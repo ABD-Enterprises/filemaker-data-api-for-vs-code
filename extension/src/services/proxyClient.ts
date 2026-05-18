@@ -245,19 +245,18 @@ export class ProxyClient {
       headers.Authorization = `Bearer ${apiKey}`;
     }
 
+    // Trust model: the proxy receives the minimum fields it needs to authenticate
+    // against FileMaker on the user's behalf. A compromised proxy has the same
+    // FileMaker access as the configured profile. See docs/security.md for the
+    // full threat model. The `name` and full server/path metadata are intentionally
+    // omitted — proxies are configured per-environment and don't need to display
+    // human-readable profile names.
     try {
       const response = await this.httpClient.post<ProxyEnvelope<T> | T>(
         endpoint,
         {
           action,
-          profile: {
-            id: profile.id,
-            name: profile.name,
-            database: profile.database,
-            serverUrl: profile.serverUrl,
-            apiBasePath: profile.apiBasePath,
-            apiVersionPath: profile.apiVersionPath
-          },
+          profile: buildProxyProfilePayload(profile),
           payload
         },
         {
@@ -313,4 +312,37 @@ export class ProxyClient {
 
     return toFMClientError(normalized);
   }
+}
+
+/**
+ * Payload sent to the proxy on every action.
+ *
+ * Includes only the fields the proxy needs to route + authenticate against
+ * FileMaker. The human-readable `name` is intentionally omitted: proxies are
+ * configured per-environment and identify profiles by `id`. Trimming the
+ * payload reduces what a compromised proxy sees in its logs.
+ *
+ * Exported for testing.
+ */
+export interface ProxyProfilePayload {
+  id: string;
+  database: string;
+  serverUrl: string;
+  apiBasePath?: string;
+  apiVersionPath?: string;
+}
+
+export function buildProxyProfilePayload(profile: ConnectionProfile): ProxyProfilePayload {
+  const payload: ProxyProfilePayload = {
+    id: profile.id,
+    database: profile.database,
+    serverUrl: profile.serverUrl
+  };
+  if (profile.apiBasePath !== undefined) {
+    payload.apiBasePath = profile.apiBasePath;
+  }
+  if (profile.apiVersionPath !== undefined) {
+    payload.apiVersionPath = profile.apiVersionPath;
+  }
+  return payload;
 }
