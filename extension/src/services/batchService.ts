@@ -1,4 +1,3 @@
-import { writeFile } from 'fs/promises';
 import { extname } from 'path';
 
 import type { FMClient } from './fmClient';
@@ -18,7 +17,7 @@ import type {
   JobContext,
   PerformanceMode
 } from '../types/fm';
-import { recordsToCsv } from '../utils/exportCsv';
+import { createCsvStreamWriter } from '../utils/csvStreamWriter';
 import { createJsonlWriter } from '../utils/jsonlWriter';
 
 interface BatchServiceOptions {
@@ -66,8 +65,8 @@ export class BatchService {
     let exported = 0;
     let offset = typeof request.offset === 'number' ? request.offset : 1;
     let truncated = false;
-    const csvRows: Array<Record<string, unknown>> = [];
     const jsonlWriter = format === 'jsonl' ? await createJsonlWriter(options.outputPath) : undefined;
+    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath) : undefined;
 
     try {
       while (exported < maxRecords) {
@@ -92,7 +91,7 @@ export class BatchService {
           if (format === 'jsonl') {
             await jsonlWriter?.append(record);
           } else {
-            csvRows.push({
+            await csvWriter?.append({
               recordId: record.recordId,
               modId: record.modId,
               ...record.fieldData
@@ -116,11 +115,6 @@ export class BatchService {
         truncated = true;
       }
 
-      if (format === 'csv') {
-        const csv = recordsToCsv(csvRows);
-        await writeFile(options.outputPath, csv, 'utf8');
-      }
-
       return {
         outputPath: options.outputPath,
         format,
@@ -129,6 +123,7 @@ export class BatchService {
       };
     } finally {
       await jsonlWriter?.close();
+      await csvWriter?.close();
     }
   }
 
