@@ -26,6 +26,7 @@ import type { SecretStore } from './secretStore';
 import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
 import { normalizeError } from '../utils/normalizeError';
+import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
@@ -779,19 +780,19 @@ export class FMClient {
 
   public invalidateProfileCache(profileId: string): void {
     for (const key of this.layoutCache.keys()) {
-      if (key.startsWith(`${profileId}::`)) {
+      if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutCache.delete(key);
       }
     }
 
     for (const key of this.layoutMetadataCache.keys()) {
-      if (key.startsWith(`${profileId}::`)) {
+      if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutMetadataCache.delete(key);
       }
     }
 
     for (const key of this.layoutMetadataEtags.keys()) {
-      if (key.startsWith(`${profileId}::`)) {
+      if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutMetadataEtags.delete(key);
       }
     }
@@ -994,11 +995,11 @@ export class FMClient {
   }
 
   private buildProfileCacheKey(profile: ConnectionProfile): string {
-    return `${profile.id}::${profile.database}::${profile.apiBasePath ?? '/fmi/data'}::${profile.apiVersionPath ?? 'vLatest'}`;
+    return buildProfileCacheKey(profile);
   }
 
   private buildLayoutMetadataCacheKey(profile: ConnectionProfile, layout: string): string {
-    return `${this.buildProfileCacheKey(profile)}::${layout}`;
+    return buildProfileCacheKey(profile, layout);
   }
 
   private buildEndpoint(profile: ConnectionProfile, path: string): string {

@@ -3,6 +3,7 @@ import type { FMClient } from './fmClient';
 import { FMClientError } from './errors';
 import type { Logger } from './logger';
 import type { OfflineModeService } from '../offline/offlineModeService';
+import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 
 interface SchemaCacheEntry {
   expiresAt: number;
@@ -36,7 +37,7 @@ export class SchemaService {
 
   public invalidateProfile(profileId: string): void {
     for (const key of this.cache.keys()) {
-      if (key.startsWith(`${profileId}::`)) {
+      if (cacheKeyMatchesProfile(key, profileId)) {
         this.cache.delete(key);
       }
     }
@@ -264,8 +265,5 @@ export function normalizeSchemaCacheTtlMs(seconds: number): number {
 }
 
 function buildSchemaCacheKey(profile: ConnectionProfile, layout: string): string {
-  const apiBasePath = profile.apiBasePath ?? '/fmi/data';
-  const versionPath = profile.apiVersionPath ?? 'vLatest';
-
-  return `${profile.id}::${profile.database}::${apiBasePath}::${versionPath}::${layout}`;
+  return buildProfileCacheKey(profile, layout);
 }
