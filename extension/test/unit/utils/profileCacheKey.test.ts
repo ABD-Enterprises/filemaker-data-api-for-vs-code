@@ -4,6 +4,7 @@ import type { ConnectionProfile } from '../../../src/types/fm';
 import {
   PROFILE_CACHE_KEY_VERSION,
   buildProfileCacheKey,
+  cacheKeyMatchesProfile,
   normalizeServerUrl
 } from '../../../src/utils/profileCacheKey';
 
@@ -106,5 +107,28 @@ describe('buildProfileCacheKey', () => {
     expect(
       buildProfileCacheKey(profile({ apiVersionPath: 'vLatest' }), 'Contacts')
     ).not.toBe(buildProfileCacheKey(profile({ apiVersionPath: 'v1' }), 'Contacts'));
+  });
+});
+
+describe('cacheKeyMatchesProfile', () => {
+  it('matches a key built for the same profile id', () => {
+    const key = buildProfileCacheKey(profile({ id: 'profile-1' }), 'Contacts');
+    expect(cacheKeyMatchesProfile(key, 'profile-1')).toBe(true);
+  });
+
+  it('does not match a key for a different profile id', () => {
+    const key = buildProfileCacheKey(profile({ id: 'profile-1' }), 'Contacts');
+    expect(cacheKeyMatchesProfile(key, 'profile-2')).toBe(false);
+  });
+
+  it('does not match when profile id is a prefix of another id (no partial-match bug)', () => {
+    // Regression guard: invalidating 'p1' must not match 'p10'.
+    const key = buildProfileCacheKey(profile({ id: 'p10' }), 'Contacts');
+    expect(cacheKeyMatchesProfile(key, 'p1')).toBe(false);
+  });
+
+  it('matches profile-level keys (no layout)', () => {
+    const key = buildProfileCacheKey(profile({ id: 'p1' }));
+    expect(cacheKeyMatchesProfile(key, 'p1')).toBe(true);
   });
 });
