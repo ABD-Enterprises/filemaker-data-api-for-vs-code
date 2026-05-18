@@ -215,6 +215,18 @@ export class SettingsService {
     };
   }
 
+  public getBridgeRateLimitConfig(): { perSecond: number; burst: number; budget: number } {
+    const config = this.getConfiguration('filemaker');
+    const perSecond = config.get<number>('fmWeb.bridge.rateLimitPerSecond', 20);
+    const burst = config.get<number>('fmWeb.bridge.rateLimitBurst', 60);
+    const budget = config.get<number>('fmWeb.bridge.requestBudget', 10_000);
+    return {
+      perSecond: clamp(Number.isFinite(perSecond) ? Math.round(perSecond) : 20, 1, 1_000),
+      burst: clamp(Number.isFinite(burst) ? Math.round(burst) : 60, 1, 10_000),
+      budget: clamp(Number.isFinite(budget) ? Math.round(budget) : 10_000, 100, 10_000_000)
+    };
+  }
+
   public getConnectionWizardTestPolicy(): 'off' | 'warn' | 'block' {
     const configured = this.getConfiguration('filemaker').get<string>(
       'connectionWizard.requireTestBeforeSave',

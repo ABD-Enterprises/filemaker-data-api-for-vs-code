@@ -130,7 +130,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     schemaService,
     logger
   );
-  const fmBridgeServer = new FmBridgeServer(profileStore, fmClient, fmWebProjectService, logger);
+  const fmBridgeServer = new FmBridgeServer(profileStore, fmClient, fmWebProjectService, logger, {
+    getRateLimitConfig: () => settingsService.getBridgeRateLimitConfig()
+  });
   const fmWebRuntimeGenerator = new FmWebRuntimeGenerator(context, fmWebProjectService, logger);
 
   await environmentSetStore.ensureSeeded(roleGuard.getDefaultEnvironmentSetSeeds());
