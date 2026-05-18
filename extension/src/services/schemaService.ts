@@ -3,7 +3,7 @@ import type { FMClient } from './fmClient';
 import { FMClientError } from './errors';
 import type { Logger } from './logger';
 import type { OfflineModeService } from '../offline/offlineModeService';
-import { buildProfileCacheKey } from '../utils/profileCacheKey';
+import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 
 interface SchemaCacheEntry {
   expiresAt: number;
@@ -37,7 +37,7 @@ export class SchemaService {
 
   public invalidateProfile(profileId: string): void {
     for (const key of this.cache.keys()) {
-      if (key.startsWith(`${profileId}::`)) {
+      if (cacheKeyMatchesProfile(key, profileId)) {
         this.cache.delete(key);
       }
     }

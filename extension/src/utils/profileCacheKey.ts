@@ -54,3 +54,13 @@ export function buildProfileCacheKey(profile: ConnectionProfile, layout?: string
   const base = `${PROFILE_CACHE_KEY_VERSION}::${profile.id}::${server}::${profile.database}::${apiBasePath}::${versionPath}`;
   return layout === undefined ? base : `${base}::${layout}`;
 }
+
+/**
+ * Returns true if a cache key produced by buildProfileCacheKey belongs to the given profile id.
+ *
+ * Encapsulates the key layout so prefix-matching consumers (invalidateProfile)
+ * don't have to know that the version prefix sits before the profile id.
+ */
+export function cacheKeyMatchesProfile(key: string, profileId: string): boolean {
+  return key.startsWith(`${PROFILE_CACHE_KEY_VERSION}::${profileId}::`);
+}
