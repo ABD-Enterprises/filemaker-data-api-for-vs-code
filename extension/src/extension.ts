@@ -433,8 +433,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   logger.info('FileMaker Data API Tools activated.');
 }
 
-const WALKTHROUGH_ID = 'deffenda.filemaker-data-api-tools#filemakerGettingStarted';
+const WALKTHROUGH_STEP_ID = 'filemakerGettingStarted';
 const FIRST_RUN_FLAG = 'filemaker.walkthrough.shownOnce';
+
+/**
+ * The fully qualified walkthrough id must match `publisher.name#stepId` exactly.
+ * Computing it from context.extension.id at runtime avoids a silent break if
+ * package.json publisher/name ever change (typo fix, fork, ownership transfer).
+ */
+function walkthroughId(context: vscode.ExtensionContext): string {
+  return `${context.extension.id}#${WALKTHROUGH_STEP_ID}`;
+}
 
 function registerWalkthroughCommands(
   context: vscode.ExtensionContext,
@@ -445,7 +454,7 @@ function registerWalkthroughCommands(
       try {
         await vscode.commands.executeCommand(
           'workbench.action.openWalkthrough',
-          { category: WALKTHROUGH_ID },
+          { category: walkthroughId(context) },
           false
         );
       } catch (error) {
@@ -470,18 +479,20 @@ async function maybeOpenFirstRunWalkthrough(
   if (context.globalState.get<boolean>(FIRST_RUN_FLAG, false)) {
     return;
   }
-  // One-shot: mark first so a failure to open the walkthrough doesn't
-  // re-prompt forever on subsequent activations.
-  await context.globalState.update(FIRST_RUN_FLAG, true);
   try {
     await vscode.commands.executeCommand(
       'workbench.action.openWalkthrough',
-      { category: WALKTHROUGH_ID },
+      { category: walkthroughId(context) },
       false
     );
+    // Only persist the flag AFTER the walkthrough actually opens. A transient
+    // failure on day one (host restart, missing markdown asset) used to flip
+    // the flag and permanently suppress the walkthrough; the user would never
+    // see it. Now we leave the flag off so the next activation can try again.
+    await context.globalState.update(FIRST_RUN_FLAG, true);
     logger.info('First-run getting-started walkthrough opened.');
   } catch (error) {
-    logger.warn('First-run walkthrough open failed; skipping.', { error });
+    logger.warn('First-run walkthrough open failed; will retry next activation.', { error });
   }
 }
 
