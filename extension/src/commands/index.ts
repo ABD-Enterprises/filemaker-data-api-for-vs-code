@@ -24,6 +24,7 @@ import { ConnectionWizardPanel } from '../webviews/connectionWizard';
 import { QueryBuilderPanel } from '../webviews/queryBuilder';
 import { RecordViewerPanel } from '../webviews/recordViewer';
 import { retryWithBackoff, type BackoffPolicy } from '../utils/backoff';
+import { showConnectionQuickPick } from '../views/connectionStatusBar';
 
 interface RegisterCoreCommandDeps {
   context: vscode.ExtensionContext;
@@ -34,6 +35,13 @@ interface RegisterCoreCommandDeps {
   logger: Logger;
   roleGuard: RoleGuard;
   refreshExplorer: () => void;
+  /**
+   * Optional callback to re-render the persistent connection status-bar
+   * item after any command that changes the active profile (connect /
+   * disconnect / remove). Wired in extension.ts; left optional so unit
+   * tests don't have to construct a status-bar shim.
+   */
+  refreshConnectionStatus?: () => void;
   onProfileDisconnected?: (profileId: string) => void;
   /** Resolved at call time so settings updates are picked up live. */
   getConnectBackoffPolicy?: () => BackoffPolicy;
@@ -77,6 +85,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
     logger,
     roleGuard,
     refreshExplorer,
+    refreshConnectionStatus,
     onProfileDisconnected
   } = deps;
 
@@ -142,6 +151,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         onProfileDisconnected?.(profile.id);
 
         refreshExplorer();
+        refreshConnectionStatus?.();
         vscode.window.showInformationMessage(`Removed profile "${profile.name}".`);
       }
     ),
@@ -188,6 +198,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
           await profileStore.setActiveProfileId(profile.id);
           refreshExplorer();
+          refreshConnectionStatus?.();
           vscode.window.showInformationMessage(`Connected to "${profile.name}".`);
         } catch (error) {
           await showCommandError(error, {
@@ -208,6 +219,13 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       await runConnect();
     }),
 
+    vscode.commands.registerCommand('filemakerDataApiTools.openConnectionMenu', async () => {
+      // Backing command for the persistent connection status-bar item. Pops a
+      // quick-pick of contextual actions (Disconnect / Switch / Open Explorer /
+      // Add Profile) and dispatches to the appropriate existing command.
+      await showConnectionQuickPick(profileStore);
+    }),
+
     vscode.commands.registerCommand('filemakerDataApiTools.disconnect', async (arg: unknown) => {
       const profile = await resolveProfileFromArg(arg, profileStore, true);
       if (!profile) {
@@ -223,6 +241,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
         onProfileDisconnected?.(profile.id);
         refreshExplorer();
+        refreshConnectionStatus?.();
         vscode.window.showInformationMessage(`Disconnected from "${profile.name}".`);
       } catch (error) {
         await showCommandError(error, {
