@@ -59,6 +59,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
   });
 
+  // Prime the settings reads so the deprecated-key tracker observes everything
+  // before we ask for the report, then surface a one-time deprecation toast.
+  settingsService.getLoggingLevel();
+  settingsService.getRequestTimeoutMs();
+  settingsService.getDefaultApiBasePath();
+  settingsService.getDefaultApiVersionPath();
+  const deprecatedKeys = settingsService.consumeDeprecatedSettingsUsed();
+  if (deprecatedKeys.length > 0) {
+    const newNames = deprecatedKeys.map((k) => k.replace('filemakerDataApiTools.', 'filemaker.'));
+    void vscode.window.showWarningMessage(
+      `FileMaker: ${deprecatedKeys.length} deprecated setting${deprecatedKeys.length === 1 ? '' : 's'} in use (${deprecatedKeys.join(', ')}). Migrate to ${newNames.join(', ')}.`
+    );
+    logger.warn('Deprecated settings in use; falling back to the legacy values.', {
+      deprecatedKeys,
+      newNames
+    });
+  }
+
   const profileStore = new ProfileStore(context.globalState, context.workspaceState);
   const secretFallbackMode = settingsService.getSecretsFallbackMode();
   const secretStore = new SecretStore(context.secrets, {

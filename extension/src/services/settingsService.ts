@@ -34,15 +34,68 @@ export class SettingsService {
   private readonly getConfiguration: (section?: string) => vscode.WorkspaceConfiguration;
   private readonly isWorkspaceTrusted: () => boolean;
 
+  /**
+   * Tracks which deprecated `filemakerDataApiTools.*` setting names we've already
+   * surfaced to the user this session. Lets `getDeprecatedSettingsUsed` report
+   * once per key so onActivate can show a single toast covering everything.
+   */
+  private readonly deprecatedKeysSeen = new Set<string>();
+
   public constructor(options?: SettingsServiceOptions) {
     this.getConfiguration = options?.getConfiguration ?? ((section) => vscode.workspace.getConfiguration(section));
     this.isWorkspaceTrusted = options?.isWorkspaceTrusted ?? (() => vscode.workspace.isTrusted);
   }
 
+  /**
+   * Prefer the modern `filemaker.<key>` value; fall back to the deprecated
+   * `filemakerDataApiTools.<oldKey>` when the new one isn't explicitly set.
+   * Records the deprecated key into deprecatedKeysSeen so the caller can
+   * surface a one-time deprecation toast.
+   */
+  private getPreferred<T>(
+    newSection: string,
+    newKey: string,
+    oldSection: string,
+    oldKey: string,
+    defaultValue: T
+  ): T {
+    const newConfig = this.getConfiguration(newSection).inspect<T>(newKey);
+    if (
+      newConfig &&
+      (newConfig.globalValue !== undefined ||
+        newConfig.workspaceValue !== undefined ||
+        newConfig.workspaceFolderValue !== undefined)
+    ) {
+      return this.getConfiguration(newSection).get<T>(newKey, defaultValue);
+    }
+    const oldConfig = this.getConfiguration(oldSection).inspect<T>(oldKey);
+    const oldExplicit =
+      oldConfig &&
+      (oldConfig.globalValue !== undefined ||
+        oldConfig.workspaceValue !== undefined ||
+        oldConfig.workspaceFolderValue !== undefined);
+    if (oldExplicit) {
+      this.deprecatedKeysSeen.add(`${oldSection}.${oldKey}`);
+      return this.getConfiguration(oldSection).get<T>(oldKey, defaultValue);
+    }
+    return this.getConfiguration(newSection).get<T>(newKey, defaultValue);
+  }
+
+  /** Returns the deprecated setting keys observed this session and clears the set. */
+  public consumeDeprecatedSettingsUsed(): string[] {
+    const out = [...this.deprecatedKeysSeen];
+    this.deprecatedKeysSeen.clear();
+    return out;
+  }
+
   public getLoggingLevel(): LogLevel {
-    const configured =
-      this.getConfiguration('filemaker').get<string>('logging.level') ??
-      this.getConfiguration('filemakerDataApiTools').get<string>('logLevel');
+    const configured = this.getPreferred<string | undefined>(
+      'filemaker',
+      'logging.level',
+      'filemakerDataApiTools',
+      'logLevel',
+      undefined
+    );
 
     if (configured === 'debug' || configured === 'info' || configured === 'warn' || configured === 'error') {
       return configured;
@@ -52,7 +105,13 @@ export class SettingsService {
   }
 
   public getRequestTimeoutMs(): number {
-    const configured = this.getConfiguration('filemakerDataApiTools').get<number>('requestTimeoutMs', 15_000);
+    const configured = this.getPreferred<number>(
+      'filemaker',
+      'requestTimeoutMs',
+      'filemakerDataApiTools',
+      'requestTimeoutMs',
+      15_000
+    );
     if (!Number.isFinite(configured)) {
       return 15_000;
     }
@@ -61,7 +120,10 @@ export class SettingsService {
   }
 
   public getDefaultApiBasePath(): string {
-    const configured = this.getConfiguration('filemakerDataApiTools').get<string>(
+    const configured = this.getPreferred<string>(
+      'filemaker',
+      'defaultApiBasePath',
+      'filemakerDataApiTools',
       'defaultApiBasePath',
       '/fmi/data'
     );
@@ -70,7 +132,10 @@ export class SettingsService {
   }
 
   public getDefaultApiVersionPath(): string {
-    const configured = this.getConfiguration('filemakerDataApiTools').get<string>(
+    const configured = this.getPreferred<string>(
+      'filemaker',
+      'defaultApiVersionPath',
+      'filemakerDataApiTools',
       'defaultApiVersionPath',
       'vLatest'
     );
