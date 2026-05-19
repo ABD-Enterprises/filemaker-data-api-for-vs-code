@@ -38,6 +38,7 @@ import { MetricsStore } from './diagnostics/metricsStore';
 import { OfflineModeService } from './offline/offlineModeService';
 import { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
 import { PluginRegistry } from './plugins/pluginRegistry';
+import { ConnectionStatusBar } from './views/connectionStatusBar';
 import { FMExplorerProvider } from './views/fmExplorer';
 import { OfflineStatusBar } from './views/offlineStatusBar';
 
@@ -198,6 +199,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     void refreshPaletteContexts();
   };
 
+  // Persistent connection-state status bar — sits at priority 105 (above the
+  // offline badge, below the transient connect-progress item). Created first
+  // so we can hand its refresh callback to the commands registry.
+  const connectionStatusBar = new ConnectionStatusBar(profileStore);
+
   const coreCommandDisposables = registerCoreCommands({
     context,
     profileStore,
@@ -207,6 +213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     roleGuard,
     refreshExplorer,
+    refreshConnectionStatus: () => connectionStatusBar.refresh(),
     onProfileDisconnected: (profileId) => {
       schemaService.invalidateProfile(profileId);
     },
@@ -346,6 +353,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     offlineStatusBar,
+    connectionStatusBar,
     treeViewDisposable,
     ...coreCommandDisposables,
     ...savedQueryDisposables,

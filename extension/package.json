@@ -152,6 +152,10 @@
         "title": "FileMaker: Disconnect"
       },
       {
+        "command": "filemakerDataApiTools.openConnectionMenu",
+        "title": "FileMaker: Connection Menu"
+      },
+      {
         "command": "filemakerDataApiTools.listLayouts",
         "title": "FileMaker: List Layouts"
       },
