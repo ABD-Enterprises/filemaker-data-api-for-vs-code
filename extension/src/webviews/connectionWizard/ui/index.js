@@ -278,7 +278,20 @@ document.addEventListener('DOMContentLoaded', () => {
       typeof timeoutMs === 'number' && timeoutMs > 0
         ? ` (timeout ${Math.round(timeoutMs / 1000)}s)`
         : '';
-    el.innerHTML = `<span class="test-progress-spinner" aria-hidden="true"></span><span class="test-progress-text">${phase}${timeoutHint}</span>`;
+
+    // Build the spinner + label via DOM APIs (textContent is safe; innerHTML with
+    // a postMessage-sourced phase string trips CodeQL's client-side-XSS check).
+    while (el.firstChild) {
+      el.removeChild(el.firstChild);
+    }
+    const spinner = document.createElement('span');
+    spinner.className = 'test-progress-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'test-progress-text';
+    text.textContent = `${phase}${timeoutHint}`;
+    el.appendChild(spinner);
+    el.appendChild(text);
     el.style.display = '';
   }
 
