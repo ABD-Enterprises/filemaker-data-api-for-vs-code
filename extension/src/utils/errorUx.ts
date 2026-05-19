@@ -10,10 +10,63 @@ interface ShowErrorOptions {
     error: (message: string, meta?: unknown) => void;
   };
   logMessage?: string;
+  /**
+   * Optional action affordances on the error toast. When provided, the toast
+   * shows the matching button for the error kind:
+   * - `retry`: shown for transient errors (network/timeout/5xx). Invokes the
+   *   callback when clicked.
+   * - `profileId`: shown for auth errors (HTTP 401/403). Opens the connection
+   *   wizard for that profile.
+   * - `settingsKey`: shown for timeout/configuration errors. Opens VS Code
+   *   settings filtered to that key.
+   */
+  actions?: {
+    retry?: () => void | Promise<void>;
+    profileId?: string;
+    settingsKey?: string;
+  };
 }
 
 const DETAILS_ACTION = 'Details…';
 const COPY_REPORT_ACTION = 'Copy as Bug Report';
+const RETRY_ACTION = 'Retry';
+const EDIT_PROFILE_ACTION = 'Edit Profile';
+const OPEN_SETTINGS_ACTION = 'Open Settings';
+
+/**
+ * Decide which action buttons to surface on an error toast based on the
+ * normalized error kind. Exported for unit testing.
+ */
+export function selectErrorActions(
+  normalized: { kind: string; status?: number; isRetryable?: boolean },
+  actions: ShowErrorOptions['actions']
+): string[] {
+  const out: string[] = [];
+  if (!actions) {
+    return out;
+  }
+
+  const status = normalized.status;
+  const isAuth =
+    normalized.kind === 'auth' || status === 401 || status === 403;
+  const isTransient =
+    normalized.isRetryable === true ||
+    normalized.kind === 'timeout' ||
+    normalized.kind === 'network' ||
+    (typeof status === 'number' && status >= 500 && status < 600);
+  const isTimeout = normalized.kind === 'timeout';
+
+  if (actions.retry && isTransient) {
+    out.push(RETRY_ACTION);
+  }
+  if (actions.profileId && isAuth) {
+    out.push(EDIT_PROFILE_ACTION);
+  }
+  if (actions.settingsKey && isTimeout) {
+    out.push(OPEN_SETTINGS_ACTION);
+  }
+  return out;
+}
 
 let lastRenderedReport: string | undefined;
 
@@ -29,11 +82,35 @@ export async function showErrorWithDetails(
     error: normalized
   });
 
+  const actionButtons = selectErrorActions(normalized, options?.actions);
+  const allButtons = [...actionButtons, DETAILS_ACTION, COPY_REPORT_ACTION];
+
   const selection = await vscode.window.showErrorMessage(
     normalized.message,
-    DETAILS_ACTION,
-    COPY_REPORT_ACTION
+    ...allButtons
   );
+
+  if (selection === RETRY_ACTION && options?.actions?.retry) {
+    try {
+      await options.actions.retry();
+    } catch (retryError) {
+      options?.logger?.error('Retry action failed.', { error: retryError });
+    }
+    return;
+  }
+  if (selection === EDIT_PROFILE_ACTION && options?.actions?.profileId) {
+    await vscode.commands.executeCommand('filemakerDataApiTools.editConnectionProfile', {
+      profileId: options.actions.profileId
+    });
+    return;
+  }
+  if (selection === OPEN_SETTINGS_ACTION && options?.actions?.settingsKey) {
+    await vscode.commands.executeCommand(
+      'workbench.action.openSettings',
+      `@id:${options.actions.settingsKey}`
+    );
+    return;
+  }
 
   if (selection !== COPY_REPORT_ACTION && selection !== DETAILS_ACTION) {
     // Toast dismissed — skip the (potentially expensive) report rendering entirely.
