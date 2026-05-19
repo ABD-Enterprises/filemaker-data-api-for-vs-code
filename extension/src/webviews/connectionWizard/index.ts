@@ -217,7 +217,16 @@ export class ConnectionWizardPanel {
     }
   }
 
+  private async postTestProgress(phase: string): Promise<void> {
+    await this.panel.webview.postMessage({ type: 'testProgress', phase });
+  }
+
   private async handleTestConnection(data: WizardFormData): Promise<void> {
+    const timeoutMs = vscode.workspace
+      .getConfiguration('filemaker')
+      .get<number>('requestTimeoutMs', 15_000);
+    await this.panel.webview.postMessage({ type: 'testStarted', timeoutMs });
+
     try {
       const tempProfile: ConnectionProfile = {
         id: this.editingProfile?.id ?? 'test-connection',
@@ -229,6 +238,7 @@ export class ConnectionWizardPanel {
         apiVersionPath: data.apiVersionPath.trim()
       };
 
+      await this.postTestProgress('Preparing credentials…');
       if (data.authMode === 'direct') {
         tempProfile.username = data.username?.trim();
 
@@ -243,7 +253,10 @@ export class ConnectionWizardPanel {
         }
       }
 
+      await this.postTestProgress('Opening session…');
       await this.fmClient.createSession(tempProfile);
+
+      await this.postTestProgress('Cleaning up…');
       await this.fmClient.deleteSession(tempProfile);
 
       await this.panel.webview.postMessage({
