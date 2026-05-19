@@ -307,10 +307,10 @@ export class ConnectionWizardPanel {
     </div>
 
     <div class="form-section">
-      <h2>Authentication Mode</h2>
-      <div class="mode-toggle">
-        <button type="button" id="modeDirectBtn">Direct</button>
-        <button type="button" id="modeProxyBtn">Proxy</button>
+      <h2 id="auth-mode-heading">Authentication Mode</h2>
+      <div class="mode-toggle" role="group" aria-labelledby="auth-mode-heading">
+        <button type="button" id="modeDirectBtn" aria-pressed="true">Direct</button>
+        <button type="button" id="modeProxyBtn" aria-pressed="false">Proxy</button>
       </div>
       <p class="hint" style="margin-top: -8px;">
         <strong>Direct</strong> connects to FileMaker Data API directly.
@@ -346,12 +346,12 @@ export class ConnectionWizardPanel {
       <h2>Credentials</h2>
       <div class="field">
         <label for="username">Username</label>
-        <input id="username" type="text" placeholder="api_user" />
+        <input id="username" type="text" placeholder="api_user" autocomplete="username" />
         <div class="hint">The FileMaker account with fmrest privilege.</div>
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input id="password" type="password" />
+        <input id="password" type="password" autocomplete="current-password" />
         <div class="hint">Stored securely in VS Code SecretStorage. Never written to disk.</div>
       </div>
     </div>
@@ -365,7 +365,7 @@ export class ConnectionWizardPanel {
       </div>
       <div class="field">
         <label for="proxyApiKey">API Key (optional)</label>
-        <input id="proxyApiKey" type="password" />
+        <input id="proxyApiKey" type="password" autocomplete="off" />
         <div class="hint">Sent as a Bearer token to your proxy. Stored securely.</div>
       </div>
     </div>
