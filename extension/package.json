@@ -39,15 +39,82 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "views": {
-      "explorer": [
+    "viewsContainers": {
+      "activitybar": [
         {
-          "id": "filemakerExplorer",
-          "name": "FileMaker Explorer"
+          "id": "filemakerActivityBar",
+          "title": "FileMaker",
+          "icon": "media/filemaker.svg"
         }
       ]
     },
+    "views": {
+      "filemakerActivityBar": [
+        {
+          "id": "filemakerExplorer",
+          "name": "Connections",
+          "contextualTitle": "FileMaker",
+          "icon": "media/filemaker.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "filemakerExplorer",
+        "contents": "No FileMaker connections yet.\n[Add Connection Profile](command:filemakerDataApiTools.addConnectionProfile)\n[Open Walkthrough](command:filemakerDataApiTools.openWelcomeWalkthrough)\n\nYour passwords stay in the OS keychain. Learn more in the [User Guide](command:filemakerDataApiTools.openUserGuide)."
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "filemakerGettingStarted",
+        "title": "Get started with FileMaker Data API Tools",
+        "description": "Set up a connection profile and run your first query in three steps.",
+        "steps": [
+          {
+            "id": "addProfile",
+            "title": "Add a connection profile",
+            "description": "Tell the extension how to reach your FileMaker server. Passwords go to the OS keychain — they never touch your workspace files.\n[Add Profile](command:filemakerDataApiTools.addConnectionProfile)",
+            "media": {
+              "markdown": "docs/walkthroughs/add-profile.md"
+            },
+            "completionEvents": [
+              "onCommand:filemakerDataApiTools.addConnectionProfile"
+            ]
+          },
+          {
+            "id": "connect",
+            "title": "Connect and verify",
+            "description": "Open a session against the Data API. Transient failures retry with exponential backoff and the token refreshes proactively before expiry.\n[Connect](command:filemakerDataApiTools.connect)",
+            "media": {
+              "markdown": "docs/walkthroughs/test-connect.md"
+            },
+            "completionEvents": [
+              "onCommand:filemakerDataApiTools.connect"
+            ]
+          },
+          {
+            "id": "runQuery",
+            "title": "Run your first query",
+            "description": "List layouts, pick one, and open the Query Builder. Field-name chips above the JSON editor save typing.\n[Open Query Builder](command:filemakerDataApiTools.openQueryBuilder)",
+            "media": {
+              "markdown": "docs/walkthroughs/query-builder.md"
+            },
+            "completionEvents": [
+              "onCommand:filemakerDataApiTools.openQueryBuilder"
+            ]
+          }
+        ]
+      }
+    ],
     "commands": [
+      {
+        "command": "filemakerDataApiTools.openWelcomeWalkthrough",
+        "title": "FileMaker: Open Getting Started Walkthrough"
+      },
+      {
+        "command": "filemakerDataApiTools.openUserGuide",
+        "title": "FileMaker: Open User Guide"
+      },
       {
         "command": "filemakerDataApiTools.addConnectionProfile",
         "title": "FileMaker: Add Connection Profile"
