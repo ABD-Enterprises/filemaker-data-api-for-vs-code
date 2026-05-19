@@ -1,3 +1,4 @@
+import { getHashes } from 'crypto';
 import * as path from 'path';
 
 import * as vscode from 'vscode';
@@ -5,6 +6,24 @@ import * as vscode from 'vscode';
 import type { EnterpriseRole, PerformanceMode, SavedQueryScope, SchemaSnapshotStorage } from '../types/fm';
 import type { LogLevel } from './logger';
 import type { SecretFallbackMode } from './secretStore';
+
+/**
+ * Lazily computed allow-list of crypto hash algorithms available on this Node
+ * runtime. We cache it because getHashes() is moderately expensive and the set
+ * is fixed for the process lifetime.
+ */
+let cachedHashAlgorithms: Set<string> | undefined;
+function supportedHashAlgorithms(): Set<string> {
+  if (!cachedHashAlgorithms) {
+    cachedHashAlgorithms = new Set(getHashes().map((name) => name.toLowerCase()));
+  }
+  return cachedHashAlgorithms;
+}
+
+/** Exported for tests so they can reset the cache after mocking getHashes. */
+export function resetSupportedHashAlgorithmCacheForTesting(): void {
+  cachedHashAlgorithms = undefined;
+}
 
 interface SettingsServiceOptions {
   getConfiguration?: (section?: string) => vscode.WorkspaceConfiguration;
@@ -186,9 +205,24 @@ export class SettingsService {
     return Math.round(configured);
   }
 
-  public getSchemaHashAlgorithm(): string {
-    const configured = this.getConfiguration('filemaker').get<string>('schema.hashAlgorithm', 'sha256').trim();
-    return configured.length > 0 ? configured : 'sha256';
+  /**
+   * Returns a hash algorithm name that is guaranteed to be supported by the
+   * current Node `crypto` runtime. Unknown / empty values silently fall back to
+   * `sha256` and are reported via the optional warning callback so the user
+   * sees the rejection.
+   */
+  public getSchemaHashAlgorithm(onInvalid?: (configured: string) => void): string {
+    const raw = this.getConfiguration('filemaker').get<string>('schema.hashAlgorithm', 'sha256').trim();
+    if (raw.length === 0) {
+      return 'sha256';
+    }
+    const supported = supportedHashAlgorithms();
+    const normalized = raw.toLowerCase();
+    if (supported.has(normalized)) {
+      return raw;
+    }
+    onInvalid?.(raw);
+    return 'sha256';
   }
 
   public isTelemetryEnabled(): boolean {
