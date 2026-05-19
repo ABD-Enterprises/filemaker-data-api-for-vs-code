@@ -330,16 +330,27 @@ export class ConnectionWizardPanel {
         <input id="database" type="text" placeholder="MyDatabase" />
         <div class="hint">The hosted FileMaker database file name.</div>
       </div>
-      <div class="field">
-        <label for="apiBasePath">API Base Path</label>
-        <input id="apiBasePath" type="text" value="/fmi/data" />
-        <div class="hint">Usually <code>/fmi/data</code>. Change only if your server uses a custom path.</div>
-      </div>
-      <div class="field">
-        <label for="apiVersionPath">API Version</label>
-        <input id="apiVersionPath" type="text" value="vLatest" />
-        <div class="hint">Usually <code>vLatest</code>.</div>
-      </div>
+      <!--
+        API Base Path and API Version are correct out of the box for 99% of
+        servers. Surfacing them as top-level inputs makes new users second-
+        guess whether they need to configure them, and they account for a
+        chunk of "I don't know what to fill in" friction in the wizard.
+        Hidden behind <details> so the defaults stay populated but the visual
+        weight goes to fields that actually matter on first save.
+      -->
+      <details class="advanced-toggle">
+        <summary>Advanced server options</summary>
+        <div class="field">
+          <label for="apiBasePath">API Base Path</label>
+          <input id="apiBasePath" type="text" value="/fmi/data" />
+          <div class="hint">Usually <code>/fmi/data</code>. Change only if your server uses a custom path.</div>
+        </div>
+        <div class="field">
+          <label for="apiVersionPath">API Version</label>
+          <input id="apiVersionPath" type="text" value="vLatest" />
+          <div class="hint">Usually <code>vLatest</code>.</div>
+        </div>
+      </details>
     </div>
 
     <div id="directFields" class="form-section direct-fields">
