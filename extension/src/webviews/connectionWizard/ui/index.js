@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
     authMode = 'direct';
     directBtn.classList.add('active');
     proxyBtn.classList.remove('active');
+    directBtn.setAttribute('aria-pressed', 'true');
+    proxyBtn.setAttribute('aria-pressed', 'false');
     directFields.classList.add('visible');
     proxyFields.classList.remove('visible');
     onFormChanged();
@@ -34,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     authMode = 'proxy';
     proxyBtn.classList.add('active');
     directBtn.classList.remove('active');
+    proxyBtn.setAttribute('aria-pressed', 'true');
+    directBtn.setAttribute('aria-pressed', 'false');
     proxyFields.classList.add('visible');
     directFields.classList.remove('visible');
     onFormChanged();
@@ -42,6 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   directBtn.classList.add('active');
   directFields.classList.add('visible');
+
+  // Focus the first input so screen-reader + keyboard users land on
+  // something actionable immediately, not at the document root.
+  const firstInput = /** @type {HTMLInputElement|null} */ (document.getElementById('profileName'));
+  if (firstInput) {
+    firstInput.focus();
+  }
 
   // Track every input edit
   form.addEventListener('input', onFormChanged);
