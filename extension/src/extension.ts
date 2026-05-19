@@ -47,6 +47,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const roleGuard = new RoleGuard(logger);
   await roleGuard.applyContexts();
 
+  // One-shot validation: surface an invalid hashAlgorithm setting as a toast.
+  // The settings-service fallback to sha256 will keep working silently for
+  // every other call site.
+  settingsService.getSchemaHashAlgorithm((bad) => {
+    void vscode.window.showWarningMessage(
+      `FileMaker: schema.hashAlgorithm '${bad}' is not supported on this runtime. Falling back to sha256.`
+    );
+    logger.warn('Rejected unsupported schema.hashAlgorithm; falling back to sha256.', {
+      configured: bad
+    });
+  });
+
   const profileStore = new ProfileStore(context.globalState, context.workspaceState);
   const secretFallbackMode = settingsService.getSecretsFallbackMode();
   const secretStore = new SecretStore(context.secrets, {
