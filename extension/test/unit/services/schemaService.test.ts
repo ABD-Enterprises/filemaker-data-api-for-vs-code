@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { SchemaService } from '../../../src/services/schemaService';
 import { FMClientError } from '../../../src/services/errors';
