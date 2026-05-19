@@ -48,6 +48,7 @@ export async function createCsvStreamWriter(
 
   let columns: string[] | undefined = options.columns ? [...options.columns] : undefined;
   let headerWritten = false;
+  let closePromise: Promise<void> | undefined;
 
   const writeLine = (line: string): Promise<void> =>
     new Promise<void>((resolve, reject) => {
@@ -77,10 +78,12 @@ export async function createCsvStreamWriter(
       await writeLine(cells.join(','));
     },
     async close(): Promise<void> {
-      // If we never saw a row and no columns were preset, still emit nothing —
-      // an empty file is a more honest result than a header-only file with
-      // unknown columns.
-      await closeStream(stream);
+      // Memoize the close so repeated calls return the same settled promise
+      // instead of trying to call stream.end() twice (which throws).
+      if (!closePromise) {
+        closePromise = closeStream(stream);
+      }
+      await closePromise;
     },
     getColumns(): string[] {
       return columns ? [...columns] : [];
@@ -90,8 +93,13 @@ export async function createCsvStreamWriter(
 
 function closeStream(stream: WriteStream): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    if (stream.closed) {
-      resolve();
+    if (stream.writableEnded || stream.closed) {
+      stream.once('close', () => resolve());
+      stream.once('error', reject);
+      // If already closed (event fired before we attached), resolve immediately.
+      if (stream.closed) {
+        resolve();
+      }
       return;
     }
     stream.end((err?: Error | null) => {
