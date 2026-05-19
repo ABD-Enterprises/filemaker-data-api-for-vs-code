@@ -133,8 +133,9 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
 
   private async getRootItems(): Promise<FMExplorerItem[]> {
     const items: FMExplorerItem[] = [];
+    const offlineActive = this.offlineModeService.isOfflineModeEnabled();
 
-    if (this.offlineModeService.isOfflineModeEnabled()) {
+    if (offlineActive) {
       items.push(
         new FMExplorerItem({
           kind: 'offlineBadge',
@@ -151,24 +152,55 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
       );
     }
 
-    const jobsRoot = new FMExplorerItem({
-      kind: 'jobsRoot',
-      label: 'Jobs',
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-      contextValue: 'fmJobsRoot',
-      iconPath: new vscode.ThemeIcon('history')
-    });
+    const profiles = await this.profileStore.listProfiles();
 
-    const envSetsRoot = new FMExplorerItem({
-      kind: 'environmentSetsRoot',
-      label: 'Environment Sets',
-      collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
-      contextValue: 'fmEnvironmentSetsRoot',
-      iconPath: new vscode.ThemeIcon('organization')
-    });
+    // Empty-state path: when the user has no profiles yet and nothing else is
+    // demanding attention (offline badge, env sets, jobs), return zero children
+    // so VS Code renders the contributes.viewsWelcome markdown (which holds the
+    // primary "Add Connection Profile" / "Open Walkthrough" CTAs). Putting any
+    // root node here suppresses viewsWelcome and leaves new users staring at
+    // empty collapsibles instead of a real call to action.
+    if (profiles.length === 0) {
+      const envSets = await this.environmentSetStore.listEnvironmentSets();
+      const jobs = this.jobRunner.listJobs();
+      if (!offlineActive && envSets.length === 0 && jobs.length === 0) {
+        return [];
+      }
+    }
 
-    const profileItems = await this.getProfileItems();
-    items.push(envSetsRoot, jobsRoot, ...profileItems);
+    // Hide Environment Sets entirely until the user has at least one set or
+    // we're in a state where env-set children are meaningful. Same idea for
+    // Jobs: don't surface a node that's just going to say "No active jobs".
+    const envSets = await this.environmentSetStore.listEnvironmentSets();
+    if (envSets.length > 0) {
+      items.push(
+        new FMExplorerItem({
+          kind: 'environmentSetsRoot',
+          label: 'Environment Sets',
+          collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+          contextValue: 'fmEnvironmentSetsRoot',
+          iconPath: new vscode.ThemeIcon('organization')
+        })
+      );
+    }
+
+    const jobs = this.jobRunner.listJobs();
+    if (jobs.length > 0) {
+      items.push(
+        new FMExplorerItem({
+          kind: 'jobsRoot',
+          label: 'Jobs',
+          collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+          contextValue: 'fmJobsRoot',
+          iconPath: new vscode.ThemeIcon('history')
+        })
+      );
+    }
+
+    if (profiles.length > 0) {
+      const profileItems = await this.getProfileItems();
+      items.push(...profileItems);
+    }
 
     return items;
   }
