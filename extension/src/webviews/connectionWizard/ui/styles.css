@@ -70,6 +70,40 @@ h1 {
   margin-bottom: 0;
 }
 
+/*
+ * Advanced server options disclosure. The summary acts as a tappable header
+ * for users who actually need to change API base path / version; everyone
+ * else never sees the inputs. Keep this visually subdued so it reads as
+ * progressive disclosure rather than another required form section.
+ */
+.advanced-toggle {
+  margin-top: 8px;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+
+.advanced-toggle > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.advanced-toggle > summary:hover {
+  color: var(--text);
+}
+
+.advanced-toggle[open] > summary {
+  margin-bottom: 10px;
+}
+
+.advanced-toggle .field {
+  margin-bottom: 12px;
+}
+
 .field label {
   display: block;
   font-size: 0.85rem;
