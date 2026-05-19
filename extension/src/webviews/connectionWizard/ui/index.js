@@ -4,7 +4,14 @@
 const vscode = acquireVsCodeApi();
 
 document.addEventListener('DOMContentLoaded', () => {
-  const form = /** @type {HTMLFormElement} */ (document.getElementById('wizardForm'));
+  // The HTML template wraps everything in <form id="wizardForm">. If that ever
+  // gets refactored away (it did before — silent regression), fall back to
+  // document.body so the input/change/submit listeners still install instead
+  // of throwing on null and halting the rest of the script (which would skip
+  // Save/Test/message bindings below).
+  const form = /** @type {HTMLElement} */ (
+    document.getElementById('wizardForm') || document.body
+  );
   const directBtn = /** @type {HTMLButtonElement} */ (document.getElementById('modeDirectBtn'));
   const proxyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('modeProxyBtn'));
   const directFields = /** @type {HTMLElement} */ (document.getElementById('directFields'));
@@ -57,6 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Track every input edit
   form.addEventListener('input', onFormChanged);
   form.addEventListener('change', onFormChanged);
+
+  // Pressing Enter inside an <input> in a <form> would otherwise trigger a
+  // navigation/reload of the webview. The CSP blocks inline onsubmit, so we
+  // attach the suppression here.
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+  });
 
   // Save
   saveBtn.addEventListener('click', () => {
