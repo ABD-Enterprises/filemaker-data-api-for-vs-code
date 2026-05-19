@@ -167,8 +167,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     fmExplorerProvider
   );
 
+  // Forward-declared so refreshExplorer (called by registered command handlers)
+  // can re-evaluate command-palette contexts after profile / snapshot / project
+  // changes. The actual implementation is wired in below once all the stores
+  // are constructed.
+  let refreshPaletteContexts: () => Promise<void> = async () => {
+    /* placeholder until wired below */
+  };
+
   const refreshExplorer = (): void => {
     fmExplorerProvider.refresh();
+    void refreshPaletteContexts();
   };
 
   const coreCommandDisposables = registerCoreCommands({
@@ -359,6 +368,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     pluginRegistry,
     new vscode.Disposable(() => fmBridgeServer.dispose()),
     new vscode.Disposable(() => logger.dispose())
+  );
+
+  // Wire command-palette context keys now that all stores exist.
+  refreshPaletteContexts = async (): Promise<void> => {
+    try {
+      const [profiles, snapshots, project] = await Promise.all([
+        profileStore.listProfiles(),
+        snapshotStore.listSnapshots().catch(() => []),
+        fmWebProjectService.readProjectConfig().catch(() => undefined)
+      ]);
+      await Promise.all([
+        vscode.commands.executeCommand('setContext', 'filemaker.hasProfiles', profiles.length > 0),
+        vscode.commands.executeCommand(
+          'setContext',
+          'filemaker.hasSchemaSnapshots',
+          snapshots.length > 0
+        ),
+        vscode.commands.executeCommand(
+          'setContext',
+          'filemaker.fmWebProjectInitialized',
+          project !== undefined
+        ),
+        vscode.commands.executeCommand(
+          'setContext',
+          'filemaker.enterpriseMode',
+          settingsService.isEnterpriseModeEnabled()
+        )
+      ]);
+    } catch (error) {
+      logger.warn('Failed to refresh command-palette contexts.', { error });
+    }
+  };
+  void refreshPaletteContexts();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('filemaker.enterprise.mode')) {
+        void refreshPaletteContexts();
+      }
+    })
   );
 
   registerWalkthroughCommands(context, logger);
