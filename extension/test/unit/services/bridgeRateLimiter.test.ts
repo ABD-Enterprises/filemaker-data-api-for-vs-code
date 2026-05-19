@@ -68,7 +68,9 @@ describe('BridgeRateLimiter', () => {
   });
 
   it('reset() restores the burst capacity and clears the budget counter', () => {
-    const limiter = new BridgeRateLimiter({ perSecond: 10, burst: 2, budget: 3 }, clock);
+    // perSecond/burst large enough that the 3 consumes succeed without throttling,
+    // so the 4th call definitely hits the budget guard (not the rate guard).
+    const limiter = new BridgeRateLimiter({ perSecond: 1000, burst: 10, budget: 3 }, clock);
     limiter.tryConsume();
     limiter.tryConsume();
     limiter.tryConsume();
