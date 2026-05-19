@@ -22,49 +22,60 @@ After reload, you should see a **FileMaker Explorer** panel in the sidebar (left
 
 ## Setting Up a Connection
 
-The extension uses a guided setup that walks you through each field one at a time in the Command Palette bar at the top of VS Code.
+Adding a profile opens the **Connection Profile** wizard as a webview editor tab. All fields are visible at once — fill them in, click **Test Connection** to verify, then **Save Profile**. There's also a `🟢 / 🔴 / 🟡` badge next to the buttons that tracks whether the current values have been successfully tested.
+
+To open the wizard:
+
+1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`.
+2. Run **FileMaker: Add Connection Profile**.
+
+The wizard has three sections — **Profile**, **Server**, and either **Credentials** (Direct mode) or **Proxy Settings** (Proxy mode). The mode toggle lives between the Profile and Server sections.
 
 ### Direct Mode (Connect to FileMaker Server Directly)
 
 Use this when your machine can reach the FileMaker Server directly over HTTPS.
 
-1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`.
-2. Type **FileMaker: Add Connection Profile** and select it.
-3. You'll be prompted for each field in sequence:
+In the wizard, click **Direct** (selected by default) and fill in:
 
-| Step | Prompt | What to Enter | Example |
-|------|--------|--------------|---------|
-| 1 | Profile name | A friendly name for this connection | `Production Server` |
-| 2 | Authentication Mode | Select **Direct** | — |
-| 3 | Server URL | Your FileMaker Server's HTTPS address | `https://fm.yourcompany.com` |
-| 4 | Database name | The hosted database file name | `Contacts` |
-| 5 | API base path | Leave the default | `/fmi/data` |
-| 6 | API version path | Leave the default | `vLatest` |
-| 7 | Username | Your FileMaker account username | `api_user` |
-| 8 | Password | Your FileMaker account password (hidden as you type) | — |
+| Field | What to Enter | Example |
+|-------|--------------|---------|
+| Profile Name | A friendly name for this connection | `Production Server` |
+| Server URL | Your FileMaker Server's HTTPS address | `https://fm.yourcompany.com` |
+| Database Name | The hosted database file name | `Contacts` |
+| API Base Path | Leave the default unless your server uses a custom path | `/fmi/data` |
+| API Version | Leave the default | `vLatest` |
+| Username | The FileMaker account with `fmrest` extended privilege | `api_user` |
+| Password | The password for that account (hidden as you type) | — |
 
-Your password is stored securely in VS Code's built-in secret storage (platform-level encryption). It is never written to settings files or logs.
-
-4. After completing the prompts, you'll see a confirmation message: *"Added connection profile..."*
+Then click **Test Connection** — the extension opens a session against your server and closes it cleanly. The badge turns green on success, red with the error message on failure. Once green, click **Save Profile**. The password is stored in VS Code's SecretStorage (platform-level encryption) and never written to settings files or logs.
 
 ### Proxy Mode (Connect Through a Middleware Proxy)
 
 Use this when your team has a proxy/middleware layer in front of FileMaker, or when you can't connect to FileMaker Server directly.
 
-1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`.
-2. Type **FileMaker: Add Connection Profile** and select it.
-3. You'll be prompted for each field:
+In the wizard, click **Proxy** and fill in:
 
-| Step | Prompt | What to Enter | Example |
-|------|--------|--------------|---------|
-| 1 | Profile name | A friendly name | `Team Proxy` |
-| 2 | Authentication Mode | Select **Proxy** | — |
-| 3 | Server URL | The FileMaker Server URL your proxy connects to | `https://fm.yourcompany.com` |
-| 4 | Database name | The hosted database | `Contacts` |
-| 5 | API base path | Leave the default | `/fmi/data` |
-| 6 | API version path | Leave the default | `vLatest` |
-| 7 | Proxy endpoint | Your proxy's URL | `https://api.yourcompany.com/fm` |
-| 8 | API key | Optional API key for your proxy (sent as Bearer token) | — |
+| Field | What to Enter | Example |
+|-------|--------------|---------|
+| Profile Name | A friendly name | `Team Proxy` |
+| Server URL | The FileMaker Server URL your proxy talks to | `https://fm.yourcompany.com` |
+| Database Name | The hosted database | `Contacts` |
+| API Base Path | Leave the default | `/fmi/data` |
+| API Version | Leave the default | `vLatest` |
+| Proxy Endpoint | Your proxy's URL | `https://api.yourcompany.com/fm` |
+| API Key (optional) | Bearer token your proxy expects | — |
+
+Click **Test Connection**, then **Save Profile** once the badge is green.
+
+### Editing or Re-Testing a Saved Profile
+
+Run **FileMaker: Edit Connection Profile** (or right-click a profile in the FileMaker Explorer). The wizard reopens pre-populated with the saved values. Passwords aren't echoed back — leave the password field blank to keep the stored one, or enter a new value to replace it. After edits, the badge flips to 🟡 ("Edits since last test") until you re-test.
+
+> **Test-before-save policy.** The setting `filemaker.connectionWizard.requireTestBeforeSave` controls how strictly the wizard enforces testing before saving:
+>
+> - `off` — no badge, save freely
+> - `warn` (default) — show a confirmation dialog if you save without a green test
+> - `block` — refuse to save until a green test is recorded on the current values
 
 ---
 
