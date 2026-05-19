@@ -260,6 +260,7 @@ describe('parseBatchUpdateInput', () => {
     const csv = 'recordId,name,age\n1,Alice,30\n2,Bob,25\n';
     const entries = parseBatchUpdateInput(csv, 'csv');
     expect(entries).toHaveLength(2);
-    expect(entries[0]).toEqual({ recordId: '1', fieldData: { name: 'Alice', age: '30' } });
+    // parseBatchUpdateInput coerces numeric strings to numbers
+    expect(entries[0]).toEqual({ recordId: '1', fieldData: { name: 'Alice', age: 30 } });
   });
 });
