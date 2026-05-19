@@ -38,6 +38,22 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Reading layout metadata, browsing the FileMaker Explorer, and running Find queries work in untrusted workspaces. Write operations (record edit/create/delete, batch updates, type generation, FM Web project init) and enterprise environment comparisons require a trusted workspace. Trust the workspace via VS Code's banner to enable them.",
+      "restrictedConfigurations": [
+        "filemaker.features.batch.enabled",
+        "filemaker.features.recordEdit.enabled",
+        "filemaker.features.scriptRunner.enabled",
+        "filemaker.enterprise.mode",
+        "filemaker.enterprise.role",
+        "filemaker.batch.maxRecords",
+        "filemaker.batch.concurrency",
+        "filemaker.batch.dryRunDefault"
+      ]
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [

@@ -1,20 +1,28 @@
 # Step 2 — Connect
 
-Once you've saved a profile, run **FileMaker: Connect** (or right-click the
-profile in the FileMaker sidebar and choose **Connect**).
+![Schema and batch tooling visible after connecting](../marketplace/schema-and-batch.png)
 
-Connect will:
+Once you've saved a profile, **click Connect**: either the **Connect**
+button in the welcome view, run **FileMaker: Connect** from the Command
+Palette (`Ctrl/Cmd+Shift+P`), or right-click the profile in the FileMaker
+sidebar and choose **Connect**.
 
-1. **Authenticate** — opens a session against the Data API and stores the
-   token in your OS keychain.
-2. **Refresh proactively** — the extension renews the token before its
-   nominal 15-minute expiry, so long-running queries don't get kicked out.
-3. **Retry transient failures** — network blips, 5xx errors, and timeouts
-   are retried with exponential backoff so you don't have to.
+What you'll see:
 
-You'll see a status-bar item showing connection state. The first time the
-session token times out due to inactivity, the extension reconnects
-automatically.
+1. A toast confirming the connection (e.g. *Connected to Production*).
+2. A persistent **status-bar item** that tells you which profile is active
+   between reloads.
+3. The sidebar populates with the database's **layouts**, **fields**,
+   **value lists**, **saved queries**, and **schema snapshots**.
+
+Under the hood the extension is:
+
+- **Authenticating** — opens a session against the Data API and stores the
+  token in your OS keychain.
+- **Refreshing proactively** — renews the token before its nominal
+  15-minute expiry, so long-running queries don't get kicked out.
+- **Retrying transient failures** — network blips, 5xx errors, and
+  timeouts are retried with exponential backoff so you don't have to.
 
 > **If Connect fails**, the error toast offers **Retry**, **Edit Profile**,
 > and **Show Details**. The Details document is redacted but includes the
