@@ -4,7 +4,7 @@ import type { NormalizedError, RequestChainEntry } from '../types/errors';
 import { normalizeError } from './normalizeError';
 import { redactString, redactValue } from './redact';
 
-interface ShowErrorOptions {
+export interface ShowErrorOptions {
   fallbackMessage?: string;
   logger?: {
     error: (message: string, meta?: unknown) => void;

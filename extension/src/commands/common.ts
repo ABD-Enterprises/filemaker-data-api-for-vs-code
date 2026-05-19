@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { FMClient } from '../services/fmClient';
 import type { ProfileStore } from '../services/profileStore';
 import type { ConnectionProfile } from '../types/fm';
-import { showErrorWithDetails, toUserErrorMessage } from '../utils/errorUx';
+import { type ShowErrorOptions, showErrorWithDetails, toUserErrorMessage } from '../utils/errorUx';
 
 export interface ProfileCommandArg {
   profileId?: string;
@@ -155,13 +155,7 @@ export function formatError(error: unknown): string {
 
 export async function showCommandError(
   error: unknown,
-  options?: {
-    fallbackMessage?: string;
-    logger?: {
-      error: (message: string, meta?: unknown) => void;
-    };
-    logMessage?: string;
-  }
+  options?: ShowErrorOptions
 ): Promise<void> {
   await showErrorWithDetails(error, options);
 }
