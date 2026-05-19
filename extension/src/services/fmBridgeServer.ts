@@ -7,20 +7,33 @@ import { FMClientError } from './errors';
 import type { FmWebProjectService } from './fmWebProjectService';
 import type { Logger } from './logger';
 import type { ProfileStore } from './profileStore';
+import {
+  BridgeRateLimiter,
+  DEFAULT_BRIDGE_RATE_LIMIT,
+  type BridgeRateLimitConfig
+} from './bridgeRateLimiter';
 
 const MAX_BODY_BYTES = 1_000_000;
 const DEFAULT_ROUTE_TIMEOUT_MS = 20_000;
+
+export interface FmBridgeServerOptions {
+  /** Resolved at request time so settings updates flow live. */
+  getRateLimitConfig?: () => BridgeRateLimitConfig;
+}
 
 export class FmBridgeServer {
   private server: Server | undefined;
   private port: number | undefined;
   private sessionToken: string | undefined;
+  private rateLimiter: BridgeRateLimiter | undefined;
+  private rateLimitWarningEmitted = false;
 
   public constructor(
     private readonly profileStore: ProfileStore,
     private readonly fmClient: FMClient,
     private readonly fmWebProjectService: FmWebProjectService,
-    private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>
+    private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>,
+    private readonly options: FmBridgeServerOptions = {}
   ) {}
 
   public async ensureStarted(): Promise<{ port: number; baseUrl: string }> {
@@ -55,8 +68,16 @@ export class FmBridgeServer {
     this.server = server;
     this.port = address.port;
     this.sessionToken = randomBytes(32).toString('hex');
+    const rateConfig = this.options.getRateLimitConfig?.() ?? DEFAULT_BRIDGE_RATE_LIMIT;
+    this.rateLimiter = new BridgeRateLimiter(rateConfig);
+    this.rateLimitWarningEmitted = false;
     this.logger.info('FM bridge server started.', {
-      port: this.port
+      port: this.port,
+      rateLimit: {
+        perSecond: rateConfig.perSecond,
+        burst: rateConfig.burst,
+        budget: rateConfig.budget
+      }
     });
 
     return {
@@ -74,6 +95,8 @@ export class FmBridgeServer {
     this.server = undefined;
     this.port = undefined;
     this.sessionToken = undefined;
+    this.rateLimiter = undefined;
+    this.rateLimitWarningEmitted = false;
 
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
@@ -129,6 +152,33 @@ export class FmBridgeServer {
       if (request.method === 'OPTIONS') {
         response.statusCode = 204;
         response.end();
+        return;
+      }
+
+      // Rate-limit enforcement: a misbehaving local process holding the token
+      // can otherwise hammer FileMaker indefinitely. Token-bucket per session.
+      const decision = this.rateLimiter?.tryConsume();
+      if (decision && !decision.ok) {
+        if (decision.retryAfterMs > 0) {
+          response.setHeader('Retry-After', Math.ceil(decision.retryAfterMs / 1000).toString());
+        }
+        // Log once per session when first throttled to avoid log spam; subsequent
+        // 429s are visible to the calling client.
+        if (!this.rateLimitWarningEmitted) {
+          this.rateLimitWarningEmitted = true;
+          this.logger.warn('FM bridge throttled a request (further throttling will not log).', {
+            reason: decision.reason,
+            remaining: decision.remaining
+          });
+        }
+        this.sendJson(response, 429, {
+          error:
+            decision.reason === 'budget'
+              ? 'Bridge request budget exhausted for this session. Restart the bridge to reset.'
+              : 'Bridge rate limit exceeded; slow down and retry.',
+          retryAfterMs: decision.retryAfterMs,
+          reason: decision.reason
+        });
         return;
       }
 
