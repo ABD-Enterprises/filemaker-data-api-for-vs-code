@@ -30,6 +30,7 @@ import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCa
 import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
+import { SessionTokenTracker } from './session/sessionTokenTracker';
 
 interface LayoutCacheEntry {
   expiresAt: number;
@@ -83,7 +84,7 @@ export class FMClient {
   private readonly layoutCache = new Map<string, LayoutCacheEntry>();
   private readonly layoutMetadataCache = new Map<string, Record<string, unknown>>();
   private readonly layoutMetadataEtags = new Map<string, string>();
-  private readonly tokenIssuedAt = new Map<string, number>();
+  private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
   private readonly timeoutMs: number;
   private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>;
@@ -118,6 +119,10 @@ export class FMClient {
     this.getSessionRefreshLeadMs = () =>
       resolveOptions().refreshLeadMs ?? DEFAULT_SESSION_REFRESH_LEAD_MS;
     this.now = () => resolveOptions().now?.() ?? Date.now();
+    this.sessionTracker = new SessionTokenTracker({
+      defaultMaxAgeMs: DEFAULT_SESSION_MAX_AGE_MS,
+      defaultRefreshLeadMs: DEFAULT_SESSION_REFRESH_LEAD_MS
+    });
   }
 
   /**
@@ -131,29 +136,11 @@ export class FMClient {
    * - If `refreshLeadMs >= maxAgeMs`, lifetime is clamped to maxAgeMs to avoid infinite refresh loops.
    */
   public shouldRefreshSession(profileId: string, now = this.now()): boolean {
-    const refreshLeadMs = this.getSessionRefreshLeadMs();
-
-    // Setting contract: 0 disables proactive refresh.
-    if (refreshLeadMs <= 0) {
-      return false;
-    }
-
-    const issuedAt = this.tokenIssuedAt.get(profileId);
-    if (issuedAt === undefined) {
-      // No issuance record (e.g., after extension restart). Trust the persisted token
-      // and let the 401-retry path catch real expiry. This prevents orphaning sessions
-      // on every reload.
-      return false;
-    }
-
-    // Clock skew guard: negative ageMs (clock moved backwards) is treated as 0.
-    const ageMs = Math.max(0, now - issuedAt);
-
-    // Infinite-loop guard: if lead >= maxAge, fall back to refreshing only after maxAge elapses.
-    const maxAgeMs = this.getSessionMaxAgeMs();
-    const lifetimeMs = refreshLeadMs >= maxAgeMs ? maxAgeMs : maxAgeMs - refreshLeadMs;
-
-    return ageMs >= Math.max(0, lifetimeMs);
+    return this.sessionTracker.shouldRefresh(profileId, {
+      now,
+      maxAgeMs: this.getSessionMaxAgeMs(),
+      refreshLeadMs: this.getSessionRefreshLeadMs()
+    });
   }
 
   public async createSession(profile: ConnectionProfile, control?: ClientRequestControl): Promise<string> {
@@ -168,7 +155,7 @@ export class FMClient {
           const token = await this.proxyClient.createSession(profile, control?.signal);
           const normalizedToken = token ?? 'proxy-session';
           await this.secretStore.setSessionToken(profile.id, normalizedToken);
-          this.tokenIssuedAt.set(profile.id, this.now());
+          this.sessionTracker.markIssued(profile.id, this.now());
           this.invalidateProfileCache(profile.id);
           return normalizedToken;
         }
@@ -210,7 +197,7 @@ export class FMClient {
           }
 
           await this.secretStore.setSessionToken(profile.id, token);
-          this.tokenIssuedAt.set(profile.id, this.now());
+          this.sessionTracker.markIssued(profile.id, this.now());
           this.invalidateProfileCache(profile.id);
 
           return token;
@@ -268,7 +255,7 @@ export class FMClient {
           });
         } finally {
           await this.secretStore.deleteSessionToken(profile.id);
-          this.tokenIssuedAt.delete(profile.id);
+          this.sessionTracker.clear(profile.id);
           this.invalidateProfileCache(profile.id);
         }
       }
@@ -882,7 +869,7 @@ export class FMClient {
           requestId: trace?.requestId
         });
         await this.secretStore.deleteSessionToken(profile.id);
-        this.tokenIssuedAt.delete(profile.id);
+        this.sessionTracker.clear(profile.id);
         await this.createSession(profile, { signal: request.signal });
 
         return this.requestWithAuth(profile, request, false, trace);
@@ -956,7 +943,7 @@ export class FMClient {
           requestId: trace?.requestId
         });
         await this.secretStore.deleteSessionToken(profile.id);
-        this.tokenIssuedAt.delete(profile.id);
+        this.sessionTracker.clear(profile.id);
         await this.createSession(profile, { signal: request.signal });
 
         return this.requestWithAuthRaw(profile, request, false, trace);
