@@ -412,6 +412,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           'setContext',
           'filemaker.enterpriseMode',
           settingsService.isEnterpriseModeEnabled()
+        ),
+        vscode.commands.executeCommand(
+          'setContext',
+          'filemaker.powerUserMode',
+          settingsService.isPowerUserModeEnabled()
         )
       ]);
     } catch (error) {
@@ -421,7 +426,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   void refreshPaletteContexts();
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('filemaker.enterprise.mode')) {
+      if (
+        event.affectsConfiguration('filemaker.enterprise.mode') ||
+        event.affectsConfiguration('filemaker.advanced.powerUserMode')
+      ) {
         void refreshPaletteContexts();
       }
     })

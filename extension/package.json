@@ -569,7 +569,16 @@
         { "command": "filemakerDataApiTools.compareEnvironments", "when": "filemaker.enterpriseMode" },
         { "command": "filemakerDataApiTools.diffLayoutAcrossEnvironments", "when": "filemaker.enterpriseMode" },
         { "command": "filemakerDataApiTools.exportEnvironmentComparisonReport", "when": "filemaker.enterpriseMode" },
-        { "command": "filemakerDataApiTools.openEnvironmentSetJson", "when": "filemaker.enterpriseMode" }
+        { "command": "filemakerDataApiTools.openEnvironmentSetJson", "when": "filemaker.enterpriseMode" },
+
+        { "command": "filemakerDataApiTools.showJobs", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.showRequestHistory", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.openDiagnosticsDashboard", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.showCircuitBreakerStatus", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.reloadPlugins", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.listActivePlugins", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.exportProfiles", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.importProfiles", "when": "filemaker.powerUserMode" }
       ]
     },
     "configuration": {
@@ -712,6 +721,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable batch export/update features (auto-disabled in untrusted workspaces)."
+        },
+        "filemaker.advanced.powerUserMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need."
         },
         "filemaker.enterprise.mode": {
           "type": "boolean",
