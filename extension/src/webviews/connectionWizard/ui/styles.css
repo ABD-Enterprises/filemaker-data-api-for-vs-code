@@ -265,3 +265,35 @@ h1 {
   background: var(--vscode-editorWarning-foreground, #cc8400);
   color: #1f1f1f;
 }
+
+.test-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px 0 0;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  background: var(--vscode-input-background, #2d2d2d);
+  color: var(--vscode-foreground, #d4d4d4);
+  border: 1px solid var(--vscode-progressBar-background, var(--vscode-input-border, transparent));
+}
+
+.test-progress-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: fm-spin 0.9s linear infinite;
+}
+
+.test-progress-text {
+  white-space: nowrap;
+}
+
+@keyframes fm-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
