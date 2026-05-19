@@ -568,23 +568,44 @@
             "error"
           ],
           "default": "info",
+          "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.logging.level#` instead.",
           "description": "Minimum log level written to the FileMaker Data API Tools output channel."
         },
         "filemakerDataApiTools.requestTimeoutMs": {
           "type": "number",
           "default": 15000,
           "minimum": 1000,
+          "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.requestTimeoutMs#` instead.",
           "description": "HTTP timeout in milliseconds for FileMaker Data API requests."
         },
         "filemakerDataApiTools.defaultApiBasePath": {
           "type": "string",
           "default": "/fmi/data",
+          "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.defaultApiBasePath#` instead.",
           "description": "Default API base path used when a profile does not override it."
         },
         "filemakerDataApiTools.defaultApiVersionPath": {
           "type": "string",
           "default": "vLatest",
+          "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.defaultApiVersionPath#` instead.",
           "description": "Default FileMaker Data API version segment used when a profile does not override it."
+        },
+        "filemaker.requestTimeoutMs": {
+          "type": "number",
+          "default": 15000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "description": "HTTP timeout in milliseconds for FileMaker Data API requests. Replaces the deprecated `filemakerDataApiTools.requestTimeoutMs`."
+        },
+        "filemaker.defaultApiBasePath": {
+          "type": "string",
+          "default": "/fmi/data",
+          "description": "Default API base path used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiBasePath`."
+        },
+        "filemaker.defaultApiVersionPath": {
+          "type": "string",
+          "default": "vLatest",
+          "description": "Default FileMaker Data API version segment used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiVersionPath`."
         },
         "filemaker.savedQueries.scope": {
           "type": "string",
