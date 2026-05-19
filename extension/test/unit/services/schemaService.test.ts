@@ -62,20 +62,21 @@ describe('SchemaService.getLayoutSchema', () => {
     expect(second.fields.map((f) => f.name)).toEqual(['firstName', 'lastName']);
   });
 
-  it('re-fetches after TTL expiry', async () => {
+  it('re-fetches when TTL is zero (entry stored as already-expired)', async () => {
     const getLayoutMetadata = vi
       .fn()
       .mockResolvedValueOnce(metadataWith([{ name: 'a' }]))
       .mockResolvedValueOnce(metadataWith([{ name: 'a' }, { name: 'b' }]));
     const fmClient = { getLayoutMetadata } as unknown as FMClient;
 
-    let ttl = 60_000;
+    // TTL of 0 means expiresAt === now at write time. The cache check uses
+    // strict > now, so the stored entry is always treated as expired and
+    // every read triggers a fresh fetch.
     const svc = new SchemaService(fmClient, createLogger(), {
-      getCacheTtlMs: () => ttl
+      getCacheTtlMs: () => 0
     });
 
     await svc.getLayoutSchema(profile(), 'Contacts');
-    ttl = -1; // force expired on next check
     await svc.getLayoutSchema(profile(), 'Contacts');
     expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
   });
