@@ -159,44 +159,53 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         multiplier: 2
       };
 
-      const statusBar = vscode.window.createStatusBarItem(
-        vscode.StatusBarAlignment.Left,
-        110
-      );
-      try {
-        statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name}…`;
-        statusBar.show();
-
-        await retryWithBackoff(
-          () => fmClient.createSession(profile),
-          policy,
-          {
-            shouldRetry: (err) => isRetryableConnectError(err),
-            onRetry: ({ attempt, delayMs, error }) => {
-              const seconds = Math.max(1, Math.round(delayMs / 1000));
-              statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name} — retry ${attempt + 1}/${policy.maxRetries} in ${seconds}s`;
-              logger.warn('Connect attempt failed; retrying with backoff.', {
-                profileId: profile.id,
-                attempt,
-                delayMs,
-                error
-              });
-            }
-          }
+      const runConnect = async (): Promise<void> => {
+        const statusBar = vscode.window.createStatusBarItem(
+          vscode.StatusBarAlignment.Left,
+          110
         );
+        try {
+          statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name}…`;
+          statusBar.show();
 
-        await profileStore.setActiveProfileId(profile.id);
-        refreshExplorer();
-        vscode.window.showInformationMessage(`Connected to "${profile.name}".`);
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Failed to connect to FileMaker profile.',
-          logger,
-          logMessage: 'Connect command failed.'
-        });
-      } finally {
-        statusBar.dispose();
-      }
+          await retryWithBackoff(
+            () => fmClient.createSession(profile),
+            policy,
+            {
+              shouldRetry: (err) => isRetryableConnectError(err),
+              onRetry: ({ attempt, delayMs, error }) => {
+                const seconds = Math.max(1, Math.round(delayMs / 1000));
+                statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name} — retry ${attempt + 1}/${policy.maxRetries} in ${seconds}s`;
+                logger.warn('Connect attempt failed; retrying with backoff.', {
+                  profileId: profile.id,
+                  attempt,
+                  delayMs,
+                  error
+                });
+              }
+            }
+          );
+
+          await profileStore.setActiveProfileId(profile.id);
+          refreshExplorer();
+          vscode.window.showInformationMessage(`Connected to "${profile.name}".`);
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: 'Failed to connect to FileMaker profile.',
+            logger,
+            logMessage: 'Connect command failed.',
+            actions: {
+              retry: runConnect,
+              profileId: profile.id,
+              settingsKey: 'filemaker.requestTimeoutMs'
+            }
+          });
+        } finally {
+          statusBar.dispose();
+        }
+      };
+
+      await runConnect();
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.disconnect', async (arg: unknown) => {
