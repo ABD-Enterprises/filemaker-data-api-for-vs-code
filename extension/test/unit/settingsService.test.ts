@@ -14,6 +14,20 @@ function createSettings(overrides?: ConfigMap, trusted = true): SettingsService 
           const sectionData = section ? data[section] ?? {} : {};
           const value = sectionData[key] as T | undefined;
           return value ?? (defaultValue as T);
+        },
+        // Mirrors VS Code's WorkspaceConfiguration.inspect so SettingsService.getPreferred
+        // can distinguish "explicitly set" from "default" in this mock. We treat any
+        // present key as workspace-scoped because the test ConfigMap doesn't model scopes.
+        inspect: <T>(key: string) => {
+          const sectionData = section ? data[section] ?? {} : {};
+          const value = sectionData[key] as T | undefined;
+          return {
+            key,
+            defaultValue: undefined as T | undefined,
+            globalValue: undefined as T | undefined,
+            workspaceValue: value,
+            workspaceFolderValue: undefined as T | undefined
+          };
         }
       }) as never,
     isWorkspaceTrusted: () => trusted
