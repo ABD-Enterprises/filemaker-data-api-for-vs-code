@@ -239,6 +239,12 @@ function applyInit(payload) {
   }
 
   setStatus('Ready.');
+
+  // Focus the profile select once the init data has rendered so SR + keyboard
+  // users land on the primary control instead of the document root.
+  if (profileSelect && typeof profileSelect.focus === 'function') {
+    profileSelect.focus();
+  }
 }
 
 function applyLayouts(payload) {
