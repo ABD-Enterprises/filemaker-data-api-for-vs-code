@@ -23,6 +23,7 @@ function createMockDeps() {
       listSummaries: vi.fn().mockResolvedValue([])
     },
     jobRunner: {
+      listJobs: vi.fn().mockReturnValue([]),
       getJobSummaries: vi.fn().mockReturnValue([])
     },
     environmentSetStore: {
@@ -56,15 +57,14 @@ function createProvider(deps = createMockDeps()) {
 
 describe('FMExplorerProvider', () => {
   describe('getChildren (root)', () => {
-    it('returns environment sets and jobs root nodes when no profiles exist', async () => {
+    it('returns an empty array when nothing exists (lets viewsWelcome render)', async () => {
       const provider = createProvider();
       const children = await provider.getChildren();
 
-      expect(children.length).toBeGreaterThanOrEqual(2);
-
-      const kinds = children.map((c) => c.kind);
-      expect(kinds).toContain('environmentSetsRoot');
-      expect(kinds).toContain('jobsRoot');
+      // Critical: an empty tree triggers contributes.viewsWelcome, which is
+      // where the primary "Add Connection Profile" / "Open Walkthrough" CTAs
+      // live. Any root node here suppresses that welcome view.
+      expect(children).toEqual([]);
     });
 
     it('returns profile nodes when profiles exist', async () => {
@@ -78,6 +78,60 @@ describe('FMExplorerProvider', () => {
       const profileNodes = children.filter((c) => c.kind === 'profile');
       expect(profileNodes).toHaveLength(1);
       expect(profileNodes[0].label).toBe('Dev Server');
+    });
+
+    it('omits Environment Sets root when zero env sets exist', async () => {
+      const deps = createMockDeps();
+      deps.profileStore.listProfiles.mockResolvedValue([
+        { id: 'p1', name: 'Dev', serverUrl: 'https://x', database: 'D', authMode: 'direct' }
+      ]);
+      const provider = createProvider(deps);
+      const children = await provider.getChildren();
+
+      const kinds = children.map((c) => c.kind);
+      expect(kinds).not.toContain('environmentSetsRoot');
+    });
+
+    it('shows Environment Sets root when at least one env set exists', async () => {
+      const deps = createMockDeps();
+      deps.environmentSetStore.listEnvironmentSets.mockResolvedValue([
+        { id: 'e1', name: 'Prod vs Dev', profiles: ['p1', 'p2'], createdAt: '2026-01-01' }
+      ]);
+      deps.profileStore.listProfiles.mockResolvedValue([
+        { id: 'p1', name: 'Dev', serverUrl: 'https://x', database: 'D', authMode: 'direct' }
+      ]);
+      const provider = createProvider(deps);
+      const children = await provider.getChildren();
+
+      const kinds = children.map((c) => c.kind);
+      expect(kinds).toContain('environmentSetsRoot');
+    });
+
+    it('omits Jobs root when no jobs are tracked', async () => {
+      const deps = createMockDeps();
+      deps.profileStore.listProfiles.mockResolvedValue([
+        { id: 'p1', name: 'Dev', serverUrl: 'https://x', database: 'D', authMode: 'direct' }
+      ]);
+      const provider = createProvider(deps);
+      const children = await provider.getChildren();
+
+      const kinds = children.map((c) => c.kind);
+      expect(kinds).not.toContain('jobsRoot');
+    });
+
+    it('shows Jobs root when jobs exist', async () => {
+      const deps = createMockDeps();
+      deps.jobRunner.listJobs = vi.fn().mockReturnValue([
+        { id: 'j1', name: 'Export', status: 'running', progress: 50, startedAt: '2026-01-01' }
+      ]);
+      deps.profileStore.listProfiles.mockResolvedValue([
+        { id: 'p1', name: 'Dev', serverUrl: 'https://x', database: 'D', authMode: 'direct' }
+      ]);
+      const provider = createProvider(deps);
+      const children = await provider.getChildren();
+
+      const kinds = children.map((c) => c.kind);
+      expect(kinds).toContain('jobsRoot');
     });
 
     it('includes offline badge when offline mode is enabled', async () => {
