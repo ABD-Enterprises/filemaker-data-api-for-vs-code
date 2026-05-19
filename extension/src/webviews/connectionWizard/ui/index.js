@@ -129,11 +129,22 @@ document.addEventListener('DOMContentLoaded', () => {
         saveBtn.textContent = 'Save Profile';
         break;
 
+      case 'testStarted': {
+        showTestProgress('Reaching server…', message.timeoutMs);
+        break;
+      }
+
+      case 'testProgress': {
+        showTestProgress(message.phase || 'Working…');
+        break;
+      }
+
       case 'testSuccess': {
         const data = collectFormData();
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'success', message: message.message, hash };
         showStatus('success', message.message || 'Connection successful.');
+        hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
         testBtn.textContent = 'Test Connection';
@@ -145,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'failure', message: message.message, hash };
         showStatus('error', message.message || 'Connection failed.');
+        hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
         testBtn.textContent = 'Test Connection';
@@ -245,6 +257,50 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     renderTestState();
+  }
+
+  function showTestProgress(phase, timeoutMs) {
+    let el = document.getElementById('testProgress');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'testProgress';
+      el.className = 'test-progress';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      const buttonsContainer = saveBtn.parentElement;
+      if (buttonsContainer) {
+        buttonsContainer.insertBefore(el, saveBtn);
+      } else {
+        document.body.appendChild(el);
+      }
+    }
+    const timeoutHint =
+      typeof timeoutMs === 'number' && timeoutMs > 0
+        ? ` (timeout ${Math.round(timeoutMs / 1000)}s)`
+        : '';
+
+    // Build the spinner + label via DOM APIs (textContent is safe; innerHTML with
+    // a postMessage-sourced phase string trips CodeQL's client-side-XSS check).
+    while (el.firstChild) {
+      el.removeChild(el.firstChild);
+    }
+    const spinner = document.createElement('span');
+    spinner.className = 'test-progress-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'test-progress-text';
+    text.textContent = `${phase}${timeoutHint}`;
+    el.appendChild(spinner);
+    el.appendChild(text);
+    el.style.display = '';
+  }
+
+  function hideTestProgress() {
+    const el = document.getElementById('testProgress');
+    if (el) {
+      el.style.display = 'none';
+      el.textContent = '';
+    }
   }
 
   function renderTestState() {
