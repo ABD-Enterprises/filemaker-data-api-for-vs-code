@@ -379,7 +379,62 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     new vscode.Disposable(() => logger.dispose())
   );
 
+  registerWalkthroughCommands(context, logger);
+  void maybeOpenFirstRunWalkthrough(context, logger);
+
   logger.info('FileMaker Data API Tools activated.');
+}
+
+const WALKTHROUGH_ID = 'deffenda.filemaker-data-api-tools#filemakerGettingStarted';
+const FIRST_RUN_FLAG = 'filemaker.walkthrough.shownOnce';
+
+function registerWalkthroughCommands(
+  context: vscode.ExtensionContext,
+  logger: { warn: (message: string, meta?: unknown) => void }
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('filemakerDataApiTools.openWelcomeWalkthrough', async () => {
+      try {
+        await vscode.commands.executeCommand(
+          'workbench.action.openWalkthrough',
+          { category: WALKTHROUGH_ID },
+          false
+        );
+      } catch (error) {
+        logger.warn('Failed to open getting-started walkthrough.', { error });
+      }
+    }),
+    vscode.commands.registerCommand('filemakerDataApiTools.openUserGuide', async () => {
+      try {
+        const uri = vscode.Uri.joinPath(context.extensionUri, 'docs', 'USER_GUIDE.md');
+        await vscode.commands.executeCommand('markdown.showPreview', uri);
+      } catch (error) {
+        logger.warn('Failed to open user guide.', { error });
+      }
+    })
+  );
+}
+
+async function maybeOpenFirstRunWalkthrough(
+  context: vscode.ExtensionContext,
+  logger: { info: (message: string, meta?: unknown) => void; warn: (message: string, meta?: unknown) => void }
+): Promise<void> {
+  if (context.globalState.get<boolean>(FIRST_RUN_FLAG, false)) {
+    return;
+  }
+  // One-shot: mark first so a failure to open the walkthrough doesn't
+  // re-prompt forever on subsequent activations.
+  await context.globalState.update(FIRST_RUN_FLAG, true);
+  try {
+    await vscode.commands.executeCommand(
+      'workbench.action.openWalkthrough',
+      { category: WALKTHROUGH_ID },
+      false
+    );
+    logger.info('First-run getting-started walkthrough opened.');
+  } catch (error) {
+    logger.warn('First-run walkthrough open failed; skipping.', { error });
+  }
 }
 
 export function deactivate(): void {
