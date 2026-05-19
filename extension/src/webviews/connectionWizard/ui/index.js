@@ -214,8 +214,21 @@ document.addEventListener('DOMContentLoaded', () => {
     setFieldValue('profileName', profile.name || '');
     setFieldValue('serverUrl', profile.serverUrl || '');
     setFieldValue('database', profile.database || '');
-    setFieldValue('apiBasePath', profile.apiBasePath || '/fmi/data');
-    setFieldValue('apiVersionPath', profile.apiVersionPath || 'vLatest');
+    const apiBasePath = profile.apiBasePath || '/fmi/data';
+    const apiVersionPath = profile.apiVersionPath || 'vLatest';
+    setFieldValue('apiBasePath', apiBasePath);
+    setFieldValue('apiVersionPath', apiVersionPath);
+
+    // The Advanced server options block is collapsed by default. If the saved
+    // profile carries non-default values, open it so the user can see what they
+    // previously set — otherwise editing an existing profile would look like
+    // those values vanished.
+    if (apiBasePath !== '/fmi/data' || apiVersionPath !== 'vLatest') {
+      const advanced = /** @type {HTMLDetailsElement|null} */ (
+        document.querySelector('.advanced-toggle')
+      );
+      if (advanced) advanced.open = true;
+    }
 
     if (profile.authMode === 'proxy') {
       proxyBtn.click();
