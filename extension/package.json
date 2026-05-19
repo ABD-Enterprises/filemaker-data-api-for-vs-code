@@ -654,6 +654,27 @@
           "maximum": 10,
           "description": "Exponential multiplier applied to the connect backoff delay between retries."
         },
+        "filemaker.fmWeb.bridge.rateLimitPerSecond": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Sustained requests-per-second cap on the local FM bridge server. Throttled requests get HTTP 429 with Retry-After. Default 20."
+        },
+        "filemaker.fmWeb.bridge.rateLimitBurst": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "Burst capacity for the bridge token bucket — max requests permitted in a single instant. Default 60."
+        },
+        "filemaker.fmWeb.bridge.requestBudget": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 100,
+          "maximum": 10000000,
+          "description": "Hard cap on total bridge requests per session token. After exhaustion, restart the bridge to reset. Default 10000."
+        },
         "filemaker.connectionWizard.requireTestBeforeSave": {
           "type": "string",
           "enum": [
