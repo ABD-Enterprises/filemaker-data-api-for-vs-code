@@ -244,6 +244,16 @@ export class SettingsService {
     return this.getConfiguration('filemaker').get<boolean>('enterprise.mode', false);
   }
 
+  /**
+   * Controls whether the advanced/diagnostic command palette entries
+   * (Show Jobs, Open Diagnostics Dashboard, Circuit Breaker, plugins,
+   * profile import/export) surface in the FileMaker command palette.
+   * Default false to keep the palette focused for new users.
+   */
+  public isPowerUserModeEnabled(): boolean {
+    return this.getConfiguration('filemaker').get<boolean>('advanced.powerUserMode', false);
+  }
+
   public getEnterpriseRole(): EnterpriseRole {
     const configured = this.getConfiguration('filemaker').get<string>('enterprise.role', 'developer');
     if (configured === 'viewer' || configured === 'developer' || configured === 'admin') {
