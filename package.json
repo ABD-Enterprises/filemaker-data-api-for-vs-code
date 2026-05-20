@@ -19,6 +19,7 @@
     "format": "npm run format --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",
     "package:check": "npm run package:check -w extension",
+    "package:vsix": "npm run package:vsix -w extension",
     "setup": "node ./setup.mjs"
   },
   "overrides": {
