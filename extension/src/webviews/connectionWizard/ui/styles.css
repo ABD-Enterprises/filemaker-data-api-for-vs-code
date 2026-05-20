@@ -1,31 +1,31 @@
+/*
+ * Map the wizard's local design tokens onto VS Code's theme tokens. This is
+ * what makes the wizard track the user's editor theme — light, dark, high
+ * contrast, custom — instead of imposing our own palette. The fallbacks (the
+ * second argument inside each var()) match the previous hardcoded values so
+ * the form still renders if VS Code somehow doesn't inject these tokens
+ * (snapshot tests, screenshot rendering outside the webview, etc.).
+ *
+ * The @media (prefers-color-scheme) override is gone on purpose: VS Code's
+ * tokens already adapt to the user's chosen theme, so a parallel rule would
+ * fight the theme service in some configurations (high contrast in particular).
+ */
 :root {
-  --bg: #f8fafb;
-  --panel: #ffffff;
-  --border: #e2e6ea;
-  --accent: #0ea5e9;
-  --accent-hover: #0284c7;
-  --text: #1e293b;
-  --muted: #64748b;
-  --error: #ef4444;
-  --success: #22c55e;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f172a;
-    --panel: #1e293b;
-    --border: #334155;
-    --accent: #38bdf8;
-    --accent-hover: #0ea5e9;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-  }
+  --bg: var(--vscode-editor-background, #f8fafb);
+  --panel: var(--vscode-textBlockQuote-background, #ffffff);
+  --border: var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea));
+  --accent: var(--vscode-focusBorder, #0ea5e9);
+  --accent-hover: var(--vscode-button-hoverBackground, #0284c7);
+  --text: var(--vscode-foreground, #1e293b);
+  --muted: var(--vscode-descriptionForeground, #64748b);
+  --error: var(--vscode-errorForeground, #ef4444);
+  --success: var(--vscode-testing-iconPassed, #22c55e);
 }
 
 body {
   margin: 0;
-  font-family: 'Avenir Next', 'Segoe UI', sans-serif;
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
+  font-family: var(--vscode-font-family, 'Avenir Next', 'Segoe UI', sans-serif);
+  font-size: var(--vscode-font-size, clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem));
   background: var(--bg);
   color: var(--text);
 }
@@ -126,20 +126,20 @@ h1 {
 .field select {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--border);
+  border: 1px solid var(--vscode-input-border, var(--border));
   border-radius: 8px;
   padding: 8px 10px;
-  font-family: 'SF Mono', Menlo, monospace;
+  font-family: var(--vscode-editor-font-family, 'SF Mono', Menlo, monospace);
   font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
-  background: var(--panel);
-  color: var(--text);
+  background: var(--vscode-input-background, var(--panel));
+  color: var(--vscode-input-foreground, var(--text));
 }
 
 .field input:focus,
 .field select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+  border-color: var(--vscode-focusBorder, var(--accent));
 }
 
 .field .hint {
@@ -174,12 +174,13 @@ h1 {
 }
 
 .mode-toggle button.active {
-  border-color: var(--accent);
-  background: rgba(14, 165, 233, 0.08);
+  border-color: var(--vscode-focusBorder, var(--accent));
+  background: var(--vscode-list-activeSelectionBackground, rgba(14, 165, 233, 0.08));
+  color: var(--vscode-list-activeSelectionForeground, var(--text));
 }
 
 .mode-toggle button:hover {
-  border-color: var(--accent);
+  border-color: var(--vscode-focusBorder, var(--accent));
 }
 
 .proxy-fields {
@@ -215,12 +216,12 @@ h1 {
 }
 
 .actions .primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, #fff);
 }
 
 .actions .primary:hover {
-  background: var(--accent-hover);
+  background: var(--vscode-button-hoverBackground, var(--accent-hover));
 }
 
 .actions .primary:disabled {
@@ -229,13 +230,13 @@ h1 {
 }
 
 .actions .secondary {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-button-secondaryForeground, var(--muted));
+  border: 1px solid var(--vscode-input-border, var(--border));
 }
 
 .actions .secondary:hover {
-  background: var(--panel);
+  background: var(--vscode-button-secondaryHoverBackground, var(--panel));
 }
 
 .status {
@@ -248,16 +249,16 @@ h1 {
 
 .status.error {
   display: block;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--error);
-  border: 1px solid var(--error);
+  background: var(--vscode-inputValidation-errorBackground, rgba(239, 68, 68, 0.1));
+  color: var(--vscode-inputValidation-errorForeground, var(--error));
+  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--error));
 }
 
 .status.success {
   display: block;
-  background: rgba(34, 197, 94, 0.1);
-  color: var(--success);
-  border: 1px solid var(--success);
+  background: var(--vscode-inputValidation-infoBackground, rgba(34, 197, 94, 0.1));
+  color: var(--vscode-testing-iconPassed, var(--success));
+  border: 1px solid var(--vscode-testing-iconPassed, var(--success));
 }
 
 .loading-skeleton {
