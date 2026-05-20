@@ -301,8 +301,9 @@ export class ConnectionWizardPanel {
     <div class="form-section">
       <h2>Profile</h2>
       <div class="field">
-        <label for="profileName">Profile Name</label>
-        <input id="profileName" type="text" placeholder="e.g. Production Server" />
+        <label for="profileName">Profile Name <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="profileName" type="text" required aria-required="true"
+               placeholder="e.g. Production Server" />
       </div>
     </div>
 
@@ -321,14 +322,18 @@ export class ConnectionWizardPanel {
     <div class="form-section">
       <h2>Server</h2>
       <div class="field">
-        <label for="serverUrl">Server URL</label>
-        <input id="serverUrl" type="url" placeholder="https://fm.yourcompany.com" />
-        <div class="hint">The HTTPS address of your FileMaker Server.</div>
+        <label for="serverUrl">Server URL <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="serverUrl" type="url" required aria-required="true"
+               aria-describedby="serverUrl-hint"
+               placeholder="https://fm.yourcompany.com" />
+        <div id="serverUrl-hint" class="hint">The HTTPS address of your FileMaker Server.</div>
       </div>
       <div class="field">
-        <label for="database">Database Name</label>
-        <input id="database" type="text" placeholder="MyDatabase" />
-        <div class="hint">The hosted FileMaker database file name.</div>
+        <label for="database">Database Name <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="database" type="text" required aria-required="true"
+               aria-describedby="database-hint"
+               placeholder="MyDatabase" />
+        <div id="database-hint" class="hint">The hosted FileMaker database file name.</div>
       </div>
       <!--
         API Base Path and API Version are correct out of the box for 99% of
@@ -342,13 +347,15 @@ export class ConnectionWizardPanel {
         <summary>Advanced server options</summary>
         <div class="field">
           <label for="apiBasePath">API Base Path</label>
-          <input id="apiBasePath" type="text" value="/fmi/data" />
-          <div class="hint">Usually <code>/fmi/data</code>. Change only if your server uses a custom path.</div>
+          <input id="apiBasePath" type="text" value="/fmi/data"
+                 aria-describedby="apiBasePath-hint" />
+          <div id="apiBasePath-hint" class="hint">Usually <code>/fmi/data</code>. Change only if your server uses a custom path.</div>
         </div>
         <div class="field">
           <label for="apiVersionPath">API Version</label>
-          <input id="apiVersionPath" type="text" value="vLatest" />
-          <div class="hint">Usually <code>vLatest</code>.</div>
+          <input id="apiVersionPath" type="text" value="vLatest"
+                 aria-describedby="apiVersionPath-hint" />
+          <div id="apiVersionPath-hint" class="hint">Usually <code>vLatest</code>.</div>
         </div>
       </details>
     </div>
@@ -356,28 +363,35 @@ export class ConnectionWizardPanel {
     <div id="directFields" class="form-section direct-fields">
       <h2>Credentials</h2>
       <div class="field">
-        <label for="username">Username</label>
-        <input id="username" type="text" placeholder="api_user" autocomplete="username" />
-        <div class="hint">The FileMaker account with fmrest privilege.</div>
+        <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="username" type="text" required aria-required="true"
+               aria-describedby="username-hint"
+               placeholder="api_user" autocomplete="username" />
+        <div id="username-hint" class="hint">The FileMaker account with fmrest privilege.</div>
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input id="password" type="password" autocomplete="current-password" />
-        <div class="hint">Stored securely in VS Code SecretStorage. Never written to disk.</div>
+        <input id="password" type="password"
+               aria-describedby="password-hint"
+               autocomplete="current-password" />
+        <div id="password-hint" class="hint">Stored securely in VS Code SecretStorage. Never written to disk.</div>
       </div>
     </div>
 
     <div id="proxyFields" class="form-section proxy-fields">
       <h2>Proxy Settings</h2>
       <div class="field">
-        <label for="proxyEndpoint">Proxy Endpoint</label>
-        <input id="proxyEndpoint" type="url" placeholder="https://api.yourcompany.com/fm-proxy" />
-        <div class="hint">Your middleware endpoint URL.</div>
+        <label for="proxyEndpoint">Proxy Endpoint <span class="required-marker" aria-hidden="true">*</span></label>
+        <input id="proxyEndpoint" type="url" required aria-required="true"
+               aria-describedby="proxyEndpoint-hint"
+               placeholder="https://api.yourcompany.com/fm-proxy" />
+        <div id="proxyEndpoint-hint" class="hint">Your middleware endpoint URL.</div>
       </div>
       <div class="field">
         <label for="proxyApiKey">API Key (optional)</label>
-        <input id="proxyApiKey" type="password" autocomplete="off" />
-        <div class="hint">Sent as a Bearer token to your proxy. Stored securely.</div>
+        <input id="proxyApiKey" type="password" autocomplete="off"
+               aria-describedby="proxyApiKey-hint" />
+        <div id="proxyApiKey-hint" class="hint">Sent as a Bearer token to your proxy. Stored securely.</div>
       </div>
     </div>
 
