@@ -42,7 +42,20 @@ describe('Connection wizard HTML/JS structural contract', () => {
     // every button being type="button" so Save/Test never trigger a form
     // submission (which would reload the webview). Strip HTML comments first
     // so a literal "<button>" inside a doc comment doesn't trip the check.
-    const withoutComments = wizardHtmlSource.replace(/<!--[\s\S]*?-->/g, '');
+    //
+    // We loop the comment strip until the result is stable. CodeQL flags a
+    // single-pass non-greedy replace as "incomplete multi-character
+    // sanitization" because an adversarial input like `<!--<!---->` would
+    // leave a trailing `<!--`. We don't actually face adversarial input here
+    // (the source file is our own .ts template), but iterating to a fixed
+    // point both silences the alert and makes the function robust if anyone
+    // ever points it at less-controlled HTML.
+    let withoutComments = wizardHtmlSource;
+    for (let i = 0; i < 4; i += 1) {
+      const stripped = withoutComments.replace(/<!--[\s\S]*?-->/g, '');
+      if (stripped === withoutComments) break;
+      withoutComments = stripped;
+    }
     const buttonOpens = withoutComments.match(/<button\b[^>]*>/g) ?? [];
     expect(buttonOpens.length).toBeGreaterThan(0);
     for (const tag of buttonOpens) {
