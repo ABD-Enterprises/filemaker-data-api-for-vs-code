@@ -1,16 +1,74 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
-- Added Marketplace-ready extension metadata:
-  - real `publisher`, repository, homepage, and issue tracker URLs
-  - Marketplace categories, keywords, icon, and gallery banner
-- Rewrote the extension README for Marketplace publication:
-  - product overview, install path, quick start, and feature highlights
-  - repo-hosted screenshots for explorer, query builder, and schema/batch workflows
-- Added a dedicated `package:vsix` script that emits the VSIX into `artifacts/`
-- Updated CI tag packaging to publish the generated VSIX artifact instead of rebuilding ad hoc
-- Made VSIX packaging dependency-free after confirming the extension bundle is self-contained, so `vsce package` no longer depends on a healthy root workspace install
+Major usability, accessibility, security, and reliability release.
+
+### Onboarding
+
+- Added a first-run Getting Started walkthrough (Add Profile → Test Connection → Query Builder) with screenshots and clear action verbs.
+- Added a dedicated activity-bar container with a FileMaker icon.
+- Added a Welcome view that surfaces **Add Connection Profile** / **Open Walkthrough** when no profiles exist (previously the empty state was buried behind always-present Environment Sets / Jobs roots).
+- Connection wizard restored: fixed a crash on load caused by a missing `<form id="wizardForm">` wrapper. Save and Test Connection buttons are now reliably bound.
+- Connection wizard collapses advanced server fields (`API Base Path`, `API Version`) under a `<details>` disclosure so first-time users see only what they need.
+- Connection wizard shows live progress during Test Connection with phase-by-phase status.
+- Walkthrough id computed from `context.extension.id` at runtime so a publisher rename can't silently break the walkthrough; the first-run flag is now only set after the walkthrough opens successfully.
+
+### Connection / Status
+
+- Added a persistent `$(plug) FileMaker: <profile>` status-bar item so you always know whether you're connected and to which profile. Click to open the Explorer.
+- Proactive session-token refresh in `fmClient` keeps long-running sessions alive without manual reconnect.
+- Exponential-backoff retry on transient login errors during Connect.
+- Inline Test Connection result + save guard: badge shows untested / passed / failed / stale; configurable policy (`off` / `warn` / `block`) controls whether saving without a recent test is allowed.
+
+### Errors & Recovery
+
+- Error toasts now offer **Retry / Edit Profile / Open Settings** actions inline. Retry re-invokes the original command; Edit Profile reopens the wizard for the failing profile; Open Settings jumps to the relevant setting key.
+- Structured error reports with the full request chain, redacted headers, and a one-click **Copy as Bug Report** action that produces a markdown report safe to paste into an issue.
+- Graceful fallback in `secretStore` when VS Code SecretStorage is unavailable (AES-256-GCM PBKDF2 envelope).
+- Offline-mode status-bar indicator with stale-cache awareness.
+- Circuit-breaker registry plus **Show Circuit Breaker Status** command for diagnosing repeated failures.
+
+### Accessibility
+
+- Connection wizard required fields now mark `aria-required`, render a visible `*`, and link hints via `aria-describedby` so screen-reader users get full context.
+- Authentication mode toggle exposes proper `aria-pressed` state.
+- Password / username inputs include `autocomplete` hints.
+- Focus management: focus lands on the first input on open; Query Builder focuses the profile select after init.
+
+### Discoverability
+
+- Command palette flood: ~33 commands gated behind context keys (`filemaker.hasProfiles`, `filemaker.hasSchemaSnapshots`, `filemaker.enterpriseMode`, `filemaker.advanced.powerUserMode`). New users see only what's relevant; advanced/diagnostic commands stay hidden until needed.
+- Power-user mode setting unlocks plugin / circuit-breaker / diagnostics commands.
+
+### Settings
+
+- Deduplicated `filemakerDataApiTools.*` settings under the canonical `filemaker.*` namespace. Legacy keys now carry `markdownDeprecationMessage`; explicit values continue to be honored with a one-time deprecation toast pointing at the new key.
+- Validation: `filemaker.schema.hashAlgorithm` is checked against `crypto.getHashes()` at activation; an unsupported value surfaces a toast instead of a silent fallback.
+- Declared `capabilities.untrustedWorkspaces` so VS Code's built-in trust banner fires up front (instead of bespoke command-level toasts).
+
+### Documentation
+
+- Rewrote USER_GUIDE.md connection sections to match the actual webview UI (the previous copy described a quick-pick flow that no longer existed).
+- Walkthrough markdown gained screenshots reused from the marketplace assets.
+- Corrected an incorrect tip claiming profiles were workspace-scoped; profiles are global, only saved queries are workspace-scoped.
+
+### Security & Reliability
+
+- Token-bucket rate limit plus per-session request budget on the FM bridge server.
+- Profile cache keys versioned (`v2::`) and include the normalized `serverUrl` to prevent cross-profile cache poisoning.
+- Documented proxy threat model; minimized outbound profile payload.
+- Structural validator for inbound webview messages.
+
+### Performance
+
+- Replaced 59 per-command `activationEvents` with `onStartupFinished` and lazy command registration.
+- `batchExportFind` now streams CSV rows instead of buffering the entire result set.
+- Refactored `fmClient` to extract `SessionTokenTracker` for clearer proactive-refresh state.
+
+### Tests
+
+- New unit-test coverage for `schemaService`, `batchService`, error-action selection, deprecated-setting tracking, command-resolution helpers, connection status bar, and webview structural assertions (catches the kind of HTML/JS mismatch that hid the wizard form bug).
 
 ## 1.0.0
 

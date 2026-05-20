@@ -2,7 +2,7 @@
   "name": "filemaker-data-api-tools",
   "displayName": "FileMaker Data API Tools",
   "description": "VS Code tools for working with the FileMaker Data API (fmrest).",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "deffenda",
   "license": "MIT",
   "icon": "docs/marketplace/icon.png",
