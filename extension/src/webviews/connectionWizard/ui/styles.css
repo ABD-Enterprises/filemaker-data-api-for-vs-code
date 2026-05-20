@@ -104,6 +104,17 @@ h1 {
   margin-bottom: 12px;
 }
 
+/*
+ * Required-field marker. The asterisk is aria-hidden because aria-required
+ * on the input already announces "required" to screen readers — exposing
+ * the visual marker would cause double-announcement.
+ */
+.required-marker {
+  color: var(--vscode-errorForeground, #c2185b);
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 .field label {
   display: block;
   font-size: 0.85rem;
