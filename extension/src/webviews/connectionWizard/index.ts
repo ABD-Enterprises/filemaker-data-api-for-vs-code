@@ -294,7 +294,15 @@ export class ConnectionWizardPanel {
   <title>Connection Profile</title>
 </head>
 <body>
-  <div class="container">
+  <!--
+    Wrapping <form id="wizardForm"> is load-bearing: the UI script
+    (connectionWizard/ui/index.js) installs delegated input/change listeners
+    on it to drive the "test result is stale" badge. Every nested <button>
+    has type="button" so this never submits. Removing the form here would
+    silently regress the badge state machine (the script would null-deref
+    on document.getElementById('wizardForm')).
+  -->
+  <form id="wizardForm" class="container">
     <h1>Connection Profile</h1>
     <p class="subtitle">Configure a connection to your FileMaker Server.</p>
 
@@ -401,7 +409,7 @@ export class ConnectionWizardPanel {
     </div>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
-  </div>
+  </form>
 
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
