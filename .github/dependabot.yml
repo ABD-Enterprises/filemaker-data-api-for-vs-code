@@ -4,6 +4,30 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 30
+      include:
+        - axios
+        - next
+        - react
+        - react-dom
+        - zod
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - "*"
+      production-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
+      security-patches:
+        applies-to: security-updates
+        patterns:
+          - "*"
     ignore:
       # uuid >=9 has a breaking ESM-first redesign that the @vscode/vsce →
       # @azure/identity → @azure/msal-node transitive chain (still on uuid@^8
