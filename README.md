@@ -2,7 +2,7 @@
 
 A free, open-source VS Code extension for the FileMaker Data API. Full CRUD, query building, schema management, batch operations, and more — all from within VS Code.
 
-**[Extension README](extension/README.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
+**[Extension README](extension/README.md)** | **[Privacy](PRIVACY.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
 
 ## Monorepo Structure
 

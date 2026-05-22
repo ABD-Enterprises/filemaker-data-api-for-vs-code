@@ -7,6 +7,8 @@
 - Your server must be reachable via **HTTPS** from your machine
 - **VS Code** installed
 
+Review the project [Privacy Policy](../../PRIVACY.md) for details about local storage, SecretStorage, direct mode, and proxy mode before configuring production credentials.
+
 ## Installing the Extension
 
 1. Download `filemaker-data-api-tools-1.0.0.vsix` from [GitHub Releases](https://github.com/deffenda/filemaker-data-api-for-vs-code/releases).
