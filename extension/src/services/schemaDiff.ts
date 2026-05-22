@@ -21,6 +21,7 @@ export function diffSchemaFields(input: SchemaDiffInput): SchemaDiffResult {
 
   const added: FileMakerFieldMetadata[] = [];
   const removed: FileMakerFieldMetadata[] = [];
+  const unchanged: FileMakerFieldMetadata[] = [];
   const changed: SchemaDiffResult['changed'] = [];
 
   for (const [fieldName, beforeField] of beforeByName.entries()) {
@@ -38,6 +39,8 @@ export function diffSchemaFields(input: SchemaDiffInput): SchemaDiffResult {
         after: afterField,
         changes: attributeChanges
       });
+    } else {
+      unchanged.push(afterField);
     }
   }
 
@@ -55,6 +58,7 @@ export function diffSchemaFields(input: SchemaDiffInput): SchemaDiffResult {
     comparedAt: new Date().toISOString(),
     added: sortFieldsByName(added),
     removed: sortFieldsByName(removed),
+    unchanged: sortFieldsByName(unchanged),
     changed: changed.sort((left, right) => left.fieldName.localeCompare(right.fieldName)),
     summary: {
       added: added.length,
