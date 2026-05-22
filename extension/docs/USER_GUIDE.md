@@ -7,6 +7,8 @@
 - Your server must be reachable via **HTTPS** from your machine
 - **VS Code** installed
 
+See [Compatibility](./COMPATIBILITY.md) for FileMaker Server and FileMaker Cloud support notes, including Data API path, container field, value list, script, and OAuth caveats.
+
 ## Installing the Extension
 
 1. Download `filemaker-data-api-tools-1.0.0.vsix` from [GitHub Releases](https://github.com/deffenda/filemaker-data-api-for-vs-code/releases).
