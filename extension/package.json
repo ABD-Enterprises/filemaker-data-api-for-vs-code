@@ -132,6 +132,10 @@
         "title": "FileMaker: Open User Guide"
       },
       {
+        "command": "filemakerDataApiTools.showDiagnostics",
+        "title": "FileMaker: Show Diagnostics"
+      },
+      {
         "command": "filemakerDataApiTools.addConnectionProfile",
         "title": "FileMaker: Add Connection Profile"
       },

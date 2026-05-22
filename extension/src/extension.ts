@@ -15,6 +15,7 @@ import { registerSavedQueriesCommands } from './commands/savedQueries';
 import { registerSchemaCommands } from './commands/schema';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
+import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
 import { BatchService } from './services/batchService';
 import { FMClient } from './services/fmClient';
@@ -484,7 +485,8 @@ function registerWalkthroughCommands(
       } catch (error) {
         logger.warn('Failed to open user guide.', { error });
       }
-    })
+    }),
+    registerShowDiagnosticsCommand(context)
   );
 }
 
