@@ -174,6 +174,14 @@ export interface GeneratedSnippetsArtifacts {
   content: string;
 }
 
+export interface GeneratedTypeScriptClientArtifacts {
+  directory: string;
+  typesPath: string;
+  clientPath: string;
+  readmePath: string;
+  layouts: string[];
+}
+
 export interface RecordDraftValidationError {
   field: string;
   message: string;

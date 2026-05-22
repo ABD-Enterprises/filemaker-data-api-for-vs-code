@@ -6,6 +6,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { TypeGenService } from '../services/typeGenService';
+import type { ConnectionProfile } from '../types/fm';
 import { parseLayoutArg, promptForLayout, resolveProfileFromArg, showCommandError } from './common';
 
 interface RegisterTypeGenCommandsDeps {
@@ -100,6 +101,48 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       }
     }),
 
+    vscode.commands.registerCommand('filemakerDataApiTools.generateTypeScriptClient', async (arg: unknown) => {
+      if (!ensureTrustedWorkspace()) {
+        return;
+      }
+
+      const contextArg = parseLayoutArg(arg);
+      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+      if (!profile) {
+        return;
+      }
+
+      const layouts = contextArg.layout
+        ? [contextArg.layout]
+        : await promptForLayouts(profile, fmClient);
+      if (!layouts || layouts.length === 0) {
+        return;
+      }
+
+      const outputDirectory = await promptForOutputDirectory();
+      if (!outputDirectory) {
+        return;
+      }
+
+      try {
+        const artifacts = await typeGenService.generateTypeScriptClient(
+          profile,
+          layouts,
+          outputDirectory
+        );
+        await openGeneratedFile(artifacts.readmePath);
+        vscode.window.showInformationMessage(
+          `Generated TypeScript client for ${artifacts.layouts.length} layout${artifacts.layouts.length === 1 ? '' : 's'}.`
+        );
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'TypeScript client generation failed.',
+          logger,
+          logMessage: 'TypeScript client generation failed.'
+        });
+      }
+    }),
+
     vscode.commands.registerCommand('filemakerDataApiTools.openGeneratedTypesFolder', async () => {
       if (!ensureTrustedWorkspace()) {
         return;
@@ -118,6 +161,33 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       await vscode.commands.executeCommand('revealFileInOS', uri);
     })
   ];
+}
+
+async function promptForLayouts(profile: ConnectionProfile, fmClient: FMClient): Promise<string[] | undefined> {
+  const layouts = await fmClient.listLayouts(profile);
+  const picks = await vscode.window.showQuickPick(
+    layouts.map((layout) => ({ label: layout })),
+    {
+      canPickMany: true,
+      placeHolder: 'Choose layouts to include in the generated TypeScript client'
+    }
+  );
+
+  return picks?.map((pick) => pick.label);
+}
+
+async function promptForOutputDirectory(): Promise<string | undefined> {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  const uris = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    defaultUri: workspaceFolder?.uri,
+    openLabel: 'Generate Client Here',
+    title: 'Choose TypeScript client output folder'
+  });
+
+  return uris?.[0]?.fsPath;
 }
 
 function ensureTrustedWorkspace(): boolean {

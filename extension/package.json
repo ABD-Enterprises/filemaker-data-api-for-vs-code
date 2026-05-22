@@ -253,6 +253,10 @@
         "title": "FileMaker: Generate Snippets for Layout"
       },
       {
+        "command": "filemakerDataApiTools.generateTypeScriptClient",
+        "title": "FileMaker: Generate TypeScript Client"
+      },
+      {
         "command": "filemakerDataApiTools.openGeneratedTypesFolder",
         "title": "FileMaker: Open Generated Types Folder"
       },
@@ -560,6 +564,7 @@
         { "command": "filemakerDataApiTools.generateTypesForLayout", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.generateTypesForAllLayouts", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.generateSnippetsForLayout", "when": "filemaker.hasProfiles" },
+        { "command": "filemakerDataApiTools.generateTypeScriptClient", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.initializeFmWebProject", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.diffSchemaSnapshots", "when": "filemaker.hasSchemaSnapshots" },
         { "command": "filemakerDataApiTools.diffAgainstLatestSnapshot", "when": "filemaker.hasSchemaSnapshots" },
