@@ -133,6 +133,7 @@ Additional project docs:
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
 - [Upgrade Guide](./UPGRADE.md)
+- [QA Smoke Test (v1.1.0)](./docs/QA/SMOKE_TEST_v1_1_0.md) — manual first-time-user test plan for release validation
 
 ## License
 
