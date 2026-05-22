@@ -15,16 +15,24 @@
 #       * Final merge approval: human (you), gated by branch protection
 #
 # Required secrets:
-#   - ANTHROPIC_API_KEY — your Anthropic API key (Marketplace > Manage > Personal API Keys)
-#   - PRS_PAT — a fine-grained PAT with `contents:write`, `pull-requests:write`,
-#       `issues:write` on this repo. Required because PRs opened by GITHUB_TOKEN
-#       do NOT trigger downstream workflows (CI won't fire), so auto-merge stalls.
-#       Skip the PAT and the action falls back to GITHUB_TOKEN — your PRs will
-#       open but you'll have to push an empty commit to trigger CI.
+#   - CLAUDE_CODE_OAUTH_TOKEN (preferred) — your Claude Pro/Max subscription
+#       OAuth token. Generate locally with `claude setup-token`. Format:
+#       sk-ant-oat01-...  Tied to your existing subscription, no pay-per-token.
+#       Token is valid 1 year.
+#       This is what you want if you already pay for Claude Pro/Max.
 #
-# Cost: pay-per-token via ANTHROPIC_API_KEY. Each ticket runs ~1-5 USD depending
-# on complexity. Prompt caching is enabled by the action; ~70% of repeat reads
-# are cached.
+#   - ANTHROPIC_API_KEY (fallback) — pay-per-token Anthropic API key. ONLY
+#       used if CLAUDE_CODE_OAUTH_TOKEN is unset. Most users should NOT use
+#       this — it bills your API account separately from your subscription.
+#
+#   - PRS_PAT (recommended) — a fine-grained PAT with `contents:write`,
+#       `pull-requests:write`, `issues:write` on this repo. PRs opened by
+#       GITHUB_TOKEN do NOT trigger downstream workflows (CI won't fire).
+#       Skip the PAT and the action falls back to GITHUB_TOKEN — PRs open
+#       but you'll have to push an empty commit to trigger CI.
+#
+# Cost: $0 if you use CLAUDE_CODE_OAUTH_TOKEN (subscription absorbs it).
+#       ~$1-5/ticket if you use ANTHROPIC_API_KEY (pay-per-token).
 #
 name: Claude Code Agent
 
@@ -113,7 +121,10 @@ jobs:
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Prefer Claude Code OAuth (subscription, $0 marginal cost) when set;
+          # fall back to API key (pay-per-token) only if OAuth is unavailable.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
           github_token: ${{ secrets.PRS_PAT || secrets.GITHUB_TOKEN }}
           branch_prefix: 'claude/issue-'
           prompt: |

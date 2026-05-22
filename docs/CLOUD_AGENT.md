@@ -20,16 +20,34 @@ The agent only runs on issues that **currently** carry the `ai/ready-for-work` l
 
 ## Setup (one-time)
 
-### 1. Add the `ANTHROPIC_API_KEY` repo secret
+### 1. Add the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (recommended)
 
-The agent calls the Anthropic API directly. Pay-per-token. Get a key from
-https://console.anthropic.com/settings/keys and add it as a repo secret:
+This uses your existing **Claude Pro/Max subscription** — no pay-per-token API
+charges. Generate the token locally:
 
+```bash
+claude setup-token
 ```
-gh secret set ANTHROPIC_API_KEY --repo deffenda/filemaker-data-api-for-vs-code
+
+That prints a token like `sk-ant-oat01-...` (valid 1 year, tied to your
+subscription, only works with Claude Code). Save it as a repo secret:
+
+```bash
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo deffenda/filemaker-data-api-for-vs-code
+# paste the token when prompted
 ```
 
 Or via the web UI: **Settings → Secrets and variables → Actions → New repository secret**.
+
+> **Cost with this option**: $0 marginal. The action draws from your existing
+> Claude Code subscription quota. You will hit the same rate limits as you
+> would running Claude Code locally.
+
+#### Fallback: `ANTHROPIC_API_KEY` (pay-per-token)
+
+ONLY use this if you don't have a Claude Pro/Max subscription. Get a key from
+https://console.anthropic.com/settings/keys and set it as `ANTHROPIC_API_KEY`.
+Expect ~$1-5 per ticket. The workflow auto-selects OAuth if both are set.
 
 ### 2. (Recommended) Add a `PRS_PAT` repo secret
 
@@ -105,9 +123,12 @@ These are hard rules baked into the prompt + branch protection:
 
 ## Cost
 
-Per ticket, expect $1–5 in Anthropic API charges depending on complexity.
-The 16 tickets currently queued should total under $50. Set a usage limit
-on your API key if you want a hard cap.
+| Auth method | Per-ticket cost | Notes |
+|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` (Pro/Max) | **$0 marginal** | Subscription absorbs it. Same rate limits as your local Claude Code. |
+| `ANTHROPIC_API_KEY` (PAYG) | $1–5 | Billed separately. Set an account-level usage cap as a safety net. |
+
+For the 16-ticket batch currently queued: $0 on subscription, or <$50 on PAYG.
 
 ## Failure handling
 
@@ -132,9 +153,12 @@ workflow run. Triage manually: read the run logs, decide whether to retry
 Check **Actions tab → All workflows → Claude Code Agent**. A run should be
 visible within 30 seconds of the label add. If not:
 
-- Verify `ANTHROPIC_API_KEY` is set (Settings → Secrets and variables → Actions).
+- Verify `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY` fallback) is set
+  in Settings → Secrets and variables → Actions.
 - Verify the workflow is enabled.
 - Verify the label name is exactly `ai/ready-for-work` (case-sensitive).
+- If you're using OAuth: tokens expire after 1 year. Re-run
+  `claude setup-token` locally and update the secret.
 
 ### PR opened but CI didn't run
 
