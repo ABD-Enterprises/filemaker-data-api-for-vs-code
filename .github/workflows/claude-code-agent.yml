@@ -119,6 +119,15 @@ jobs:
           gh issue comment "$ISSUE_NUMBER" --body "🤖 Claude Code cloud agent claimed this ticket. Working in branch \`claude/issue-$ISSUE_NUMBER\`."
 
       - name: Run Claude Code
+        # Belt-and-suspenders auth: the @v1 release accepts
+        # claude_code_oauth_token as a `with:` input but does not always
+        # export it to the CLI subprocess as the CLI expects. Setting
+        # CLAUDE_CODE_OAUTH_TOKEN as a job-step env var guarantees the
+        # token is visible to the Claude CLI regardless of how the action
+        # wires its inputs internally. The `with:` input stays so the
+        # action's own bookkeeping (logging, validation) still sees it.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         uses: anthropics/claude-code-action@v1
         with:
           # Prefer Claude Code OAuth (subscription, $0 marginal cost) when set;
