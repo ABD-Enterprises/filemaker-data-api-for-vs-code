@@ -1,0 +1,29 @@
+{
+  "// purpose": "One-click try-the-extension environment for GitHub Codespaces and the local Dev Containers VS Code extension. Closes #184. See the README badge for the Open-in-Codespaces button.",
+  "name": "FileMaker Data API Tools — Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "deffenda.filemaker-data-api-tools"
+      ],
+      "settings": {
+        "files.exclude": {
+          "node_modules": true,
+          "dist": true,
+          "artifacts": true,
+          "coverage": true
+        },
+        "filemaker.advanced.powerUserMode": false
+      }
+    }
+  },
+  "postCreateCommand": "npm install",
+  "remoteUser": "node",
+  "forwardPorts": [],
+  "portsAttributes": {}
+}
