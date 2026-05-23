@@ -42,6 +42,28 @@ jobs:
       - name: Package Validation
         run: npm run package:check
 
+      - name: Enforce VSIX size budget
+        env:
+          # Hard ceiling on the VSIX produced by package:check. Bumping this
+          # cap is a deliberate decision — open a PR that changes the
+          # number, with a one-line rationale in the commit message
+          # (e.g., "raising to 5 MB to accommodate webview chunk split").
+          # See docs/BUNDLE_SIZE.md for the policy.
+          VSIX_BUDGET_BYTES: '5242880'  # 5 MiB
+        run: |
+          VSIX_PATH="$(echo artifacts/*.vsix)"
+          if [ ! -f "$VSIX_PATH" ]; then
+            echo "::error::No VSIX found in artifacts/. package:check must produce one."
+            exit 1
+          fi
+          ACTUAL=$(wc -c < "$VSIX_PATH" | tr -d ' ')
+          echo "VSIX size: $ACTUAL bytes ($(echo "scale=2; $ACTUAL/1048576" | bc) MiB)"
+          echo "Budget:    $VSIX_BUDGET_BYTES bytes ($(echo "scale=2; $VSIX_BUDGET_BYTES/1048576" | bc) MiB)"
+          if [ "$ACTUAL" -gt "$VSIX_BUDGET_BYTES" ]; then
+            echo "::error::VSIX exceeds the size budget. See docs/BUNDLE_SIZE.md for how to raise the cap intentionally vs. trim the bundle."
+            exit 1
+          fi
+
   package:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-test
