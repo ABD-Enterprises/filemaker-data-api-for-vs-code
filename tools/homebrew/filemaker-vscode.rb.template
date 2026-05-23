@@ -1,0 +1,49 @@
+# Homebrew formula for installing the FileMaker Data API Tools VS Code
+# extension via `brew install deffenda/tap/filemaker-vscode`.
+#
+# This file is a TEMPLATE. The real formula is published to
+# https://github.com/deffenda/homebrew-tap by the release workflow on
+# every tag push (see tools/homebrew/update-formula.sh).
+#
+# Variables substituted at release time:
+#   __VERSION__     — e.g., "1.1.0"
+#   __VSIX_URL__    — full URL to the VSIX on the GitHub release
+#   __VSIX_SHA256__ — SHA256 of the VSIX
+#
+# Closes #183.
+
+class FilemakerVscode < Formula
+  desc "VS Code extension: FileMaker Data API tooling (query, edit, schema diff)"
+  homepage "https://github.com/deffenda/filemaker-data-api-for-vs-code"
+  url "__VSIX_URL__"
+  sha256 "__VSIX_SHA256__"
+  version "__VERSION__"
+  license "MIT"
+
+  depends_on "visual-studio-code" => :recommended
+
+  def install
+    vsix_path = pkgshare/"filemaker-data-api-tools-#{version}.vsix"
+    pkgshare.install Dir["*.vsix"].first => vsix_path.basename
+  end
+
+  def caveats
+    <<~EOS
+      To install the extension into VS Code, run:
+        code --install-extension #{pkgshare}/filemaker-data-api-tools-#{version}.vsix
+
+      Or open VS Code, run "Extensions: Install from VSIX..." from the
+      Command Palette, and pick the file above.
+
+      If you prefer the Marketplace path:
+        code --install-extension deffenda.filemaker-data-api-tools
+
+      The brew path is for users who manage all their tools via brew.
+      It is NOT required.
+    EOS
+  end
+
+  test do
+    assert_predicate pkgshare/"filemaker-data-api-tools-#{version}.vsix", :exist?
+  end
+end
