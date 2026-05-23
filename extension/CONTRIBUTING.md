@@ -1,5 +1,7 @@
 # Contributing
 
+All contributors are expected to follow the project [Code of Conduct](../CODE_OF_CONDUCT.md).
+
 ## Development Setup
 
 ```bash
