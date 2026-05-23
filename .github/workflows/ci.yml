@@ -93,6 +93,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -117,3 +119,13 @@ jobs:
           npx @vscode/vsce publish --packagePath "$VSIX_PATH" --no-update-package-json
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Create GitHub Release
+        run: |
+          VSIX_PATH="$(echo artifacts/*.vsix)"
+          tools/release-notes.sh "$GITHUB_REF_NAME" \
+            | gh release create "$GITHUB_REF_NAME" "$VSIX_PATH" \
+                --title "$GITHUB_REF_NAME" \
+                --notes-file -
+        env:
+          GH_TOKEN: ${{ github.token }}
