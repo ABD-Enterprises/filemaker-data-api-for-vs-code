@@ -1,0 +1,12 @@
+# GitHub Sponsors funding sources for this project.
+# See https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# Sponsorship pays for:
+#   - Maintainer time on bug fixes + feature requests
+#   - VS Code Marketplace publisher infrastructure
+#   - Hosting the demo FileMaker sandbox (see #168) once it's online
+#
+# Reporting: spend is summarized quarterly in /docs/FUNDING.md once that
+# document exists. Until then, all funds defray maintainer time.
+
+github: [deffenda]
