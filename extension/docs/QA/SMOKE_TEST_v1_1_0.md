@@ -92,7 +92,7 @@ Skip this scenario if SC-01 passed. Use it if Marketplace install is unavailable
 **Precondition:** Clean VS Code.
 
 **Steps:**
-1. Download the VSIX from https://github.com/deffenda/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
+1. Download the VSIX from https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
 2. In a terminal: `code --install-extension ~/Downloads/filemaker-data-api-tools-1.1.0.vsix`
 3. Restart VS Code.
 
@@ -524,4 +524,4 @@ If any scenario fails:
 
 1. Capture: VS Code version, macOS version, the failing screenshot, and the relevant Output panel logs (`View → Output → FileMaker Data API Tools` dropdown).
 2. If a webview is involved, also capture Developer Tools console (`Help → Toggle Developer Tools`).
-3. Open a new issue at https://github.com/deffenda/filemaker-data-api-for-vs-code/issues with a title like `v1.1.0 QA: SC-XX <short failure description>`. Attach the smoke test issue link.
+3. Open a new issue at https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues with a title like `v1.1.0 QA: SC-XX <short failure description>`. Attach the smoke test issue link.

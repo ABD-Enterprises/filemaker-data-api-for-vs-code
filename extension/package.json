@@ -12,11 +12,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/deffenda/filemaker-data-api-for-vs-code.git"
+    "url": "https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code.git"
   },
   "homepage": "https://github.com/deffenda/filemaker-data-api-for-vs-code",
   "bugs": {
-    "url": "https://github.com/deffenda/filemaker-data-api-for-vs-code/issues"
+    "url": "https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues"
   },
   "engines": {
     "vscode": "^1.96.0"
@@ -902,7 +902,7 @@
     "test:coverage": "vitest run --coverage",
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p . --noEmit",
-    "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/deffenda/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/deffenda/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
+    "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/ABD-Enterprises/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
     "package:check": "npm run package:vsix"
   },
   "dependencies": {

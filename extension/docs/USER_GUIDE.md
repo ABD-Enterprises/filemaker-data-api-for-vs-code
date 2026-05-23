@@ -9,7 +9,7 @@
 
 ## Installing the Extension
 
-1. Download `filemaker-data-api-tools-1.0.0.vsix` from [GitHub Releases](https://github.com/deffenda/filemaker-data-api-for-vs-code/releases).
+1. Download `filemaker-data-api-tools-1.0.0.vsix` from [GitHub Releases](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/releases).
 2. Open VS Code.
 3. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux) to open the Command Palette.
 4. Type **Extensions: Install from VSIX...** and select it.
