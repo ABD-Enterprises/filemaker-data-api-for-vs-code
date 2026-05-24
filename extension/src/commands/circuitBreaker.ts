@@ -1,10 +1,15 @@
 import * as vscode from 'vscode';
 
-import { renderCircuitBreakerStatus } from '../performance/circuitBreakerRegistry';
-import type { CircuitBreakerRegistry } from '../performance/circuitBreakerRegistry';
+import type { CircuitBreakerRegistry, RegistryEntry } from '../performance/circuitBreakerRegistry';
+
+type CircuitBreakerRegistryReader =
+  | Pick<CircuitBreakerRegistry, 'list'>
+  | {
+      list: () => RegistryEntry[] | Promise<RegistryEntry[]>;
+    };
 
 export interface CircuitBreakerCommandsDeps {
-  registry: CircuitBreakerRegistry;
+  registry: CircuitBreakerRegistryReader;
 }
 
 export function registerCircuitBreakerCommands(
@@ -13,7 +18,11 @@ export function registerCircuitBreakerCommands(
   const showStatus = vscode.commands.registerCommand(
     'filemakerDataApiTools.showCircuitBreakerStatus',
     async () => {
-      const content = renderCircuitBreakerStatus(deps.registry.list());
+      const [entries, { renderCircuitBreakerStatus }] = await Promise.all([
+        deps.registry.list(),
+        import('../performance/circuitBreakerRegistry')
+      ]);
+      const content = renderCircuitBreakerStatus(entries);
       const doc = await vscode.workspace.openTextDocument({
         language: 'markdown',
         content

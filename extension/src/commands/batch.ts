@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
-import type { BatchService} from '../services/batchService';
-import { inferExportFormat, parseBatchUpdateInput } from '../services/batchService';
+import type { BatchService } from '../services/batchService';
 import type { JobRunner } from '../services/jobRunner';
 import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
@@ -96,6 +95,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
       const maxRecords = settingsService.getBatchMaxRecords();
 
       const performanceMode = roleGuard.resolvePerformanceMode();
+      const { inferExportFormat } = await import('../services/batchService');
       const selectedFormat = inferExportFormat(outputUri.fsPath);
       const format = performanceMode === 'high-scale' ? 'jsonl' : selectedFormat;
       const outputPath =
@@ -172,13 +172,14 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           const sourceBytes = await vscode.workspace.fs.readFile(sourceUri);
           const sourceText = Buffer.from(sourceBytes).toString('utf8');
           const format = sourceUri.fsPath.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
+          const { parseBatchUpdateInput } = await import('../services/batchService');
           const entries = parseBatchUpdateInput(sourceText, format);
           if (entries.length === 0) {
             vscode.window.showWarningMessage('No valid update rows found.');
             return;
           }
 
-          const defaults = batchService.getDefaultBatchUpdateOptions();
+          const defaults = await batchService.getDefaultBatchUpdateOptions();
           const dryRunSelection = await vscode.window.showQuickPick(
             [
               { label: 'Dry-run only (recommended)', value: true },
