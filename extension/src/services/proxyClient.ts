@@ -5,6 +5,7 @@ import { FMClientError, toFMClientError } from './errors';
 import type { SecretStore } from './secretStore';
 import type {
   ConnectionProfile,
+  ContainerUploadFile,
   EditRecordResult,
   FileMakerRecord,
   FindRecordsRequest,
@@ -59,6 +60,16 @@ interface ProxyCreateRecordResponse {
 
 interface ProxyDeleteRecordResponse {
   result?: EditRecordResult;
+}
+
+interface ProxyUploadContainerResponse {
+  result?: EditRecordResult;
+}
+
+export interface ProxyUploadContainerOptions {
+  signal?: AbortSignal;
+  fieldRepetition?: number;
+  modId?: string;
 }
 
 export class ProxyClient {
@@ -220,6 +231,37 @@ export class ProxyClient {
 
     if (!data.result) {
       throw new FMClientError('Proxy response did not include a deleteRecord result payload.');
+    }
+
+    return data.result;
+  }
+
+  public async uploadContainer(
+    profile: ConnectionProfile,
+    layout: string,
+    recordId: string,
+    fieldName: string,
+    file: ContainerUploadFile,
+    options?: ProxyUploadContainerOptions
+  ): Promise<EditRecordResult> {
+    const data = await this.invoke<ProxyUploadContainerResponse>(
+      profile,
+      'uploadContainer',
+      {
+        layout,
+        recordId,
+        fieldName,
+        fieldRepetition: options?.fieldRepetition ?? 1,
+        modId: options?.modId,
+        fileName: file.fileName,
+        contentType: file.contentType ?? 'application/octet-stream',
+        contentBase64: Buffer.from(file.content).toString('base64')
+      },
+      options?.signal
+    );
+
+    if (!data.result) {
+      throw new FMClientError('Proxy response did not include an uploadContainer result payload.');
     }
 
     return data.result;

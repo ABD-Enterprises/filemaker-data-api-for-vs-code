@@ -101,7 +101,9 @@ describe('FMClient (unit)', () => {
 
     const client = new FMClient(secretStore, logger, 15_000, axios as never);
 
-    await expect(client.listLayouts(profile)).rejects.toThrow('FileMaker API error (HTTP 500) [500]');
+    await expect(client.listLayouts(profile)).rejects.toThrow(
+      'FileMaker API error (HTTP 500) [500]'
+    );
   });
 
   it('re-authenticates once on 401 and retries request', async () => {
@@ -158,5 +160,99 @@ describe('FMClient (unit)', () => {
     await expect(client.listLayouts(profile)).resolves.toEqual(['Contacts']);
     await expect(secretStore.getSessionToken(profile.id)).resolves.toBe('new-token');
     expect(axios.request).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([
+    ['image upload', 'photo.png', 'image/png'],
+    ['PDF upload', 'report.pdf', 'application/pdf'],
+    ['binary upload', 'archive.bin', 'application/octet-stream']
+  ])(
+    'uploads container data as multipart form-data for %s',
+    async (_label, fileName, contentType) => {
+      const axios = new FakeAxios();
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn()
+      };
+      const secretStore = new SecretStore(new InMemorySecretStorage() as never);
+      const profile = createProfile();
+
+      await secretStore.setSessionToken(profile.id, 'token-a');
+
+      axios.request.mockResolvedValueOnce({
+        data: {
+          response: {},
+          messages: [{ code: '0', message: 'OK' }]
+        }
+      } as AxiosResponse<Record<string, unknown>>);
+
+      const client = new FMClient(secretStore, logger, 15_000, axios as never);
+      const result = await client.uploadContainer(
+        profile,
+        'Contacts',
+        '42',
+        'Attachment',
+        {
+          fileName,
+          content: Buffer.from(`content:${fileName}`, 'utf8'),
+          contentType
+        },
+        {
+          maxBytes: 1024
+        }
+      );
+
+      expect(result.recordId).toBe('42');
+      expect(axios.request).toHaveBeenCalledTimes(1);
+
+      const uploadRequest = axios.request.mock.calls[0]?.[0] as Record<string, unknown>;
+      const headers = uploadRequest.headers as Record<string, string>;
+      const body = uploadRequest.data as Buffer;
+
+      expect(String(uploadRequest.url)).toContain(
+        '/fmi/data/vLatest/databases/TestDB/layouts/Contacts/records/42/containers/Attachment/1'
+      );
+      expect(headers.Authorization).toBe('Bearer token-a');
+      expect(headers['Content-Type']).toMatch(/^multipart\/form-data; boundary=/);
+      expect(headers['Content-Length']).toBe(String(body.byteLength));
+      expect(body.toString('utf8')).toContain('name="upload"');
+      expect(body.toString('utf8')).toContain(`filename="${fileName}"`);
+      expect(body.toString('utf8')).toContain(`Content-Type: ${contentType}`);
+      expect(body.toString('utf8')).toContain(`content:${fileName}`);
+    }
+  );
+
+  it('rejects container uploads larger than the configured limit before sending a request', async () => {
+    const axios = new FakeAxios();
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const secretStore = new SecretStore(new InMemorySecretStorage() as never);
+    const profile = createProfile();
+    const client = new FMClient(secretStore, logger, 15_000, axios as never);
+
+    await expect(
+      client.uploadContainer(
+        profile,
+        'Contacts',
+        '42',
+        'Attachment',
+        {
+          fileName: 'too-large.bin',
+          content: Buffer.alloc(11),
+          contentType: 'application/octet-stream'
+        },
+        {
+          maxBytes: 10
+        }
+      )
+    ).rejects.toThrow('Container upload exceeds the configured limit');
+
+    expect(axios.request).not.toHaveBeenCalled();
   });
 });

@@ -159,7 +159,9 @@ describe('ProxyClient', () => {
         .reply(200, { ok: true, data: { result: editResult } });
 
       const client = createClient();
-      const result = await client.editRecord(createProfile(), 'Contacts', '42', { Name: 'Updated' });
+      const result = await client.editRecord(createProfile(), 'Contacts', '42', {
+        Name: 'Updated'
+      });
 
       expect(result.recordId).toBe('42');
       expect(result.modId).toBe('2');
@@ -203,9 +205,9 @@ describe('ProxyClient', () => {
   describe('missing proxy endpoint', () => {
     it('throws when proxy endpoint is missing', async () => {
       const client = createClient();
-      await expect(
-        client.createSession(createProfile({ proxyEndpoint: '' }))
-      ).rejects.toThrow('Proxy mode requires a proxy endpoint');
+      await expect(client.createSession(createProfile({ proxyEndpoint: '' }))).rejects.toThrow(
+        'Proxy mode requires a proxy endpoint'
+      );
     });
   });
 
@@ -242,6 +244,41 @@ describe('ProxyClient', () => {
 
       const client = createClient();
       const result = await client.deleteRecord(createProfile(), 'Contacts', '42');
+
+      expect(result.recordId).toBe('42');
+      scope.done();
+    });
+  });
+
+  describe('uploadContainer', () => {
+    it('sends base64 file content to the proxy action', async () => {
+      const uploadResult = {
+        recordId: '42',
+        messages: [{ code: '0', message: 'OK' }],
+        response: {}
+      };
+      const scope = nock(PROXY_URL)
+        .post(PROXY_PATH, (body: Record<string, unknown>) => {
+          const payload = body.payload as Record<string, unknown>;
+          return (
+            body.action === 'uploadContainer' &&
+            payload.layout === 'Contacts' &&
+            payload.recordId === '42' &&
+            payload.fieldName === 'Attachment' &&
+            payload.fieldRepetition === 1 &&
+            payload.fileName === 'report.pdf' &&
+            payload.contentType === 'application/pdf' &&
+            payload.contentBase64 === Buffer.from('pdf-bytes').toString('base64')
+          );
+        })
+        .reply(200, { ok: true, data: { result: uploadResult } });
+
+      const client = createClient();
+      const result = await client.uploadContainer(createProfile(), 'Contacts', '42', 'Attachment', {
+        fileName: 'report.pdf',
+        contentType: 'application/pdf',
+        content: Buffer.from('pdf-bytes')
+      });
 
       expect(result.recordId).toBe('42');
       scope.done();

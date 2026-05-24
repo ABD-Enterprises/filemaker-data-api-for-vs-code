@@ -210,6 +210,18 @@ Click on any layout to expand it and see its fields, value lists, and schema sna
 
 ---
 
+## Uploading to a Container Field
+
+1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`.
+2. Type **FileMaker: Upload to Container** and select it, or click **Upload Container** from the Query Builder.
+3. Select a profile and layout.
+4. Enter the record ID and container field name.
+5. Pick the image, PDF, or other binary file to upload.
+
+The upload uses the FileMaker Data API container endpoint with a multipart part named `upload`. The default size cap is 100 MB. Change `filemaker.containerUploadMaxBytes` if your server and workflow need a different limit.
+
+---
+
 ## Running Scripts
 
 1. Press `Cmd+Shift+P` / `Ctrl+Shift+P`.
