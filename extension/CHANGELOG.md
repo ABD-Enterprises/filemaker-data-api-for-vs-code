@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a versioned **FileMaker: Show What's New** walkthrough that opens once
+  after an extension upgrade and can be reopened from the Command Palette.
+
 - Attributed the extension to ABD Enterprises in README and `package.json`:
   - new `author` field pointing at `https://abdenterprises.com`
   - `homepage` now resolves to `abdenterprises.com?ref=vscode` (with the GitHub repo still linked via `repository`)

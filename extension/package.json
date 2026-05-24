@@ -136,12 +136,94 @@
             ]
           }
         ]
+      },
+      {
+        "id": "filemakerWhatsNew110",
+        "title": "What's New in v1.1.0",
+        "description": "Review the v1.1.0 onboarding, connection, querying, and reliability improvements.",
+        "steps": [
+          {
+            "id": "guidedOnboarding",
+            "title": "Guided onboarding",
+            "description": "The extension now opens a first-run walkthrough and keeps the FileMaker Explorer welcome view focused on the next useful setup action.\n[Open Getting Started](command:filemakerDataApiTools.openWelcomeWalkthrough)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.1.0/guided-onboarding.md"
+            }
+          },
+          {
+            "id": "connectionStatus",
+            "title": "Connection status that persists",
+            "description": "A status-bar item shows the active FileMaker profile across reloads, while Connect uses retry and proactive token refresh to reduce manual reconnects.\n[Connect](command:filemakerDataApiTools.connect)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.1.0/connection-status.md"
+            }
+          },
+          {
+            "id": "queryBuilder",
+            "title": "Query Builder discoverability",
+            "description": "The Query Builder is easier to reach from layouts and includes field-name chips, result export, and snippet copy actions for faster Data API work.\n[Open Query Builder](command:filemakerDataApiTools.openQueryBuilder)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.1.0/query-builder.md"
+            }
+          },
+          {
+            "id": "resilientSessions",
+            "title": "Resilient Data API sessions",
+            "description": "Error toasts now include retry and details actions, SecretStorage has a documented fallback mode, and offline status is visible in the editor chrome.",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.1.0/resilient-sessions.md"
+            }
+          }
+        ]
+      },
+      {
+        "id": "filemakerWhatsNew120",
+        "title": "What's New in v1.2.0",
+        "description": "Review the v1.2.0 FM Web, layout authoring, schema workflow, and release-visibility improvements.",
+        "steps": [
+          {
+            "id": "fmWebScaffolding",
+            "title": "FM Web project scaffolding",
+            "description": "Generate a Next.js runtime project from FileMaker metadata, sync layout data, and keep generated runtime files separate from extension state.\n[Generate FM Web App](command:filemakerDataApiTools.generateFmWebNextApp)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.2.0/fm-web-scaffolding.md"
+            }
+          },
+          {
+            "id": "layoutMode",
+            "title": "Layout Mode authoring",
+            "description": "Open Layout Mode from initialized FM Web projects to inspect layout metadata and prepare browser-rendered FileMaker experiences.\n[Open Layout Mode](command:filemakerDataApiTools.openLayoutMode)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.2.0/layout-mode.md"
+            }
+          },
+          {
+            "id": "schemaWorkflows",
+            "title": "Schema and batch workflow polish",
+            "description": "Schema snapshots, visual diffs, TypeScript generation, and batch jobs are grouped into clearer FileMaker commands and Explorer actions.",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.2.0/schema-workflows.md"
+            }
+          },
+          {
+            "id": "releaseVisibility",
+            "title": "Release visibility after upgrades",
+            "description": "After a version bump, this What's New walkthrough opens once, then stores the seen version so skipping the panel does not reopen it next launch.\n[Show What's New](command:filemakerDataApiTools.showWhatsNew)",
+            "media": {
+              "markdown": "docs/walkthroughs/whats-new-1.2.0/release-visibility.md"
+            }
+          }
+        ]
       }
     ],
     "commands": [
       {
         "command": "filemakerDataApiTools.openWelcomeWalkthrough",
         "title": "FileMaker: Open Getting Started Walkthrough"
+      },
+      {
+        "command": "filemakerDataApiTools.showWhatsNew",
+        "title": "FileMaker: Show What's New"
       },
       {
         "command": "filemakerDataApiTools.openUserGuide",

@@ -42,12 +42,20 @@ to `.vscodeignore`. Update this section when you do.
 
 1. Branch from green main: `git checkout -b release/vX.Y.Z`
 2. Bump `extension/package.json` version
-3. Add a CHANGELOG section under `## X.Y.Z`
-4. PR, CI green, merge
-5. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — <theme>"` then `git push origin vX.Y.Z`
-6. CI's `package` + `publish` jobs build the VSIX and publish to Marketplace
-7. Promote the GitHub release from draft to Latest
-8. Verify Marketplace shows new version (~5 min after publish)
+3. Update the What's New walkthrough for the new version:
+   - add or update the version entry in `extension/src/extension.ts`
+     (`WHATS_NEW_RELEASES`)
+   - add a matching `contributes.walkthroughs` entry in
+     `extension/package.json`
+   - add 3-5 walkthrough markdown files under
+     `extension/docs/walkthroughs/whats-new-X.Y.Z/`, each with a screenshot
+   - verify **FileMaker: Show What's New** opens the new walkthrough
+4. Add a CHANGELOG section under `## X.Y.Z`
+5. PR, CI green, merge
+6. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — <theme>"` then `git push origin vX.Y.Z`
+7. CI's `package` + `publish` jobs build the VSIX and publish to Marketplace
+8. Promote the GitHub release from draft to Latest
+9. Verify Marketplace shows new version (~5 min after publish)
 
 ## After publish
 

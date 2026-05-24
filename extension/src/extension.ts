@@ -83,8 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const secretFallbackMode = settingsService.getSecretsFallbackMode();
   const secretStore = new SecretStore(context.secrets, {
     fallbackMode: secretFallbackMode,
-    workspaceState:
-      secretFallbackMode === 'workspace-state' ? context.workspaceState : undefined,
+    workspaceState: secretFallbackMode === 'workspace-state' ? context.workspaceState : undefined,
     machineId: vscode.env.machineId,
     logger,
     onFallbackEngaged: (mode, reason) => {
@@ -125,15 +124,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
   const schemaService = new SchemaService(fmClient, logger, {
-    getCacheTtlMs: () =>
-      normalizeSchemaCacheTtlMs(settingsService.getSchemaCacheTtlSeconds()),
+    getCacheTtlMs: () => normalizeSchemaCacheTtlMs(settingsService.getSchemaCacheTtlSeconds()),
     isMetadataEnabled: () => settingsService.isSchemaMetadataEnabled(),
     offlineModeService
   });
   const environmentCompareService = new EnvironmentCompareService(fmClient, schemaService, logger);
   const snapshotStore = new SchemaSnapshotStore(context.workspaceState, logger, {
-    getStorageMode: () =>
-      settingsService.getSchemaSnapshotsStorage(),
+    getStorageMode: () => settingsService.getSchemaSnapshotsStorage(),
     getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     isWorkspaceTrusted: () => vscode.workspace.isTrusted
   });
@@ -338,7 +335,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const jobsSubscription = jobRunner.onDidChange(() => {
     refreshExplorer();
-    const running = jobRunner.listJobs().find((job) => job.status === 'running' || job.status === 'queued');
+    const running = jobRunner
+      .listJobs()
+      .find((job) => job.status === 'running' || job.status === 'queued');
     if (!running) {
       jobsStatusBar.text = '$(history) FM Jobs: idle';
       return;
@@ -445,37 +444,153 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   registerWalkthroughCommands(context, logger);
+  void maybeOpenWhatsNewAfterUpgrade(context, logger);
   void maybeOpenFirstRunWalkthrough(context, logger);
 
   logger.info('FileMaker Data API Tools activated.');
 }
 
-const WALKTHROUGH_STEP_ID = 'filemakerGettingStarted';
+const GETTING_STARTED_WALKTHROUGH_ID = 'filemakerGettingStarted';
 const FIRST_RUN_FLAG = 'filemaker.walkthrough.shownOnce';
+export const WHATS_NEW_LAST_SEEN_VERSION_KEY = 'filemaker.whatsNew.lastSeenVersion';
+const WHATS_NEW_BASELINE_VERSION = '1.1.0';
+
+interface WhatsNewRelease {
+  readonly version: string;
+  readonly walkthroughId: string;
+  readonly title: string;
+  readonly highlights: readonly string[];
+}
+
+const WHATS_NEW_RELEASES: readonly WhatsNewRelease[] = [
+  {
+    version: '1.1.0',
+    walkthroughId: 'filemakerWhatsNew110',
+    title: "What's New in v1.1.0",
+    highlights: [
+      'Guided first-run onboarding',
+      'Persistent connection status',
+      'Query Builder discoverability',
+      'Resilient Data API sessions'
+    ]
+  },
+  {
+    version: '1.2.0',
+    walkthroughId: 'filemakerWhatsNew120',
+    title: "What's New in v1.2.0",
+    highlights: [
+      'FM Web project scaffolding',
+      'Layout Mode authoring',
+      'Schema and batch workflow improvements',
+      'Post-upgrade release visibility'
+    ]
+  }
+];
 
 /**
  * The fully qualified walkthrough id must match `publisher.name#stepId` exactly.
  * Computing it from context.extension.id at runtime avoids a silent break if
  * package.json publisher/name ever change (typo fix, fork, ownership transfer).
  */
-function walkthroughId(context: vscode.ExtensionContext): string {
-  return `${context.extension.id}#${WALKTHROUGH_STEP_ID}`;
+function walkthroughId(context: vscode.ExtensionContext, id: string): string {
+  return `${context.extension.id}#${id}`;
 }
 
-function registerWalkthroughCommands(
+async function openContributedWalkthrough(
+  context: vscode.ExtensionContext,
+  id: string
+): Promise<void> {
+  await vscode.commands.executeCommand(
+    'workbench.action.openWalkthrough',
+    walkthroughId(context, id),
+    false
+  );
+}
+
+export function compareExtensionVersions(left: string, right: string): number {
+  const parse = (version: string): { parts: [number, number, number]; prerelease?: string } => {
+    const trimmed = version.trim();
+    const [core = '0.0.0', prerelease] = trimmed.split('-', 2);
+    const rawParts = core.split('.');
+    const numberAt = (index: number): number => {
+      const value = Number.parseInt(rawParts[index] ?? '0', 10);
+      return Number.isFinite(value) ? value : 0;
+    };
+    return {
+      parts: [numberAt(0), numberAt(1), numberAt(2)],
+      prerelease
+    };
+  };
+
+  const leftVersion = parse(left);
+  const rightVersion = parse(right);
+  const pairs: Array<[number, number]> = [
+    [leftVersion.parts[0], rightVersion.parts[0]],
+    [leftVersion.parts[1], rightVersion.parts[1]],
+    [leftVersion.parts[2], rightVersion.parts[2]]
+  ];
+  for (const [leftPart, rightPart] of pairs) {
+    const delta = leftPart - rightPart;
+    if (delta !== 0) {
+      return delta > 0 ? 1 : -1;
+    }
+  }
+
+  if (leftVersion.prerelease && !rightVersion.prerelease) {
+    return -1;
+  }
+  if (!leftVersion.prerelease && rightVersion.prerelease) {
+    return 1;
+  }
+  if (leftVersion.prerelease && rightVersion.prerelease) {
+    return leftVersion.prerelease.localeCompare(rightVersion.prerelease);
+  }
+  return 0;
+}
+
+function currentExtensionVersion(context: vscode.ExtensionContext): string {
+  const packageJson = context.extension.packageJSON as { version?: unknown };
+  return typeof packageJson.version === 'string' && packageJson.version.trim().length > 0
+    ? packageJson.version.trim()
+    : '0.0.0';
+}
+
+function latestWhatsNewReleaseFor(version: string): WhatsNewRelease | undefined {
+  return WHATS_NEW_RELEASES.filter(
+    (release) => compareExtensionVersions(release.version, version) <= 0
+  ).sort((left, right) => compareExtensionVersions(right.version, left.version))[0];
+}
+
+export function registerWalkthroughCommands(
   context: vscode.ExtensionContext,
   logger: { warn: (message: string, meta?: unknown) => void }
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('filemakerDataApiTools.openWelcomeWalkthrough', async () => {
       try {
-        await vscode.commands.executeCommand(
-          'workbench.action.openWalkthrough',
-          { category: walkthroughId(context) },
-          false
-        );
+        await openContributedWalkthrough(context, GETTING_STARTED_WALKTHROUGH_ID);
       } catch (error) {
         logger.warn('Failed to open getting-started walkthrough.', { error });
+      }
+    }),
+    vscode.commands.registerCommand('filemakerDataApiTools.showWhatsNew', async () => {
+      const release = latestWhatsNewReleaseFor(currentExtensionVersion(context));
+      if (!release) {
+        void vscode.window.showInformationMessage(
+          "FileMaker: No What's New walkthrough is available for this version."
+        );
+        return;
+      }
+
+      try {
+        await openContributedWalkthrough(context, release.walkthroughId);
+      } catch (error) {
+        logger.warn("Failed to open What's New walkthrough.", {
+          error,
+          title: release.title,
+          version: release.version,
+          highlights: release.highlights
+        });
       }
     }),
     vscode.commands.registerCommand('filemakerDataApiTools.openUserGuide', async () => {
@@ -490,19 +605,65 @@ function registerWalkthroughCommands(
   );
 }
 
+export async function maybeOpenWhatsNewAfterUpgrade(
+  context: vscode.ExtensionContext,
+  logger: {
+    info: (message: string, meta?: unknown) => void;
+    warn: (message: string, meta?: unknown) => void;
+  }
+): Promise<void> {
+  try {
+    const currentVersion = currentExtensionVersion(context);
+    const storedLastSeenVersion = context.globalState.get<string>(WHATS_NEW_LAST_SEEN_VERSION_KEY);
+    const firstRunAlreadyShown = context.globalState.get<boolean>(FIRST_RUN_FLAG, false);
+
+    if (!storedLastSeenVersion && !firstRunAlreadyShown) {
+      await context.globalState.update(WHATS_NEW_LAST_SEEN_VERSION_KEY, currentVersion);
+      return;
+    }
+
+    const lastSeenVersion = storedLastSeenVersion ?? WHATS_NEW_BASELINE_VERSION;
+    if (compareExtensionVersions(currentVersion, lastSeenVersion) <= 0) {
+      if (!storedLastSeenVersion) {
+        await context.globalState.update(WHATS_NEW_LAST_SEEN_VERSION_KEY, currentVersion);
+      }
+      return;
+    }
+
+    const release = latestWhatsNewReleaseFor(currentVersion);
+    if (!release || compareExtensionVersions(release.version, lastSeenVersion) <= 0) {
+      await context.globalState.update(WHATS_NEW_LAST_SEEN_VERSION_KEY, currentVersion);
+      return;
+    }
+
+    await openContributedWalkthrough(context, release.walkthroughId);
+    await context.globalState.update(WHATS_NEW_LAST_SEEN_VERSION_KEY, currentVersion);
+    logger.info("Post-upgrade What's New walkthrough opened.", {
+      currentVersion,
+      lastSeenVersion,
+      release: release.version,
+      title: release.title,
+      highlights: release.highlights
+    });
+  } catch (error) {
+    logger.warn("Post-upgrade What's New walkthrough failed; will retry next activation.", {
+      error
+    });
+  }
+}
+
 async function maybeOpenFirstRunWalkthrough(
   context: vscode.ExtensionContext,
-  logger: { info: (message: string, meta?: unknown) => void; warn: (message: string, meta?: unknown) => void }
+  logger: {
+    info: (message: string, meta?: unknown) => void;
+    warn: (message: string, meta?: unknown) => void;
+  }
 ): Promise<void> {
   if (context.globalState.get<boolean>(FIRST_RUN_FLAG, false)) {
     return;
   }
   try {
-    await vscode.commands.executeCommand(
-      'workbench.action.openWalkthrough',
-      { category: walkthroughId(context) },
-      false
-    );
+    await openContributedWalkthrough(context, GETTING_STARTED_WALKTHROUGH_ID);
     // Only persist the flag AFTER the walkthrough actually opens. A transient
     // failure on day one (host restart, missing markdown asset) used to flip
     // the flag and permanently suppress the walkthrough; the user would never

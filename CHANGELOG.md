@@ -24,7 +24,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Added a versioned **FileMaker: Show What's New** walkthrough that auto-opens
+  once after upgrades and records the seen extension version.
 
 ### [FIX]
 
