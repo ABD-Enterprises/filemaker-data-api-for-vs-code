@@ -24,7 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Added a WebDirect URL helper command that copies the current record URL and can open it in the system browser.
 
 ### [FIX]
 

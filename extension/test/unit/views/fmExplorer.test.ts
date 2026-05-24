@@ -199,17 +199,19 @@ describe('FMExplorerProvider', () => {
 describe('FMExplorerItem', () => {
   it('stores kind and contextValue', () => {
     const item = new FMExplorerItem({
-      kind: 'layout',
-      label: 'Contacts',
-      contextValue: 'fmLayout',
+      kind: 'record',
+      label: 'Record 42',
+      contextValue: 'fmRecord',
       profileId: 'p1',
-      layoutName: 'Contacts'
+      layoutName: 'Contacts',
+      recordId: '42'
     });
 
-    expect(item.kind).toBe('layout');
-    expect(item.contextValue).toBe('fmLayout');
+    expect(item.kind).toBe('record');
+    expect(item.contextValue).toBe('fmRecord');
     expect(item.profileId).toBe('p1');
     expect(item.layoutName).toBe('Contacts');
+    expect(item.recordId).toBe('42');
   });
 
   it('defaults collapsible state to None', () => {

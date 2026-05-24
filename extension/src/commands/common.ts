@@ -14,6 +14,13 @@ export interface LayoutCommandArg extends ProfileCommandArg {
   layoutName?: string;
 }
 
+export interface RecordCommandArg extends LayoutCommandArg {
+  recordId?: string | number;
+  record?: {
+    recordId?: string | number;
+  };
+}
+
 export interface SavedQueryCommandArg extends ProfileCommandArg {
   queryId?: string;
   savedQueryId?: string;
@@ -118,6 +125,27 @@ export function parseLayoutArg(arg: unknown): LayoutCommandArg {
   return {
     profileId: typeof value.profileId === 'string' ? value.profileId : undefined,
     layout: resolvedLayout
+  };
+}
+
+export function parseRecordArg(arg: unknown): LayoutCommandArg & { recordId?: string } {
+  const layoutArg = parseLayoutArg(arg);
+  if (!arg || typeof arg !== 'object') {
+    return layoutArg;
+  }
+
+  const value = arg as RecordCommandArg;
+  const rawRecordId =
+    typeof value.recordId === 'string' || typeof value.recordId === 'number'
+      ? value.recordId
+      : typeof value.record?.recordId === 'string' || typeof value.record?.recordId === 'number'
+        ? value.record.recordId
+        : undefined;
+  const recordId = rawRecordId === undefined ? undefined : String(rawRecordId).trim();
+
+  return {
+    ...layoutArg,
+    recordId: recordId && recordId.length > 0 ? recordId : undefined
   };
 }
 

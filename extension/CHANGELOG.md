@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added **FileMaker: Copy WebDirect URL for Current Record** to copy a selected record's WebDirect URL and optionally open it in the system browser.
+
 - Attributed the extension to ABD Enterprises in README and `package.json`:
   - new `author` field pointing at `https://abdenterprises.com`
   - `homepage` now resolves to `abdenterprises.com?ref=vscode` (with the GitHub repo still linked via `repository`)

@@ -23,6 +23,7 @@ export type ExplorerNodeKind =
   | 'savedQueriesRoot'
   | 'savedQuery'
   | 'layout'
+  | 'record'
   | 'fieldsRoot'
   | 'field'
   | 'schemaSnapshotsRoot'
@@ -36,6 +37,7 @@ export class FMExplorerItem extends vscode.TreeItem {
   public readonly kind: ExplorerNodeKind;
   public readonly profileId?: string;
   public readonly layoutName?: string;
+  public readonly recordId?: string;
   public readonly queryId?: string;
   public readonly fieldName?: string;
   public readonly snapshotId?: string;
@@ -48,6 +50,7 @@ export class FMExplorerItem extends vscode.TreeItem {
     collapsibleState?: vscode.TreeItemCollapsibleState;
     profileId?: string;
     layoutName?: string;
+    recordId?: string;
     queryId?: string;
     fieldName?: string;
     snapshotId?: string;
@@ -64,6 +67,7 @@ export class FMExplorerItem extends vscode.TreeItem {
     this.kind = options.kind;
     this.profileId = options.profileId;
     this.layoutName = options.layoutName;
+    this.recordId = options.recordId;
     this.queryId = options.queryId;
     this.fieldName = options.fieldName;
     this.snapshotId = options.snapshotId;

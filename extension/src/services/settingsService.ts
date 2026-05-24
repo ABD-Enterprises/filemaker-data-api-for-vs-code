@@ -131,6 +131,15 @@ export class SettingsService {
     return normalizeApiPath(configured, '/fmi/data');
   }
 
+  public getWebDirectBasePath(): string {
+    const configured = this.getConfiguration('filemaker').get<string>(
+      'webDirect.basePath',
+      '/fmi/webd'
+    );
+
+    return normalizeApiPath(configured, '/fmi/webd');
+  }
+
   public getDefaultApiVersionPath(): string {
     const configured = this.getPreferred<string>(
       'filemaker',

@@ -219,7 +219,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       schemaService.invalidateProfile(profileId);
     },
     getConnectBackoffPolicy: () => settingsService.getConnectBackoffPolicy(),
-    getConnectionWizardTestPolicy: () => settingsService.getConnectionWizardTestPolicy()
+    getConnectionWizardTestPolicy: () => settingsService.getConnectionWizardTestPolicy(),
+    getWebDirectBasePath: () => settingsService.getWebDirectBasePath()
   });
 
   const savedQueryDisposables = registerSavedQueriesCommands({

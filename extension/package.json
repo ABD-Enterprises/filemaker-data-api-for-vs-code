@@ -188,6 +188,10 @@
         "title": "FileMaker: Get Record by ID"
       },
       {
+        "command": "filemakerDataApiTools.copyWebDirectUrlForCurrentRecord",
+        "title": "FileMaker: Copy WebDirect URL for Current Record"
+      },
+      {
         "command": "filemakerDataApiTools.openRecordViewer",
         "title": "FileMaker: Open Record Viewer (by ID)"
       },
@@ -440,6 +444,11 @@
           "group": "navigation@1"
         },
         {
+          "command": "filemakerDataApiTools.copyWebDirectUrlForCurrentRecord",
+          "when": "view == filemakerExplorer && viewItem == fmRecord",
+          "group": "inline@1"
+        },
+        {
           "command": "filemakerDataApiTools.runSavedQuery",
           "when": "view == filemakerExplorer && viewItem == fmSavedQuery",
           "group": "inline@1"
@@ -566,6 +575,7 @@
         { "command": "filemakerDataApiTools.openRecordEditor", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.runFindJson", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.getRecordById", "when": "filemaker.hasProfiles" },
+        { "command": "filemakerDataApiTools.copyWebDirectUrlForCurrentRecord", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.editRecordById", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.createRecord", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.deleteRecord", "when": "filemaker.hasProfiles" },
@@ -655,6 +665,11 @@
           "type": "string",
           "default": "vLatest",
           "description": "Default FileMaker Data API version segment used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiVersionPath`."
+        },
+        "filemaker.webDirect.basePath": {
+          "type": "string",
+          "default": "/fmi/webd",
+          "description": "Base path used when building WebDirect record URLs."
         },
         "filemaker.savedQueries.scope": {
           "type": "string",

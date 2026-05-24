@@ -98,4 +98,11 @@ describe('SettingsService deprecation handling', () => {
     // Second consume clears
     expect(svc.consumeDeprecatedSettingsUsed()).toEqual([]);
   });
+
+  it('normalizes the WebDirect base path setting', () => {
+    const svc = service({
+      filemaker: { workspace: { 'webDirect.basePath': 'custom/webd/' } }
+    });
+    expect(svc.getWebDirectBasePath()).toBe('/custom/webd');
+  });
 });

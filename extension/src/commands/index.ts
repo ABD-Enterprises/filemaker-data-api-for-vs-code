@@ -16,6 +16,7 @@ import {
 import {
   openJsonDocument,
   parseLayoutArg,
+  parseRecordArg,
   promptForLayout,
   resolveProfileFromArg,
   showCommandError
@@ -25,6 +26,7 @@ import { QueryBuilderPanel } from '../webviews/queryBuilder';
 import { RecordViewerPanel } from '../webviews/recordViewer';
 import { retryWithBackoff, type BackoffPolicy } from '../utils/backoff';
 import { showConnectionQuickPick } from '../views/connectionStatusBar';
+import { buildWebDirectRecordUrl, DEFAULT_WEBDIRECT_BASE_PATH } from '../utils/webDirectUrl';
 
 interface RegisterCoreCommandDeps {
   context: vscode.ExtensionContext;
@@ -46,6 +48,7 @@ interface RegisterCoreCommandDeps {
   /** Resolved at call time so settings updates are picked up live. */
   getConnectBackoffPolicy?: () => BackoffPolicy;
   getConnectionWizardTestPolicy?: () => 'off' | 'warn' | 'block';
+  getWebDirectBasePath?: () => string;
 }
 
 function isRetryableConnectError(error: unknown): boolean {
@@ -392,6 +395,59 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         });
       }
     }),
+
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.copyWebDirectUrlForCurrentRecord',
+      async (arg: unknown) => {
+        const contextArg = parseRecordArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
+
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
+
+        const recordId =
+          contextArg.recordId ??
+          (await vscode.window.showInputBox({
+            title: 'Copy WebDirect URL for Current Record',
+            prompt: 'Enter FileMaker record ID',
+            ignoreFocusOut: true,
+            validateInput: (value) => validateRecordId(value).error
+          }));
+        if (!recordId) {
+          return;
+        }
+
+        try {
+          const url = buildWebDirectRecordUrl({
+            profile,
+            layout,
+            recordId,
+            basePath: deps.getWebDirectBasePath?.() ?? DEFAULT_WEBDIRECT_BASE_PATH
+          });
+
+          await vscode.env.clipboard.writeText(url);
+          const action = await vscode.window.showInformationMessage(
+            `WebDirect URL copied: ${url}`,
+            'Open in Browser'
+          );
+
+          if (action === 'Open in Browser') {
+            await vscode.env.openExternal(vscode.Uri.parse(url));
+          }
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: 'Failed to copy WebDirect URL.',
+            logger,
+            logMessage: 'Copy WebDirect URL command failed.'
+          });
+        }
+      }
+    ),
 
     vscode.commands.registerCommand('filemakerDataApiTools.openRecordViewer', async (arg: unknown) => {
       const contextArg = parseLayoutArg(arg);
