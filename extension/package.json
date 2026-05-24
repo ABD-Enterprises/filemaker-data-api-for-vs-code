@@ -152,6 +152,10 @@
         "title": "FileMaker: Show Diagnostics"
       },
       {
+        "command": "filemakerDataApiTools.openNetworkLog",
+        "title": "FileMaker: Open Network Log"
+      },
+      {
         "command": "filemakerDataApiTools.addConnectionProfile",
         "title": "FileMaker: Add Connection Profile"
       },
@@ -598,6 +602,7 @@
         { "command": "filemakerDataApiTools.showJobs", "when": "filemaker.powerUserMode" },
         { "command": "filemakerDataApiTools.showRequestHistory", "when": "filemaker.powerUserMode" },
         { "command": "filemakerDataApiTools.openDiagnosticsDashboard", "when": "filemaker.powerUserMode" },
+        { "command": "filemakerDataApiTools.openNetworkLog" },
         { "command": "filemakerDataApiTools.showCircuitBreakerStatus", "when": "filemaker.powerUserMode" },
         { "command": "filemakerDataApiTools.reloadPlugins", "when": "filemaker.powerUserMode" },
         { "command": "filemakerDataApiTools.listActivePlugins", "when": "filemaker.powerUserMode" },
@@ -712,6 +717,11 @@
           "type": "boolean",
           "default": false,
           "description": "Publish schema diff changes to the Problems panel when diffing against latest snapshot."
+        },
+        "filemaker.diagnostics.captureNetwork": {
+          "type": "boolean",
+          "default": false,
+          "description": "Capture recent FileMaker Data API HTTP requests in the in-memory network log. Authorization headers and secret-like values are redacted."
         },
         "filemaker.typegen.outputDir": {
           "type": "string",

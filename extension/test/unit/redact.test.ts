@@ -28,10 +28,12 @@ describe('redact', () => {
   it('redacts authorization headers', () => {
     const headers = redactHeaders({
       Authorization: 'Bearer abc',
+      'set-cookie': 'session=abc',
       'X-Test': 'ok'
     });
 
     expect(headers?.Authorization).toBe('***');
+    expect(headers?.['set-cookie']).toBe('***');
     expect(headers?.['X-Test']).toBe('ok');
   });
 });

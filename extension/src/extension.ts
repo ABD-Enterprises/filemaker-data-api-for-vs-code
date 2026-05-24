@@ -36,6 +36,7 @@ import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
 import { RoleGuard } from './enterprise/roleGuard';
 import { MetricsStore } from './diagnostics/metricsStore';
+import { NetworkLogStore } from './diagnostics/networkLogStore';
 import { OfflineModeService } from './offline/offlineModeService';
 import { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
 import { PluginRegistry } from './plugins/pluginRegistry';
@@ -107,6 +108,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const metricsStore = new MetricsStore(context.workspaceState, {
     getMaxEntries: () => 200
   });
+  const networkLogStore = new NetworkLogStore({
+    getMaxEntries: () => 100,
+    createEventEmitter: () => new vscode.EventEmitter<void>()
+  });
   const jobRunner = new JobRunner(context.workspaceState);
 
   const timeoutMs = settingsService.getRequestTimeoutMs();
@@ -122,7 +127,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     () => ({
       maxAgeMs: settingsService.getSessionMaxAgeMs(),
       refreshLeadMs: settingsService.getSessionRefreshLeadMs()
-    })
+    }),
+    {
+      recorder: networkLogStore,
+      isEnabled: () => settingsService.isNetworkCaptureEnabled()
+    }
   );
   const schemaService = new SchemaService(fmClient, logger, {
     getCacheTtlMs: () =>
@@ -302,7 +311,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const diagnosticsDisposables = registerDiagnosticsCommands({
     metricsStore,
-    historyStore
+    historyStore,
+    networkLogStore
   });
   const offlineDisposables = registerOfflineCommands({
     profileStore,
@@ -372,6 +382,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ...pluginDisposables,
     ...circuitBreakerDisposables,
     ...fmWebProjectDisposables,
+    networkLogStore,
     diagnostics,
     jobsStatusBar,
     jobsSubscription,

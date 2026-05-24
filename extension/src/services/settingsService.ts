@@ -205,6 +205,10 @@ export class SettingsService {
     return this.getConfiguration('filemaker').get<boolean>('schema.diagnostics.enabled', false);
   }
 
+  public isNetworkCaptureEnabled(): boolean {
+    return this.getConfiguration('filemaker').get<boolean>('diagnostics.captureNetwork', false);
+  }
+
   public getTypegenOutputDir(): string {
     const configured = this.getConfiguration('filemaker').get<string>('typegen.outputDir', 'filemaker-types');
     return sanitizeRelativeDir(configured, 'filemaker-types');

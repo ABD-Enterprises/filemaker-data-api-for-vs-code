@@ -1,4 +1,4 @@
-const SECRET_KEY_PATTERN = /(authorization|password|token|secret|api[-_]?key|session)/i;
+const SECRET_KEY_PATTERN = /(authorization|password|token|secret|api[-_]?key|session|cookie)/i;
 
 const BEARER_OR_BASIC_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9\-._~+/]+=*/gi;
 

@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
 
-import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type AxiosResponse
+} from 'axios';
 
 import type {
   ConnectionProfile,
@@ -8,6 +13,7 @@ import type {
   FileMakerRecord,
   FindRecordsRequest,
   FindRecordsResult,
+  NetworkLogRecorder,
   RequestHistoryRecorder,
   RequestMetricsRecorder,
   RunScriptRequest,
@@ -78,6 +84,11 @@ export interface FMClientSessionOptions {
   now?: () => number;
 }
 
+export interface FMClientNetworkLogOptions {
+  recorder?: NetworkLogRecorder;
+  isEnabled?: () => boolean;
+}
+
 export class FMClient {
   private readonly httpClient: AxiosInstance;
   private readonly proxyClient: ProxyClient;
@@ -91,6 +102,8 @@ export class FMClient {
   private readonly getSessionMaxAgeMs: () => number;
   private readonly getSessionRefreshLeadMs: () => number;
   private readonly now: () => number;
+  private readonly networkLogRecorder?: NetworkLogRecorder;
+  private readonly isNetworkCaptureEnabled: () => boolean;
 
   public constructor(
     private readonly secretStore: SecretStore,
@@ -100,7 +113,8 @@ export class FMClient {
     proxyClient?: ProxyClient,
     private readonly historyRecorder?: RequestHistoryRecorder,
     private readonly metricsRecorder?: RequestMetricsRecorder,
-    sessionOptions?: FMClientSessionOptions | (() => FMClientSessionOptions)
+    sessionOptions?: FMClientSessionOptions | (() => FMClientSessionOptions),
+    networkLogOptions?: FMClientNetworkLogOptions
   ) {
     this.logger = logger;
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -119,6 +133,8 @@ export class FMClient {
     this.getSessionRefreshLeadMs = () =>
       resolveOptions().refreshLeadMs ?? DEFAULT_SESSION_REFRESH_LEAD_MS;
     this.now = () => resolveOptions().now?.() ?? Date.now();
+    this.networkLogRecorder = networkLogOptions?.recorder;
+    this.isNetworkCaptureEnabled = networkLogOptions?.isEnabled ?? (() => false);
     this.sessionTracker = new SessionTokenTracker({
       defaultMaxAgeMs: DEFAULT_SESSION_MAX_AGE_MS,
       defaultRefreshLeadMs: DEFAULT_SESSION_REFRESH_LEAD_MS
@@ -175,15 +191,19 @@ export class FMClient {
         const basic = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
 
         try {
-          const envelope = await this.requestNoAuth<DataApiSessionResponse>(profile, {
-            method: 'POST',
-            path: '/sessions',
-            headers: {
-              Authorization: `Basic ${basic}`
+          const envelope = await this.requestNoAuth<DataApiSessionResponse>(
+            profile,
+            {
+              method: 'POST',
+              path: '/sessions',
+              headers: {
+                Authorization: `Basic ${basic}`
+              },
+              data: {},
+              signal: control?.signal
             },
-            data: {},
-            signal: control?.signal
-          });
+            trace
+          );
           trace.endpoint = 'POST /sessions';
 
           const token = envelope.response.token;
@@ -856,7 +876,11 @@ export class FMClient {
         timeout: this.timeoutMs
       };
 
-      const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
+      const response = await this.sendDataApiRequest<DataApiEnvelope<TResponse>>(
+        request,
+        config,
+        trace
+      );
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -918,7 +942,11 @@ export class FMClient {
         validateStatus: (status) => (status >= 200 && status < 300) || status === 304
       };
 
-      const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
+      const response = await this.sendDataApiRequest<DataApiEnvelope<TResponse>>(
+        request,
+        config,
+        trace
+      );
       const headers = normalizeHeaders(response.headers as Record<string, unknown>);
       if (response.status === 304) {
         return {
@@ -961,7 +989,8 @@ export class FMClient {
 
   private async requestNoAuth<TResponse extends Record<string, unknown>>(
     profile: ConnectionProfile,
-    request: RequestOptions
+    request: RequestOptions,
+    trace?: RequestTrace
   ): Promise<DataApiEnvelope<TResponse>> {
     const config: AxiosRequestConfig = {
       method: request.method,
@@ -977,8 +1006,77 @@ export class FMClient {
       timeout: this.timeoutMs
     };
 
-    const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
+    const response = await this.sendDataApiRequest<DataApiEnvelope<TResponse>>(
+      request,
+      config,
+      trace
+    );
     return response.data;
+  }
+
+  private async sendDataApiRequest<T>(
+    request: RequestOptions,
+    config: AxiosRequestConfig,
+    trace?: RequestTrace
+  ): Promise<AxiosResponse<T>> {
+    const start = Date.now();
+
+    try {
+      const response = await this.httpClient.request<T>(config);
+      await this.recordNetworkLog(request, config, start, response, undefined, trace);
+      return response;
+    } catch (error) {
+      await this.recordNetworkLog(request, config, start, undefined, error, trace);
+      throw error;
+    }
+  }
+
+  private async recordNetworkLog<T>(
+    request: RequestOptions,
+    config: AxiosRequestConfig,
+    start: number,
+    response?: AxiosResponse<T>,
+    error?: unknown,
+    trace?: RequestTrace
+  ): Promise<void> {
+    if (!this.networkLogRecorder) {
+      return;
+    }
+
+    let enabled: boolean;
+    try {
+      enabled = this.isNetworkCaptureEnabled();
+    } catch (settingsError) {
+      this.logger.warn('Failed to read network capture setting.', { error: settingsError });
+      return;
+    }
+
+    if (!enabled) {
+      return;
+    }
+
+    const axiosError = error as AxiosError;
+    const errorResponse = axiosError?.isAxiosError ? axiosError.response : undefined;
+    const responseForLog = response ?? errorResponse;
+    const url = appendQueryParams(String(config.url ?? ''), config.params);
+
+    try {
+      await this.networkLogRecorder.record({
+        requestId: trace?.requestId,
+        method: request.method,
+        url,
+        relativeUrl: toRelativeUrl(url),
+        requestHeaders: headersToRecord(config.headers),
+        requestBody: config.data,
+        responseStatus: responseForLog?.status,
+        responseHeaders: headersToRecord(responseForLog?.headers),
+        responseBody: responseForLog?.data,
+        durationMs: Date.now() - start,
+        errorMessage: error ? getErrorMessage(error) : undefined
+      });
+    } catch (recordError) {
+      this.logger.warn('Failed to record network request log entry.', { error: recordError });
+    }
   }
 
   private buildProfileCacheKey(profile: ConnectionProfile): string {
@@ -1192,4 +1290,60 @@ function normalizeHeaders(headers: Record<string, unknown>): Record<string, stri
   }
 
   return normalized;
+}
+
+function headersToRecord(headers: unknown): Record<string, unknown> | undefined {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+    return undefined;
+  }
+
+  const maybeSerializable = headers as { toJSON?: () => unknown };
+  if (typeof maybeSerializable.toJSON === 'function') {
+    const serialized = maybeSerializable.toJSON();
+    if (serialized && typeof serialized === 'object' && !Array.isArray(serialized)) {
+      return serialized as Record<string, unknown>;
+    }
+  }
+
+  return headers as Record<string, unknown>;
+}
+
+function appendQueryParams(url: string, params: unknown): string {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return url;
+  }
+
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) {
+          search.append(key, String(item));
+        }
+      }
+      continue;
+    }
+
+    search.append(key, String(value));
+  }
+
+  const query = search.toString();
+  if (!query) {
+    return url;
+  }
+
+  return `${url}${url.includes('?') ? '&' : '?'}${query}`;
+}
+
+function toRelativeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
 }

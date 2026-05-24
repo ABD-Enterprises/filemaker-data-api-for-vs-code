@@ -260,6 +260,24 @@ export interface RequestMetricsRecorder {
   record(entry: RequestMetricsRecordInput): Promise<void>;
 }
 
+export interface NetworkLogRecordInput {
+  requestId?: string;
+  method: string;
+  url: string;
+  relativeUrl: string;
+  requestHeaders?: Record<string, unknown>;
+  requestBody?: unknown;
+  responseStatus?: number;
+  responseHeaders?: Record<string, unknown>;
+  responseBody?: unknown;
+  durationMs: number;
+  errorMessage?: string;
+}
+
+export interface NetworkLogRecorder {
+  record(entry: NetworkLogRecordInput): Promise<void>;
+}
+
 export interface JobLogEntry {
   timestamp: string;
   level: 'info' | 'warn' | 'error';
