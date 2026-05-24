@@ -692,6 +692,11 @@
           "default": true,
           "description": "Enable Script Runner UI and script execution features."
         },
+        "filemaker.scripts.parameterBuilder.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Script Runner JSON parameter builder."
+        },
         "filemaker.schema.snapshots.storage": {
           "type": "string",
           "enum": [

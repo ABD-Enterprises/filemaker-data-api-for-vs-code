@@ -127,13 +127,10 @@ export class ScriptRunnerPanel {
 
   private async sendInit(): Promise<void> {
     const profiles = await this.profileStore.listProfiles();
-    const scriptRunnerEnabled = vscode.workspace
-      .getConfiguration('filemaker')
-      .get<boolean>('features.scriptRunner.enabled', true);
-
-    const includeAuthByDefault = vscode.workspace
-      .getConfiguration('filemaker')
-      .get<boolean>('snippets.includeAuthByDefault', false);
+    const configuration = vscode.workspace.getConfiguration('filemaker');
+    const scriptRunnerEnabled = configuration.get<boolean>('features.scriptRunner.enabled', true);
+    const includeAuthByDefault = configuration.get<boolean>('snippets.includeAuthByDefault', false);
+    const parameterBuilderEnabled = configuration.get<boolean>('scripts.parameterBuilder.enabled', true);
 
     await this.panel.webview.postMessage({
       type: 'init',
@@ -147,7 +144,8 @@ export class ScriptRunnerPanel {
         activeProfileId: this.profileStore.getActiveProfileId(),
         defaults: this.pendingDefaults,
         scriptRunnerEnabled,
-        includeAuthByDefault
+        includeAuthByDefault,
+        parameterBuilderEnabled
       }
     });
 
@@ -426,8 +424,27 @@ export class ScriptRunnerPanel {
       </div>
       <div class="row">
         <label for="scriptParamInput">Script Parameter (optional)</label>
-        <textarea id="scriptParamInput" rows="3" placeholder="Any string payload"></textarea>
+        <div class="parameter-input-group">
+          <textarea id="scriptParamInput" rows="3" placeholder="Any string payload"></textarea>
+          <button id="buildParameterButton" type="button" aria-expanded="false" aria-controls="parameterBuilderPanel">Build Parameter</button>
+        </div>
       </div>
+      <section id="parameterBuilderPanel" class="panel builder-panel hidden" aria-labelledby="parameterBuilderTitle">
+        <h2 id="parameterBuilderTitle">Build Parameter</h2>
+        <div id="parameterRows" class="builder-rows"></div>
+        <div class="builder-toolbar">
+          <button id="addParameterRowButton" type="button">Add Row</button>
+        </div>
+        <div class="row">
+          <label for="parameterPreview">JSON Preview</label>
+          <pre id="parameterPreview" class="parameter-preview" role="status" aria-live="polite">{}</pre>
+        </div>
+        <p id="parameterBuilderStatus" class="status builder-status" role="status" aria-live="polite"></p>
+        <div class="actions builder-actions">
+          <button id="applyParameterButton" type="button">Apply Parameter</button>
+          <button id="closeParameterBuilderButton" type="button" class="secondary">Close</button>
+        </div>
+      </section>
       <div class="row inline">
         <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header in snippets</label>
       </div>
