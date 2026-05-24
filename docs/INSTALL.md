@@ -25,7 +25,7 @@ Useful when you need a specific version, pre-release builds, or air-gapped insta
 ```bash
 # Download the VSIX from the GitHub release of your choice:
 curl -L -o filemaker-data-api-tools-1.1.0.vsix \
-  https://github.com/deffenda/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
+  https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
 
 # Install:
 code --install-extension filemaker-data-api-tools-1.1.0.vsix
@@ -81,7 +81,7 @@ lifecycle.
 
 ## Reporting an install bug
 
-Open an issue at https://github.com/deffenda/filemaker-data-api-for-vs-code/issues
+Open an issue at https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues
 with the title prefixed `install:`. Include:
 
 - Your install path (Marketplace / VSIX / brew)

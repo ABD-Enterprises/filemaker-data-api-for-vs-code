@@ -33,7 +33,7 @@ That prints a token like `sk-ant-oat01-...` (valid 1 year, tied to your
 subscription, only works with Claude Code). Save it as a repo secret:
 
 ```bash
-gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo deffenda/filemaker-data-api-for-vs-code
+gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ABD-Enterprises/filemaker-data-api-for-vs-code
 # paste the token when prompted
 ```
 
