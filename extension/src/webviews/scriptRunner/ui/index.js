@@ -1,5 +1,13 @@
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 const state = {
   profiles: [],
   activeProfileId: undefined,
@@ -49,11 +57,17 @@ window.addEventListener('message', (event) => {
       renderResult(message.payload);
       break;
     case 'unsupported':
-      setStatus(message.message || 'Script runner unsupported.', true);
+      setStatus(
+        message.message || t('webviews.scriptRunner.ui.unsupported', 'Script runner unsupported.'),
+        true
+      );
       runButton.disabled = true;
       break;
     case 'error':
-      setStatus(message.message || 'Unknown error.', true);
+      setStatus(
+        message.message || t('webviews.scriptRunner.ui.unknownError', 'Unknown error.'),
+        true
+      );
       break;
     default:
       break;
@@ -70,7 +84,7 @@ runButton.addEventListener('click', () => {
     return;
   }
 
-  setStatus('Running script...');
+  setStatus(t('webviews.scriptRunner.ui.runningScript', 'Running script...'));
   vscode.postMessage({
     type: 'runScript',
     payload
@@ -118,7 +132,10 @@ function applyInit(payload) {
   runButton.disabled = !state.scriptRunnerEnabled;
 
   if (!state.scriptRunnerEnabled) {
-    setStatus('Script runner is disabled by setting.', true);
+    setStatus(
+      t('webviews.scriptRunner.ui.disabledBySetting', 'Script runner is disabled by setting.'),
+      true
+    );
   }
 
   renderProfiles();
@@ -127,7 +144,7 @@ function applyInit(payload) {
     recordIdInput.value = state.defaults.recordId;
   }
 
-  setStatus('Ready.');
+  setStatus(t('webviews.scriptRunner.ui.ready', 'Ready.'));
 }
 
 function renderProfiles() {
@@ -137,7 +154,7 @@ function renderProfiles() {
       state.profiles,
       (profile) => profile.id,
       (profile) => `${profile.name} (${profile.database})`,
-      'No profiles configured'
+      t('webviews.scriptRunner.ui.noProfilesConfigured', 'No profiles configured')
     )
   ) {
     return;
@@ -167,7 +184,7 @@ function requestLayouts(profileId, preferredLayout) {
     return;
   }
 
-  setStatus('Loading layouts...');
+  setStatus(t('webviews.scriptRunner.ui.loadingLayouts', 'Loading layouts...'));
   vscode.postMessage({
     type: 'loadLayouts',
     profileId
@@ -194,7 +211,7 @@ function renderLayouts(layouts, preferredLayout) {
       Array.isArray(layouts) ? layouts : [],
       (layout) => layout,
       (layout) => layout,
-      'No layouts available'
+      t('webviews.scriptRunner.ui.noLayoutsAvailable', 'No layouts available')
     )
   ) {
     return;
@@ -216,17 +233,17 @@ function collectPayload() {
   const scriptName = scriptNameInput.value.trim();
 
   if (!profileId) {
-    setStatus('Select a profile.', true);
+    setStatus(t('webviews.scriptRunner.ui.selectProfile', 'Select a profile.'), true);
     return undefined;
   }
 
   if (!layout) {
-    setStatus('Select a layout.', true);
+    setStatus(t('webviews.scriptRunner.ui.selectLayout', 'Select a layout.'), true);
     return undefined;
   }
 
   if (!scriptName) {
-    setStatus('Enter a script name.', true);
+    setStatus(t('webviews.scriptRunner.ui.enterScriptName', 'Enter a script name.'), true);
     return undefined;
   }
 
@@ -261,7 +278,9 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
     return false;
   }
 
-  const existingOptions = new Map(Array.from(select.options).map((option) => [option.value, option]));
+  const existingOptions = new Map(
+    Array.from(select.options).map((option) => [option.value, option])
+  );
 
   items.forEach((item, index) => {
     const value = getValue(item);
@@ -308,11 +327,15 @@ function renderResult(payload) {
   const messages = Array.isArray(result.messages) ? result.messages : [];
 
   summary.textContent = messages.length
-    ? `Messages: ${messages.map((item) => `${item.code}:${item.message}`).join(' | ')}`
-    : 'Script executed.';
+    ? t(
+        'webviews.scriptRunner.ui.messagesSummary',
+        'Messages: {0}',
+        messages.map((item) => `${item.code}:${item.message}`).join(' | ')
+      )
+    : t('webviews.scriptRunner.ui.scriptExecuted', 'Script executed.');
 
   rawResult.textContent = JSON.stringify(payload, null, 2);
-  setStatus('Script execution completed.');
+  setStatus(t('webviews.scriptRunner.ui.executionCompleted', 'Script execution completed.'));
 }
 
 function setStatus(message, isError = false) {

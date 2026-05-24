@@ -1,5 +1,13 @@
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 const state = {
   profiles: [],
   activeProfileId: undefined,
@@ -78,7 +86,7 @@ window.addEventListener('message', (event) => {
     case 'savedQueries':
       state.savedQueries = Array.isArray(message.payload) ? message.payload : [];
       renderSavedQueries();
-      setStatus('Saved queries updated.');
+      setStatus(t('webviews.queryBuilder.ui.savedQueriesUpdated', 'Saved queries updated.'));
       break;
     case 'history':
       state.history = Array.isArray(message.payload) ? message.payload : [];
@@ -88,7 +96,10 @@ window.addEventListener('message', (event) => {
       saveButton.click();
       break;
     case 'error':
-      setStatus(message.message || 'Unknown error.', true);
+      setStatus(
+        message.message || t('webviews.queryBuilder.ui.unknownError', 'Unknown error.'),
+        true
+      );
       break;
     default:
       break;
@@ -113,7 +124,7 @@ runButton.addEventListener('click', () => {
   }
 
   state.currentPayload = payload;
-  setStatus('Running query...');
+  setStatus(t('webviews.queryBuilder.ui.runningQuery', 'Running query...'));
   vscode.postMessage({
     type: 'runQuery',
     payload
@@ -128,7 +139,10 @@ saveButton.addEventListener('click', () => {
 
   const name = queryNameInput.value.trim();
   if (!name) {
-    setStatus('Enter a name before saving query.', true);
+    setStatus(
+      t('webviews.queryBuilder.ui.enterNameBeforeSaving', 'Enter a name before saving query.'),
+      true
+    );
     return;
   }
 
@@ -188,12 +202,17 @@ loadSavedButton.addEventListener('click', () => {
   const selected = state.savedQueries.find((item) => item.id === selectedId);
 
   if (!selected) {
-    setStatus('Select a saved query to load.', true);
+    setStatus(
+      t('webviews.queryBuilder.ui.selectSavedQueryToLoad', 'Select a saved query to load.'),
+      true
+    );
     return;
   }
 
   applySavedQuery(selected);
-  setStatus(`Loaded saved query "${selected.name}".`);
+  setStatus(
+    t('webviews.queryBuilder.ui.loadedSavedQuery', 'Loaded saved query "{0}".', selected.name)
+  );
 });
 
 rawToggle.addEventListener('change', () => {
@@ -238,7 +257,7 @@ function applyInit(payload) {
     applySavedQuery(payload.defaults.savedQuery);
   }
 
-  setStatus('Ready.');
+  setStatus(t('webviews.queryBuilder.ui.ready', 'Ready.'));
 
   // Focus the profile select once the init data has rendered so SR + keyboard
   // users land on the primary control instead of the document root.
@@ -267,7 +286,7 @@ function renderProfiles() {
       state.profiles,
       (profile) => profile.id,
       (profile) => `${profile.name} (${profile.database})`,
-      'No profiles configured'
+      t('webviews.queryBuilder.ui.noProfilesConfigured', 'No profiles configured')
     )
   ) {
     return;
@@ -293,7 +312,7 @@ function renderLayouts(layouts, preferredLayout) {
       Array.isArray(layouts) ? layouts : [],
       (layout) => layout,
       (layout) => layout,
-      'No layouts available'
+      t('webviews.queryBuilder.ui.noLayoutsAvailable', 'No layouts available')
     )
   ) {
     return;
@@ -320,7 +339,7 @@ function requestLayouts(profileId, preferredLayout) {
     return;
   }
 
-  setStatus('Loading layouts...');
+  setStatus(t('webviews.queryBuilder.ui.loadingLayouts', 'Loading layouts...'));
   vscode.postMessage({
     type: 'loadLayouts',
     profileId
@@ -332,12 +351,12 @@ function collectPayload() {
   const layout = layoutSelect.value;
 
   if (!profileId) {
-    setStatus('Select a profile.', true);
+    setStatus(t('webviews.queryBuilder.ui.selectProfile', 'Select a profile.'), true);
     return undefined;
   }
 
   if (!layout) {
-    setStatus('Select a layout.', true);
+    setStatus(t('webviews.queryBuilder.ui.selectLayout', 'Select a layout.'), true);
     return undefined;
   }
 
@@ -395,15 +414,19 @@ function renderQueryResult(payload) {
   state.lastResult = payload;
   renderResultView();
 
-  const total = Array.isArray(payload.result && payload.result.data) ? payload.result.data.length : 0;
-  setStatus(`Query completed. Returned ${total} records.`);
+  const total = Array.isArray(payload.result && payload.result.data)
+    ? payload.result.data.length
+    : 0;
+  setStatus(
+    t('webviews.queryBuilder.ui.queryCompleted', 'Query completed. Returned {0} records.', total)
+  );
 
   vscode.postMessage({ type: 'refreshHistory' });
 }
 
 function renderResultView() {
   if (!state.lastResult) {
-    resultSummary.textContent = 'No results yet.';
+    resultSummary.textContent = t('webviews.queryBuilder.ui.noResultsYet', 'No results yet.');
     clearTableContainer();
     rawContainer.textContent = '';
     return;
@@ -412,9 +435,13 @@ function renderResultView() {
   const result = state.lastResult.result || {};
   const records = Array.isArray(result.data) ? result.data : [];
 
-  const summaryParts = [`Records: ${records.length}`];
+  const summaryParts = [
+    t('webviews.queryBuilder.ui.recordsSummary', 'Records: {0}', records.length)
+  ];
   if (state.lastResult.query) {
-    summaryParts.push(`Layout: ${state.lastResult.query.layout}`);
+    summaryParts.push(
+      t('webviews.queryBuilder.ui.layoutSummary', 'Layout: {0}', state.lastResult.query.layout)
+    );
   }
   resultSummary.textContent = summaryParts.join(' | ');
 
@@ -430,7 +457,9 @@ function renderResultView() {
 
   if (records.length === 0) {
     clearTableContainer();
-    tableContainer.appendChild(createEmptyMessage('No records returned.'));
+    tableContainer.appendChild(
+      createEmptyMessage(t('webviews.queryBuilder.ui.noRecordsReturned', 'No records returned.'))
+    );
     return;
   }
 
@@ -450,7 +479,8 @@ function collectColumns(records) {
   const seen = new Set();
 
   for (const record of records) {
-    const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
+    const fieldData =
+      record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
     Object.keys(fieldData).forEach((key) => seen.add(key));
   }
 
@@ -479,7 +509,7 @@ function renderSavedQueries() {
   if (!Array.isArray(state.savedQueries) || state.savedQueries.length === 0) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No saved queries';
+    option.textContent = t('webviews.queryBuilder.ui.noSavedQueries', 'No saved queries');
     savedQueriesSelect.appendChild(option);
     return;
   }
@@ -507,7 +537,9 @@ function applySavedQuery(query) {
 
 function renderHistory() {
   if (!Array.isArray(state.history) || state.history.length === 0) {
-    historyContainer.replaceChildren(createEmptyMessage('No history entries yet.'));
+    historyContainer.replaceChildren(
+      createEmptyMessage(t('webviews.queryBuilder.ui.noHistoryEntries', 'No history entries yet.'))
+    );
     return;
   }
 
@@ -517,7 +549,14 @@ function renderHistory() {
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
 
-  ['Time', 'Operation', 'Profile', 'Layout', 'Status', 'Duration'].forEach((title) => {
+  [
+    t('webviews.queryBuilder.ui.history.time', 'Time'),
+    t('webviews.queryBuilder.ui.history.operation', 'Operation'),
+    t('webviews.queryBuilder.ui.history.profile', 'Profile'),
+    t('webviews.queryBuilder.ui.history.layout', 'Layout'),
+    t('webviews.queryBuilder.ui.history.status', 'Status'),
+    t('webviews.queryBuilder.ui.history.duration', 'Duration')
+  ].forEach((title) => {
     const th = document.createElement('th');
     th.textContent = title;
     headerRow.appendChild(th);
@@ -535,7 +574,12 @@ function renderHistory() {
     addCell(row, entry.operation || '');
     addCell(row, entry.profileId || '');
     addCell(row, entry.layout || '-');
-    addCell(row, entry.success ? 'Success' : 'Failure');
+    addCell(
+      row,
+      entry.success
+        ? t('webviews.queryBuilder.ui.history.success', 'Success')
+        : t('webviews.queryBuilder.ui.history.failure', 'Failure')
+    );
     addCell(row, `${entry.durationMs || 0}ms`);
 
     tbody.appendChild(row);
@@ -572,7 +616,9 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
     return false;
   }
 
-  const existingOptions = new Map(Array.from(select.options).map((option) => [option.value, option]));
+  const existingOptions = new Map(
+    Array.from(select.options).map((option) => [option.value, option])
+  );
 
   items.forEach((item, index) => {
     const value = getValue(item);
@@ -613,7 +659,10 @@ function renderStandardTable(records, columns) {
     standardResultTable.tbody = tableState.tbody;
     standardResultTable.rows.clear();
     tableContainer.replaceChildren(tableState.wrapper);
-  } else if (standardResultTable.wrapper && tableContainer.firstElementChild !== standardResultTable.wrapper) {
+  } else if (
+    standardResultTable.wrapper &&
+    tableContainer.firstElementChild !== standardResultTable.wrapper
+  ) {
     tableContainer.replaceChildren(standardResultTable.wrapper);
   }
 
@@ -688,7 +737,8 @@ function updateResultRowState(rowState, record, columns) {
     rowState.idCell.textContent = nextRecordId;
   }
 
-  const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
+  const fieldData =
+    record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
   columns.forEach((column) => {
     const cell = rowState.cells.get(column);
     const nextValue = toCellValue(fieldData[column]);
@@ -701,12 +751,18 @@ function updateResultRowState(rowState, record, columns) {
 function createStableRowKeys(records) {
   const counts = new Map();
   records.forEach((record) => {
-    const recordId = record && record.recordId !== undefined && record.recordId !== null ? String(record.recordId) : '';
+    const recordId =
+      record && record.recordId !== undefined && record.recordId !== null
+        ? String(record.recordId)
+        : '';
     counts.set(recordId, (counts.get(recordId) || 0) + 1);
   });
 
   return records.map((record, index) => {
-    const recordId = record && record.recordId !== undefined && record.recordId !== null ? String(record.recordId) : '';
+    const recordId =
+      record && record.recordId !== undefined && record.recordId !== null
+        ? String(record.recordId)
+        : '';
     if (!recordId || counts.get(recordId) > 1) {
       return `row-${index}`;
     }
@@ -826,7 +882,11 @@ function renderFieldNames(payload) {
   if (error) {
     const msg = document.createElement('div');
     msg.className = 'field-names-error';
-    msg.textContent = `Layout fields unavailable: ${error}`;
+    msg.textContent = t(
+      'webviews.queryBuilder.ui.layoutFieldsUnavailable',
+      'Layout fields unavailable: {0}',
+      error
+    );
     panel.appendChild(msg);
     return;
   }
@@ -840,7 +900,11 @@ function renderFieldNames(payload) {
 
   const header = document.createElement('div');
   header.className = 'field-names-header';
-  header.textContent = `Layout fields (${names.length}) — click to insert`;
+  header.textContent = t(
+    'webviews.queryBuilder.ui.layoutFieldsHeader',
+    'Layout fields ({0}) - click to insert',
+    names.length
+  );
   panel.appendChild(header);
 
   const chipRow = document.createElement('div');
@@ -850,7 +914,11 @@ function renderFieldNames(payload) {
     chip.type = 'button';
     chip.className = 'field-name-chip';
     chip.textContent = name;
-    chip.title = `Insert "${name}" into the find JSON`;
+    chip.title = t(
+      'webviews.queryBuilder.ui.insertFieldName',
+      'Insert "{0}" into the find JSON',
+      name
+    );
     chip.addEventListener('click', () => insertFieldNameIntoFindJson(name));
     chipRow.appendChild(chip);
   }

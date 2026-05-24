@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { localize } from '../i18n';
 import type { PluginRegistry } from '../plugins/pluginRegistry';
 
 interface RegisterPluginCommandsDeps {
@@ -12,13 +13,17 @@ export function registerPluginCommands(deps: RegisterPluginCommandsDeps): vscode
   return [
     vscode.commands.registerCommand('filemakerDataApiTools.reloadPlugins', async () => {
       await pluginRegistry.reload();
-      vscode.window.showInformationMessage('Reloaded FileMaker plugins.');
+      vscode.window.showInformationMessage(
+        localize('commands.plugins.reloaded', 'Reloaded FileMaker plugins.')
+      );
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.listActivePlugins', async () => {
       const active = pluginRegistry.listActivePlugins();
       if (active.length === 0) {
-        vscode.window.showInformationMessage('No active FileMaker plugins.');
+        vscode.window.showInformationMessage(
+          localize('commands.plugins.noneActive', 'No active FileMaker plugins.')
+        );
         return;
       }
 
@@ -30,7 +35,7 @@ export function registerPluginCommands(deps: RegisterPluginCommandsDeps): vscode
           plugin
         })),
         {
-          title: 'Active FileMaker Plugins'
+          title: localize('commands.plugins.active.title', 'Active FileMaker Plugins')
         }
       );
 

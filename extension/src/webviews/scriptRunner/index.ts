@@ -5,13 +5,14 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
-import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
-import { buildWebviewCsp, createNonce } from '../common/csp';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import {
-  getOptionalBooleanField,
-  getStringField,
-  toRecord
-} from '../common/messageValidation';
+  generateCurlSnippet,
+  generateFetchSnippet,
+  type SnippetRequest
+} from '../../utils/snippetGen';
+import { buildWebviewCsp, createNonce } from '../common/csp';
+import { getOptionalBooleanField, getStringField, toRecord } from '../common/messageValidation';
 
 interface ScriptRunnerOpenOptions {
   profileId?: string;
@@ -80,13 +81,18 @@ export class ScriptRunnerPanel {
       return;
     }
 
-    const panel = vscode.window.createWebviewPanel('filemakerScriptRunner', 'FileMaker Script Runner', column, {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui')
-      ]
-    });
+    const panel = vscode.window.createWebviewPanel(
+      'filemakerScriptRunner',
+      localize('webviews.scriptRunner.panelTitle', 'FileMaker Script Runner'),
+      column,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui')
+        ]
+      }
+    );
 
     ScriptRunnerPanel.currentPanel = new ScriptRunnerPanel(
       panel,
@@ -158,7 +164,9 @@ export class ScriptRunnerPanel {
     const profile = await this.profileStore.getProfile(profileId);
 
     if (!profile) {
-      await this.postError('Connection profile not found.');
+      await this.postError(
+        localize('webviews.scriptRunner.profileNotFound', 'Connection profile not found.')
+      );
       return;
     }
 
@@ -180,26 +188,36 @@ export class ScriptRunnerPanel {
     const scriptRunnerEnabled = vscode.workspace
       .getConfiguration('filemaker')
       .get<boolean>('features.scriptRunner.enabled', true);
-    const offlineMode = vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false);
+    const offlineMode = vscode.workspace
+      .getConfiguration('filemaker')
+      .get<boolean>('offline.mode', false);
 
     if (!scriptRunnerEnabled) {
       await this.panel.webview.postMessage({
         type: 'unsupported',
-        message: 'Script runner is disabled by setting filemaker.features.scriptRunner.enabled.'
+        message: localize(
+          'webviews.scriptRunner.disabledBySetting',
+          'Script runner is disabled by setting filemaker.features.scriptRunner.enabled.'
+        )
       });
       return;
     }
     if (offlineMode) {
       await this.panel.webview.postMessage({
         type: 'unsupported',
-        message: 'Offline mode is enabled; script execution is disabled.'
+        message: localize(
+          'webviews.scriptRunner.offlineDisabled',
+          'Offline mode is enabled; script execution is disabled.'
+        )
       });
       return;
     }
 
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Connection profile not found.');
+      await this.postError(
+        localize('webviews.scriptRunner.profileNotFound', 'Connection profile not found.')
+      );
       return;
     }
 
@@ -234,7 +252,9 @@ export class ScriptRunnerPanel {
   private async copyCurl(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Connection profile not found.');
+      await this.postError(
+        localize('webviews.scriptRunner.profileNotFound', 'Connection profile not found.')
+      );
       return;
     }
 
@@ -246,7 +266,9 @@ export class ScriptRunnerPanel {
       });
 
       await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied curl snippet to clipboard.');
+      vscode.window.showInformationMessage(
+        localize('webviews.scriptRunner.copyCurl.success', 'Copied curl snippet to clipboard.')
+      );
     } catch (error) {
       await this.postError(formatError(error));
     }
@@ -255,7 +277,9 @@ export class ScriptRunnerPanel {
   private async copyFetch(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Connection profile not found.');
+      await this.postError(
+        localize('webviews.scriptRunner.profileNotFound', 'Connection profile not found.')
+      );
       return;
     }
 
@@ -267,7 +291,9 @@ export class ScriptRunnerPanel {
       });
 
       await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied fetch snippet to clipboard.');
+      vscode.window.showInformationMessage(
+        localize('webviews.scriptRunner.copyFetch.success', 'Copied fetch snippet to clipboard.')
+      );
     } catch (error) {
       await this.postError(formatError(error));
     }
@@ -379,17 +405,32 @@ export class ScriptRunnerPanel {
 
   private getHtml(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui', 'styles.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'scriptRunner',
+        'ui',
+        'styles.css'
+      )
     );
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'scriptRunner',
+        'ui',
+        'index.js'
+      )
     );
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -397,55 +438,56 @@ export class ScriptRunnerPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>FileMaker Script Runner</title>
+  <title>${localize('webviews.scriptRunner.htmlTitle', 'FileMaker Script Runner')}</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>FileMaker Script Runner</h1>
-      <p>Run FileMaker scripts with safe request previews.</p>
+      <h1>${localize('webviews.scriptRunner.heading', 'FileMaker Script Runner')}</h1>
+      <p>${localize('webviews.scriptRunner.subtitle', 'Run FileMaker scripts with safe request previews.')}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <label for="profileSelect">Profile</label>
+        <label for="profileSelect">${localize('webviews.scriptRunner.profileLabel', 'Profile')}</label>
         <select id="profileSelect"></select>
       </div>
       <div class="row">
-        <label for="layoutSelect">Layout</label>
+        <label for="layoutSelect">${localize('webviews.scriptRunner.layoutLabel', 'Layout')}</label>
         <select id="layoutSelect"></select>
       </div>
       <div class="row">
-        <label for="recordIdInput">Record ID (optional)</label>
+        <label for="recordIdInput">${localize('webviews.scriptRunner.recordIdLabel', 'Record ID (optional)')}</label>
         <input id="recordIdInput" type="text" placeholder="1" />
       </div>
       <div class="row">
-        <label for="scriptNameInput">Script Name</label>
-        <input id="scriptNameInput" type="text" placeholder="MyScript" />
+        <label for="scriptNameInput">${localize('webviews.scriptRunner.scriptNameLabel', 'Script Name')}</label>
+        <input id="scriptNameInput" type="text" placeholder="${localize('webviews.scriptRunner.scriptNamePlaceholder', 'MyScript')}" />
       </div>
       <div class="row">
-        <label for="scriptParamInput">Script Parameter (optional)</label>
-        <textarea id="scriptParamInput" rows="3" placeholder="Any string payload"></textarea>
+        <label for="scriptParamInput">${localize('webviews.scriptRunner.scriptParamLabel', 'Script Parameter (optional)')}</label>
+        <textarea id="scriptParamInput" rows="3" placeholder="${localize('webviews.scriptRunner.scriptParamPlaceholder', 'Any string payload')}"></textarea>
       </div>
       <div class="row inline">
-        <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header in snippets</label>
+        <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> ${localize('webviews.scriptRunner.includeAuthLabel', 'Include auth header in snippets')}</label>
       </div>
       <div class="actions">
-        <button id="runButton">Run Script</button>
-        <button id="copyCurlButton">Copy as curl</button>
-        <button id="copyFetchButton">Copy as fetch()</button>
+        <button id="runButton">${localize('webviews.scriptRunner.runButton', 'Run Script')}</button>
+        <button id="copyCurlButton">${localize('webviews.scriptRunner.copyCurlButton', 'Copy as curl')}</button>
+        <button id="copyFetchButton">${localize('webviews.scriptRunner.copyFetchButton', 'Copy as fetch()')}</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel">
-      <h2>Result</h2>
-      <div id="summary" class="summary" role="status" aria-live="polite">No script run yet.</div>
+      <h2>${localize('webviews.scriptRunner.resultHeading', 'Result')}</h2>
+      <div id="summary" class="summary" role="status" aria-live="polite">${localize('webviews.scriptRunner.noScriptRunYet', 'No script run yet.')}</div>
       <pre id="rawResult" class="raw"></pre>
     </section>
   </div>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -493,12 +535,16 @@ function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
   const scriptName = payload.scriptName.trim();
 
   if (!scriptName) {
-    throw new FMClientError('Script name is required.');
+    throw new FMClientError(
+      localize('webviews.scriptRunner.scriptNameRequired', 'Script name is required.')
+    );
   }
 
   const layout = payload.layout.trim();
   if (!layout) {
-    throw new FMClientError('Layout is required.');
+    throw new FMClientError(
+      localize('webviews.scriptRunner.layoutRequired', 'Layout is required.')
+    );
   }
 
   return {
@@ -514,5 +560,5 @@ function formatError(error: unknown): string {
     return error.message;
   }
 
-  return 'Unexpected error.';
+  return localize('webviews.scriptRunner.unexpectedError', 'Unexpected error.');
 }

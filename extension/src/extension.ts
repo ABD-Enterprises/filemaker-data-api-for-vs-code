@@ -35,6 +35,7 @@ import { FmBridgeServer } from './services/fmBridgeServer';
 import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
 import { RoleGuard } from './enterprise/roleGuard';
+import { localize } from './i18n';
 import { MetricsStore } from './diagnostics/metricsStore';
 import { OfflineModeService } from './offline/offlineModeService';
 import { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
@@ -45,7 +46,10 @@ import { OfflineStatusBar } from './views/offlineStatusBar';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const settingsService = new SettingsService();
-  const logger = new Logger('FileMaker Data API Tools', settingsService);
+  const logger = new Logger(
+    localize('extension.outputChannel.name', 'FileMaker Data API Tools'),
+    settingsService
+  );
   const roleGuard = new RoleGuard(logger);
   await roleGuard.applyContexts();
 
@@ -54,7 +58,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // every other call site.
   settingsService.getSchemaHashAlgorithm((bad) => {
     void vscode.window.showWarningMessage(
-      `FileMaker: schema.hashAlgorithm '${bad}' is not supported on this runtime. Falling back to sha256.`
+      localize(
+        'extension.schemaHashAlgorithm.unsupported',
+        "FileMaker: schema.hashAlgorithm '{0}' is not supported on this runtime. Falling back to sha256.",
+        bad
+      )
     );
     logger.warn('Rejected unsupported schema.hashAlgorithm; falling back to sha256.', {
       configured: bad
@@ -71,7 +79,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (deprecatedKeys.length > 0) {
     const newNames = deprecatedKeys.map((k) => k.replace('filemakerDataApiTools.', 'filemaker.'));
     void vscode.window.showWarningMessage(
-      `FileMaker: ${deprecatedKeys.length} deprecated setting${deprecatedKeys.length === 1 ? '' : 's'} in use (${deprecatedKeys.join(', ')}). Migrate to ${newNames.join(', ')}.`
+      localize(
+        'extension.deprecatedSettings.warning',
+        'FileMaker: {0} deprecated setting{1} in use ({2}). Migrate to {3}.',
+        deprecatedKeys.length,
+        deprecatedKeys.length === 1 ? '' : 's',
+        deprecatedKeys.join(', '),
+        newNames.join(', ')
+      )
     );
     logger.warn('Deprecated settings in use; falling back to the legacy values.', {
       deprecatedKeys,
@@ -83,15 +98,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const secretFallbackMode = settingsService.getSecretsFallbackMode();
   const secretStore = new SecretStore(context.secrets, {
     fallbackMode: secretFallbackMode,
-    workspaceState:
-      secretFallbackMode === 'workspace-state' ? context.workspaceState : undefined,
+    workspaceState: secretFallbackMode === 'workspace-state' ? context.workspaceState : undefined,
     machineId: vscode.env.machineId,
     logger,
     onFallbackEngaged: (mode, reason) => {
       const text =
         mode === 'workspace-state'
-          ? `FileMaker: SecretStorage unavailable (${reason}); falling back to encrypted workspace state.`
-          : `FileMaker: SecretStorage unavailable (${reason}); secret persistence is disabled.`;
+          ? localize(
+              'extension.secretStorage.workspaceFallback',
+              'FileMaker: SecretStorage unavailable ({0}); falling back to encrypted workspace state.',
+              reason
+            )
+          : localize(
+              'extension.secretStorage.disabledFallback',
+              'FileMaker: SecretStorage unavailable ({0}); secret persistence is disabled.',
+              reason
+            );
       void vscode.window.showWarningMessage(text);
     }
   });
@@ -125,15 +147,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
   const schemaService = new SchemaService(fmClient, logger, {
-    getCacheTtlMs: () =>
-      normalizeSchemaCacheTtlMs(settingsService.getSchemaCacheTtlSeconds()),
+    getCacheTtlMs: () => normalizeSchemaCacheTtlMs(settingsService.getSchemaCacheTtlSeconds()),
     isMetadataEnabled: () => settingsService.isSchemaMetadataEnabled(),
     offlineModeService
   });
   const environmentCompareService = new EnvironmentCompareService(fmClient, schemaService, logger);
   const snapshotStore = new SchemaSnapshotStore(context.workspaceState, logger, {
-    getStorageMode: () =>
-      settingsService.getSchemaSnapshotsStorage(),
+    getStorageMode: () => settingsService.getSchemaSnapshotsStorage(),
     getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     isWorkspaceTrusted: () => vscode.workspace.isTrusted
   });
@@ -332,19 +352,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const jobsStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
   jobsStatusBar.command = 'filemakerDataApiTools.showJobs';
-  jobsStatusBar.text = '$(history) FM Jobs: idle';
-  jobsStatusBar.tooltip = 'FileMaker Data API jobs';
+  jobsStatusBar.text = localize('extension.jobs.idleStatus', '$(history) FM Jobs: idle');
+  jobsStatusBar.tooltip = localize('extension.jobs.tooltip', 'FileMaker Data API jobs');
   jobsStatusBar.show();
 
   const jobsSubscription = jobRunner.onDidChange(() => {
     refreshExplorer();
-    const running = jobRunner.listJobs().find((job) => job.status === 'running' || job.status === 'queued');
+    const running = jobRunner
+      .listJobs()
+      .find((job) => job.status === 'running' || job.status === 'queued');
     if (!running) {
-      jobsStatusBar.text = '$(history) FM Jobs: idle';
+      jobsStatusBar.text = localize('extension.jobs.idleStatus', '$(history) FM Jobs: idle');
       return;
     }
 
-    jobsStatusBar.text = `$(sync~spin) FM Job: ${running.name} ${running.progress}%`;
+    jobsStatusBar.text = localize(
+      'extension.jobs.runningStatus',
+      '$(sync~spin) FM Job: {0} {1}%',
+      running.name,
+      running.progress
+    );
   });
 
   const offlineStatusBar = new OfflineStatusBar(offlineModeService, {
@@ -492,7 +519,10 @@ function registerWalkthroughCommands(
 
 async function maybeOpenFirstRunWalkthrough(
   context: vscode.ExtensionContext,
-  logger: { info: (message: string, meta?: unknown) => void; warn: (message: string, meta?: unknown) => void }
+  logger: {
+    info: (message: string, meta?: unknown) => void;
+    warn: (message: string, meta?: unknown) => void;
+  }
 ): Promise<void> {
   if (context.globalState.get<boolean>(FIRST_RUN_FLAG, false)) {
     return;

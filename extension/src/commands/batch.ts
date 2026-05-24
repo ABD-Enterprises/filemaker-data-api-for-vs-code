@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
-import type { BatchService} from '../services/batchService';
+import type { BatchService } from '../services/batchService';
 import { inferExportFormat, parseBatchUpdateInput } from '../services/batchService';
 import type { JobRunner } from '../services/jobRunner';
 import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
+import { localize } from '../i18n';
 import { parseFindJson, parseSortJson } from '../utils/jsonValidate';
 import {
   openJsonDocument,
@@ -28,108 +29,129 @@ interface RegisterBatchCommandsDeps {
 }
 
 export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.Disposable[] {
-  const { profileStore, fmClient, batchService, jobRunner, roleGuard, settingsService, logger } = deps;
+  const { profileStore, fmClient, batchService, jobRunner, roleGuard, settingsService, logger } =
+    deps;
 
   return [
-    vscode.commands.registerCommand('filemakerDataApiTools.batchExportFind', async (arg: unknown) => {
-      if (!(await ensureBatchEnabled(settingsService))) {
-        return;
-      }
-
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
-
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
-
-      const findJsonInput = await vscode.window.showInputBox({
-        title: 'Batch Export (Find)',
-        prompt: 'Find query JSON array',
-        value: '[{}]',
-        ignoreFocusOut: true
-      });
-      if (!findJsonInput) {
-        return;
-      }
-
-      const sortJsonInput = await vscode.window.showInputBox({
-        title: 'Batch Export (Find)',
-        prompt: 'Sort JSON array (optional)',
-        ignoreFocusOut: true
-      });
-
-      const outputUri = await vscode.window.showSaveDialog({
-        title: 'Export batch find results',
-        defaultUri: vscode.Uri.file(`${layout}.jsonl`),
-        filters: {
-          JSONL: ['jsonl'],
-          CSV: ['csv']
-        }
-      });
-      if (!outputUri) {
-        return;
-      }
-
-      const findValidation = parseFindJson(findJsonInput);
-      if (!findValidation.ok || !findValidation.value) {
-        vscode.window.showErrorMessage(findValidation.error ?? 'Invalid find JSON.');
-        return;
-      }
-      const findQuery = findValidation.value;
-
-      let sort: Array<Record<string, unknown>> | undefined;
-      if (sortJsonInput && sortJsonInput.trim().length > 0) {
-        const sortValidation = parseSortJson(sortJsonInput);
-        if (!sortValidation.ok || !sortValidation.value) {
-          vscode.window.showErrorMessage(sortValidation.error ?? 'Invalid sort JSON.');
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.batchExportFind',
+      async (arg: unknown) => {
+        if (!(await ensureBatchEnabled(settingsService))) {
           return;
         }
 
-        sort = sortValidation.value;
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
+
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
+
+        const findJsonInput = await vscode.window.showInputBox({
+          title: localize('commands.batch.exportFind.title', 'Batch Export (Find)'),
+          prompt: localize('commands.batch.exportFind.findPrompt', 'Find query JSON array'),
+          value: '[{}]',
+          ignoreFocusOut: true
+        });
+        if (!findJsonInput) {
+          return;
+        }
+
+        const sortJsonInput = await vscode.window.showInputBox({
+          title: localize('commands.batch.exportFind.title', 'Batch Export (Find)'),
+          prompt: localize('commands.batch.exportFind.sortPrompt', 'Sort JSON array (optional)'),
+          ignoreFocusOut: true
+        });
+
+        const outputUri = await vscode.window.showSaveDialog({
+          title: localize(
+            'commands.batch.exportFind.saveDialog.title',
+            'Export batch find results'
+          ),
+          defaultUri: vscode.Uri.file(`${layout}.jsonl`),
+          filters: {
+            JSONL: ['jsonl'],
+            CSV: ['csv']
+          }
+        });
+        if (!outputUri) {
+          return;
+        }
+
+        const findValidation = parseFindJson(findJsonInput);
+        if (!findValidation.ok || !findValidation.value) {
+          vscode.window.showErrorMessage(
+            findValidation.error ?? localize('commands.batch.invalidFindJson', 'Invalid find JSON.')
+          );
+          return;
+        }
+        const findQuery = findValidation.value;
+
+        let sort: Array<Record<string, unknown>> | undefined;
+        if (sortJsonInput && sortJsonInput.trim().length > 0) {
+          const sortValidation = parseSortJson(sortJsonInput);
+          if (!sortValidation.ok || !sortValidation.value) {
+            vscode.window.showErrorMessage(
+              sortValidation.error ??
+                localize('commands.batch.invalidSortJson', 'Invalid sort JSON.')
+            );
+            return;
+          }
+
+          sort = sortValidation.value;
+        }
+
+        const maxRecords = settingsService.getBatchMaxRecords();
+
+        const performanceMode = roleGuard.resolvePerformanceMode();
+        const selectedFormat = inferExportFormat(outputUri.fsPath);
+        const format = performanceMode === 'high-scale' ? 'jsonl' : selectedFormat;
+        const outputPath =
+          performanceMode === 'high-scale' && selectedFormat !== 'jsonl'
+            ? replaceExtension(outputUri.fsPath, '.jsonl')
+            : outputUri.fsPath;
+
+        const job = jobRunner.startJob(
+          localize('commands.batch.exportFind.jobName', 'Batch Export {0}', layout),
+          async (jobContext) => {
+            jobContext.log('info', `Starting export to ${outputPath}`);
+
+            const result = await batchService.batchExportFind(
+              profile,
+              layout,
+              {
+                query: findQuery,
+                sort
+              },
+              {
+                outputPath,
+                format,
+                maxRecords
+              },
+              jobContext
+            );
+
+            jobContext.log(
+              'info',
+              `Finished export. Records=${result.exportedRecords}, truncated=${result.truncated}`
+            );
+            return result;
+          }
+        );
+
+        vscode.window.showInformationMessage(
+          localize(
+            'commands.batch.exportFind.started',
+            'Started job {0} for batch export.',
+            job.id.slice(0, 8)
+          )
+        );
       }
-
-      const maxRecords = settingsService.getBatchMaxRecords();
-
-      const performanceMode = roleGuard.resolvePerformanceMode();
-      const selectedFormat = inferExportFormat(outputUri.fsPath);
-      const format = performanceMode === 'high-scale' ? 'jsonl' : selectedFormat;
-      const outputPath =
-        performanceMode === 'high-scale' && selectedFormat !== 'jsonl'
-          ? replaceExtension(outputUri.fsPath, '.jsonl')
-          : outputUri.fsPath;
-
-      const job = jobRunner.startJob(`Batch Export ${layout}`, async (jobContext) => {
-        jobContext.log('info', `Starting export to ${outputPath}`);
-
-        const result = await batchService.batchExportFind(
-          profile,
-          layout,
-          {
-            query: findQuery,
-            sort
-          },
-          {
-            outputPath,
-            format,
-            maxRecords
-          },
-          jobContext
-        );
-
-        jobContext.log(
-          'info',
-          `Finished export. Records=${result.exportedRecords}, truncated=${result.truncated}`
-        );
-        return result;
-      });
-
-      vscode.window.showInformationMessage(`Started job ${job.id.slice(0, 8)} for batch export.`);
-    }),
+    ),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.batchUpdateFromFile',
@@ -138,7 +160,10 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           return;
         }
 
-        const canUpdate = await roleGuard.assertFeature('batchUpdate', 'Batch update from CSV/JSON');
+        const canUpdate = await roleGuard.assertFeature(
+          'batchUpdate',
+          localize('commands.batch.update.featureName', 'Batch update from CSV/JSON')
+        );
         if (!canUpdate) {
           return;
         }
@@ -155,7 +180,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
         }
 
         const filePick = await vscode.window.showOpenDialog({
-          title: 'Batch update source file',
+          title: localize('commands.batch.update.sourceFile.title', 'Batch update source file'),
           canSelectMany: false,
           filters: {
             JSON: ['json'],
@@ -174,19 +199,33 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           const format = sourceUri.fsPath.toLowerCase().endsWith('.csv') ? 'csv' : 'json';
           const entries = parseBatchUpdateInput(sourceText, format);
           if (entries.length === 0) {
-            vscode.window.showWarningMessage('No valid update rows found.');
+            vscode.window.showWarningMessage(
+              localize('commands.batch.update.noRows', 'No valid update rows found.')
+            );
             return;
           }
 
           const defaults = batchService.getDefaultBatchUpdateOptions();
           const dryRunSelection = await vscode.window.showQuickPick(
             [
-              { label: 'Dry-run only (recommended)', value: true },
-              { label: 'Execute updates now', value: false }
+              {
+                label: localize('commands.batch.update.mode.dryRun', 'Dry-run only (recommended)'),
+                value: true
+              },
+              {
+                label: localize('commands.batch.update.mode.execute', 'Execute updates now'),
+                value: false
+              }
             ],
             {
-              title: 'Batch Update Mode',
-              placeHolder: `Default: ${defaults.dryRun ? 'dry-run' : 'execute'}`
+              title: localize('commands.batch.update.mode.title', 'Batch Update Mode'),
+              placeHolder: localize(
+                'commands.batch.update.mode.defaultPlaceholder',
+                'Default: {0}',
+                defaults.dryRun
+                  ? localize('commands.batch.update.mode.defaultDryRun', 'dry-run')
+                  : localize('commands.batch.update.mode.defaultExecute', 'execute')
+              )
             }
           );
 
@@ -195,45 +234,60 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           }
 
           if (!dryRunSelection.value) {
+            const executeLabel = localize('commands.batch.update.confirm.execute', 'Execute');
             const confirmation = await vscode.window.showWarningMessage(
-              `Execute batch update for ${entries.length} records on ${layout}?\nRollback guidance: keep a pre-update export and rerun updates with previous values to revert.`,
+              localize(
+                'commands.batch.update.confirm.message',
+                'Execute batch update for {0} records on {1}?\nRollback guidance: keep a pre-update export and rerun updates with previous values to revert.',
+                entries.length,
+                layout
+              ),
               { modal: true },
-              'Execute'
+              executeLabel
             );
 
-            if (confirmation !== 'Execute') {
+            if (confirmation !== executeLabel) {
               return;
             }
           }
 
           const concurrency = settingsService.getBatchConcurrency();
 
-          const job = jobRunner.startJob(`Batch Update ${layout}`, async (jobContext) => {
-            jobContext.log(
-              'info',
-              `Starting batch update from ${sourceUri.fsPath} (dryRun=${dryRunSelection.value})`
-            );
+          const job = jobRunner.startJob(
+            localize('commands.batch.update.jobName', 'Batch Update {0}', layout),
+            async (jobContext) => {
+              jobContext.log(
+                'info',
+                `Starting batch update from ${sourceUri.fsPath} (dryRun=${dryRunSelection.value})`
+              );
 
-            const result = await batchService.batchUpdate(
-              profile,
-              layout,
-              entries,
-              {
-                dryRun: dryRunSelection.value,
-                concurrency
-              },
-              jobContext
-            );
+              const result = await batchService.batchUpdate(
+                profile,
+                layout,
+                entries,
+                {
+                  dryRun: dryRunSelection.value,
+                  concurrency
+                },
+                jobContext
+              );
 
-            jobContext.log(
-              'info',
-              `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}`
-            );
+              jobContext.log(
+                'info',
+                `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}`
+              );
 
-            return result;
-          });
+              return result;
+            }
+          );
 
-          vscode.window.showInformationMessage(`Started job ${job.id.slice(0, 8)} for batch update.`);
+          vscode.window.showInformationMessage(
+            localize(
+              'commands.batch.update.started',
+              'Started job {0} for batch update.',
+              job.id.slice(0, 8)
+            )
+          );
 
           if (dryRunSelection.value) {
             const preview = {
@@ -246,7 +300,10 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           }
         } catch (error) {
           await showCommandError(error, {
-            fallbackMessage: 'Batch update failed to start.',
+            fallbackMessage: localize(
+              'commands.batch.update.failedToStart',
+              'Batch update failed to start.'
+            ),
             logger,
             logMessage: 'Batch update failed to start.'
           });
@@ -261,11 +318,14 @@ async function ensureBatchEnabled(settingsService: SettingsService): Promise<boo
   if (!enabled || !vscode.workspace.isTrusted) {
     void vscode.window
       .showInformationMessage(
-        'Batch operations are disabled in settings or untrusted workspace mode.',
-        'Learn More'
+        localize(
+          'commands.batch.disabled',
+          'Batch operations are disabled in settings or untrusted workspace mode.'
+        ),
+        localize('commands.batch.learnMore', 'Learn More')
       )
       .then((selection) => {
-        if (selection === 'Learn More') {
+        if (selection === localize('commands.batch.learnMore', 'Learn More')) {
           void vscode.env.openExternal(
             vscode.Uri.parse('https://code.visualstudio.com/docs/editor/workspace-trust')
           );

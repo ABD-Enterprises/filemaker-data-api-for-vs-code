@@ -1,5 +1,13 @@
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 const state = {
   profiles: [],
   activeProfileId: undefined,
@@ -58,7 +66,10 @@ window.addEventListener('message', (event) => {
       break;
     }
     case 'error': {
-      setStatus(message.message || 'Unknown error.', true);
+      setStatus(
+        message.message || t('webviews.recordViewer.ui.unknownError', 'Unknown error.'),
+        true
+      );
       break;
     }
     default:
@@ -76,7 +87,7 @@ loadButton.addEventListener('click', () => {
     return;
   }
 
-  setStatus('Loading record...');
+  setStatus(t('webviews.recordViewer.ui.loadingRecord', 'Loading record...'));
   vscode.postMessage({
     type: 'loadRecord',
     payload
@@ -98,7 +109,7 @@ function applyInit(payload) {
     recordIdInput.value = state.defaults.recordId;
   }
 
-  setStatus('Ready.');
+  setStatus(t('webviews.recordViewer.ui.ready', 'Ready.'));
 }
 
 function renderProfiles() {
@@ -107,7 +118,10 @@ function renderProfiles() {
   if (state.profiles.length === 0) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No profiles configured';
+    option.textContent = t(
+      'webviews.recordViewer.ui.noProfilesConfigured',
+      'No profiles configured'
+    );
     profileSelect.appendChild(option);
     return;
   }
@@ -139,7 +153,7 @@ function requestLayouts(profileId, preferredLayout) {
     return;
   }
 
-  setStatus('Loading layouts...');
+  setStatus(t('webviews.recordViewer.ui.loadingLayouts', 'Loading layouts...'));
   vscode.postMessage({
     type: 'loadLayouts',
     profileId
@@ -165,7 +179,7 @@ function renderLayouts(layouts, preferredLayout) {
   if (!Array.isArray(layouts) || layouts.length === 0) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No layouts available';
+    option.textContent = t('webviews.recordViewer.ui.noLayoutsAvailable', 'No layouts available');
     layoutSelect.appendChild(option);
     return;
   }
@@ -190,17 +204,17 @@ function collectPayload() {
   const recordId = recordIdInput.value.trim();
 
   if (!profileId) {
-    setStatus('Select a profile.', true);
+    setStatus(t('webviews.recordViewer.ui.selectProfile', 'Select a profile.'), true);
     return undefined;
   }
 
   if (!layout) {
-    setStatus('Select a layout.', true);
+    setStatus(t('webviews.recordViewer.ui.selectLayout', 'Select a layout.'), true);
     return undefined;
   }
 
   if (!recordId) {
-    setStatus('Enter a record ID.', true);
+    setStatus(t('webviews.recordViewer.ui.enterRecordId', 'Enter a record ID.'), true);
     return undefined;
   }
 
@@ -215,14 +229,18 @@ function renderRecord(payload) {
   state.lastRecord = payload;
 
   const record = payload.record || {};
-  const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
-  const relatedData = record.portalData && typeof record.portalData === 'object' ? record.portalData : {};
+  const fieldData =
+    record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
+  const relatedData =
+    record.portalData && typeof record.portalData === 'object' ? record.portalData : {};
 
   renderFieldData(fieldData);
   renderPortalData(relatedData);
 
   rawJson.textContent = JSON.stringify(payload, null, 2);
-  setStatus(`Loaded record ${record.recordId || ''}.`);
+  setStatus(
+    t('webviews.recordViewer.ui.loadedRecord', 'Loaded record {0}.', record.recordId || '')
+  );
 }
 
 function createLoadingSkeleton(widths) {
@@ -259,7 +277,9 @@ function renderFieldData(fieldData) {
   const fieldKeys = Object.keys(fieldData);
   if (!fieldKeys.length) {
     fieldCellRefs.clear();
-    fieldDataContainer.replaceChildren(createEmptyMessage('No field data.'));
+    fieldDataContainer.replaceChildren(
+      createEmptyMessage(t('webviews.recordViewer.ui.noFieldData', 'No field data.'))
+    );
     return;
   }
 
@@ -272,7 +292,10 @@ function renderFieldData(fieldData) {
 }
 
 function hasMatchingFieldCells(fieldKeys) {
-  return fieldCellRefs.size === fieldKeys.length && fieldKeys.every((fieldKey) => fieldCellRefs.has(fieldKey));
+  return (
+    fieldCellRefs.size === fieldKeys.length &&
+    fieldKeys.every((fieldKey) => fieldCellRefs.has(fieldKey))
+  );
 }
 
 function buildFieldTable(fieldData, fieldKeys) {
@@ -287,15 +310,15 @@ function buildFieldTable(fieldData, fieldKeys) {
   const headRow = document.createElement('tr');
 
   const fieldHeader = document.createElement('th');
-  fieldHeader.textContent = 'Field';
+  fieldHeader.textContent = t('webviews.recordViewer.ui.fieldHeader', 'Field');
   headRow.appendChild(fieldHeader);
 
   const valueHeader = document.createElement('th');
-  valueHeader.textContent = 'Value';
+  valueHeader.textContent = t('webviews.recordViewer.ui.valueHeader', 'Value');
   headRow.appendChild(valueHeader);
 
   const copyHeader = document.createElement('th');
-  copyHeader.textContent = 'Copy';
+  copyHeader.textContent = t('webviews.recordViewer.ui.copyHeader', 'Copy');
   headRow.appendChild(copyHeader);
 
   thead.appendChild(headRow);
@@ -317,10 +340,10 @@ function buildFieldTable(fieldData, fieldKeys) {
 
     const copyCell = document.createElement('td');
     const copyButton = document.createElement('button');
-    copyButton.textContent = 'Copy';
+    copyButton.textContent = t('webviews.recordViewer.ui.copyButton', 'Copy');
     copyButton.addEventListener('click', async () => {
       await navigator.clipboard.writeText(valueCell.textContent || '');
-      setStatus(`Copied ${field}.`);
+      setStatus(t('webviews.recordViewer.ui.copiedField', 'Copied {0}.', field));
     });
     copyCell.appendChild(copyButton);
     row.appendChild(copyCell);
@@ -347,7 +370,9 @@ function renderPortalData(relatedData) {
   const portalKeys = Object.keys(relatedData);
   if (!portalKeys.length) {
     portalSectionRefs.clear();
-    relatedDataContainer.replaceChildren(createEmptyMessage('No related rows.'));
+    relatedDataContainer.replaceChildren(
+      createEmptyMessage(t('webviews.recordViewer.ui.noRelatedRows', 'No related rows.'))
+    );
     return;
   }
 
@@ -360,7 +385,10 @@ function renderPortalData(relatedData) {
 }
 
 function hasMatchingPortalSections(portalKeys) {
-  return portalSectionRefs.size === portalKeys.length && portalKeys.every((portalKey) => portalSectionRefs.has(portalKey));
+  return (
+    portalSectionRefs.size === portalKeys.length &&
+    portalKeys.every((portalKey) => portalSectionRefs.has(portalKey))
+  );
 }
 
 function buildPortalSections(relatedData, portalKeys) {
@@ -374,7 +402,9 @@ function buildPortalSections(relatedData, portalKeys) {
     const summary = document.createElement('summary');
     details.appendChild(summary);
 
-    const content = renderRelatedRows(Array.isArray(relatedData[portalKey]) ? relatedData[portalKey] : []);
+    const content = renderRelatedRows(
+      Array.isArray(relatedData[portalKey]) ? relatedData[portalKey] : []
+    );
     details.appendChild(content);
 
     portalSectionRefs.set(portalKey, { details, summary, content });
@@ -393,14 +423,16 @@ function updatePortalSections(relatedData, portalKeys) {
 
     const entries = Array.isArray(relatedData[portalKey]) ? relatedData[portalKey] : [];
     section.summary.textContent = `${portalKey} (${entries.length})`;
-    section.content.textContent = entries.length ? JSON.stringify(entries, null, 2) : 'No related rows.';
+    section.content.textContent = entries.length
+      ? JSON.stringify(entries, null, 2)
+      : t('webviews.recordViewer.ui.noRelatedRows', 'No related rows.');
   });
 }
 
 function renderRelatedRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     const empty = document.createElement('p');
-    empty.textContent = 'No related rows.';
+    empty.textContent = t('webviews.recordViewer.ui.noRelatedRows', 'No related rows.');
     return empty;
   }
 

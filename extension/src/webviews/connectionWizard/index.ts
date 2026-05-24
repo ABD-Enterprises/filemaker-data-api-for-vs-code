@@ -5,12 +5,10 @@ import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { SecretStore } from '../../services/secretStore';
 import type { ConnectionProfile } from '../../types/fm';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { toRecord } from '../common/messageValidation';
-import {
-  validateDatabaseName,
-  validateServerUrl
-} from '../../utils/jsonValidate';
+import { validateDatabaseName, validateServerUrl } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
 
 export type ConnectionWizardTestPolicy = 'off' | 'warn' | 'block';
@@ -83,7 +81,9 @@ export class ConnectionWizardPanel {
 
     const panel = vscode.window.createWebviewPanel(
       'filemakerConnectionWizard',
-      editingProfile ? `Edit Profile — ${editingProfile.name}` : 'Add Connection Profile',
+      editingProfile
+        ? localize('webviews.connectionWizard.editTitle', 'Edit Profile - {0}', editingProfile.name)
+        : localize('webviews.connectionWizard.addTitle', 'Add Connection Profile'),
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -159,7 +159,9 @@ export class ConnectionWizardPanel {
       if (!serverValidation.ok) {
         await this.panel.webview.postMessage({
           type: 'saveError',
-          message: serverValidation.error ?? 'Invalid server URL.'
+          message:
+            serverValidation.error ??
+            localize('webviews.connectionWizard.invalidServerUrl', 'Invalid server URL.')
         });
         return;
       }
@@ -168,7 +170,9 @@ export class ConnectionWizardPanel {
       if (!dbValidation.ok) {
         await this.panel.webview.postMessage({
           type: 'saveError',
-          message: dbValidation.error ?? 'Invalid database name.'
+          message:
+            dbValidation.error ??
+            localize('webviews.connectionWizard.invalidDatabaseName', 'Invalid database name.')
         });
         return;
       }
@@ -207,12 +211,19 @@ export class ConnectionWizardPanel {
 
       await this.panel.webview.postMessage({
         type: 'saveSuccess',
-        message: `Profile "${profile.name}" saved. Use FileMaker: Connect to start a session.`
+        message: localize(
+          'webviews.connectionWizard.profileSaved',
+          'Profile "{0}" saved. Use FileMaker: Connect to start a session.',
+          profile.name
+        )
       });
     } catch (error) {
       await this.panel.webview.postMessage({
         type: 'saveError',
-        message: toUserErrorMessage(error, 'Failed to save profile.')
+        message: toUserErrorMessage(
+          error,
+          localize('webviews.connectionWizard.saveFailed', 'Failed to save profile.')
+        )
       });
     }
   }
@@ -238,7 +249,9 @@ export class ConnectionWizardPanel {
         apiVersionPath: data.apiVersionPath.trim()
       };
 
-      await this.postTestProgress('Preparing credentials…');
+      await this.postTestProgress(
+        localize('webviews.connectionWizard.testProgress.credentials', 'Preparing credentials...')
+      );
       if (data.authMode === 'direct') {
         tempProfile.username = data.username?.trim();
 
@@ -253,20 +266,30 @@ export class ConnectionWizardPanel {
         }
       }
 
-      await this.postTestProgress('Opening session…');
+      await this.postTestProgress(
+        localize('webviews.connectionWizard.testProgress.openingSession', 'Opening session...')
+      );
       await this.fmClient.createSession(tempProfile);
 
-      await this.postTestProgress('Cleaning up…');
+      await this.postTestProgress(
+        localize('webviews.connectionWizard.testProgress.cleanup', 'Cleaning up...')
+      );
       await this.fmClient.deleteSession(tempProfile);
 
       await this.panel.webview.postMessage({
         type: 'testSuccess',
-        message: 'Connection successful. Session opened and closed cleanly.'
+        message: localize(
+          'webviews.connectionWizard.connectionSuccessful',
+          'Connection successful. Session opened and closed cleanly.'
+        )
       });
     } catch (error) {
       await this.panel.webview.postMessage({
         type: 'testError',
-        message: toUserErrorMessage(error, 'Connection test failed.')
+        message: toUserErrorMessage(
+          error,
+          localize('webviews.connectionWizard.connectionTestFailed', 'Connection test failed.')
+        )
       });
     }
   }
@@ -283,6 +306,7 @@ export class ConnectionWizardPanel {
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(uiBase, 'styles.css'));
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(uiBase, 'index.js'));
     const csp = buildWebviewCsp(webview, { nonce });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -291,7 +315,7 @@ export class ConnectionWizardPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <link rel="stylesheet" href="${styleUri}" />
-  <title>Connection Profile</title>
+  <title>${localize('webviews.connectionWizard.htmlTitle', 'Connection Profile')}</title>
 </head>
 <body>
   <!--
@@ -303,45 +327,45 @@ export class ConnectionWizardPanel {
     on document.getElementById('wizardForm')).
   -->
   <form id="wizardForm" class="container">
-    <h1>Connection Profile</h1>
-    <p class="subtitle">Configure a connection to your FileMaker Server.</p>
+    <h1>${localize('webviews.connectionWizard.heading', 'Connection Profile')}</h1>
+    <p class="subtitle">${localize('webviews.connectionWizard.subtitle', 'Configure a connection to your FileMaker Server.')}</p>
 
     <div class="form-section">
-      <h2>Profile</h2>
+      <h2>${localize('webviews.connectionWizard.profileSection', 'Profile')}</h2>
       <div class="field">
-        <label for="profileName">Profile Name <span class="required-marker" aria-hidden="true">*</span></label>
+        <label for="profileName">${localize('webviews.connectionWizard.profileNameLabel', 'Profile Name')} <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="profileName" type="text" required aria-required="true"
-               placeholder="e.g. Production Server" />
+               placeholder="${localize('webviews.connectionWizard.profileNamePlaceholder', 'e.g. Production Server')}" />
       </div>
     </div>
 
     <div class="form-section">
-      <h2 id="auth-mode-heading">Authentication Mode</h2>
+      <h2 id="auth-mode-heading">${localize('webviews.connectionWizard.authModeHeading', 'Authentication Mode')}</h2>
       <div class="mode-toggle" role="group" aria-labelledby="auth-mode-heading">
-        <button type="button" id="modeDirectBtn" aria-pressed="true">Direct</button>
-        <button type="button" id="modeProxyBtn" aria-pressed="false">Proxy</button>
+        <button type="button" id="modeDirectBtn" aria-pressed="true">${localize('webviews.connectionWizard.directMode', 'Direct')}</button>
+        <button type="button" id="modeProxyBtn" aria-pressed="false">${localize('webviews.connectionWizard.proxyMode', 'Proxy')}</button>
       </div>
       <p class="hint" style="margin-top: -8px;">
-        <strong>Direct</strong> connects to FileMaker Data API directly.
-        <strong>Proxy</strong> connects through your middleware endpoint.
+        <strong>${localize('webviews.connectionWizard.directMode', 'Direct')}</strong> ${localize('webviews.connectionWizard.directHint', 'connects to FileMaker Data API directly.')}
+        <strong>${localize('webviews.connectionWizard.proxyMode', 'Proxy')}</strong> ${localize('webviews.connectionWizard.proxyHint', 'connects through your middleware endpoint.')}
       </p>
     </div>
 
     <div class="form-section">
-      <h2>Server</h2>
+      <h2>${localize('webviews.connectionWizard.serverSection', 'Server')}</h2>
       <div class="field">
-        <label for="serverUrl">Server URL <span class="required-marker" aria-hidden="true">*</span></label>
+        <label for="serverUrl">${localize('webviews.connectionWizard.serverUrlLabel', 'Server URL')} <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="serverUrl" type="url" required aria-required="true"
                aria-describedby="serverUrl-hint"
-               placeholder="https://fm.yourcompany.com" />
-        <div id="serverUrl-hint" class="hint">The HTTPS address of your FileMaker Server.</div>
+               placeholder="${localize('webviews.connectionWizard.serverUrlPlaceholder', 'https://fm.yourcompany.com')}" />
+        <div id="serverUrl-hint" class="hint">${localize('webviews.connectionWizard.serverUrlHint', 'The HTTPS address of your FileMaker Server.')}</div>
       </div>
       <div class="field">
-        <label for="database">Database Name <span class="required-marker" aria-hidden="true">*</span></label>
+        <label for="database">${localize('webviews.connectionWizard.databaseLabel', 'Database Name')} <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="database" type="text" required aria-required="true"
                aria-describedby="database-hint"
-               placeholder="MyDatabase" />
-        <div id="database-hint" class="hint">The hosted FileMaker database file name.</div>
+               placeholder="${localize('webviews.connectionWizard.databasePlaceholder', 'MyDatabase')}" />
+        <div id="database-hint" class="hint">${localize('webviews.connectionWizard.databaseHint', 'The hosted FileMaker database file name.')}</div>
       </div>
       <!--
         API Base Path and API Version are correct out of the box for 99% of
@@ -352,65 +376,66 @@ export class ConnectionWizardPanel {
         weight goes to fields that actually matter on first save.
       -->
       <details class="advanced-toggle">
-        <summary>Advanced server options</summary>
+        <summary>${localize('webviews.connectionWizard.advancedOptions', 'Advanced server options')}</summary>
         <div class="field">
-          <label for="apiBasePath">API Base Path</label>
+          <label for="apiBasePath">${localize('webviews.connectionWizard.apiBasePathLabel', 'API Base Path')}</label>
           <input id="apiBasePath" type="text" value="/fmi/data"
                  aria-describedby="apiBasePath-hint" />
-          <div id="apiBasePath-hint" class="hint">Usually <code>/fmi/data</code>. Change only if your server uses a custom path.</div>
+          <div id="apiBasePath-hint" class="hint">${localize('webviews.connectionWizard.apiBasePathHint', 'Usually')} <code>/fmi/data</code>. ${localize('webviews.connectionWizard.apiBasePathHintSuffix', 'Change only if your server uses a custom path.')}</div>
         </div>
         <div class="field">
-          <label for="apiVersionPath">API Version</label>
+          <label for="apiVersionPath">${localize('webviews.connectionWizard.apiVersionLabel', 'API Version')}</label>
           <input id="apiVersionPath" type="text" value="vLatest"
                  aria-describedby="apiVersionPath-hint" />
-          <div id="apiVersionPath-hint" class="hint">Usually <code>vLatest</code>.</div>
+          <div id="apiVersionPath-hint" class="hint">${localize('webviews.connectionWizard.apiVersionHint', 'Usually')} <code>vLatest</code>.</div>
         </div>
       </details>
     </div>
 
     <div id="directFields" class="form-section direct-fields">
-      <h2>Credentials</h2>
+      <h2>${localize('webviews.connectionWizard.credentialsSection', 'Credentials')}</h2>
       <div class="field">
-        <label for="username">Username <span class="required-marker" aria-hidden="true">*</span></label>
+        <label for="username">${localize('webviews.connectionWizard.usernameLabel', 'Username')} <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="username" type="text" required aria-required="true"
                aria-describedby="username-hint"
-               placeholder="api_user" autocomplete="username" />
-        <div id="username-hint" class="hint">The FileMaker account with fmrest privilege.</div>
+               placeholder="${localize('webviews.connectionWizard.usernamePlaceholder', 'api_user')}" autocomplete="username" />
+        <div id="username-hint" class="hint">${localize('webviews.connectionWizard.usernameHint', 'The FileMaker account with fmrest privilege.')}</div>
       </div>
       <div class="field">
-        <label for="password">Password</label>
+        <label for="password">${localize('webviews.connectionWizard.passwordLabel', 'Password')}</label>
         <input id="password" type="password"
                aria-describedby="password-hint"
                autocomplete="current-password" />
-        <div id="password-hint" class="hint">Stored securely in VS Code SecretStorage. Never written to disk.</div>
+        <div id="password-hint" class="hint">${localize('webviews.connectionWizard.passwordHint', 'Stored securely in VS Code SecretStorage. Never written to disk.')}</div>
       </div>
     </div>
 
     <div id="proxyFields" class="form-section proxy-fields">
-      <h2>Proxy Settings</h2>
+      <h2>${localize('webviews.connectionWizard.proxySection', 'Proxy Settings')}</h2>
       <div class="field">
-        <label for="proxyEndpoint">Proxy Endpoint <span class="required-marker" aria-hidden="true">*</span></label>
+        <label for="proxyEndpoint">${localize('webviews.connectionWizard.proxyEndpointLabel', 'Proxy Endpoint')} <span class="required-marker" aria-hidden="true">*</span></label>
         <input id="proxyEndpoint" type="url" required aria-required="true"
                aria-describedby="proxyEndpoint-hint"
-               placeholder="https://api.yourcompany.com/fm-proxy" />
-        <div id="proxyEndpoint-hint" class="hint">Your middleware endpoint URL.</div>
+               placeholder="${localize('webviews.connectionWizard.proxyEndpointPlaceholder', 'https://api.yourcompany.com/fm-proxy')}" />
+        <div id="proxyEndpoint-hint" class="hint">${localize('webviews.connectionWizard.proxyEndpointHint', 'Your middleware endpoint URL.')}</div>
       </div>
       <div class="field">
-        <label for="proxyApiKey">API Key (optional)</label>
+        <label for="proxyApiKey">${localize('webviews.connectionWizard.proxyApiKeyLabel', 'API Key (optional)')}</label>
         <input id="proxyApiKey" type="password" autocomplete="off"
                aria-describedby="proxyApiKey-hint" />
-        <div id="proxyApiKey-hint" class="hint">Sent as a Bearer token to your proxy. Stored securely.</div>
+        <div id="proxyApiKey-hint" class="hint">${localize('webviews.connectionWizard.proxyApiKeyHint', 'Sent as a Bearer token to your proxy. Stored securely.')}</div>
       </div>
     </div>
 
     <div class="actions">
-      <button type="button" id="saveBtn" class="primary">Save Profile</button>
-      <button type="button" id="testBtn" class="secondary">Test Connection</button>
+      <button type="button" id="saveBtn" class="primary">${localize('webviews.connectionWizard.saveButton', 'Save Profile')}</button>
+      <button type="button" id="testBtn" class="secondary">${localize('webviews.connectionWizard.testButton', 'Test Connection')}</button>
     </div>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </form>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

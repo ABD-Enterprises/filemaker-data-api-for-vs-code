@@ -7,10 +7,15 @@ import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { SavedQueriesStore } from '../../services/savedQueriesStore';
 import type { ConnectionProfile, FindRecordsRequest, SavedQuery } from '../../types/fm';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { recordsToCsv } from '../../utils/exportCsv';
 import { extractLayoutFieldNames } from '../../utils/layoutFields';
 import { parseFindJson, parseSortJson } from '../../utils/jsonValidate';
-import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
+import {
+  generateCurlSnippet,
+  generateFetchSnippet,
+  type SnippetRequest
+} from '../../utils/snippetGen';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import {
   getOptionalBooleanField,
@@ -114,7 +119,7 @@ export class QueryBuilderPanel {
 
     const panel = vscode.window.createWebviewPanel(
       'filemakerQueryBuilder',
-      'FileMaker Query Builder',
+      localize('webviews.queryBuilder.panelTitle', 'FileMaker Query Builder'),
       column,
       {
         enableScripts: true,
@@ -233,7 +238,12 @@ export class QueryBuilderPanel {
   private async handleLoadLayouts(profileId: string): Promise<void> {
     const profile = await this.profileStore.getProfile(profileId);
     if (!profile) {
-      await this.postError('The selected connection profile could not be found.');
+      await this.postError(
+        localize(
+          'webviews.queryBuilder.selectedProfileNotFound',
+          'The selected connection profile could not be found.'
+        )
+      );
       return;
     }
 
@@ -270,7 +280,11 @@ export class QueryBuilderPanel {
         payload: { profileId, layout, fieldNames }
       });
     } catch (error) {
-      this.logger.warn('Failed to load field names for query builder.', { profileId, layout, error });
+      this.logger.warn('Failed to load field names for query builder.', {
+        profileId,
+        layout,
+        error
+      });
       await this.panel.webview.postMessage({
         type: 'fieldNamesLoaded',
         payload: {
@@ -286,7 +300,12 @@ export class QueryBuilderPanel {
   private async handleRunQuery(payload: RunQueryPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('The selected connection profile no longer exists.');
+      await this.postError(
+        localize(
+          'webviews.queryBuilder.selectedProfileMissing',
+          'The selected connection profile no longer exists.'
+        )
+      );
       return;
     }
 
@@ -318,7 +337,12 @@ export class QueryBuilderPanel {
   private async handleSaveQuery(payload: SaveQueryPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('The selected profile no longer exists.');
+      await this.postError(
+        localize(
+          'webviews.queryBuilder.selectedProfileNoLongerExists',
+          'The selected profile no longer exists.'
+        )
+      );
       return;
     }
 
@@ -347,7 +371,9 @@ export class QueryBuilderPanel {
       });
 
       await vscode.commands.executeCommand('filemakerDataApiTools.refreshExplorer');
-      vscode.window.showInformationMessage(`Saved query "${query.name}".`);
+      vscode.window.showInformationMessage(
+        localize('webviews.queryBuilder.savedQuery', 'Saved query "{0}".', query.name)
+      );
     } catch (error) {
       await this.postError(this.formatError(error));
     }
@@ -357,7 +383,10 @@ export class QueryBuilderPanel {
     const findValidation = parseFindJson(payload.findJson || '[{}]');
 
     if (!findValidation.ok || !findValidation.value) {
-      throw new FMClientError(findValidation.error ?? 'Find JSON is invalid.');
+      throw new FMClientError(
+        findValidation.error ??
+          localize('webviews.queryBuilder.findJsonInvalid', 'Find JSON is invalid.')
+      );
     }
 
     let sortValidationValue: Array<Record<string, unknown>> | undefined;
@@ -365,7 +394,10 @@ export class QueryBuilderPanel {
     if (payload.sortJson && payload.sortJson.trim().length > 0) {
       const sortValidation = parseSortJson(payload.sortJson);
       if (!sortValidation.ok || !sortValidation.value) {
-        throw new FMClientError(sortValidation.error ?? 'Sort JSON is invalid.');
+        throw new FMClientError(
+          sortValidation.error ??
+            localize('webviews.queryBuilder.sortJsonInvalid', 'Sort JSON is invalid.')
+        );
       }
 
       sortValidationValue = sortValidation.value;
@@ -388,7 +420,13 @@ export class QueryBuilderPanel {
     }
 
     if (!Number.isInteger(value) || value < 0) {
-      throw new FMClientError(`${label} must be a non-negative integer.`);
+      throw new FMClientError(
+        localize(
+          'webviews.queryBuilder.nonNegativeInteger',
+          '{0} must be a non-negative integer.',
+          label
+        )
+      );
     }
 
     return value;
@@ -396,7 +434,9 @@ export class QueryBuilderPanel {
 
   private async exportResultsToEditor(): Promise<void> {
     if (!this.lastResult) {
-      await this.postError('No query results available to export.');
+      await this.postError(
+        localize('webviews.queryBuilder.noResultsToExport', 'No query results available to export.')
+      );
       return;
     }
 
@@ -410,12 +450,14 @@ export class QueryBuilderPanel {
 
   private async exportResultsJsonFile(): Promise<void> {
     if (!this.lastResult) {
-      await this.postError('No query results available to export.');
+      await this.postError(
+        localize('webviews.queryBuilder.noResultsToExport', 'No query results available to export.')
+      );
       return;
     }
 
     const uri = await vscode.window.showSaveDialog({
-      title: 'Export Query Results (JSON)',
+      title: localize('webviews.queryBuilder.exportJson.title', 'Export Query Results (JSON)'),
       filters: {
         JSON: ['json']
       },
@@ -426,14 +468,21 @@ export class QueryBuilderPanel {
       return;
     }
 
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(this.lastResult, null, 2), 'utf8'));
+    await vscode.workspace.fs.writeFile(
+      uri,
+      Buffer.from(JSON.stringify(this.lastResult, null, 2), 'utf8')
+    );
 
-    vscode.window.showInformationMessage('Exported query results JSON file.');
+    vscode.window.showInformationMessage(
+      localize('webviews.queryBuilder.exportJson.success', 'Exported query results JSON file.')
+    );
   }
 
   private async exportResultsCsvFile(): Promise<void> {
     if (!this.lastResult) {
-      await this.postError('No query results available to export.');
+      await this.postError(
+        localize('webviews.queryBuilder.noResultsToExport', 'No query results available to export.')
+      );
       return;
     }
 
@@ -441,7 +490,7 @@ export class QueryBuilderPanel {
     const csv = recordsToCsv(rows);
 
     const uri = await vscode.window.showSaveDialog({
-      title: 'Export Query Results (CSV)',
+      title: localize('webviews.queryBuilder.exportCsv.title', 'Export Query Results (CSV)'),
       filters: {
         CSV: ['csv']
       },
@@ -453,7 +502,9 @@ export class QueryBuilderPanel {
     }
 
     await vscode.workspace.fs.writeFile(uri, Buffer.from(csv, 'utf8'));
-    vscode.window.showInformationMessage('Exported query results CSV file.');
+    vscode.window.showInformationMessage(
+      localize('webviews.queryBuilder.exportCsv.success', 'Exported query results CSV file.')
+    );
   }
 
   private toCsvRows(result: QueryExecutionResult): Array<Record<string, unknown>> {
@@ -480,7 +531,12 @@ export class QueryBuilderPanel {
   private async copyFetchSnippet(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Cannot generate snippet because the profile was not found.');
+      await this.postError(
+        localize(
+          'webviews.queryBuilder.snippetProfileNotFound',
+          'Cannot generate snippet because the profile was not found.'
+        )
+      );
       return;
     }
 
@@ -492,7 +548,9 @@ export class QueryBuilderPanel {
       });
 
       await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied fetch() snippet to clipboard.');
+      vscode.window.showInformationMessage(
+        localize('webviews.queryBuilder.copyFetch.success', 'Copied fetch() snippet to clipboard.')
+      );
     } catch (error) {
       await this.postError(this.formatError(error));
     }
@@ -501,7 +559,12 @@ export class QueryBuilderPanel {
   private async copyCurlSnippet(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Cannot generate snippet because the profile was not found.');
+      await this.postError(
+        localize(
+          'webviews.queryBuilder.snippetProfileNotFound',
+          'Cannot generate snippet because the profile was not found.'
+        )
+      );
       return;
     }
 
@@ -513,7 +576,9 @@ export class QueryBuilderPanel {
       });
 
       await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied curl snippet to clipboard.');
+      vscode.window.showInformationMessage(
+        localize('webviews.queryBuilder.copyCurl.success', 'Copied curl snippet to clipboard.')
+      );
     } catch (error) {
       await this.postError(this.formatError(error));
     }
@@ -725,17 +790,32 @@ export class QueryBuilderPanel {
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', 'styles.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'queryBuilder',
+        'ui',
+        'styles.css'
+      )
     );
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'queryBuilder',
+        'ui',
+        'index.js'
+      )
     );
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -743,86 +823,87 @@ export class QueryBuilderPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>FileMaker Query Builder</title>
+  <title>${localize('webviews.queryBuilder.htmlTitle', 'FileMaker Query Builder')}</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>FileMaker Query Builder</h1>
-      <p>Build Data API find requests and inspect results.</p>
+      <h1>${localize('webviews.queryBuilder.heading', 'FileMaker Query Builder')}</h1>
+      <p>${localize('webviews.queryBuilder.subtitle', 'Build Data API find requests and inspect results.')}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <label for="profileSelect">Profile</label>
+        <label for="profileSelect">${localize('webviews.queryBuilder.profileLabel', 'Profile')}</label>
         <select id="profileSelect"></select>
       </div>
       <div class="row">
-        <label for="layoutSelect">Layout</label>
+        <label for="layoutSelect">${localize('webviews.queryBuilder.layoutLabel', 'Layout')}</label>
         <select id="layoutSelect"></select>
       </div>
       <div class="row">
-        <label for="findJson">Find JSON (array)</label>
+        <label for="findJson">${localize('webviews.queryBuilder.findJsonLabel', 'Find JSON (array)')}</label>
         <textarea id="findJson" rows="6">[{ }]</textarea>
       </div>
       <div class="row">
-        <label for="sortJson">Sort JSON (optional array)</label>
+        <label for="sortJson">${localize('webviews.queryBuilder.sortJsonLabel', 'Sort JSON (optional array)')}</label>
         <textarea id="sortJson" rows="3"></textarea>
       </div>
       <div class="grid">
         <div>
-          <label for="limitInput">Limit</label>
+          <label for="limitInput">${localize('webviews.queryBuilder.limitLabel', 'Limit')}</label>
           <input id="limitInput" type="number" min="0" placeholder="100" />
         </div>
         <div>
-          <label for="offsetInput">Offset</label>
+          <label for="offsetInput">${localize('webviews.queryBuilder.offsetLabel', 'Offset')}</label>
           <input id="offsetInput" type="number" min="0" placeholder="1" />
         </div>
         <div>
-          <label for="queryNameInput">Saved Query Name</label>
-          <input id="queryNameInput" type="text" placeholder="My Find Query" />
+          <label for="queryNameInput">${localize('webviews.queryBuilder.queryNameLabel', 'Saved Query Name')}</label>
+          <input id="queryNameInput" type="text" placeholder="${localize('webviews.queryBuilder.queryNamePlaceholder', 'My Find Query')}" />
         </div>
       </div>
       <div class="row inline">
-        <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header in snippets</label>
+        <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> ${localize('webviews.queryBuilder.includeAuthLabel', 'Include auth header in snippets')}</label>
       </div>
       <div class="actions">
-        <button id="runButton">Run</button>
-        <button id="saveButton">Save Query</button>
-        <button id="exportEditorButton">Open JSON in Editor</button>
-        <button id="exportJsonButton">Export JSON File</button>
-        <button id="exportCsvButton">Export CSV File</button>
-        <button id="copyFetchButton">Copy as fetch()</button>
-        <button id="copyCurlButton">Copy as curl</button>
+        <button id="runButton">${localize('webviews.queryBuilder.runButton', 'Run')}</button>
+        <button id="saveButton">${localize('webviews.queryBuilder.saveButton', 'Save Query')}</button>
+        <button id="exportEditorButton">${localize('webviews.queryBuilder.openJsonButton', 'Open JSON in Editor')}</button>
+        <button id="exportJsonButton">${localize('webviews.queryBuilder.exportJsonButton', 'Export JSON File')}</button>
+        <button id="exportCsvButton">${localize('webviews.queryBuilder.exportCsvButton', 'Export CSV File')}</button>
+        <button id="copyFetchButton">${localize('webviews.queryBuilder.copyFetchButton', 'Copy as fetch()')}</button>
+        <button id="copyCurlButton">${localize('webviews.queryBuilder.copyCurlButton', 'Copy as curl')}</button>
       </div>
       <div class="saved">
-        <label for="savedQueriesSelect">Saved Queries</label>
+        <label for="savedQueriesSelect">${localize('webviews.queryBuilder.savedQueriesLabel', 'Saved Queries')}</label>
         <select id="savedQueriesSelect"></select>
       </div>
       <div class="actions compact">
-        <button id="loadSavedButton">Load Saved Query</button>
-        <button id="prevButton">Prev Page</button>
-        <button id="nextButton">Next Page</button>
-        <button id="refreshHistoryButton">Refresh History</button>
-        <label class="toggle"><input id="rawToggle" type="checkbox" /> Raw JSON</label>
+        <button id="loadSavedButton">${localize('webviews.queryBuilder.loadSavedButton', 'Load Saved Query')}</button>
+        <button id="prevButton">${localize('webviews.queryBuilder.prevButton', 'Prev Page')}</button>
+        <button id="nextButton">${localize('webviews.queryBuilder.nextButton', 'Next Page')}</button>
+        <button id="refreshHistoryButton">${localize('webviews.queryBuilder.refreshHistoryButton', 'Refresh History')}</button>
+        <label class="toggle"><input id="rawToggle" type="checkbox" /> ${localize('webviews.queryBuilder.rawJsonLabel', 'Raw JSON')}</label>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel">
-      <h2>Results</h2>
+      <h2>${localize('webviews.queryBuilder.resultsHeading', 'Results')}</h2>
       <div id="resultSummary" class="summary" role="status" aria-live="polite"></div>
       <div id="tableContainer" class="table-wrap"></div>
       <pre id="rawContainer" class="raw hidden"></pre>
     </section>
 
     <section class="panel">
-      <h2>History (Last Requests)</h2>
+      <h2>${localize('webviews.queryBuilder.historyHeading', 'History (Last Requests)')}</h2>
       <div id="historyContainer" class="history"></div>
     </section>
   </div>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

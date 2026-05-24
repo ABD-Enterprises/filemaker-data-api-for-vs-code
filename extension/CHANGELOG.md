@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added localization scaffolding with `vscode-nls`, generated `package.nls.json` / runtime message bundles, extraction/check scripts, and contribution docs for adding translations.
 - Attributed the extension to ABD Enterprises in README and `package.json`:
   - new `author` field pointing at `https://abdenterprises.com`
   - `homepage` now resolves to `abdenterprises.com?ref=vscode` (with the GitHub repo still linked via `repository`)

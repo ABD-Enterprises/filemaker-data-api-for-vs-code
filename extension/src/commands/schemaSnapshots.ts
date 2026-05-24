@@ -9,6 +9,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { SchemaSnapshot } from '../types/fm';
+import { localize } from '../i18n';
 import {
   openJsonDocument,
   parseLayoutArg,
@@ -46,97 +47,128 @@ export function registerSchemaSnapshotCommands(
   } = deps;
 
   return [
-    vscode.commands.registerCommand('filemakerDataApiTools.captureSchemaSnapshot', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.captureSchemaSnapshot',
+      async (arg: unknown) => {
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
 
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
 
-      try {
-        const schema = await schemaService.getLayoutSchema(profile, layout);
-        if (!schema.supported || !schema.metadata) {
+        try {
+          const schema = await schemaService.getLayoutSchema(profile, layout);
+          if (!schema.supported || !schema.metadata) {
+            vscode.window.showInformationMessage(
+              schema.message ??
+                localize(
+                  'commands.schemaSnapshots.metadataUnavailable',
+                  'Metadata is not available on this server/profile.'
+                )
+            );
+            return;
+          }
+
+          const snapshot = await snapshotStore.captureSnapshot({
+            profileId: profile.id,
+            layout,
+            source: 'manual',
+            metadata: schema.metadata
+          });
+
+          refreshExplorer();
           vscode.window.showInformationMessage(
-            schema.message ?? 'Metadata is not available on this server/profile.'
+            localize(
+              'commands.schemaSnapshots.capture.success',
+              'Captured schema snapshot {0} for {1}.',
+              snapshot.id.slice(0, 8),
+              layout
+            )
+          );
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: localize(
+              'commands.schemaSnapshots.capture.failed',
+              'Failed to capture schema snapshot.'
+            ),
+            logger,
+            logMessage: 'Failed to capture schema snapshot.'
+          });
+        }
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.diffSchemaSnapshots',
+      async (arg: unknown) => {
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
+
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
+
+        const snapshots = await snapshotStore.listSnapshots({
+          profileId: profile.id,
+          layout
+        });
+        if (snapshots.length < 2) {
+          vscode.window.showInformationMessage(
+            localize(
+              'commands.schemaSnapshots.diff.needTwo',
+              'At least two snapshots are required to diff.'
+            )
           );
           return;
         }
 
-        const snapshot = await snapshotStore.captureSnapshot({
-          profileId: profile.id,
-          layout,
-          source: 'manual',
-          metadata: schema.metadata
-        });
-
-        refreshExplorer();
-        vscode.window.showInformationMessage(
-          `Captured schema snapshot ${snapshot.id.slice(0, 8)} for ${layout}.`
+        const older = await pickSnapshot(
+          localize('commands.schemaSnapshots.diff.selectOlder', 'Select older snapshot'),
+          snapshots
         );
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Failed to capture schema snapshot.',
-          logger,
-          logMessage: 'Failed to capture schema snapshot.'
-        });
+        if (!older) {
+          return;
+        }
+
+        const newer = await pickSnapshot(
+          localize('commands.schemaSnapshots.diff.selectNewer', 'Select newer snapshot'),
+          snapshots.filter((snapshot) => snapshot.id !== older.id)
+        );
+        if (!newer) {
+          return;
+        }
+
+        const olderSnapshot = await snapshotStore.getSnapshot(older.id);
+        const newerSnapshot = await snapshotStore.getSnapshot(newer.id);
+        if (!olderSnapshot || !newerSnapshot) {
+          vscode.window.showErrorMessage(
+            localize(
+              'commands.schemaSnapshots.diff.loadFailed',
+              'Unable to load one or both selected snapshots.'
+            )
+          );
+          return;
+        }
+
+        const diff = diffSchemaSnapshots(
+          olderSnapshot,
+          newerSnapshot,
+          extractFieldsFromMetadata(olderSnapshot.metadata),
+          extractFieldsFromMetadata(newerSnapshot.metadata)
+        );
+
+        SchemaDiffPanel.createOrShow(context, diff);
       }
-    }),
-
-    vscode.commands.registerCommand('filemakerDataApiTools.diffSchemaSnapshots', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
-
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
-
-      const snapshots = await snapshotStore.listSnapshots({
-        profileId: profile.id,
-        layout
-      });
-      if (snapshots.length < 2) {
-        vscode.window.showInformationMessage('At least two snapshots are required to diff.');
-        return;
-      }
-
-      const older = await pickSnapshot('Select older snapshot', snapshots);
-      if (!older) {
-        return;
-      }
-
-      const newer = await pickSnapshot(
-        'Select newer snapshot',
-        snapshots.filter((snapshot) => snapshot.id !== older.id)
-      );
-      if (!newer) {
-        return;
-      }
-
-      const olderSnapshot = await snapshotStore.getSnapshot(older.id);
-      const newerSnapshot = await snapshotStore.getSnapshot(newer.id);
-      if (!olderSnapshot || !newerSnapshot) {
-        vscode.window.showErrorMessage('Unable to load one or both selected snapshots.');
-        return;
-      }
-
-      const diff = diffSchemaSnapshots(
-        olderSnapshot,
-        newerSnapshot,
-        extractFieldsFromMetadata(olderSnapshot.metadata),
-        extractFieldsFromMetadata(newerSnapshot.metadata)
-      );
-
-      SchemaDiffPanel.createOrShow(context, diff);
-    }),
+    ),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.diffAgainstLatestSnapshot',
@@ -154,7 +186,12 @@ export function registerSchemaSnapshotCommands(
 
         const latest = await snapshotStore.getLatestSnapshot(profile.id, layout);
         if (!latest) {
-          vscode.window.showInformationMessage('No snapshot found. Capture one first.');
+          vscode.window.showInformationMessage(
+            localize(
+              'commands.schemaSnapshots.diffLatest.noneFound',
+              'No snapshot found. Capture one first.'
+            )
+          );
           return;
         }
 
@@ -162,7 +199,11 @@ export function registerSchemaSnapshotCommands(
           const currentSchema = await schemaService.getLayoutSchema(profile, layout);
           if (!currentSchema.supported || !currentSchema.metadata) {
             vscode.window.showInformationMessage(
-              currentSchema.message ?? 'Metadata is not available on this server/profile.'
+              currentSchema.message ??
+                localize(
+                  'commands.schemaSnapshots.metadataUnavailable',
+                  'Metadata is not available on this server/profile.'
+                )
             );
             return;
           }
@@ -185,7 +226,10 @@ export function registerSchemaSnapshotCommands(
           );
         } catch (error) {
           await showCommandError(error, {
-            fallbackMessage: 'Failed to diff schema against latest snapshot.',
+            fallbackMessage: localize(
+              'commands.schemaSnapshots.diffLatest.failed',
+              'Failed to diff schema against latest snapshot.'
+            ),
             logger,
             logMessage: 'Failed to diff current schema against latest snapshot.'
           });
@@ -193,37 +237,45 @@ export function registerSchemaSnapshotCommands(
       }
     ),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.openSchemaSnapshotJson', async (arg: unknown) => {
-      const snapshotId = parseSnapshotId(arg);
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.openSchemaSnapshotJson',
+      async (arg: unknown) => {
+        const snapshotId = parseSnapshotId(arg);
 
-      let snapshot: SchemaSnapshot | undefined;
-      if (snapshotId) {
-        snapshot = await snapshotStore.getSnapshot(snapshotId);
-      } else {
-        const profile = await resolveProfileFromArg(undefined, profileStore, true);
-        if (!profile) {
+        let snapshot: SchemaSnapshot | undefined;
+        if (snapshotId) {
+          snapshot = await snapshotStore.getSnapshot(snapshotId);
+        } else {
+          const profile = await resolveProfileFromArg(undefined, profileStore, true);
+          if (!profile) {
+            return;
+          }
+
+          const snapshots = await snapshotStore.listSnapshots({
+            profileId: profile.id
+          });
+
+          const picked = await pickSnapshot(
+            localize('commands.schemaSnapshots.open.selectSnapshot', 'Open schema snapshot'),
+            snapshots
+          );
+          if (!picked) {
+            return;
+          }
+
+          snapshot = await snapshotStore.getSnapshot(picked.id);
+        }
+
+        if (!snapshot) {
+          vscode.window.showErrorMessage(
+            localize('commands.schemaSnapshots.notFound', 'Snapshot not found.')
+          );
           return;
         }
 
-        const snapshots = await snapshotStore.listSnapshots({
-          profileId: profile.id
-        });
-
-        const picked = await pickSnapshot('Open schema snapshot', snapshots);
-        if (!picked) {
-          return;
-        }
-
-        snapshot = await snapshotStore.getSnapshot(picked.id);
+        await openJsonDocument(snapshot);
       }
-
-      if (!snapshot) {
-        vscode.window.showErrorMessage('Snapshot not found.');
-        return;
-      }
-
-      await openJsonDocument(snapshot);
-    })
+    )
   ];
 }
 
@@ -282,12 +334,30 @@ function publishDiffDiagnosticsIfEnabled(
   const range = new vscode.Range(0, 0, 0, 1);
 
   for (const field of diff.added) {
-    items.push(new vscode.Diagnostic(range, `Schema added field: ${field.name}`, vscode.DiagnosticSeverity.Warning));
+    items.push(
+      new vscode.Diagnostic(
+        range,
+        localize(
+          'commands.schemaSnapshots.diagnostics.added',
+          'Schema added field: {0}',
+          field.name
+        ),
+        vscode.DiagnosticSeverity.Warning
+      )
+    );
   }
 
   for (const field of diff.removed) {
     items.push(
-      new vscode.Diagnostic(range, `Schema removed field: ${field.name}`, vscode.DiagnosticSeverity.Warning)
+      new vscode.Diagnostic(
+        range,
+        localize(
+          'commands.schemaSnapshots.diagnostics.removed',
+          'Schema removed field: {0}',
+          field.name
+        ),
+        vscode.DiagnosticSeverity.Warning
+      )
     );
   }
 
@@ -296,7 +366,12 @@ function publishDiffDiagnosticsIfEnabled(
     items.push(
       new vscode.Diagnostic(
         range,
-        `Schema changed field ${field.fieldName}: ${attributes}`,
+        localize(
+          'commands.schemaSnapshots.diagnostics.changed',
+          'Schema changed field {0}: {1}',
+          field.fieldName,
+          attributes
+        ),
         vscode.DiagnosticSeverity.Information
       )
     );

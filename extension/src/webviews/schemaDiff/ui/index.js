@@ -1,5 +1,13 @@
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 const meta = document.getElementById('meta');
 const summary = document.getElementById('summary');
 const added = document.getElementById('added');
@@ -35,8 +43,20 @@ exportButton.addEventListener('click', () => {
 });
 
 function renderDiff(diff) {
-  meta.textContent = `${diff.profileId} • ${diff.layout} • Compared ${diff.comparedAt}`;
-  summary.textContent = `Added ${diff.summary.added}, Removed ${diff.summary.removed}, Changed ${diff.summary.changed}`;
+  meta.textContent = t(
+    'webviews.schemaDiff.ui.meta',
+    '{0} • {1} • Compared {2}',
+    diff.profileId,
+    diff.layout,
+    diff.comparedAt
+  );
+  summary.textContent = t(
+    'webviews.schemaDiff.ui.summary',
+    'Added {0}, Removed {1}, Changed {2}',
+    diff.summary.added,
+    diff.summary.removed,
+    diff.summary.changed
+  );
 
   renderSimpleTable(added, diff.added || []);
   renderSimpleTable(removed, diff.removed || []);
@@ -55,7 +75,7 @@ function renderDiff(diff) {
 
 function renderSimpleTable(container, rows) {
   if (!rows.length) {
-    container.replaceChildren(createEmptyMessage('None'));
+    container.replaceChildren(createEmptyMessage(t('webviews.schemaDiff.ui.none', 'None')));
     return;
   }
 
@@ -65,7 +85,11 @@ function renderSimpleTable(container, rows) {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  ['Field', 'Type', 'Repetitions'].forEach((heading) => {
+  [
+    t('webviews.schemaDiff.ui.fieldHeader', 'Field'),
+    t('webviews.schemaDiff.ui.typeHeader', 'Type'),
+    t('webviews.schemaDiff.ui.repetitionsHeader', 'Repetitions')
+  ].forEach((heading) => {
     const th = document.createElement('th');
     th.textContent = heading;
     headerRow.appendChild(th);
@@ -76,11 +100,13 @@ function renderSimpleTable(container, rows) {
   const tbody = document.createElement('tbody');
   for (const row of rows) {
     const tr = document.createElement('tr');
-    [row.name || '', row.type || row.result || '', String(row.repetitions ?? '')].forEach((value) => {
-      const td = document.createElement('td');
-      td.textContent = value;
-      tr.appendChild(td);
-    });
+    [row.name || '', row.type || row.result || '', String(row.repetitions ?? '')].forEach(
+      (value) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      }
+    );
     tbody.appendChild(tr);
   }
 
@@ -91,7 +117,7 @@ function renderSimpleTable(container, rows) {
 
 function renderChanged(container, rows) {
   if (!rows.length) {
-    container.replaceChildren(createEmptyMessage('None'));
+    container.replaceChildren(createEmptyMessage(t('webviews.schemaDiff.ui.none', 'None')));
     return;
   }
 
@@ -101,13 +127,24 @@ function renderChanged(container, rows) {
     block.className = 'changed-item';
 
     const summaryLine = document.createElement('summary');
-    summaryLine.textContent = `${item.fieldName} (${item.changes.length} changes)`;
+    summaryLine.textContent = t(
+      'webviews.schemaDiff.ui.changedSummary',
+      '{0} ({1} changes)',
+      item.fieldName,
+      item.changes.length
+    );
     block.appendChild(summaryLine);
 
     const list = document.createElement('ul');
     for (const change of item.changes) {
       const li = document.createElement('li');
-      li.textContent = `${change.attribute}: ${JSON.stringify(change.before)} -> ${JSON.stringify(change.after)}`;
+      li.textContent = t(
+        'webviews.schemaDiff.ui.changeLine',
+        '{0}: {1} -> {2}',
+        change.attribute,
+        JSON.stringify(change.before),
+        JSON.stringify(change.after)
+      );
       list.appendChild(li);
     }
 

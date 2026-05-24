@@ -10,12 +10,9 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { FmWebProjectService } from '../../services/fmWebProjectService';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
-import {
-  getOptionalBooleanField,
-  getStringField,
-  toRecord
-} from '../common/messageValidation';
+import { getOptionalBooleanField, getStringField, toRecord } from '../common/messageValidation';
 import { executeBehaviorBinding, type BehaviorExecutionResult } from './behaviorExecution';
 
 interface LayoutModeOpenOptions {
@@ -80,13 +77,18 @@ export class LayoutModePanel {
       return;
     }
 
-    const panel = vscode.window.createWebviewPanel('filemakerLayoutMode', 'FileMaker Layout Mode', column, {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui')
-      ]
-    });
+    const panel = vscode.window.createWebviewPanel(
+      'filemakerLayoutMode',
+      localize('webviews.layoutMode.panelTitle', 'FileMaker Layout Mode'),
+      column,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui')
+        ]
+      }
+    );
 
     LayoutModePanel.currentPanel = new LayoutModePanel(
       panel,
@@ -125,7 +127,9 @@ export class LayoutModePanel {
       const project = await this.fmWebProjectService.ensureProjectInitialized();
       const loaded = await this.fmWebProjectService.loadOrCreateLayout(this.pendingLayoutId);
       const metadataCache = await this.fmWebProjectService.loadMetadataCache();
-      const availableFields = await this.fmWebProjectService.getAvailableFields(loaded.layout.fmLayoutName);
+      const availableFields = await this.fmWebProjectService.getAvailableFields(
+        loaded.layout.fmLayoutName
+      );
 
       await this.panel.webview.postMessage({
         type: 'init',
@@ -152,7 +156,9 @@ export class LayoutModePanel {
         type: 'saveResult',
         payload: {
           ok: true,
-          message: autosave ? 'Autosaved layout.' : 'Layout saved.'
+          message: autosave
+            ? localize('webviews.layoutMode.autosaved', 'Autosaved layout.')
+            : localize('webviews.layoutMode.saved', 'Layout saved.')
         }
       });
     } catch (error) {
@@ -205,7 +211,9 @@ export class LayoutModePanel {
     }
   }
 
-  private async resolveActiveProfile(): Promise<Awaited<ReturnType<ProfileStore['getProfile']>> | undefined> {
+  private async resolveActiveProfile(): Promise<
+    Awaited<ReturnType<ProfileStore['getProfile']>> | undefined
+  > {
     const project = await this.fmWebProjectService.readProjectConfig();
     const profileId = project?.activeProfileId ?? this.profileStore.getActiveProfileId();
     if (!profileId) {
@@ -303,15 +311,30 @@ export class LayoutModePanel {
   private getHtml(webview: vscode.Webview): string {
     const nonce = createNonce();
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'layoutMode',
+        'ui',
+        'index.js'
+      )
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui', 'index.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'layoutMode',
+        'ui',
+        'index.css'
+      )
     );
 
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -320,10 +343,11 @@ export class LayoutModePanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <link rel="stylesheet" href="${styleUri}" />
-    <title>FileMaker Layout Mode</title>
+    <title>${localize('webviews.layoutMode.htmlTitle', 'FileMaker Layout Mode')}</title>
   </head>
   <body>
     <div id="root"></div>
+    ${i18nScript}
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`;
@@ -334,7 +358,7 @@ export class LayoutModePanel {
       return error.message;
     }
 
-    return 'Unexpected Layout Mode error.';
+    return localize('webviews.layoutMode.unexpectedError', 'Unexpected Layout Mode error.');
   }
 }
 
@@ -353,9 +377,10 @@ function parseBehaviorBinding(value: unknown): BehaviorBinding | undefined {
   }
 
   const typeRaw = getStringField(behavior, 'type');
-  const type = typeRaw && BEHAVIOR_TYPES.has(typeRaw as Exclude<BehaviorBinding['type'], undefined>)
-    ? (typeRaw as Exclude<BehaviorBinding['type'], undefined>)
-    : undefined;
+  const type =
+    typeRaw && BEHAVIOR_TYPES.has(typeRaw as Exclude<BehaviorBinding['type'], undefined>)
+      ? (typeRaw as Exclude<BehaviorBinding['type'], undefined>)
+      : undefined;
 
   return {
     type,

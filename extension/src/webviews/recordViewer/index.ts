@@ -4,6 +4,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { FileMakerRecord } from '../../types/fm';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 
@@ -69,7 +70,7 @@ export class RecordViewerPanel {
 
     const panel = vscode.window.createWebviewPanel(
       'filemakerRecordViewer',
-      'FileMaker Record Viewer',
+      localize('webviews.recordViewer.panelTitle', 'FileMaker Record Viewer'),
       column,
       {
         enableScripts: true,
@@ -141,7 +142,12 @@ export class RecordViewerPanel {
   private async handleLoadLayouts(profileId: string): Promise<void> {
     const profile = await this.profileStore.getProfile(profileId);
     if (!profile) {
-      await this.postError('The selected connection profile could not be found.');
+      await this.postError(
+        localize(
+          'webviews.recordViewer.selectedProfileNotFound',
+          'The selected connection profile could not be found.'
+        )
+      );
       return;
     }
 
@@ -163,7 +169,12 @@ export class RecordViewerPanel {
   private async handleLoadRecord(payload: LoadRecordPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('The selected profile no longer exists.');
+      await this.postError(
+        localize(
+          'webviews.recordViewer.selectedProfileMissing',
+          'The selected profile no longer exists.'
+        )
+      );
       return;
     }
 
@@ -186,7 +197,9 @@ export class RecordViewerPanel {
 
   private async exportRecord(): Promise<void> {
     if (!this.lastRecord) {
-      await this.postError('No record loaded yet.');
+      await this.postError(
+        localize('webviews.recordViewer.noRecordLoaded', 'No record loaded yet.')
+      );
       return;
     }
 
@@ -203,7 +216,10 @@ export class RecordViewerPanel {
       return error.message;
     }
 
-    return 'Unknown error while processing record viewer request.';
+    return localize(
+      'webviews.recordViewer.unknownError',
+      'Unknown error while processing record viewer request.'
+    );
   }
 
   private async postError(message: string): Promise<void> {
@@ -278,17 +294,32 @@ export class RecordViewerPanel {
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordViewer', 'ui', 'styles.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'recordViewer',
+        'ui',
+        'styles.css'
+      )
     );
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordViewer', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'recordViewer',
+        'ui',
+        'index.js'
+      )
     );
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -296,44 +327,45 @@ export class RecordViewerPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>FileMaker Record Viewer</title>
+  <title>${localize('webviews.recordViewer.htmlTitle', 'FileMaker Record Viewer')}</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>FileMaker Record Viewer</h1>
-      <p>Inspect one record and related portal data.</p>
+      <h1>${localize('webviews.recordViewer.heading', 'FileMaker Record Viewer')}</h1>
+      <p>${localize('webviews.recordViewer.subtitle', 'Inspect one record and related portal data.')}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <label for="profileSelect">Profile</label>
+        <label for="profileSelect">${localize('webviews.recordViewer.profileLabel', 'Profile')}</label>
         <select id="profileSelect"></select>
       </div>
       <div class="row">
-        <label for="layoutSelect">Layout</label>
+        <label for="layoutSelect">${localize('webviews.recordViewer.layoutLabel', 'Layout')}</label>
         <select id="layoutSelect"></select>
       </div>
       <div class="row">
-        <label for="recordIdInput">Record ID</label>
+        <label for="recordIdInput">${localize('webviews.recordViewer.recordIdLabel', 'Record ID')}</label>
         <input id="recordIdInput" type="text" placeholder="1" />
       </div>
       <div class="actions">
-        <button id="loadButton">Load Record</button>
-        <button id="exportButton">Export Record JSON</button>
+        <button id="loadButton">${localize('webviews.recordViewer.loadButton', 'Load Record')}</button>
+        <button id="exportButton">${localize('webviews.recordViewer.exportButton', 'Export Record JSON')}</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel">
-      <h2>Record</h2>
+      <h2>${localize('webviews.recordViewer.recordHeading', 'Record')}</h2>
       <div id="fieldDataContainer"></div>
       <div id="relatedDataContainer" class="related"></div>
       <pre id="rawJson" class="raw"></pre>
     </section>
   </div>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

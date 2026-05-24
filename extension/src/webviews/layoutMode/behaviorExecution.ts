@@ -1,5 +1,6 @@
 import type { BehaviorBinding } from '../../fmweb/layoutSchema';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
+import { localize } from '../../i18n';
 
 export interface ExecuteBehaviorBindingArgs {
   behavior: BehaviorBinding;
@@ -22,14 +23,21 @@ export async function executeBehaviorBinding(
   args: ExecuteBehaviorBindingArgs
 ): Promise<BehaviorExecutionResult> {
   const action = args.behavior.type;
-  const objectLabel = args.objectName.trim().length > 0 ? args.objectName : 'Object';
+  const objectLabel =
+    args.objectName.trim().length > 0
+      ? args.objectName
+      : localize('webviews.layoutMode.behavior.objectFallback', 'Object');
 
   if (!action) {
     return {
       ok: false,
       action: 'none',
       stub: true,
-      message: `${objectLabel} has no behavior binding.`
+      message: localize(
+        'webviews.layoutMode.behavior.noBinding',
+        '{0} has no behavior binding.',
+        objectLabel
+      )
     };
   }
 
@@ -40,7 +48,11 @@ export async function executeBehaviorBinding(
         ok: false,
         action,
         stub: true,
-        message: `${objectLabel} is missing a script name.`
+        message: localize(
+          'webviews.layoutMode.behavior.missingScriptName',
+          '{0} is missing a script name.',
+          objectLabel
+        )
       };
     }
 
@@ -49,17 +61,26 @@ export async function executeBehaviorBinding(
         ok: true,
         action,
         stub: true,
-        message: `Preview stub: would run script "${scriptName}". Select an active profile to execute live.`
+        message: localize(
+          'webviews.layoutMode.behavior.runScriptPreview',
+          'Preview stub: would run script "{0}". Select an active profile to execute live.',
+          scriptName
+        )
       };
     }
 
-    const layout = normalizeOptionalString(args.fmLayoutName) ?? normalizeOptionalString(args.layoutName);
+    const layout =
+      normalizeOptionalString(args.fmLayoutName) ?? normalizeOptionalString(args.layoutName);
     if (!layout) {
       return {
         ok: false,
         action,
         stub: true,
-        message: `Cannot run "${scriptName}" because no FileMaker layout is mapped.`
+        message: localize(
+          'webviews.layoutMode.behavior.noFmLayout',
+          'Cannot run "{0}" because no FileMaker layout is mapped.',
+          scriptName
+        )
       };
     }
 
@@ -75,7 +96,13 @@ export async function executeBehaviorBinding(
         ok: true,
         action,
         stub: false,
-        message: `Executed script "${scriptName}" on "${layout}" using profile "${args.profile.name}".`,
+        message: localize(
+          'webviews.layoutMode.behavior.scriptExecuted',
+          'Executed script "{0}" on "{1}" using profile "{2}".',
+          scriptName,
+          layout,
+          args.profile.name
+        ),
         detail: result
       };
     } catch (error) {
@@ -95,7 +122,11 @@ export async function executeBehaviorBinding(
         ok: false,
         action,
         stub: true,
-        message: `${objectLabel} is missing a target web layout ID.`
+        message: localize(
+          'webviews.layoutMode.behavior.missingWebLayout',
+          '{0} is missing a target web layout ID.',
+          objectLabel
+        )
       };
     }
 
@@ -103,7 +134,11 @@ export async function executeBehaviorBinding(
       ok: true,
       action,
       stub: true,
-      message: `Preview stub: would navigate to web layout "${targetLayoutId}".`
+      message: localize(
+        'webviews.layoutMode.behavior.webLayoutPreview',
+        'Preview stub: would navigate to web layout "{0}".',
+        targetLayoutId
+      )
     };
   }
 
@@ -114,7 +149,11 @@ export async function executeBehaviorBinding(
         ok: false,
         action,
         stub: true,
-        message: `${objectLabel} is missing a target FileMaker layout name.`
+        message: localize(
+          'webviews.layoutMode.behavior.missingFmLayout',
+          '{0} is missing a target FileMaker layout name.',
+          objectLabel
+        )
       };
     }
 
@@ -122,7 +161,11 @@ export async function executeBehaviorBinding(
       ok: true,
       action,
       stub: true,
-      message: `Preview stub: would open FileMaker layout "${targetLayoutName}".`
+      message: localize(
+        'webviews.layoutMode.behavior.fmLayoutPreview',
+        'Preview stub: would open FileMaker layout "{0}".',
+        targetLayoutName
+      )
     };
   }
 
@@ -133,7 +176,11 @@ export async function executeBehaviorBinding(
         ok: false,
         action,
         stub: true,
-        message: `${objectLabel} is missing a URL.`
+        message: localize(
+          'webviews.layoutMode.behavior.missingUrl',
+          '{0} is missing a URL.',
+          objectLabel
+        )
       };
     }
 
@@ -141,7 +188,11 @@ export async function executeBehaviorBinding(
       ok: true,
       action,
       stub: true,
-      message: `Preview stub: would open ${url}.`
+      message: localize(
+        'webviews.layoutMode.behavior.openUrlPreview',
+        'Preview stub: would open {0}.',
+        url
+      )
     };
   }
 
@@ -150,7 +201,11 @@ export async function executeBehaviorBinding(
     ok: true,
     action,
     stub: true,
-    message: `Preview stub: would show dialog "${dialogId}".`
+    message: localize(
+      'webviews.layoutMode.behavior.dialogPreview',
+      'Preview stub: would show dialog "{0}".',
+      dialogId
+    )
   };
 }
 
@@ -168,5 +223,8 @@ function formatError(error: unknown): string {
     return error.message;
   }
 
-  return 'Unexpected behavior execution error.';
+  return localize(
+    'webviews.layoutMode.behavior.unexpectedError',
+    'Unexpected behavior execution error.'
+  );
 }

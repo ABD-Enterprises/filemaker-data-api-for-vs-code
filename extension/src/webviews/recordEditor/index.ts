@@ -6,6 +6,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import { RecordEditService } from '../../services/recordEditService';
 import type { SchemaService } from '../../services/schemaService';
 import type { FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 
@@ -34,7 +35,10 @@ type IncomingMessage =
   | { type: 'validateDraft'; payload: DraftPayload }
   | { type: 'previewPatch'; payload: DraftPayload }
   | { type: 'saveRecord'; payload: DraftPayload }
-  | { type: 'createRecord'; payload: { profileId: string; layout: string; fieldData: Record<string, unknown> } }
+  | {
+      type: 'createRecord';
+      payload: { profileId: string; layout: string; fieldData: Record<string, unknown> };
+    }
   | { type: 'exportRecord' };
 
 export class RecordEditorPanel {
@@ -84,22 +88,18 @@ export class RecordEditorPanel {
     }
 
     const isCreateMode = defaults?.mode === 'create';
-    const panelTitle = isCreateMode && defaults?.layout
-      ? `Create Record — ${defaults.layout}`
-      : 'FileMaker Record Editor';
+    const panelTitle =
+      isCreateMode && defaults?.layout
+        ? localize('webviews.recordEditor.createPanelTitle', 'Create Record - {0}', defaults.layout)
+        : localize('webviews.recordEditor.panelTitle', 'FileMaker Record Editor');
 
-    const panel = vscode.window.createWebviewPanel(
-      'filemakerRecordEditor',
-      panelTitle,
-      column,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui')
-        ]
-      }
-    );
+    const panel = vscode.window.createWebviewPanel('filemakerRecordEditor', panelTitle, column, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui')
+      ]
+    });
 
     RecordEditorPanel.currentPanel = new RecordEditorPanel(
       panel,
@@ -171,7 +171,9 @@ export class RecordEditorPanel {
   private async loadLayouts(profileId: string): Promise<void> {
     const profile = await this.profileStore.getProfile(profileId);
     if (!profile) {
-      await this.postError('Selected profile was not found.');
+      await this.postError(
+        localize('webviews.recordEditor.selectedProfileNotFound', 'Selected profile was not found.')
+      );
       return;
     }
 
@@ -192,7 +194,9 @@ export class RecordEditorPanel {
   private async loadRecord(payload: LoadRecordPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Selected profile was not found.');
+      await this.postError(
+        localize('webviews.recordEditor.selectedProfileNotFound', 'Selected profile was not found.')
+      );
       return;
     }
 
@@ -241,7 +245,10 @@ export class RecordEditorPanel {
   }
 
   private async previewPatch(payload: DraftPayload): Promise<void> {
-    const preview = this.recordEditService.previewPatch(payload.originalFieldData, payload.draftFieldData);
+    const preview = this.recordEditService.previewPatch(
+      payload.originalFieldData,
+      payload.draftFieldData
+    );
     await this.panel.webview.postMessage({
       type: 'patchPreview',
       payload: preview
@@ -250,29 +257,48 @@ export class RecordEditorPanel {
 
   private async saveRecord(payload: DraftPayload): Promise<void> {
     if (vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false)) {
-      await this.postError('Offline mode is enabled; record writes are disabled.');
+      await this.postError(
+        localize(
+          'webviews.recordEditor.offlineWritesDisabled',
+          'Offline mode is enabled; record writes are disabled.'
+        )
+      );
       return;
     }
 
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Selected profile was not found.');
+      await this.postError(
+        localize('webviews.recordEditor.selectedProfileNotFound', 'Selected profile was not found.')
+      );
       return;
     }
 
-    const preview = this.recordEditService.previewPatch(payload.originalFieldData, payload.draftFieldData);
+    const preview = this.recordEditService.previewPatch(
+      payload.originalFieldData,
+      payload.draftFieldData
+    );
     if (preview.changedFields.length === 0) {
-      await this.postError('No field changes detected.');
+      await this.postError(
+        localize('webviews.recordEditor.noFieldChanges', 'No field changes detected.')
+      );
       return;
     }
 
+    const saveLabel = localize('webviews.recordEditor.saveAction', 'Save');
     const confirmation = await vscode.window.showWarningMessage(
-      `Save ${preview.changedFields.length} field changes to record ${payload.recordId}? (${preview.changedFields.join(', ')})\nRollback guidance: export the current record before save, then reapply previous values if needed.`,
+      localize(
+        'webviews.recordEditor.saveConfirm',
+        'Save {0} field changes to record {1}? ({2})\nRollback guidance: export the current record before save, then reapply previous values if needed.',
+        preview.changedFields.length,
+        payload.recordId,
+        preview.changedFields.join(', ')
+      ),
       { modal: true },
-      'Save'
+      saveLabel
     );
 
-    if (confirmation !== 'Save') {
+    if (confirmation !== saveLabel) {
       await this.panel.webview.postMessage({
         type: 'saveCancelled'
       });
@@ -287,7 +313,11 @@ export class RecordEditorPanel {
         payload.originalFieldData,
         payload.draftFieldData
       );
-      const refreshedRecord = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
+      const refreshedRecord = await this.fmClient.getRecord(
+        profile,
+        payload.layout,
+        payload.recordId
+      );
       this.loadedRecord = {
         profileId: payload.profileId,
         layout: payload.layout,
@@ -312,13 +342,20 @@ export class RecordEditorPanel {
     fieldData: Record<string, unknown>;
   }): Promise<void> {
     if (vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false)) {
-      await this.postError('Offline mode is enabled; record writes are disabled.');
+      await this.postError(
+        localize(
+          'webviews.recordEditor.offlineWritesDisabled',
+          'Offline mode is enabled; record writes are disabled.'
+        )
+      );
       return;
     }
 
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Selected profile was not found.');
+      await this.postError(
+        localize('webviews.recordEditor.selectedProfileNotFound', 'Selected profile was not found.')
+      );
       return;
     }
 
@@ -327,17 +364,28 @@ export class RecordEditorPanel {
     );
 
     if (Object.keys(nonEmptyFields).length === 0) {
-      await this.postError('At least one field must have a value to create a record.');
+      await this.postError(
+        localize(
+          'webviews.recordEditor.createNeedsField',
+          'At least one field must have a value to create a record.'
+        )
+      );
       return;
     }
 
+    const createLabel = localize('webviews.recordEditor.createAction', 'Create');
     const confirmation = await vscode.window.showWarningMessage(
-      `Create a new record in layout "${payload.layout}" with ${Object.keys(nonEmptyFields).length} field(s)?`,
+      localize(
+        'webviews.recordEditor.createConfirm',
+        'Create a new record in layout "{0}" with {1} field(s)?',
+        payload.layout,
+        Object.keys(nonEmptyFields).length
+      ),
       { modal: true },
-      'Create'
+      createLabel
     );
 
-    if (confirmation !== 'Create') {
+    if (confirmation !== createLabel) {
       await this.panel.webview.postMessage({ type: 'saveCancelled' });
       return;
     }
@@ -345,7 +393,13 @@ export class RecordEditorPanel {
     try {
       const result = await this.fmClient.createRecord(profile, payload.layout, nonEmptyFields);
 
-      vscode.window.showInformationMessage(`Record created (ID: ${result.recordId}).`);
+      vscode.window.showInformationMessage(
+        localize(
+          'webviews.recordEditor.createSuccess',
+          'Record created (ID: {0}).',
+          result.recordId
+        )
+      );
 
       await this.panel.webview.postMessage({
         type: 'recordCreated',
@@ -358,7 +412,9 @@ export class RecordEditorPanel {
 
   private async exportCurrentRecord(): Promise<void> {
     if (!this.loadedRecord) {
-      await this.postError('No record has been loaded.');
+      await this.postError(
+        localize('webviews.recordEditor.noRecordLoaded', 'No record has been loaded.')
+      );
       return;
     }
 
@@ -383,17 +439,32 @@ export class RecordEditorPanel {
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui', 'styles.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'recordEditor',
+        'ui',
+        'styles.css'
+      )
     );
 
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'recordEditor',
+        'ui',
+        'index.js'
+      )
     );
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -401,50 +472,51 @@ export class RecordEditorPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>FileMaker Record Editor</title>
+  <title>${localize('webviews.recordEditor.htmlTitle', 'FileMaker Record Editor')}</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
     <header class="header">
-      <h1>FileMaker Record Editor</h1>
-      <p>Load a record, edit fieldData, preview patch JSON, and save safely.</p>
+      <h1>${localize('webviews.recordEditor.heading', 'FileMaker Record Editor')}</h1>
+      <p>${localize('webviews.recordEditor.subtitle', 'Load a record, edit fieldData, preview patch JSON, and save safely.')}</p>
     </header>
 
     <section class="panel">
       <div class="row">
-        <label for="profileSelect">Profile</label>
+        <label for="profileSelect">${localize('webviews.recordEditor.profileLabel', 'Profile')}</label>
         <select id="profileSelect"></select>
       </div>
       <div class="row">
-        <label for="layoutSelect">Layout</label>
+        <label for="layoutSelect">${localize('webviews.recordEditor.layoutLabel', 'Layout')}</label>
         <select id="layoutSelect"></select>
       </div>
       <div class="row">
-        <label for="recordIdInput">Record ID</label>
+        <label for="recordIdInput">${localize('webviews.recordEditor.recordIdLabel', 'Record ID')}</label>
         <input id="recordIdInput" type="text" placeholder="1" />
       </div>
       <div class="actions">
-        <button id="loadButton">Load</button>
-        <button id="validateButton">Validate</button>
-        <button id="previewButton">Preview Update JSON</button>
-        <button id="saveButton">Save</button>
-        <button id="discardButton">Discard Changes</button>
-        <button id="exportButton">Export Record JSON</button>
+        <button id="loadButton">${localize('webviews.recordEditor.loadButton', 'Load')}</button>
+        <button id="validateButton">${localize('webviews.recordEditor.validateButton', 'Validate')}</button>
+        <button id="previewButton">${localize('webviews.recordEditor.previewButton', 'Preview Update JSON')}</button>
+        <button id="saveButton">${localize('webviews.recordEditor.saveButton', 'Save')}</button>
+        <button id="discardButton">${localize('webviews.recordEditor.discardButton', 'Discard Changes')}</button>
+        <button id="exportButton">${localize('webviews.recordEditor.exportButton', 'Export Record JSON')}</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel">
-      <h2>Field Data</h2>
+      <h2>${localize('webviews.recordEditor.fieldDataHeading', 'Field Data')}</h2>
       <div id="fieldEditor"></div>
-      <h3>Patch Preview</h3>
+      <h3>${localize('webviews.recordEditor.patchPreviewHeading', 'Patch Preview')}</h3>
       <pre id="patchPreview" class="raw"></pre>
-      <h3>Raw Record JSON</h3>
+      <h3>${localize('webviews.recordEditor.rawRecordHeading', 'Raw Record JSON')}</h3>
       <pre id="rawRecord" class="raw"></pre>
     </section>
   </div>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -478,7 +550,13 @@ function parseIncomingMessage(raw: unknown): IncomingMessage | undefined {
     return { type };
   }
 
-  if (type === 'loadRecord' || type === 'validateDraft' || type === 'previewPatch' || type === 'saveRecord' || type === 'createRecord') {
+  if (
+    type === 'loadRecord' ||
+    type === 'validateDraft' ||
+    type === 'previewPatch' ||
+    type === 'saveRecord' ||
+    type === 'createRecord'
+  ) {
     const payload = parseDraftPayload(value.payload, type === 'loadRecord');
     if (!payload) {
       return undefined;
@@ -552,5 +630,5 @@ function formatError(error: unknown): string {
     return error.message;
   }
 
-  return 'Unexpected error.';
+  return localize('webviews.recordEditor.unexpectedError', 'Unexpected error.');
 }

@@ -1,5 +1,13 @@
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 function debounce(fn, ms) {
   let timer;
   function wrapped(...args) {
@@ -85,10 +93,13 @@ window.addEventListener('message', (event) => {
       applySaved(message.payload);
       break;
     case 'saveCancelled':
-      setStatus('Save cancelled.');
+      setStatus(t('webviews.recordEditor.ui.saveCancelled', 'Save cancelled.'));
       break;
     case 'error':
-      setStatus(message.message || 'Unknown error.', true);
+      setStatus(
+        message.message || t('webviews.recordEditor.ui.unknownError', 'Unknown error.'),
+        true
+      );
       break;
     default:
       break;
@@ -106,7 +117,7 @@ loadButton.addEventListener('click', () => {
   }
 
   vscode.postMessage({ type: 'loadRecord', payload });
-  setStatus('Loading record...');
+  setStatus(t('webviews.recordEditor.ui.loadingRecord', 'Loading record...'));
 });
 
 validateButton.addEventListener('click', () => {
@@ -135,7 +146,7 @@ saveButton.addEventListener('click', () => {
 
   debouncedMarkDirtyState.cancel();
   vscode.postMessage({ type: 'saveRecord', payload });
-  setStatus('Saving...');
+  setStatus(t('webviews.recordEditor.ui.saving', 'Saving...'));
 });
 
 discardButton.addEventListener('click', () => {
@@ -146,7 +157,7 @@ discardButton.addEventListener('click', () => {
   debouncedMarkDirtyState.cancel();
   state.draftFieldData = { ...state.originalFieldData };
   renderFieldEditor();
-  setStatus('Draft changes discarded.');
+  setStatus(t('webviews.recordEditor.ui.draftDiscarded', 'Draft changes discarded.'));
 });
 
 exportButton.addEventListener('click', () => {
@@ -159,7 +170,7 @@ function applyInit(payload) {
   state.defaults = payload.defaults;
 
   renderProfiles();
-  setStatus('Ready.');
+  setStatus(t('webviews.recordEditor.ui.ready', 'Ready.'));
 }
 
 function applyLayouts(payload) {
@@ -187,7 +198,9 @@ function applyRecord(payload) {
   rawRecord.textContent = JSON.stringify(payload.record, null, 2);
   patchPreview.textContent = '';
   renderFieldEditor();
-  setStatus(`Loaded record ${payload.record.recordId}.`);
+  setStatus(
+    t('webviews.recordEditor.ui.loadedRecord', 'Loaded record {0}.', payload.record.recordId)
+  );
 }
 
 function applyValidation(payload) {
@@ -196,20 +209,27 @@ function applyValidation(payload) {
   }
 
   if (payload.valid) {
-    setStatus('Draft is valid.');
+    setStatus(t('webviews.recordEditor.ui.draftValid', 'Draft is valid.'));
     return;
   }
 
   const details = Array.isArray(payload.errors)
     ? payload.errors.map((item) => `${item.field}: ${item.message}`).join(' | ')
-    : 'Validation failed.';
+    : t('webviews.recordEditor.ui.validationFailed', 'Validation failed.');
   setStatus(details, true);
 }
 
 function applyPatchPreview(payload) {
   patchPreview.textContent = JSON.stringify(payload, null, 2);
   const count = payload && Array.isArray(payload.changedFields) ? payload.changedFields.length : 0;
-  setStatus(`Patch preview ready (${count} changed field${count === 1 ? '' : 's'}).`);
+  setStatus(
+    t(
+      'webviews.recordEditor.ui.patchPreviewReady',
+      'Patch preview ready ({0} changed field{1}).',
+      count,
+      count === 1 ? '' : 's'
+    )
+  );
 }
 
 function applySaved(payload) {
@@ -224,7 +244,7 @@ function applySaved(payload) {
   patchPreview.textContent = '';
   renderFieldEditor();
   revealRecordEditor();
-  setStatus('Record saved.');
+  setStatus(t('webviews.recordEditor.ui.recordSaved', 'Record saved.'));
 }
 
 function createLoadingSkeleton(widths) {
@@ -263,7 +283,7 @@ function renderProfiles() {
   if (!state.profiles.length) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No profiles';
+    option.textContent = t('webviews.recordEditor.ui.noProfiles', 'No profiles');
     profileSelect.appendChild(option);
     return;
   }
@@ -291,7 +311,7 @@ function renderLayouts(layouts, preferredLayout) {
   if (!Array.isArray(layouts) || !layouts.length) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No layouts';
+    option.textContent = t('webviews.recordEditor.ui.noLayouts', 'No layouts');
     layoutSelect.appendChild(option);
     return;
   }
@@ -346,7 +366,7 @@ function showEmptyFieldEditor() {
   fieldInputs.clear();
   const empty = document.createElement('p');
   empty.className = 'empty';
-  empty.textContent = 'No fieldData available.';
+  empty.textContent = t('webviews.recordEditor.ui.noFieldData', 'No fieldData available.');
   fieldEditor.replaceChildren(empty);
 }
 
@@ -360,11 +380,11 @@ function buildFieldEditor(keys) {
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
   const fieldHeader = document.createElement('th');
-  fieldHeader.textContent = 'Field';
+  fieldHeader.textContent = t('webviews.recordEditor.ui.fieldHeader', 'Field');
   headerRow.appendChild(fieldHeader);
 
   const valueHeader = document.createElement('th');
-  valueHeader.textContent = 'Value';
+  valueHeader.textContent = t('webviews.recordEditor.ui.valueHeader', 'Value');
   headerRow.appendChild(valueHeader);
   thead.appendChild(headerRow);
   table.appendChild(thead);
@@ -410,7 +430,7 @@ function updateFieldEditorValues(keys) {
 function markDirtyState() {
   const changed = JSON.stringify(state.originalFieldData) !== JSON.stringify(state.draftFieldData);
   if (changed) {
-    setStatus('Draft has unsaved changes.');
+    setStatus(t('webviews.recordEditor.ui.unsavedChanges', 'Draft has unsaved changes.'));
   }
 }
 
@@ -420,7 +440,10 @@ function collectBasePayload() {
   const recordId = recordIdInput.value.trim();
 
   if (!profileId || !layout || !recordId) {
-    setStatus('Profile, layout, and record ID are required.', true);
+    setStatus(
+      t('webviews.recordEditor.ui.requiredFields', 'Profile, layout, and record ID are required.'),
+      true
+    );
     return undefined;
   }
 

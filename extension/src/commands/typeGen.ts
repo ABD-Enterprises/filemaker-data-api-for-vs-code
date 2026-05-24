@@ -6,6 +6,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { TypeGenService } from '../services/typeGenService';
+import { localize } from '../i18n';
 import { parseLayoutArg, promptForLayout, resolveProfileFromArg, showCommandError } from './common';
 
 interface RegisterTypeGenCommandsDeps {
@@ -20,85 +21,113 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
   const { profileStore, fmClient, typeGenService, settingsService, logger } = deps;
 
   return [
-    vscode.commands.registerCommand('filemakerDataApiTools.generateTypesForLayout', async (arg: unknown) => {
-      if (!ensureTrustedWorkspace()) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.generateTypesForLayout',
+      async (arg: unknown) => {
+        if (!ensureTrustedWorkspace()) {
+          return;
+        }
 
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
 
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
 
-      try {
-        const artifact = await typeGenService.generateTypesForLayout(profile, layout);
-        await openGeneratedFile(artifact.filePath);
-        vscode.window.showInformationMessage(`Generated types for ${layout}.`);
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Type generation failed for layout.',
-          logger,
-          logMessage: 'Type generation failed for layout.'
-        });
+        try {
+          const artifact = await typeGenService.generateTypesForLayout(profile, layout);
+          await openGeneratedFile(artifact.filePath);
+          vscode.window.showInformationMessage(
+            localize('commands.typeGen.layout.success', 'Generated types for {0}.', layout)
+          );
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: localize(
+              'commands.typeGen.layout.failed',
+              'Type generation failed for layout.'
+            ),
+            logger,
+            logMessage: 'Type generation failed for layout.'
+          });
+        }
       }
-    }),
+    ),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.generateTypesForAllLayouts', async (arg: unknown) => {
-      if (!ensureTrustedWorkspace()) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.generateTypesForAllLayouts',
+      async (arg: unknown) => {
+        if (!ensureTrustedWorkspace()) {
+          return;
+        }
 
-      const profile = await resolveProfileFromArg(arg, profileStore, true);
-      if (!profile) {
-        return;
-      }
+        const profile = await resolveProfileFromArg(arg, profileStore, true);
+        if (!profile) {
+          return;
+        }
 
-      try {
-        const artifacts = await typeGenService.generateTypesForAllLayouts(profile);
-        vscode.window.showInformationMessage(`Generated ${artifacts.length} layout type files.`);
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Type generation failed for all layouts.',
-          logger,
-          logMessage: 'Type generation failed for all layouts.'
-        });
+        try {
+          const artifacts = await typeGenService.generateTypesForAllLayouts(profile);
+          vscode.window.showInformationMessage(
+            localize(
+              'commands.typeGen.allLayouts.success',
+              'Generated {0} layout type files.',
+              artifacts.length
+            )
+          );
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: localize(
+              'commands.typeGen.allLayouts.failed',
+              'Type generation failed for all layouts.'
+            ),
+            logger,
+            logMessage: 'Type generation failed for all layouts.'
+          });
+        }
       }
-    }),
+    ),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.generateSnippetsForLayout', async (arg: unknown) => {
-      if (!ensureTrustedWorkspace()) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.generateSnippetsForLayout',
+      async (arg: unknown) => {
+        if (!ensureTrustedWorkspace()) {
+          return;
+        }
 
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
 
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
 
-      try {
-        const artifact = await typeGenService.generateSnippetsForLayout(profile, layout);
-        await openGeneratedFile(artifact.filePath);
-        vscode.window.showInformationMessage(`Generated snippets for ${layout}.`);
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Snippet generation failed.',
-          logger,
-          logMessage: 'Snippet generation failed.'
-        });
+        try {
+          const artifact = await typeGenService.generateSnippetsForLayout(profile, layout);
+          await openGeneratedFile(artifact.filePath);
+          vscode.window.showInformationMessage(
+            localize('commands.typeGen.snippets.success', 'Generated snippets for {0}.', layout)
+          );
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: localize(
+              'commands.typeGen.snippets.failed',
+              'Snippet generation failed.'
+            ),
+            logger,
+            logMessage: 'Snippet generation failed.'
+          });
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand('filemakerDataApiTools.openGeneratedTypesFolder', async () => {
       if (!ensureTrustedWorkspace()) {
@@ -107,7 +136,9 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
 
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) {
-        vscode.window.showWarningMessage('Open a workspace folder first.');
+        vscode.window.showWarningMessage(
+          localize('commands.typeGen.openWorkspaceFirst', 'Open a workspace folder first.')
+        );
         return;
       }
 
@@ -125,14 +156,21 @@ function ensureTrustedWorkspace(): boolean {
     return true;
   }
 
-  void vscode.window.showWarningMessage(
-    'Workspace is untrusted. File output generation is disabled. Trust the workspace to enable this feature.',
-    'Learn More'
-  ).then((selection) => {
-    if (selection === 'Learn More') {
-      void vscode.env.openExternal(vscode.Uri.parse('https://code.visualstudio.com/docs/editor/workspace-trust'));
-    }
-  });
+  void vscode.window
+    .showWarningMessage(
+      localize(
+        'commands.typeGen.untrusted',
+        'Workspace is untrusted. File output generation is disabled. Trust the workspace to enable this feature.'
+      ),
+      localize('commands.typeGen.learnMore', 'Learn More')
+    )
+    .then((selection) => {
+      if (selection === localize('commands.typeGen.learnMore', 'Learn More')) {
+        void vscode.env.openExternal(
+          vscode.Uri.parse('https://code.visualstudio.com/docs/editor/workspace-trust')
+        );
+      }
+    });
 
   return false;
 }

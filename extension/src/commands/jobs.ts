@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { localize } from '../i18n';
 import type { JobRunner } from '../services/jobRunner';
 import { openJsonDocument } from './common';
 
@@ -16,7 +17,7 @@ export function registerJobsCommands(deps: RegisterJobsCommandsDeps): vscode.Dis
       const recent = jobRunner.getRecentSummaries();
 
       if (active.length === 0 && recent.length === 0) {
-        vscode.window.showInformationMessage('No jobs found.');
+        vscode.window.showInformationMessage(localize('commands.jobs.noneFound', 'No jobs found.'));
         return;
       }
 
@@ -25,18 +26,30 @@ export function registerJobsCommands(deps: RegisterJobsCommandsDeps): vscode.Dis
           ...active.map((job) => ({
             label: `${job.name} (${job.status})`,
             description: `${job.progress}%`,
-            detail: `Started ${job.startedAt}${job.details ? ` • ${job.details}` : ''}`,
+            detail: localize(
+              'commands.jobs.activeDetail',
+              'Started {0}{1}',
+              job.startedAt,
+              job.details ? ` • ${job.details}` : ''
+            ),
             value: { kind: 'active' as const, id: job.id }
           })),
           ...recent.map((job) => ({
             label: `${job.name} (${job.status})`,
             description: `${job.progress}%`,
-            detail: `Started ${job.startedAt}${job.finishedAt ? ` • Finished ${job.finishedAt}` : ''}`,
+            detail: localize(
+              'commands.jobs.recentDetail',
+              'Started {0}{1}',
+              job.startedAt,
+              job.finishedAt
+                ? localize('commands.jobs.finishedSuffix', ' • Finished {0}', job.finishedAt)
+                : ''
+            ),
             value: { kind: 'recent' as const, id: job.id }
           }))
         ],
         {
-          title: 'FileMaker Jobs'
+          title: localize('commands.jobs.title', 'FileMaker Jobs')
         }
       );
 

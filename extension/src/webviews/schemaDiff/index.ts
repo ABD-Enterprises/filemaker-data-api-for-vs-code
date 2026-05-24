@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { SchemaDiffResult } from '../../types/fm';
+import { getWebviewI18nScript, localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { toRecord } from '../common/messageValidation';
 
@@ -26,10 +27,7 @@ export class SchemaDiffPanel {
     });
   }
 
-  public static createOrShow(
-    context: vscode.ExtensionContext,
-    diff: SchemaDiffResult
-  ): void {
+  public static createOrShow(context: vscode.ExtensionContext, diff: SchemaDiffResult): void {
     if (SchemaDiffPanel.currentPanel) {
       SchemaDiffPanel.currentPanel.diff = diff;
       SchemaDiffPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
@@ -39,7 +37,7 @@ export class SchemaDiffPanel {
 
     const panel = vscode.window.createWebviewPanel(
       'filemakerSchemaDiff',
-      'FileMaker Schema Diff',
+      localize('webviews.schemaDiff.panelTitle', 'FileMaker Schema Diff'),
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -80,7 +78,7 @@ export class SchemaDiffPanel {
 
   private async exportDiffJson(): Promise<void> {
     const uri = await vscode.window.showSaveDialog({
-      title: 'Export schema diff JSON',
+      title: localize('webviews.schemaDiff.export.title', 'Export schema diff JSON'),
       defaultUri: vscode.Uri.file(`schema-diff-${this.diff.layout}.json`),
       filters: {
         JSON: ['json']
@@ -93,21 +91,38 @@ export class SchemaDiffPanel {
 
     const bytes = Buffer.from(`${JSON.stringify(this.diff, null, 2)}\n`, 'utf8');
     await vscode.workspace.fs.writeFile(uri, bytes);
-    vscode.window.showInformationMessage(`Exported schema diff to ${uri.fsPath}`);
+    vscode.window.showInformationMessage(
+      localize('webviews.schemaDiff.export.success', 'Exported schema diff to {0}', uri.fsPath)
+    );
   }
 
   private renderHtml(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'schemaDiff', 'ui', 'styles.css')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'schemaDiff',
+        'ui',
+        'styles.css'
+      )
     );
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'schemaDiff', 'ui', 'index.js')
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        'dist',
+        'webviews',
+        'schemaDiff',
+        'ui',
+        'index.js'
+      )
     );
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
     });
+    const i18nScript = getWebviewI18nScript(nonce);
 
     return `<!doctype html>
 <html lang="en">
@@ -115,36 +130,37 @@ export class SchemaDiffPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>Schema Diff</title>
+  <title>${localize('webviews.schemaDiff.htmlTitle', 'Schema Diff')}</title>
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <main class="container">
     <header>
-      <h1>FileMaker Schema Diff</h1>
+      <h1>${localize('webviews.schemaDiff.heading', 'FileMaker Schema Diff')}</h1>
       <p id="meta"></p>
       <div class="summary" id="summary" role="status" aria-live="polite"></div>
       <div class="actions">
-        <button id="exportButton">Export Diff JSON</button>
+        <button id="exportButton">${localize('webviews.schemaDiff.exportButton', 'Export Diff JSON')}</button>
       </div>
     </header>
 
     <section>
-      <h2>Added Fields</h2>
+      <h2>${localize('webviews.schemaDiff.addedHeading', 'Added Fields')}</h2>
       <div id="added"></div>
     </section>
 
     <section>
-      <h2>Removed Fields</h2>
+      <h2>${localize('webviews.schemaDiff.removedHeading', 'Removed Fields')}</h2>
       <div id="removed"></div>
     </section>
 
     <section>
-      <h2>Changed Fields</h2>
+      <h2>${localize('webviews.schemaDiff.changedHeading', 'Changed Fields')}</h2>
       <div id="changed"></div>
     </section>
   </main>
 
+  ${i18nScript}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

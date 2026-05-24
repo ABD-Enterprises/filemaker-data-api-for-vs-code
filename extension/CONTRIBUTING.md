@@ -12,6 +12,7 @@ npm test
 ```
 
 Launch the extension host:
+
 1. Open this repo in VS Code.
 2. Press `F5`.
 3. Run **FileMaker: Add Connection Profile** in the new window.
@@ -34,6 +35,29 @@ Launch the extension host:
 3. Add command and menu contributions in `package.json`.
 4. Enforce role guard and workspace trust where needed.
 5. Add unit and integration tests.
+
+## Localization
+
+User-facing extension strings live in two generated English bundles:
+
+- `package.nls.json` for `package.json` contribution strings.
+- `i18n/messages.json` for runtime strings used by `src/extension.ts`, `src/commands/`, and webviews.
+
+Wrap new runtime UI text with `localize('stable.key', 'English text')` from `src/i18n.ts`. Webview UI scripts can use `t('stable.key', 'English text')`; the host injects the localized message bundle into each webview.
+
+After adding or changing user-facing strings, run:
+
+```bash
+npm run i18n:extract -w extension
+npm run i18n:check -w extension
+```
+
+To contribute a translation, add both files in one PR:
+
+- `package.nls.<locale>.json`
+- `i18n/messages.<locale>.json`
+
+Use the same keys as the English source bundles and translate only the values.
 
 ## Adding New Data API Endpoints
 

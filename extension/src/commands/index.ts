@@ -7,6 +7,7 @@ import type { ProfileStore } from '../services/profileStore';
 import type { SavedQueriesStore } from '../services/savedQueriesStore';
 import type { SecretStore } from '../services/secretStore';
 import type { FindRecordsRequest } from '../types/fm';
+import { localize } from '../i18n';
 import {
   parseFindJson,
   parseOptionalNonNegativeInteger,
@@ -91,32 +92,66 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
   return [
     vscode.commands.registerCommand('filemakerDataApiTools.addConnectionProfile', async () => {
-      if (!(await roleGuard.assertFeature('writeOperations', 'Add Connection Profile'))) {
+      if (
+        !(await roleGuard.assertFeature(
+          'writeOperations',
+          localize('commands.core.addProfile.featureName', 'Add Connection Profile')
+        ))
+      ) {
         return;
       }
 
-      ConnectionWizardPanel.createOrShow(context, profileStore, secretStore, fmClient, logger, undefined, {
-        getTestPolicy: deps.getConnectionWizardTestPolicy
-      });
+      ConnectionWizardPanel.createOrShow(
+        context,
+        profileStore,
+        secretStore,
+        fmClient,
+        logger,
+        undefined,
+        {
+          getTestPolicy: deps.getConnectionWizardTestPolicy
+        }
+      );
     }),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.editConnectionProfile', async (arg: unknown) => {
-      const profile = await resolveProfileFromArg(arg, profileStore);
-      if (!profile) {
-        return;
-      }
-      if (roleGuard.isProfileLocked(profile.id)) {
-        vscode.window.showWarningMessage('This profile is locked by enterprise configuration.');
-        return;
-      }
-      if (!(await roleGuard.assertFeature('writeOperations', 'Edit Connection Profile'))) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.editConnectionProfile',
+      async (arg: unknown) => {
+        const profile = await resolveProfileFromArg(arg, profileStore);
+        if (!profile) {
+          return;
+        }
+        if (roleGuard.isProfileLocked(profile.id)) {
+          vscode.window.showWarningMessage(
+            localize(
+              'commands.core.profileLocked',
+              'This profile is locked by enterprise configuration.'
+            )
+          );
+          return;
+        }
+        if (
+          !(await roleGuard.assertFeature(
+            'writeOperations',
+            localize('commands.core.editProfile.featureName', 'Edit Connection Profile')
+          ))
+        ) {
+          return;
+        }
 
-      ConnectionWizardPanel.createOrShow(context, profileStore, secretStore, fmClient, logger, profile, {
-        getTestPolicy: deps.getConnectionWizardTestPolicy
-      });
-    }),
+        ConnectionWizardPanel.createOrShow(
+          context,
+          profileStore,
+          secretStore,
+          fmClient,
+          logger,
+          profile,
+          {
+            getTestPolicy: deps.getConnectionWizardTestPolicy
+          }
+        );
+      }
+    ),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.removeConnectionProfile',
@@ -126,20 +161,35 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
           return;
         }
         if (roleGuard.isProfileLocked(profile.id)) {
-          vscode.window.showWarningMessage('This profile is locked by enterprise configuration.');
+          vscode.window.showWarningMessage(
+            localize(
+              'commands.core.profileLocked',
+              'This profile is locked by enterprise configuration.'
+            )
+          );
           return;
         }
-        if (!(await roleGuard.assertFeature('writeOperations', 'Remove Connection Profile'))) {
+        if (
+          !(await roleGuard.assertFeature(
+            'writeOperations',
+            localize('commands.core.removeProfile.featureName', 'Remove Connection Profile')
+          ))
+        ) {
           return;
         }
 
+        const removeLabel = localize('commands.core.removeProfile.action', 'Remove');
         const confirmation = await vscode.window.showWarningMessage(
-          `Remove profile "${profile.name}" and all associated secrets?`,
+          localize(
+            'commands.core.removeProfile.confirm',
+            'Remove profile "{0}" and all associated secrets?',
+            profile.name
+          ),
           { modal: true },
-          'Remove'
+          removeLabel
         );
 
-        if (confirmation !== 'Remove') {
+        if (confirmation !== removeLabel) {
           return;
         }
 
@@ -152,7 +202,9 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
         refreshExplorer();
         refreshConnectionStatus?.();
-        vscode.window.showInformationMessage(`Removed profile "${profile.name}".`);
+        vscode.window.showInformationMessage(
+          localize('commands.core.removeProfile.success', 'Removed profile "{0}".', profile.name)
+        );
       }
     ),
 
@@ -170,39 +222,48 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       };
 
       const runConnect = async (): Promise<void> => {
-        const statusBar = vscode.window.createStatusBarItem(
-          vscode.StatusBarAlignment.Left,
-          110
-        );
+        const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 110);
         try {
-          statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name}…`;
+          statusBar.text = localize(
+            'commands.core.connect.status.connecting',
+            '$(sync~spin) FileMaker: Connecting to {0}...',
+            profile.name
+          );
           statusBar.show();
 
-          await retryWithBackoff(
-            () => fmClient.createSession(profile),
-            policy,
-            {
-              shouldRetry: (err) => isRetryableConnectError(err),
-              onRetry: ({ attempt, delayMs, error }) => {
-                const seconds = Math.max(1, Math.round(delayMs / 1000));
-                statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name} — retry ${attempt + 1}/${policy.maxRetries} in ${seconds}s`;
-                logger.warn('Connect attempt failed; retrying with backoff.', {
-                  profileId: profile.id,
-                  attempt,
-                  delayMs,
-                  error
-                });
-              }
+          await retryWithBackoff(() => fmClient.createSession(profile), policy, {
+            shouldRetry: (err) => isRetryableConnectError(err),
+            onRetry: ({ attempt, delayMs, error }) => {
+              const seconds = Math.max(1, Math.round(delayMs / 1000));
+              statusBar.text = localize(
+                'commands.core.connect.status.retrying',
+                '$(sync~spin) FileMaker: Connecting to {0} - retry {1}/{2} in {3}s',
+                profile.name,
+                attempt + 1,
+                policy.maxRetries,
+                seconds
+              );
+              logger.warn('Connect attempt failed; retrying with backoff.', {
+                profileId: profile.id,
+                attempt,
+                delayMs,
+                error
+              });
             }
-          );
+          });
 
           await profileStore.setActiveProfileId(profile.id);
           refreshExplorer();
           refreshConnectionStatus?.();
-          vscode.window.showInformationMessage(`Connected to "${profile.name}".`);
+          vscode.window.showInformationMessage(
+            localize('commands.core.connect.success', 'Connected to "{0}".', profile.name)
+          );
         } catch (error) {
           await showCommandError(error, {
-            fallbackMessage: 'Failed to connect to FileMaker profile.',
+            fallbackMessage: localize(
+              'commands.core.connect.failed',
+              'Failed to connect to FileMaker profile.'
+            ),
             logger,
             logMessage: 'Connect command failed.',
             actions: {
@@ -242,10 +303,15 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         onProfileDisconnected?.(profile.id);
         refreshExplorer();
         refreshConnectionStatus?.();
-        vscode.window.showInformationMessage(`Disconnected from "${profile.name}".`);
+        vscode.window.showInformationMessage(
+          localize('commands.core.disconnect.success', 'Disconnected from "{0}".', profile.name)
+        );
       } catch (error) {
         await showCommandError(error, {
-          fallbackMessage: 'Failed to disconnect from FileMaker profile.',
+          fallbackMessage: localize(
+            'commands.core.disconnect.failed',
+            'Failed to disconnect from FileMaker profile.'
+          ),
           logger,
           logMessage: 'Disconnect command failed.'
         });
@@ -267,7 +333,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         });
       } catch (error) {
         await showCommandError(error, {
-          fallbackMessage: 'Failed to list layouts.',
+          fallbackMessage: localize('commands.core.listLayouts.failed', 'Failed to list layouts.'),
           logger,
           logMessage: 'List layouts command failed.'
         });
@@ -287,8 +353,8 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       }
 
       const findJsonInput = await vscode.window.showInputBox({
-        title: 'Run Find',
-        prompt: 'Enter find query JSON array',
+        title: localize('commands.core.runFind.title', 'Run Find'),
+        prompt: localize('commands.core.runFind.findPrompt', 'Enter find query JSON array'),
         value: '[{}]',
         ignoreFocusOut: true
       });
@@ -297,27 +363,30 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       }
 
       const sortJsonInput = await vscode.window.showInputBox({
-        title: 'Run Find',
-        prompt: 'Enter sort JSON array (optional)',
+        title: localize('commands.core.runFind.title', 'Run Find'),
+        prompt: localize('commands.core.runFind.sortPrompt', 'Enter sort JSON array (optional)'),
         ignoreFocusOut: true
       });
 
       const limitInput = await vscode.window.showInputBox({
-        title: 'Run Find',
-        prompt: 'Enter limit (optional)',
+        title: localize('commands.core.runFind.title', 'Run Find'),
+        prompt: localize('commands.core.runFind.limitPrompt', 'Enter limit (optional)'),
         ignoreFocusOut: true
       });
 
       const offsetInput = await vscode.window.showInputBox({
-        title: 'Run Find',
-        prompt: 'Enter offset (optional)',
+        title: localize('commands.core.runFind.title', 'Run Find'),
+        prompt: localize('commands.core.runFind.offsetPrompt', 'Enter offset (optional)'),
         ignoreFocusOut: true
       });
 
       try {
         const findValidation = parseFindJson(findJsonInput);
         if (!findValidation.ok || !findValidation.value) {
-          throw new Error(findValidation.error ?? 'Find JSON is invalid.');
+          throw new Error(
+            findValidation.error ??
+              localize('commands.core.runFind.findInvalid', 'Find JSON is invalid.')
+          );
         }
 
         let sortValidationValue: Array<Record<string, unknown>> | undefined;
@@ -325,7 +394,10 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         if (sortJsonInput && sortJsonInput.trim().length > 0) {
           const sortValidation = parseSortJson(sortJsonInput);
           if (!sortValidation.ok || !sortValidation.value) {
-            throw new Error(sortValidation.error ?? 'Sort JSON is invalid.');
+            throw new Error(
+              sortValidation.error ??
+                localize('commands.core.runFind.sortInvalid', 'Sort JSON is invalid.')
+            );
           }
 
           sortValidationValue = sortValidation.value;
@@ -334,8 +406,14 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         const request: FindRecordsRequest = {
           query: findValidation.value,
           sort: sortValidationValue,
-          limit: parseOptionalNonNegativeInteger(limitInput, 'Limit'),
-          offset: parseOptionalNonNegativeInteger(offsetInput, 'Offset')
+          limit: parseOptionalNonNegativeInteger(
+            limitInput,
+            localize('commands.core.runFind.limitLabel', 'Limit')
+          ),
+          offset: parseOptionalNonNegativeInteger(
+            offsetInput,
+            localize('commands.core.runFind.offsetLabel', 'Offset')
+          )
         };
 
         const result = await fmClient.findRecords(profile, layout, request);
@@ -347,7 +425,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         });
       } catch (error) {
         await showCommandError(error, {
-          fallbackMessage: 'Failed to run find query.',
+          fallbackMessage: localize('commands.core.runFind.failed', 'Failed to run find query.'),
           logger,
           logMessage: 'Run find command failed.'
         });
@@ -367,8 +445,8 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       }
 
       const recordId = await vscode.window.showInputBox({
-        title: 'Get Record by ID',
-        prompt: 'Enter FileMaker record ID',
+        title: localize('commands.core.getRecord.title', 'Get Record by ID'),
+        prompt: localize('commands.core.getRecord.prompt', 'Enter FileMaker record ID'),
         ignoreFocusOut: true,
         validateInput: (value) => validateRecordId(value).error
       });
@@ -386,61 +464,75 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         });
       } catch (error) {
         await showCommandError(error, {
-          fallbackMessage: 'Failed to get record by ID.',
+          fallbackMessage: localize(
+            'commands.core.getRecord.failed',
+            'Failed to get record by ID.'
+          ),
           logger,
           logMessage: 'Get record command failed.'
         });
       }
     }),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.openRecordViewer', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.openRecordViewer',
+      async (arg: unknown) => {
+        const contextArg = parseLayoutArg(arg);
 
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-      let recordId: string | undefined;
+        let profileId = contextArg.profileId;
+        let layout = contextArg.layout;
+        let recordId: string | undefined;
 
-      if (!profileId) {
-        const profile = await resolveProfileFromArg(undefined, profileStore, true);
-        if (!profile) {
-          return;
+        if (!profileId) {
+          const profile = await resolveProfileFromArg(undefined, profileStore, true);
+          if (!profile) {
+            return;
+          }
+
+          profileId = profile.id;
         }
 
-        profileId = profile.id;
-      }
+        if (!layout) {
+          const profile = await profileStore.getProfile(profileId);
+          if (!profile) {
+            vscode.window.showErrorMessage(
+              localize('commands.core.selectedProfileNotFound', 'Selected profile not found.')
+            );
+            return;
+          }
 
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
+          layout = await promptForLayout(profile, fmClient);
         }
 
-        layout = await promptForLayout(profile, fmClient);
-      }
+        if (layout) {
+          recordId = await vscode.window.showInputBox({
+            title: localize('commands.core.openRecordViewer.title', 'Open Record Viewer'),
+            prompt: localize(
+              'commands.core.openRecordViewer.recordIdPrompt',
+              'Record ID (optional)'
+            ),
+            ignoreFocusOut: true
+          });
+        }
 
-      if (layout) {
-        recordId = await vscode.window.showInputBox({
-          title: 'Open Record Viewer',
-          prompt: 'Record ID (optional)',
-          ignoreFocusOut: true
+        RecordViewerPanel.createOrShow(context, profileStore, fmClient, logger, {
+          profileId,
+          layout,
+          recordId
         });
       }
+    ),
 
-      RecordViewerPanel.createOrShow(context, profileStore, fmClient, logger, {
-        profileId,
-        layout,
-        recordId
-      });
-    }),
-
-    vscode.commands.registerCommand('filemakerDataApiTools.openQueryBuilder', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
-        profileId: contextArg.profileId,
-        layout: contextArg.layout
-      });
-    }),
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.openQueryBuilder',
+      async (arg: unknown) => {
+        const contextArg = parseLayoutArg(arg);
+        QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
+          profileId: contextArg.profileId,
+          layout: contextArg.layout
+        });
+      }
+    ),
 
     vscode.commands.registerCommand('filemakerDataApiTools.refreshExplorer', () => {
       refreshExplorer();

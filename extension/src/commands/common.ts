@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { FMClient } from '../services/fmClient';
 import type { ProfileStore } from '../services/profileStore';
 import type { ConnectionProfile } from '../types/fm';
+import { localize } from '../i18n';
 import { type ShowErrorOptions, showErrorWithDetails, toUserErrorMessage } from '../utils/errorUx';
 
 export interface ProfileCommandArg {
@@ -29,7 +30,9 @@ export async function resolveProfileFromArg(
   if (profileId) {
     const profile = await profileStore.getProfile(profileId);
     if (!profile) {
-      vscode.window.showErrorMessage(`Connection profile ${profileId} not found.`);
+      vscode.window.showErrorMessage(
+        localize('commands.common.profileNotFound', 'Connection profile {0} not found.', profileId)
+      );
     }
 
     return profile;
@@ -45,7 +48,12 @@ export async function pickProfile(
   const profiles = await profileStore.listProfiles();
 
   if (profiles.length === 0) {
-    vscode.window.showWarningMessage('No FileMaker connection profiles configured.');
+    vscode.window.showWarningMessage(
+      localize(
+        'commands.common.noProfilesConfigured',
+        'No FileMaker connection profiles configured.'
+      )
+    );
     return undefined;
   }
 
@@ -66,8 +74,11 @@ export async function pickProfile(
       profile
     })),
     {
-      title: 'Select FileMaker Connection Profile',
-      placeHolder: 'Choose a connection profile'
+      title: localize('commands.common.selectProfile.title', 'Select FileMaker Connection Profile'),
+      placeHolder: localize(
+        'commands.common.selectProfile.placeholder',
+        'Choose a connection profile'
+      )
     }
   );
 
@@ -81,13 +92,18 @@ export async function promptForLayout(
   const layouts = await fmClient.listLayouts(profile);
 
   if (layouts.length === 0) {
-    vscode.window.showWarningMessage('No layouts available for the selected profile.');
+    vscode.window.showWarningMessage(
+      localize(
+        'commands.common.noLayoutsAvailable',
+        'No layouts available for the selected profile.'
+      )
+    );
     return undefined;
   }
 
   const picked = await vscode.window.showQuickPick(layouts, {
-    title: 'Select Layout',
-    placeHolder: 'Choose a layout'
+    title: localize('commands.common.selectLayout.title', 'Select Layout'),
+    placeHolder: localize('commands.common.selectLayout.placeholder', 'Choose a layout')
   });
 
   return picked;
@@ -150,12 +166,12 @@ export async function openJsonDocument(content: unknown): Promise<void> {
 }
 
 export function formatError(error: unknown): string {
-  return toUserErrorMessage(error, 'Unexpected error.');
+  return toUserErrorMessage(
+    error,
+    localize('commands.common.unexpectedError', 'Unexpected error.')
+  );
 }
 
-export async function showCommandError(
-  error: unknown,
-  options?: ShowErrorOptions
-): Promise<void> {
+export async function showCommandError(error: unknown, options?: ShowErrorOptions): Promise<void> {
   await showErrorWithDetails(error, options);
 }

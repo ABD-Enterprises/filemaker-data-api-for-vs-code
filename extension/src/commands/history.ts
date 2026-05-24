@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { localize } from '../i18n';
 import type { HistoryStore } from '../services/historyStore';
 
 interface RegisterHistoryCommandDeps {
@@ -14,7 +15,9 @@ export function registerHistoryCommands(deps: RegisterHistoryCommandDeps): vscod
       const entries = historyStore.listEntries();
 
       if (entries.length === 0) {
-        vscode.window.showInformationMessage('No request history entries available yet.');
+        vscode.window.showInformationMessage(
+          localize('commands.history.noEntries', 'No request history entries available yet.')
+        );
         return;
       }
 
@@ -26,8 +29,11 @@ export function registerHistoryCommands(deps: RegisterHistoryCommandDeps): vscod
           entry
         })),
         {
-          title: 'Request History',
-          placeHolder: 'Select an entry to inspect details'
+          title: localize('commands.history.title', 'Request History'),
+          placeHolder: localize(
+            'commands.history.placeholder',
+            'Select an entry to inspect details'
+          )
         }
       );
 

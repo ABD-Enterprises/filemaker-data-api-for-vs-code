@@ -7,6 +7,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { ConnectionProfile, EnvironmentCompareResult, EnvironmentSet } from '../types/fm';
+import { localize } from '../i18n';
 import { openJsonDocument, showCommandError } from './common';
 import { EnvironmentComparePanel } from '../webviews/environmentCompare';
 
@@ -22,7 +23,9 @@ interface RegisterEnterpriseCommandsDeps {
 
 let lastCompareResult: EnvironmentCompareResult | undefined;
 
-export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps): vscode.Disposable[] {
+export function registerEnterpriseCommands(
+  deps: RegisterEnterpriseCommandsDeps
+): vscode.Disposable[] {
   const {
     profileStore,
     environmentSetStore,
@@ -35,21 +38,34 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
 
   return [
     vscode.commands.registerCommand('filemakerDataApiTools.createEnvironmentSet', async () => {
-      if (!(await roleGuard.assertFeature('writeOperations', 'Create Environment Set'))) {
+      if (
+        !(await roleGuard.assertFeature(
+          'writeOperations',
+          localize('commands.enterprise.createSet.featureName', 'Create Environment Set')
+        ))
+      ) {
         return;
       }
 
       const profiles = await profileStore.listProfiles();
       if (profiles.length < 2) {
-        vscode.window.showWarningMessage('At least two profiles are required to create an environment set.');
+        vscode.window.showWarningMessage(
+          localize(
+            'commands.enterprise.createSet.needTwoProfiles',
+            'At least two profiles are required to create an environment set.'
+          )
+        );
         return;
       }
 
       const name = await vscode.window.showInputBox({
-        title: 'Create Environment Set',
-        prompt: 'Environment set name',
+        title: localize('commands.enterprise.createSet.title', 'Create Environment Set'),
+        prompt: localize('commands.enterprise.createSet.namePrompt', 'Environment set name'),
         ignoreFocusOut: true,
-        validateInput: (value) => (value.trim().length === 0 ? 'Name is required.' : undefined)
+        validateInput: (value) =>
+          value.trim().length === 0
+            ? localize('commands.enterprise.createSet.nameRequired', 'Name is required.')
+            : undefined
       });
 
       if (!name) {
@@ -63,14 +79,22 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
           profileId: profile.id
         })),
         {
-          title: 'Select profiles for environment set',
+          title: localize(
+            'commands.enterprise.createSet.selectProfiles',
+            'Select profiles for environment set'
+          ),
           canPickMany: true,
           ignoreFocusOut: true
         }
       );
 
       if (!pickedProfiles || pickedProfiles.length < 2) {
-        vscode.window.showWarningMessage('Select at least two profiles.');
+        vscode.window.showWarningMessage(
+          localize(
+            'commands.enterprise.createSet.selectTwoProfiles',
+            'Select at least two profiles.'
+          )
+        );
         return;
       }
 
@@ -80,32 +104,47 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
       });
 
       refreshExplorer();
-      vscode.window.showInformationMessage(`Created environment set "${name}".`);
+      vscode.window.showInformationMessage(
+        localize('commands.enterprise.createSet.success', 'Created environment set "{0}".', name)
+      );
     }),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.compareEnvironments', async (arg: unknown) => {
-      const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
-      if (!environmentSet) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.compareEnvironments',
+      async (arg: unknown) => {
+        const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
+        if (!environmentSet) {
+          return;
+        }
 
-      try {
-        const profiles = await resolveProfilesForSet(environmentSet, profileStore);
-        const result = await compareService.compareEnvironmentSet(environmentSet, profiles, {
-          concurrency: settingsService.getBatchConcurrency(),
-          hashAlgorithm: settingsService.getSchemaHashAlgorithm()
-        });
+        try {
+          const profiles = await resolveProfilesForSet(environmentSet, profileStore);
+          const result = await compareService.compareEnvironmentSet(environmentSet, profiles, {
+            concurrency: settingsService.getBatchConcurrency(),
+            hashAlgorithm: settingsService.getSchemaHashAlgorithm()
+          });
 
-        lastCompareResult = result;
-        EnvironmentComparePanel.createOrShow({ compare: result }, `Env Compare: ${environmentSet.name}`);
-      } catch (error) {
-        await showCommandError(error, {
-          fallbackMessage: 'Environment compare failed.',
-          logger,
-          logMessage: 'Environment compare failed.'
-        });
+          lastCompareResult = result;
+          EnvironmentComparePanel.createOrShow(
+            { compare: result },
+            localize(
+              'commands.enterprise.compare.panelTitle',
+              'Env Compare: {0}',
+              environmentSet.name
+            )
+          );
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: localize(
+              'commands.enterprise.compare.failed',
+              'Environment compare failed.'
+            ),
+            logger,
+            logMessage: 'Environment compare failed.'
+          });
+        }
       }
-    }),
+    ),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.diffLayoutAcrossEnvironments',
@@ -118,7 +157,12 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
 
         const profiles = await resolveProfilesForSet(environmentSet, profileStore);
         if (profiles.length < 2) {
-          vscode.window.showErrorMessage('Environment set must reference at least two existing profiles.');
+          vscode.window.showErrorMessage(
+            localize(
+              'commands.enterprise.diff.needTwoProfiles',
+              'Environment set must reference at least two existing profiles.'
+            )
+          );
           return;
         }
 
@@ -130,20 +174,33 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
         }
 
         try {
-          const result = await compareService.diffLayoutAcrossEnvironments(environmentSet, layout, profiles, {
-            concurrency: settingsService.getBatchConcurrency(),
-            hashAlgorithm: settingsService.getSchemaHashAlgorithm()
-          });
+          const result = await compareService.diffLayoutAcrossEnvironments(
+            environmentSet,
+            layout,
+            profiles,
+            {
+              concurrency: settingsService.getBatchConcurrency(),
+              hashAlgorithm: settingsService.getSchemaHashAlgorithm()
+            }
+          );
 
           EnvironmentComparePanel.createOrShow(
             {
               layoutDiff: result
             },
-            `Layout Diff: ${environmentSet.name} / ${layout}`
+            localize(
+              'commands.enterprise.diff.panelTitle',
+              'Layout Diff: {0} / {1}',
+              environmentSet.name,
+              layout
+            )
           );
         } catch (error) {
           await showCommandError(error, {
-            fallbackMessage: 'Diff layout across environments failed.',
+            fallbackMessage: localize(
+              'commands.enterprise.diff.failed',
+              'Diff layout across environments failed.'
+            ),
             logger,
             logMessage: 'Diff layout across environments failed.'
           });
@@ -154,7 +211,10 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
     vscode.commands.registerCommand(
       'filemakerDataApiTools.exportEnvironmentComparisonReport',
       async (arg: unknown) => {
-        const allowed = await roleGuard.assertFeature('environmentExport', 'Export environment comparison report');
+        const allowed = await roleGuard.assertFeature(
+          'environmentExport',
+          localize('commands.enterprise.export.featureName', 'Export environment comparison report')
+        );
         if (!allowed) {
           return;
         }
@@ -173,17 +233,31 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
         }
 
         if (!result) {
-          vscode.window.showInformationMessage('Run FileMaker: Compare Environments first.');
+          vscode.window.showInformationMessage(
+            localize(
+              'commands.enterprise.export.compareFirst',
+              'Run FileMaker: Compare Environments first.'
+            )
+          );
           return;
         }
 
         const format = await vscode.window.showQuickPick(
           [
-            { label: 'JSON', value: 'json' as const },
-            { label: 'Markdown', value: 'md' as const }
+            {
+              label: localize('commands.enterprise.export.formatJson', 'JSON'),
+              value: 'json' as const
+            },
+            {
+              label: localize('commands.enterprise.export.formatMarkdown', 'Markdown'),
+              value: 'md' as const
+            }
           ],
           {
-            title: 'Export environment comparison report as'
+            title: localize(
+              'commands.enterprise.export.formatTitle',
+              'Export environment comparison report as'
+            )
           }
         );
 
@@ -193,7 +267,10 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
 
         const extension = format.value === 'json' ? 'json' : 'md';
         const uri = await vscode.window.showSaveDialog({
-          title: 'Export Environment Comparison Report',
+          title: localize(
+            'commands.enterprise.export.saveDialogTitle',
+            'Export Environment Comparison Report'
+          ),
           defaultUri: vscode.Uri.file(`filemaker-environment-compare.${extension}`),
           filters: format.value === 'json' ? { JSON: ['json'] } : { Markdown: ['md'] }
         });
@@ -208,18 +285,23 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
             : compareService.toMarkdownReport(result);
 
         await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
-        vscode.window.showInformationMessage('Exported environment comparison report.');
+        vscode.window.showInformationMessage(
+          localize('commands.enterprise.export.success', 'Exported environment comparison report.')
+        );
       }
     ),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.openEnvironmentSetJson', async (arg: unknown) => {
-      const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
-      if (!environmentSet) {
-        return;
-      }
+    vscode.commands.registerCommand(
+      'filemakerDataApiTools.openEnvironmentSetJson',
+      async (arg: unknown) => {
+        const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
+        if (!environmentSet) {
+          return;
+        }
 
-      await openJsonDocument(environmentSet);
-    })
+        await openJsonDocument(environmentSet);
+      }
+    )
   ];
 }
 
@@ -232,7 +314,13 @@ async function resolveEnvironmentSet(
   if (parsed.environmentSetId) {
     const byId = await environmentSetStore.getEnvironmentSet(parsed.environmentSetId);
     if (!byId) {
-      vscode.window.showErrorMessage(`Environment set ${parsed.environmentSetId} not found.`);
+      vscode.window.showErrorMessage(
+        localize(
+          'commands.enterprise.setNotFound',
+          'Environment set {0} not found.',
+          parsed.environmentSetId
+        )
+      );
       return undefined;
     }
 
@@ -241,7 +329,9 @@ async function resolveEnvironmentSet(
 
   const items = await environmentSetStore.listEnvironmentSets();
   if (items.length === 0) {
-    vscode.window.showInformationMessage('No environment sets found. Create one first.');
+    vscode.window.showInformationMessage(
+      localize('commands.enterprise.noSets', 'No environment sets found. Create one first.')
+    );
     return undefined;
   }
 
@@ -252,7 +342,7 @@ async function resolveEnvironmentSet(
       item
     })),
     {
-      title: 'Select environment set'
+      title: localize('commands.enterprise.selectSet.title', 'Select environment set')
     }
   );
 
@@ -288,7 +378,7 @@ async function pickLayoutForEnvironment(
       layout: row.layout
     })),
     {
-      title: 'Select layout for environment diff'
+      title: localize('commands.enterprise.pickLayout.title', 'Select layout for environment diff')
     }
   );
 

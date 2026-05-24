@@ -3,15 +3,21 @@
 
 const vscode = acquireVsCodeApi();
 
+function t(key, fallback, ...args) {
+  const messages = window.fileMakerI18n || {};
+  const template = typeof messages[key] === 'string' ? messages[key] : fallback;
+  return template.replace(/\{(\d+)\}/g, (match, index) =>
+    Object.prototype.hasOwnProperty.call(args, index) ? String(args[index]) : match
+  );
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // The HTML template wraps everything in <form id="wizardForm">. If that ever
   // gets refactored away (it did before — silent regression), fall back to
   // document.body so the input/change/submit listeners still install instead
   // of throwing on null and halting the rest of the script (which would skip
   // Save/Test/message bindings below).
-  const form = /** @type {HTMLElement} */ (
-    document.getElementById('wizardForm') || document.body
-  );
+  const form = /** @type {HTMLElement} */ (document.getElementById('wizardForm') || document.body);
   const directBtn = /** @type {HTMLButtonElement} */ (document.getElementById('modeDirectBtn'));
   const proxyBtn = /** @type {HTMLButtonElement} */ (document.getElementById('modeProxyBtn'));
   const directFields = /** @type {HTMLElement} */ (document.getElementById('directFields'));
@@ -85,7 +91,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (guard === 'block') {
       showStatus(
         'error',
-        'Save blocked by policy: please run a successful Test Connection on the current values first.'
+        t(
+          'webviews.connectionWizard.saveBlocked',
+          'Save blocked by policy: please run a successful Test Connection on the current values first.'
+        )
       );
       return;
     }
@@ -97,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     pendingConfirmedSave = false;
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
+    saveBtn.textContent = t('webviews.connectionWizard.saving', 'Saving...');
     clearStatus();
     vscode.postMessage({ type: 'save', payload: data });
   });
@@ -110,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     testBtn.disabled = true;
-    testBtn.textContent = 'Testing...';
+    testBtn.textContent = t('webviews.connectionWizard.testing', 'Testing...');
     clearStatus();
 
     vscode.postMessage({ type: 'testConnection', payload: data });
@@ -125,31 +134,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     switch (message.type) {
       case 'init':
-        if (message.testPolicy === 'off' || message.testPolicy === 'warn' || message.testPolicy === 'block') {
+        if (
+          message.testPolicy === 'off' ||
+          message.testPolicy === 'warn' ||
+          message.testPolicy === 'block'
+        ) {
           testPolicy = message.testPolicy;
         }
         renderTestState();
         break;
 
       case 'saveSuccess':
-        showStatus('success', message.message || 'Profile saved successfully.');
+        showStatus(
+          'success',
+          message.message ||
+            t('webviews.connectionWizard.profileSavedSuccessfully', 'Profile saved successfully.')
+        );
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Profile';
+        saveBtn.textContent = t('webviews.connectionWizard.saveButton', 'Save Profile');
         break;
 
       case 'saveError':
-        showStatus('error', message.message || 'Failed to save profile.');
+        showStatus(
+          'error',
+          message.message ||
+            t('webviews.connectionWizard.profileSaveFailed', 'Failed to save profile.')
+        );
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Profile';
+        saveBtn.textContent = t('webviews.connectionWizard.saveButton', 'Save Profile');
         break;
 
       case 'testStarted': {
-        showTestProgress('Reaching server…', message.timeoutMs);
+        showTestProgress(
+          t('webviews.connectionWizard.testProgress.reachingServer', 'Reaching server...'),
+          message.timeoutMs
+        );
         break;
       }
 
       case 'testProgress': {
-        showTestProgress(message.phase || 'Working…');
+        showTestProgress(message.phase || t('webviews.connectionWizard.working', 'Working...'));
         break;
       }
 
@@ -157,11 +181,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = collectFormData();
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'success', message: message.message, hash };
-        showStatus('success', message.message || 'Connection successful.');
+        showStatus(
+          'success',
+          message.message ||
+            t('webviews.connectionWizard.connectionSuccessfulShort', 'Connection successful.')
+        );
         hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
-        testBtn.textContent = 'Test Connection';
+        testBtn.textContent = t('webviews.connectionWizard.testButton', 'Test Connection');
         break;
       }
 
@@ -169,11 +197,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = collectFormData();
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'failure', message: message.message, hash };
-        showStatus('error', message.message || 'Connection failed.');
+        showStatus(
+          'error',
+          message.message ||
+            t('webviews.connectionWizard.connectionFailedShort', 'Connection failed.')
+        );
         hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
-        testBtn.textContent = 'Test Connection';
+        testBtn.textContent = t('webviews.connectionWizard.testButton', 'Test Connection');
         break;
       }
 
@@ -191,7 +223,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiVersionPath = getValue('apiVersionPath');
 
     if (!name || !serverUrl || !database) {
-      showStatus('error', 'Profile name, server URL, and database are required.');
+      showStatus(
+        'error',
+        t(
+          'webviews.connectionWizard.requiredProfileFields',
+          'Profile name, server URL, and database are required.'
+        )
+      );
       return null;
     }
 
@@ -208,7 +246,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const username = getValue('username');
       const password = getValue('password');
       if (!username) {
-        showStatus('error', 'Username is required for direct mode.');
+        showStatus(
+          'error',
+          t('webviews.connectionWizard.usernameRequired', 'Username is required for direct mode.')
+        );
         return null;
       }
       return { ...data, username, password };
@@ -217,7 +258,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const proxyEndpoint = getValue('proxyEndpoint');
     const proxyApiKey = getValue('proxyApiKey');
     if (!proxyEndpoint) {
-      showStatus('error', 'Proxy endpoint is required for proxy mode.');
+      showStatus(
+        'error',
+        t(
+          'webviews.connectionWizard.proxyEndpointRequired',
+          'Proxy endpoint is required for proxy mode.'
+        )
+      );
       return null;
     }
     return { ...data, proxyEndpoint, proxyApiKey };
@@ -303,7 +350,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const timeoutHint =
       typeof timeoutMs === 'number' && timeoutMs > 0
-        ? ` (timeout ${Math.round(timeoutMs / 1000)}s)`
+        ? t(
+            'webviews.connectionWizard.timeoutHint',
+            ' (timeout {0}s)',
+            Math.round(timeoutMs / 1000)
+          )
         : '';
 
     // Build the spinner + label via DOM APIs (textContent is safe; innerHTML with
@@ -348,19 +399,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let cls = 'test-badge';
     switch (testState.state) {
       case 'untested':
-        label = testPolicy === 'off' ? '' : '⚪ Connection not tested';
+        label =
+          testPolicy === 'off'
+            ? ''
+            : t('webviews.connectionWizard.badge.untested', 'Connection not tested');
         cls += ' untested';
         break;
       case 'success':
-        label = '🟢 Test passed';
+        label = t('webviews.connectionWizard.badge.success', 'Test passed');
         cls += ' success';
         break;
       case 'failure':
-        label = `🔴 Test failed${testState.message ? ': ' + testState.message : ''}`;
+        label = testState.message
+          ? t(
+              'webviews.connectionWizard.badge.failureWithMessage',
+              'Test failed: {0}',
+              testState.message
+            )
+          : t('webviews.connectionWizard.badge.failure', 'Test failed');
         cls += ' failure';
         break;
       case 'stale':
-        label = '🟡 Edits since last test';
+        label = t('webviews.connectionWizard.badge.stale', 'Edits since last test');
         cls += ' stale';
         break;
     }
@@ -382,7 +442,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showConfirmation(hash) {
     const confirmed = window.confirm(
-      'You have not run a successful Test Connection on the current values. Save anyway?'
+      t(
+        'webviews.connectionWizard.confirmUntestedSave',
+        'You have not run a successful Test Connection on the current values. Save anyway?'
+      )
     );
     if (confirmed) {
       pendingConfirmedSave = true;

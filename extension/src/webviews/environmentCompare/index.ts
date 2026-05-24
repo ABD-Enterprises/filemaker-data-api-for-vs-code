@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { EnvironmentCompareResult, LayoutEnvironmentDiffResult } from '../../types/fm';
+import { localize } from '../../i18n';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 
 interface EnvironmentComparePanelPayload {
@@ -19,7 +20,7 @@ export class EnvironmentComparePanel {
 
   public static createOrShow(
     payload: EnvironmentComparePanelPayload,
-    title = 'FileMaker Environment Compare'
+    title = localize('webviews.environmentCompare.panelTitle', 'FileMaker Environment Compare')
   ): void {
     const column = vscode.ViewColumn.One;
 
@@ -56,7 +57,7 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
-  <title>Environment Compare</title>
+  <title>${localize('webviews.environmentCompare.htmlTitle', 'Environment Compare')}</title>
   <style nonce="${nonce}">
     body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f6f9fc; color: #1f2937; }
     .wrap { padding: 16px; display: grid; gap: 14px; }
@@ -87,7 +88,9 @@ function renderCompare(compare: EnvironmentCompareResult): string {
       const presence = Object.entries(row.presence)
         .map(([profileId, present]) => `${escapeHtml(profileId)}=${present ? 'Y' : 'N'}`)
         .join(' | ');
-      const hashes = Object.values(row.metadataHashes).filter((value): value is string => Boolean(value));
+      const hashes = Object.values(row.metadataHashes).filter((value): value is string =>
+        Boolean(value)
+      );
       const hashVariants = new Set(hashes).size;
       const scripts = Object.entries(row.scripts)
         .map(([profileId, values]) => `${escapeHtml(profileId)}(${values.length})`)
@@ -103,16 +106,16 @@ function renderCompare(compare: EnvironmentCompareResult): string {
     .join('');
 
   return `<section class="card">
-    <h2>Environment Set: ${escapeHtml(compare.environmentSetName)}</h2>
-    <p>Generated ${escapeHtml(compare.generatedAt)}</p>
+    <h2>${escapeHtml(localize('webviews.environmentCompare.environmentSetHeading', 'Environment Set: {0}', compare.environmentSetName))}</h2>
+    <p>${escapeHtml(localize('webviews.environmentCompare.generated', 'Generated {0}', compare.generatedAt))}</p>
     <p>
-      <span class="badge ok">Profiles: ${compare.summary.profileCount}</span>
-      <span class="badge warn">Layouts: ${compare.summary.totalLayouts}</span>
-      <span class="badge bad">Differences: ${compare.summary.differentLayouts}</span>
+      <span class="badge ok">${escapeHtml(localize('webviews.environmentCompare.profilesBadge', 'Profiles: {0}', compare.summary.profileCount))}</span>
+      <span class="badge warn">${escapeHtml(localize('webviews.environmentCompare.layoutsBadge', 'Layouts: {0}', compare.summary.totalLayouts))}</span>
+      <span class="badge bad">${escapeHtml(localize('webviews.environmentCompare.differencesBadge', 'Differences: {0}', compare.summary.differentLayouts))}</span>
     </p>
     <table>
       <thead>
-        <tr><th>Layout</th><th>Presence Matrix</th><th>Metadata Hash Variants</th><th>Scripts</th></tr>
+        <tr><th>${escapeHtml(localize('webviews.environmentCompare.layoutHeader', 'Layout'))}</th><th>${escapeHtml(localize('webviews.environmentCompare.presenceHeader', 'Presence Matrix'))}</th><th>${escapeHtml(localize('webviews.environmentCompare.hashVariantsHeader', 'Metadata Hash Variants'))}</th><th>${escapeHtml(localize('webviews.environmentCompare.scriptsHeader', 'Scripts'))}</th></tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
@@ -130,25 +133,25 @@ function renderLayoutDiff(diff: LayoutEnvironmentDiffResult): string {
         .join('; ');
 
       return `<details>
-        <summary>${escapeHtml(profileResult.profileId)} ${profileResult.available ? '' : '(metadata unavailable)'}
+        <summary>${escapeHtml(profileResult.profileId)} ${profileResult.available ? '' : escapeHtml(localize('webviews.environmentCompare.metadataUnavailable', '(metadata unavailable)'))}
           <span class="badge ok">+${profileResult.addedFields.length}</span>
           <span class="badge bad">-${profileResult.removedFields.length}</span>
           <span class="badge warn">Δ${profileResult.changedFields.length}</span>
         </summary>
         <div>
-          <p>Metadata hash: ${escapeHtml(profileResult.metadataHash ?? 'n/a')}</p>
-          <p>Scripts: ${profileResult.scripts.map((script) => escapeHtml(script)).join(', ') || '-'}</p>
-          <p>Added fields: ${profileResult.addedFields.map((field) => escapeHtml(field)).join(', ') || '-'}</p>
-          <p>Removed fields: ${profileResult.removedFields.map((field) => escapeHtml(field)).join(', ') || '-'}</p>
-          <p>Changed fields: ${changedFields || '-'}</p>
+          <p>${escapeHtml(localize('webviews.environmentCompare.metadataHash', 'Metadata hash: {0}', profileResult.metadataHash ?? 'n/a'))}</p>
+          <p>${escapeHtml(localize('webviews.environmentCompare.scripts', 'Scripts: {0}', profileResult.scripts.join(', ') || '-'))}</p>
+          <p>${escapeHtml(localize('webviews.environmentCompare.addedFields', 'Added fields: {0}', profileResult.addedFields.join(', ') || '-'))}</p>
+          <p>${escapeHtml(localize('webviews.environmentCompare.removedFields', 'Removed fields: {0}', profileResult.removedFields.join(', ') || '-'))}</p>
+          <p>${escapeHtml(localize('webviews.environmentCompare.changedFields', 'Changed fields: {0}', changedFields || '-'))}</p>
         </div>
       </details>`;
     })
     .join('');
 
   return `<section class="card">
-    <h2>Layout Diff: ${escapeHtml(diff.layout)}</h2>
-    <p>Environment Set: ${escapeHtml(diff.environmentSetName)} • Baseline: ${escapeHtml(diff.baselineProfileId)}</p>
+    <h2>${escapeHtml(localize('webviews.environmentCompare.layoutDiffHeading', 'Layout Diff: {0}', diff.layout))}</h2>
+    <p>${escapeHtml(localize('webviews.environmentCompare.layoutDiffMeta', 'Environment Set: {0} • Baseline: {1}', diff.environmentSetName, diff.baselineProfileId))}</p>
     ${details}
   </section>`;
 }
