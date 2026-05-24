@@ -70,9 +70,68 @@ describe('FmBridgeServer', () => {
     expect(body.error).toContain('Origin');
   });
 
+  it('serves health checks without bridge token authentication', async () => {
+    const server = new FmBridgeServer(
+      createProfileStoreStub(),
+      createFmClientStub(),
+      createFmWebProjectServiceStub(),
+      logger
+    );
+
+    const response = await invokeBridgeRequest(server, '/healthz', {
+      method: 'GET'
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.json).toEqual({ status: 'ok' });
+  });
+
+  it('permits remote clients only when explicitly configured', async () => {
+    const defaultServer = new FmBridgeServer(
+      createProfileStoreStub(),
+      createFmClientStub(),
+      createFmWebProjectServiceStub(),
+      logger
+    );
+
+    const defaultResponse = await invokeBridgeRequest(defaultServer, '/fm/find', {
+      remoteAddress: '172.17.0.1',
+      payload: {
+        layout: 'Contacts',
+        query: [{}]
+      }
+    });
+
+    const headlessServer = new FmBridgeServer(
+      createProfileStoreStub(),
+      createFmClientStub(),
+      createFmWebProjectServiceStub(),
+      logger,
+      {
+        allowRemoteClients: true
+      }
+    );
+
+    const headlessResponse = await invokeBridgeRequest(headlessServer, '/fm/find', {
+      remoteAddress: '172.17.0.1',
+      payload: {
+        layout: 'Contacts',
+        query: [{}]
+      }
+    });
+
+    expect(defaultResponse.status).toBe(403);
+    expect(headlessResponse.status).toBe(200);
+  });
+
   it('returns timeout/abort failures from route handlers', async () => {
     const findRecords = vi.fn(
-      async (_profile: ConnectionProfile, _layout: string, _request: unknown, control?: { signal?: AbortSignal }) =>
+      async (
+        _profile: ConnectionProfile,
+        _layout: string,
+        _request: unknown,
+        control?: { signal?: AbortSignal }
+      ) =>
         new Promise<FindRecordsResult>((_resolve, reject) => {
           control?.signal?.addEventListener('abort', () => reject(new Error('Request timed out.')));
         })
@@ -107,12 +166,19 @@ async function invokeBridgeRequest(
   server: FmBridgeServer,
   route: string,
   input: {
+    method?: string;
     origin?: string;
     payload?: Record<string, unknown>;
     remoteAddress?: string;
   }
 ): Promise<{ status: number; body: string; json: unknown; headers: Record<string, string> }> {
-  const request = buildRequest(route, input.origin, input.payload, input.remoteAddress);
+  const request = buildRequest(
+    route,
+    input.method,
+    input.origin,
+    input.payload,
+    input.remoteAddress
+  );
   const response = buildResponse();
 
   const bridge = server as unknown as {
@@ -135,6 +201,7 @@ async function invokeBridgeRequest(
 
 function buildRequest(
   route: string,
+  method: string | undefined,
   origin: string | undefined,
   payload: Record<string, unknown> | undefined,
   remoteAddress = '127.0.0.1'
@@ -143,7 +210,7 @@ function buildRequest(
     read() {}
   }) as IncomingMessage;
 
-  readable.method = 'POST';
+  readable.method = method ?? 'POST';
   readable.url = route;
   readable.headers = {
     'content-type': 'application/json',

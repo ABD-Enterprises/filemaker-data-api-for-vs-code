@@ -49,7 +49,7 @@ jobs:
           # number, with a one-line rationale in the commit message
           # (e.g., "raising to 5 MB to accommodate webview chunk split").
           # See docs/BUNDLE_SIZE.md for the policy.
-          VSIX_BUDGET_BYTES: '5242880'  # 5 MiB
+          VSIX_BUDGET_BYTES: '5242880' # 5 MiB
         run: |
           VSIX_PATH="$(echo artifacts/*.vsix)"
           if [ ! -f "$VSIX_PATH" ]; then
@@ -63,6 +63,15 @@ jobs:
             echo "::error::VSIX exceeds the size budget. See docs/BUNDLE_SIZE.md for how to raise the cap intentionally vs. trim the bundle."
             exit 1
           fi
+
+  headless-bridge-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and smoke-test headless bridge image
+        run: scripts/smoke-headless-bridge-image.sh filemaker-bridge:ci
 
   package:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -129,3 +138,42 @@ jobs:
                 --notes-file -
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish-headless-bridge-image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-test
+      - headless-bridge-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/abd-enterprises/filemaker-bridge
+          tags: |
+            type=ref,event=tag
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

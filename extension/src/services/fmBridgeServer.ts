@@ -19,6 +19,17 @@ const DEFAULT_ROUTE_TIMEOUT_MS = 20_000;
 export interface FmBridgeServerOptions {
   /** Resolved at request time so settings updates flow live. */
   getRateLimitConfig?: () => BridgeRateLimitConfig;
+  /** Host/interface to bind. Defaults to localhost for the embedded VS Code bridge. */
+  host?: string;
+  /** Port to bind. Defaults to 0 so the OS assigns an ephemeral localhost port. */
+  port?: number;
+  /**
+   * Permit non-local clients. Keep false for the embedded bridge; Docker/headless mode
+   * enables this explicitly and still requires the bridge token.
+   */
+  allowRemoteClients?: boolean;
+  /** Fixed token for automation clients. Defaults to a generated per-process token. */
+  sessionToken?: string;
 }
 
 export class FmBridgeServer {
@@ -54,7 +65,7 @@ export class FmBridgeServer {
 
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(this.options.port ?? 0, this.options.host ?? '127.0.0.1', () => {
         resolve();
       });
     });
@@ -67,7 +78,7 @@ export class FmBridgeServer {
 
     this.server = server;
     this.port = address.port;
-    this.sessionToken = randomBytes(32).toString('hex');
+    this.sessionToken = this.options.sessionToken ?? randomBytes(32).toString('hex');
     const rateConfig = this.options.getRateLimitConfig?.() ?? DEFAULT_BRIDGE_RATE_LIMIT;
     this.rateLimiter = new BridgeRateLimiter(rateConfig);
     this.rateLimitWarningEmitted = false;
@@ -130,8 +141,13 @@ export class FmBridgeServer {
         return;
       }
 
-      if (!isLocalSocket(request.socket.remoteAddress)) {
+      if (!this.options.allowRemoteClients && !isLocalSocket(request.socket.remoteAddress)) {
         this.sendJson(response, 403, { error: 'Bridge server only accepts localhost clients.' });
+        return;
+      }
+
+      if (request.method === 'GET' && getHealthPath(request.url)) {
+        this.sendJson(response, 200, { status: 'ok' });
         return;
       }
 
@@ -233,7 +249,9 @@ export class FmBridgeServer {
 
         const request: FindRecordsRequest = {
           query: query as Array<Record<string, unknown>>,
-          sort: Array.isArray(payload.sort) ? (payload.sort as Array<Record<string, unknown>>) : undefined,
+          sort: Array.isArray(payload.sort)
+            ? (payload.sort as Array<Record<string, unknown>>)
+            : undefined,
           limit: parseOptionalNumber(payload.limit),
           offset: parseOptionalNumber(payload.offset)
         };
@@ -308,9 +326,7 @@ export class FmBridgeServer {
   private async resolveProfile(profileIdFromRequest?: string) {
     const project = await this.fmWebProjectService.readProjectConfig();
     const profileId =
-      profileIdFromRequest ??
-      project?.activeProfileId ??
-      this.profileStore.getActiveProfileId();
+      profileIdFromRequest ?? project?.activeProfileId ?? this.profileStore.getActiveProfileId();
 
     if (!profileId) {
       return undefined;
@@ -378,7 +394,9 @@ function isLocalSocket(remoteAddress: string | undefined): boolean {
     return false;
   }
 
-  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+  return (
+    remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1'
+  );
 }
 
 function isAllowedOrigin(origin: string): boolean {
@@ -405,6 +423,15 @@ function getRoutePath(rawUrl: string | undefined): string | undefined {
   }
 
   return parsed.pathname.slice(3);
+}
+
+function getHealthPath(rawUrl: string | undefined): boolean {
+  if (!rawUrl) {
+    return false;
+  }
+
+  const parsed = new URL(rawUrl, 'http://127.0.0.1');
+  return parsed.pathname === '/healthz';
 }
 
 function readHeader(value: string | string[] | undefined): string | undefined {

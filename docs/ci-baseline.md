@@ -8,13 +8,16 @@ for re-introducing a custom guardrail.
 
 Branch protection on `main` enforces two contexts:
 
-| Context | Source | What it covers |
-|---|---|---|
+| Context      | Source                     | What it covers                                                                                                           |
+| ------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `build-test` | `.github/workflows/ci.yml` | `npm install`, `npm audit --omit=dev --audit-level=high`, `lint`, `typecheck`, `test:coverage`, `build`, `package:check` |
-| `CodeQL`     | GitHub default setup | Code scanning for `actions`, `javascript`, `javascript-typescript`, `typescript` |
+| `CodeQL`     | GitHub default setup       | Code scanning for `actions`, `javascript`, `javascript-typescript`, `typescript`                                         |
 
 Together these are the minimum bar a change must clear before it can land
 on `main`.
+
+Release-tag builds also publish the headless FileMaker bridge image to GHCR
+after the Docker image smoke test passes.
 
 ## What `build-test` actually runs
 
@@ -28,6 +31,12 @@ and `npm run package:check` reproduce it.
 - **Tests** — `vitest run --coverage` in each workspace that ships a test script
 - **Build** — `esbuild` bundle of the extension entry point + webview asset copy
 - **Package check** — `vsce package` to ensure the extension is publishable
+
+## Headless bridge image
+
+The `headless-bridge-image` job builds the standalone bridge Docker image and
+smoke-tests its `/healthz` endpoint. On release tags, `publish-headless-bridge-image`
+pushes the same image to `ghcr.io/abd-enterprises/filemaker-bridge`.
 
 ## What was removed and why
 
