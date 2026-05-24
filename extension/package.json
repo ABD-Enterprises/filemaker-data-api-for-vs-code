@@ -87,6 +87,12 @@
           "name": "Connections",
           "contextualTitle": "FileMaker",
           "icon": "media/filemaker.svg"
+        },
+        {
+          "id": "filemakerLayoutInspector",
+          "name": "Layout Inspector",
+          "contextualTitle": "FileMaker",
+          "icon": "media/filemaker.svg"
         }
       ]
     },
@@ -94,6 +100,10 @@
       {
         "view": "filemakerExplorer",
         "contents": "No FileMaker connections yet.\n[Add Connection Profile](command:filemakerDataApiTools.addConnectionProfile)\n[Open Walkthrough](command:filemakerDataApiTools.openWelcomeWalkthrough)\n\nYour passwords stay in the OS keychain. Learn more in the [User Guide](command:filemakerDataApiTools.openUserGuide)."
+      },
+      {
+        "view": "filemakerLayoutInspector",
+        "contents": "Select a layout in Connections or choose one directly.\n[Select Layout](command:filemakerDataApiTools.selectLayoutForInspector)\n[Connect](command:filemakerDataApiTools.connect)"
       }
     ],
     "walkthroughs": [
@@ -198,6 +208,16 @@
       {
         "command": "filemakerDataApiTools.openLayoutMetadata",
         "title": "FileMaker: Open Layout Metadata"
+      },
+      {
+        "command": "filemakerDataApiTools.selectLayoutForInspector",
+        "title": "FileMaker: Select Layout for Inspector",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "filemakerDataApiTools.refreshLayoutInspector",
+        "title": "FileMaker: Refresh Layout Inspector",
+        "icon": "$(refresh)"
       },
       {
         "command": "filemakerDataApiTools.refreshSchemaCache",
@@ -396,6 +416,16 @@
           "command": "filemakerDataApiTools.refreshExplorer",
           "when": "view == filemakerExplorer",
           "group": "navigation@2"
+        },
+        {
+          "command": "filemakerDataApiTools.selectLayoutForInspector",
+          "when": "view == filemakerLayoutInspector",
+          "group": "navigation@1"
+        },
+        {
+          "command": "filemakerDataApiTools.refreshLayoutInspector",
+          "when": "view == filemakerLayoutInspector",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -440,6 +470,11 @@
           "group": "navigation@1"
         },
         {
+          "command": "filemakerDataApiTools.selectLayoutForInspector",
+          "when": "view == filemakerExplorer && viewItem == fmLayout",
+          "group": "navigation@2"
+        },
+        {
           "command": "filemakerDataApiTools.runSavedQuery",
           "when": "view == filemakerExplorer && viewItem == fmSavedQuery",
           "group": "inline@1"
@@ -467,32 +502,32 @@
         {
           "command": "filemakerDataApiTools.editRecordById",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "filemakerDataApiTools.captureSchemaSnapshot",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "filemakerDataApiTools.diffAgainstLatestSnapshot",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "filemakerDataApiTools.generateTypesForLayout",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@5"
+          "group": "navigation@6"
         },
         {
           "command": "filemakerDataApiTools.batchExportFind",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@6"
+          "group": "navigation@7"
         },
         {
           "command": "filemakerDataApiTools.batchUpdateFromFile",
           "when": "view == filemakerExplorer && viewItem == fmLayout",
-          "group": "navigation@7"
+          "group": "navigation@8"
         },
         {
           "command": "filemakerDataApiTools.openSchemaSnapshotJson",
@@ -558,6 +593,8 @@
         { "command": "filemakerDataApiTools.removeConnectionProfile", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.selectActiveProfile", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.listLayouts", "when": "filemaker.hasProfiles" },
+        { "command": "filemakerDataApiTools.selectLayoutForInspector", "when": "filemaker.hasProfiles" },
+        { "command": "filemakerDataApiTools.refreshLayoutInspector", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.refreshSchemaCache", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.openScriptRunner", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.openQueryBuilder", "when": "filemaker.hasProfiles" },
