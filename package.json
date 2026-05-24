@@ -18,6 +18,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "format": "npm run format --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",
+    "docs:api": "npm run docs:api -w extension",
     "package:check": "npm run package:check -w extension",
     "package:vsix": "npm run build --workspaces --if-present && npm run package:vsix -w extension",
     "setup": "node ./setup.mjs"

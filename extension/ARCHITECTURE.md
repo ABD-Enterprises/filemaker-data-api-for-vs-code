@@ -4,6 +4,8 @@
 
 The extension is organized around service boundaries with a thin command/webview layer. Services handle all business logic and Data API communication. Commands and webviews are thin entry points that delegate to services.
 
+Generated API documentation for `src/services` and `src/types` is published at [abd-enterprises.github.io/filemaker-data-api-for-vs-code/api/](https://abd-enterprises.github.io/filemaker-data-api-for-vs-code/api/). Run `npm run docs:api` from the repository root to regenerate the local TypeDoc output in `docs/api`.
+
 ## Module Boundaries
 
 ### Composition Root
