@@ -5,6 +5,11 @@
   "version": "1.1.0",
   "publisher": "deffenda",
   "license": "MIT",
+  "author": {
+    "name": "ABD Enterprises",
+    "url": "https://abdenterprises.com?ref=vscode",
+    "email": "registrar@abdenterprises.com"
+  },
   "icon": "docs/marketplace/icon.png",
   "galleryBanner": {
     "color": "#081726",
@@ -14,7 +19,7 @@
     "type": "git",
     "url": "https://github.com/deffenda/filemaker-data-api-for-vs-code.git"
   },
-  "homepage": "https://github.com/deffenda/filemaker-data-api-for-vs-code",
+  "homepage": "https://abdenterprises.com?ref=vscode",
   "bugs": {
     "url": "https://github.com/deffenda/filemaker-data-api-for-vs-code/issues"
   },

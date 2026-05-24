@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Attributed the extension to ABD Enterprises in README and `package.json`:
+  - new `author` field pointing at `https://abdenterprises.com`
+  - `homepage` now resolves to `abdenterprises.com?ref=vscode` (with the GitHub repo still linked via `repository`)
+  - README opens with an ABD attribution line and closes with a consulting-engagement table for users who need integration, migration, or modernization help
+
 ## 1.1.0
 
 Major usability, accessibility, security, and reliability release.

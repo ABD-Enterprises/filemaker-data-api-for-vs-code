@@ -4,6 +4,8 @@
 
 FileMaker Data API Tools turns VS Code into a serious FileMaker workspace: connect to a FileMaker server, inspect layouts and metadata, run find requests, edit records, compare schema snapshots, export large result sets, and review diagnostics without leaving the editor.
 
+**Built by [ABD Enterprises](https://abdenterprises.com?ref=vscode).** A free, open-source tool for FileMaker developers — distilled from the workflows we use on every client engagement.
+
 Built for teams that already live in VS Code:
 
 - Direct and proxy connection modes
@@ -136,6 +138,22 @@ Additional project docs:
 - [Security](./SECURITY.md)
 - [Upgrade Guide](./UPGRADE.md)
 - [QA Smoke Test (v1.1.0)](./docs/QA/SMOKE_TEST_v1_1_0.md) — manual first-time-user test plan for release validation
+
+## Need help with FileMaker integration?
+
+This extension is free and MIT-licensed. The team behind it — [ABD Enterprises](https://abdenterprises.com?ref=vscode) — has been delivering FileMaker integration, migration, and modernization work since 2005.
+
+If you need a hand with the work behind the tool:
+
+| Engagement | Price | What you get |
+| --- | --- | --- |
+| **Discovery Sprint** | $3,000 / 1 week | Documented requirements + effort estimate |
+| **Integration Audit** | $4,500 / 1 week | Architecture review, gap analysis, prioritized remediation |
+| **Migration Assessment** | $9,000 / 2 weeks | Honest evaluation: modernize within FileMaker, or move on |
+| **Platform Modernization** | $25k – $150k | Execute the chosen path in measured phases |
+| **Retainer** | $5,000 / month | Ongoing maintenance, feature work, FM Server administration |
+
+**Contact:** [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension) · [abdenterprises.com](https://abdenterprises.com?ref=vscode)
 
 ## License
 
