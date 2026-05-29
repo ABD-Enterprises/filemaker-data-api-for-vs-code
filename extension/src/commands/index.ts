@@ -23,7 +23,7 @@ import {
 import { ConnectionWizardPanel } from '../webviews/connectionWizard';
 import { QueryBuilderPanel } from '../webviews/queryBuilder';
 import { RecordViewerPanel } from '../webviews/recordViewer';
-import { retryWithBackoff, type BackoffPolicy } from '../utils/backoff';
+import type { BackoffPolicy } from '../utils/backoff';
 import { showConnectionQuickPick } from '../views/connectionStatusBar';
 
 interface RegisterCoreCommandDeps {
@@ -178,6 +178,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
           statusBar.text = `$(sync~spin) FileMaker: Connecting to ${profile.name}…`;
           statusBar.show();
 
+          const { retryWithBackoff } = await import('../utils/backoff');
           await retryWithBackoff(
             () => fmClient.createSession(profile),
             policy,

@@ -17,8 +17,8 @@ import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
-import { BatchService } from './services/batchService';
-import { FMClient } from './services/fmClient';
+import type { BatchService } from './services/batchService';
+import type { FMClient } from './services/fmClient';
 import { HistoryStore } from './services/historyStore';
 import { JobRunner } from './services/jobRunner';
 import { Logger } from './services/logger';
@@ -37,11 +37,65 @@ import { EnvironmentCompareService } from './enterprise/environmentCompareServic
 import { RoleGuard } from './enterprise/roleGuard';
 import { MetricsStore } from './diagnostics/metricsStore';
 import { OfflineModeService } from './offline/offlineModeService';
-import { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
+import type { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
 import { PluginRegistry } from './plugins/pluginRegistry';
 import { ConnectionStatusBar } from './views/connectionStatusBar';
 import { FMExplorerProvider } from './views/fmExplorer';
 import { OfflineStatusBar } from './views/offlineStatusBar';
+
+function createLazyFmClient(
+  loadClient: () => Promise<FMClient>,
+  getLoadedClient: () => FMClient | undefined
+): FMClient {
+  return new Proxy({} as FMClient, {
+    get(_target, property) {
+      if (property === 'then') {
+        return undefined;
+      }
+
+      if (property === 'invalidateProfileCache') {
+        return (profileId: string): void => {
+          getLoadedClient()?.invalidateProfileCache(profileId);
+        };
+      }
+
+      if (property === 'shouldRefreshSession') {
+        return (profileId: string, now?: number): boolean =>
+          getLoadedClient()?.shouldRefreshSession(profileId, now) ?? false;
+      }
+
+      return async (...args: unknown[]) => {
+        const client = await loadClient();
+        const value = (client as unknown as Record<PropertyKey, unknown>)[property];
+        return typeof value === 'function' ? value.apply(client, args) : value;
+      };
+    }
+  });
+}
+
+function createLazyBatchService(loadService: () => Promise<BatchService>): BatchService {
+  return new Proxy({} as BatchService, {
+    get(_target, property) {
+      if (property === 'then') {
+        return undefined;
+      }
+
+      return async (...args: unknown[]) => {
+        const service = await loadService();
+        const value = (service as unknown as Record<PropertyKey, unknown>)[property];
+        return typeof value === 'function' ? value.apply(service, args) : value;
+      };
+    }
+  });
+}
+
+function createLazyCircuitBreakerRegistry(
+  getLoadedRegistry: () => CircuitBreakerRegistry | undefined
+): Pick<CircuitBreakerRegistry, 'list'> {
+  return {
+    list: (...args) => getLoadedRegistry()?.list(...args) ?? []
+  };
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const settingsService = new SettingsService();
@@ -111,19 +165,97 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const timeoutMs = settingsService.getRequestTimeoutMs();
 
-  const fmClient = new FMClient(
-    secretStore,
-    logger,
-    timeoutMs,
-    undefined,
-    undefined,
-    historyStore,
-    metricsStore,
-    () => ({
-      maxAgeMs: settingsService.getSessionMaxAgeMs(),
-      refreshLeadMs: settingsService.getSessionRefreshLeadMs()
-    })
+  let loadedFmClient: FMClient | undefined;
+  let fmClientLoad: Promise<FMClient> | undefined;
+  const loadFmClient = (): Promise<FMClient> => {
+    if (loadedFmClient) {
+      return Promise.resolve(loadedFmClient);
+    }
+
+    fmClientLoad ??= import('./services/fmClient')
+      .then(({ FMClient }) => {
+        loadedFmClient = new FMClient(
+          secretStore,
+          logger,
+          timeoutMs,
+          undefined,
+          undefined,
+          historyStore,
+          metricsStore,
+          () => ({
+            maxAgeMs: settingsService.getSessionMaxAgeMs(),
+            refreshLeadMs: settingsService.getSessionRefreshLeadMs()
+          })
+        );
+        return loadedFmClient;
+      })
+      .catch((error) => {
+        fmClientLoad = undefined;
+        throw error;
+      });
+
+    return fmClientLoad;
+  };
+  const fmClient = createLazyFmClient(loadFmClient, () => loadedFmClient);
+
+  let loadedCircuitBreakerRegistry: CircuitBreakerRegistry | undefined;
+  let circuitBreakerRegistryLoad: Promise<CircuitBreakerRegistry> | undefined;
+  const loadCircuitBreakerRegistry = (): Promise<CircuitBreakerRegistry> => {
+    if (loadedCircuitBreakerRegistry) {
+      return Promise.resolve(loadedCircuitBreakerRegistry);
+    }
+
+    circuitBreakerRegistryLoad ??= import('./performance/circuitBreakerRegistry')
+      .then(({ CircuitBreakerRegistry }) => {
+        loadedCircuitBreakerRegistry = new CircuitBreakerRegistry();
+        return loadedCircuitBreakerRegistry;
+      })
+      .catch((error) => {
+        circuitBreakerRegistryLoad = undefined;
+        throw error;
+      });
+
+    return circuitBreakerRegistryLoad;
+  };
+  const circuitBreakerRegistry = createLazyCircuitBreakerRegistry(
+    () => loadedCircuitBreakerRegistry
   );
+
+  let loadedBatchService: BatchService | undefined;
+  let batchServiceLoad: Promise<BatchService> | undefined;
+  const loadBatchService = (): Promise<BatchService> => {
+    if (loadedBatchService) {
+      return Promise.resolve(loadedBatchService);
+    }
+
+    batchServiceLoad ??= Promise.all([
+      import('./services/batchService'),
+      loadCircuitBreakerRegistry()
+    ])
+      .then(([{ BatchService }, registry]) => {
+        loadedBatchService = new BatchService(fmClient, {
+          getMaxRecords: () => {
+            const configured = settingsService.getBatchMaxRecords();
+            return roleGuard.resolvePerformanceMode() === 'high-scale'
+              ? Math.min(configured, 10_000)
+              : configured;
+          },
+          getConcurrency: () => settingsService.getBatchConcurrency(),
+          getDryRunDefault: () => settingsService.getBatchDryRunDefault(),
+          getPerformanceMode: () => roleGuard.resolvePerformanceMode(),
+          circuitBreakerRegistry: registry
+        });
+        return loadedBatchService;
+      })
+      .catch((error) => {
+        batchServiceLoad = undefined;
+        throw error;
+      });
+
+    return batchServiceLoad;
+  };
+  const batchService = createLazyBatchService(loadBatchService);
+
   const schemaService = new SchemaService(fmClient, logger, {
     getCacheTtlMs: () =>
       normalizeSchemaCacheTtlMs(settingsService.getSchemaCacheTtlSeconds()),
@@ -141,19 +273,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     getOutputDir: () => settingsService.getTypegenOutputDir(),
     getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     isWorkspaceTrusted: () => vscode.workspace.isTrusted
-  });
-  const circuitBreakerRegistry = new CircuitBreakerRegistry();
-  const batchService = new BatchService(fmClient, {
-    getMaxRecords: () => {
-      const configured = settingsService.getBatchMaxRecords();
-      return roleGuard.resolvePerformanceMode() === 'high-scale'
-        ? Math.min(configured, 10_000)
-        : configured;
-    },
-    getConcurrency: () => settingsService.getBatchConcurrency(),
-    getDryRunDefault: () => settingsService.getBatchDryRunDefault(),
-    getPerformanceMode: () => roleGuard.resolvePerformanceMode(),
-    circuitBreakerRegistry
   });
   const pluginRegistry = new PluginRegistry(profileStore, fmClient, roleGuard, logger);
   const fmWebProjectService = new FmWebProjectService(
