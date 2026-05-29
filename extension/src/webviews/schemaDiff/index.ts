@@ -125,23 +125,26 @@ export class SchemaDiffPanel {
       <p id="meta"></p>
       <div class="summary" id="summary" role="status" aria-live="polite"></div>
       <div class="actions">
+        <div class="mode-switch" role="tablist" aria-label="Schema diff view mode">
+          <button id="sideBySideMode" type="button" role="tab" aria-selected="true">Side by Side</button>
+          <button id="treeMode" type="button" role="tab" aria-selected="false">Tree</button>
+        </div>
+        <label class="filter-toggle">
+          <input id="changesOnly" type="checkbox" />
+          <span>Show only changes</span>
+        </label>
         <button id="exportButton">Export Diff JSON</button>
       </div>
     </header>
 
-    <section>
-      <h2>Added Fields</h2>
-      <div id="added"></div>
+    <section id="sideBySidePanel">
+      <h2>Side by Side</h2>
+      <div id="sideBySide"></div>
     </section>
 
-    <section>
-      <h2>Removed Fields</h2>
-      <div id="removed"></div>
-    </section>
-
-    <section>
-      <h2>Changed Fields</h2>
-      <div id="changed"></div>
+    <section id="treePanel" hidden>
+      <h2>Tree</h2>
+      <div id="tree"></div>
     </section>
   </main>
 

@@ -163,6 +163,7 @@ export interface SchemaDiffResult {
   comparedAt: string;
   added: FileMakerFieldMetadata[];
   removed: FileMakerFieldMetadata[];
+  unchanged?: FileMakerFieldMetadata[];
   changed: SchemaFieldChanged[];
   summary: SchemaDiffSummary;
   hasChanges: boolean;

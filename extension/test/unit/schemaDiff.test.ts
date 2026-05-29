@@ -17,10 +17,12 @@ describe('schemaDiff', () => {
       layout: 'Contacts',
       beforeFields: [
         { name: 'FirstName', type: 'text', repetitions: 1 },
+        { name: 'StableName', type: 'text', repetitions: 1 },
         { name: 'LegacyCode', type: 'text', repetitions: 1 }
       ],
       afterFields: [
         { name: 'FirstName', type: 'number', repetitions: 1 },
+        { name: 'StableName', type: 'text', repetitions: 1 },
         { name: 'LastName', type: 'text', repetitions: 1 }
       ]
     });
@@ -28,6 +30,7 @@ describe('schemaDiff', () => {
     expect(diff.summary).toEqual({ added: 1, removed: 1, changed: 1 });
     expect(diff.added.map((field) => field.name)).toEqual(['LastName']);
     expect(diff.removed.map((field) => field.name)).toEqual(['LegacyCode']);
+    expect(diff.unchanged?.map((field) => field.name)).toEqual(['StableName']);
     const changed = diff.changed.at(0);
     expect(changed?.fieldName).toBe('FirstName');
     expect(changed?.changes.some((change) => change.attribute === 'type')).toBe(true);
@@ -44,6 +47,7 @@ describe('schemaDiff', () => {
 
     expect(diff.hasChanges).toBe(false);
     expect(diff.summary).toEqual({ added: 0, removed: 0, changed: 0 });
+    expect(diff.unchanged?.map((field) => field.name)).toEqual(['FirstName']);
   });
 
   it('posts schema diff input to a worker and resolves the worker result', async () => {
