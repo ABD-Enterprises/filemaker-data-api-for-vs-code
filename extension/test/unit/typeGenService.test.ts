@@ -146,6 +146,7 @@ void run;
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
       moduleResolution: ts.ModuleResolutionKind.Node10,
+      ignoreDeprecations: '6.0',
       lib: ['lib.es2020.d.ts', 'lib.dom.d.ts'],
       skipLibCheck: true
     });
