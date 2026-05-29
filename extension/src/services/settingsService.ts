@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import type { EnterpriseRole, PerformanceMode, SavedQueryScope, SchemaSnapshotStorage } from '../types/fm';
 import type { LogLevel } from './logger';
 import type { SecretFallbackMode } from './secretStore';
+import { DEFAULT_CONTAINER_UPLOAD_MAX_BYTES, normalizeContainerUploadMaxBytes } from '../utils/containerUpload';
 
 /**
  * Lazily computed allow-list of crypto hash algorithms available on this Node
@@ -238,6 +239,15 @@ export class SettingsService {
 
   public isBatchEnabled(): boolean {
     return this.getConfiguration('filemaker').get<boolean>('features.batch.enabled', true);
+  }
+
+  public getContainerUploadMaxBytes(): number {
+    return normalizeContainerUploadMaxBytes(
+      this.getConfiguration('filemaker').get<number>(
+        'containerUploadMaxBytes',
+        DEFAULT_CONTAINER_UPLOAD_MAX_BYTES
+      )
+    );
   }
 
   public isEnterpriseModeEnabled(): boolean {

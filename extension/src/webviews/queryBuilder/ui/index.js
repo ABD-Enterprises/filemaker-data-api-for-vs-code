@@ -27,6 +27,7 @@ const exportJsonButton = document.getElementById('exportJsonButton');
 const exportCsvButton = document.getElementById('exportCsvButton');
 const copyFetchButton = document.getElementById('copyFetchButton');
 const copyCurlButton = document.getElementById('copyCurlButton');
+const uploadContainerButton = document.getElementById('uploadContainerButton');
 const savedQueriesSelect = document.getElementById('savedQueriesSelect');
 const loadSavedButton = document.getElementById('loadSavedButton');
 const prevButton = document.getElementById('prevButton');
@@ -86,6 +87,13 @@ window.addEventListener('message', (event) => {
       break;
     case 'saveCurrentQuery':
       saveButton.click();
+      break;
+    case 'containerUploadResult':
+      setStatus(
+        message.payload && message.payload.completed
+          ? 'Container upload completed.'
+          : 'Container upload cancelled.'
+      );
       break;
     case 'error':
       setStatus(message.message || 'Unknown error.', true);
@@ -180,6 +188,19 @@ copyCurlButton.addEventListener('click', () => {
       ...payload,
       includeAuthHeader: includeAuthCheckbox.checked
     }
+  });
+});
+
+uploadContainerButton.addEventListener('click', () => {
+  const payload = collectProfileLayoutPayload();
+  if (!payload) {
+    return;
+  }
+
+  setStatus('Opening container upload...');
+  vscode.postMessage({
+    type: 'uploadContainer',
+    payload
   });
 });
 
@@ -328,6 +349,22 @@ function requestLayouts(profileId, preferredLayout) {
 }
 
 function collectPayload() {
+  const base = collectProfileLayoutPayload();
+  if (!base) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    findJson: findJson.value,
+    sortJson: sortJson.value,
+    limit: parseNumber(limitInput.value),
+    offset: parseNumber(offsetInput.value),
+    queryId: state.currentQueryId
+  };
+}
+
+function collectProfileLayoutPayload() {
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
 
@@ -343,12 +380,7 @@ function collectPayload() {
 
   return {
     profileId,
-    layout,
-    findJson: findJson.value,
-    sortJson: sortJson.value,
-    limit: parseNumber(limitInput.value),
-    offset: parseNumber(offsetInput.value),
-    queryId: state.currentQueryId
+    layout
   };
 }
 
@@ -688,7 +720,8 @@ function updateResultRowState(rowState, record, columns) {
     rowState.idCell.textContent = nextRecordId;
   }
 
-  const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
+  const fieldData =
+    record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
   columns.forEach((column) => {
     const cell = rowState.cells.get(column);
     const nextValue = toCellValue(fieldData[column]);
@@ -701,12 +734,18 @@ function updateResultRowState(rowState, record, columns) {
 function createStableRowKeys(records) {
   const counts = new Map();
   records.forEach((record) => {
-    const recordId = record && record.recordId !== undefined && record.recordId !== null ? String(record.recordId) : '';
+    const recordId =
+      record && record.recordId !== undefined && record.recordId !== null
+        ? String(record.recordId)
+        : '';
     counts.set(recordId, (counts.get(recordId) || 0) + 1);
   });
 
   return records.map((record, index) => {
-    const recordId = record && record.recordId !== undefined && record.recordId !== null ? String(record.recordId) : '';
+    const recordId =
+      record && record.recordId !== undefined && record.recordId !== null
+        ? String(record.recordId)
+        : '';
     if (!recordId || counts.get(recordId) > 1) {
       return `row-${index}`;
     }

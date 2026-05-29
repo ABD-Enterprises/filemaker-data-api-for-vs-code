@@ -11,7 +11,7 @@ function createSettings(overrides?: ConfigMap, trusted = true): SettingsService 
     getConfiguration: (section?: string) =>
       ({
         get: <T>(key: string, defaultValue?: T): T => {
-          const sectionData = section ? data[section] ?? {} : {};
+          const sectionData = section ? (data[section] ?? {}) : {};
           const value = sectionData[key] as T | undefined;
           return value ?? (defaultValue as T);
         },
@@ -19,7 +19,7 @@ function createSettings(overrides?: ConfigMap, trusted = true): SettingsService 
         // can distinguish "explicitly set" from "default" in this mock. We treat any
         // present key as workspace-scoped because the test ConfigMap doesn't model scopes.
         inspect: <T>(key: string) => {
-          const sectionData = section ? data[section] ?? {} : {};
+          const sectionData = section ? (data[section] ?? {}) : {};
           const value = sectionData[key] as T | undefined;
           return {
             key,
@@ -41,6 +41,7 @@ describe('SettingsService', () => {
     expect(settings.getRequestTimeoutMs()).toBe(15_000);
     expect(settings.getSavedQueriesScope()).toBe('workspace');
     expect(settings.getTypegenOutputDir()).toBe('filemaker-types');
+    expect(settings.getContainerUploadMaxBytes()).toBe(100 * 1024 * 1024);
   });
 
   it('normalizes invalid values', () => {
@@ -49,6 +50,7 @@ describe('SettingsService', () => {
         'logging.level': 'verbose',
         'savedQueries.scope': 'bad',
         'batch.concurrency': 99,
+        containerUploadMaxBytes: 0,
         'typegen.outputDir': '../outside'
       },
       filemakerDataApiTools: {
@@ -61,6 +63,17 @@ describe('SettingsService', () => {
     expect(settings.getBatchConcurrency()).toBe(10);
     expect(settings.getRequestTimeoutMs()).toBe(1_000);
     expect(settings.getTypegenOutputDir()).toBe('filemaker-types');
+    expect(settings.getContainerUploadMaxBytes()).toBe(1);
+  });
+
+  it('clamps container upload max bytes to a safe upper bound', () => {
+    const settings = createSettings({
+      filemaker: {
+        containerUploadMaxBytes: Number.MAX_SAFE_INTEGER
+      }
+    });
+
+    expect(settings.getContainerUploadMaxBytes()).toBe(2_147_483_647);
   });
 
   it('forces workspaceState storage in untrusted workspaces', () => {

@@ -4,6 +4,7 @@ import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } f
 
 import type {
   ConnectionProfile,
+  ContainerUploadFile,
   EditRecordResult,
   FileMakerRecord,
   FindRecordsRequest,
@@ -62,6 +63,13 @@ interface RequestTrace {
 
 interface ClientRequestControl {
   signal?: AbortSignal;
+}
+
+export interface FMClientContainerUploadOptions {
+  signal?: AbortSignal;
+  fieldRepetition?: number;
+  modId?: string;
+  maxBytes?: number;
 }
 
 const DEFAULT_LAYOUT_TTL_MS = 60_000;
@@ -658,6 +666,108 @@ export class FMClient {
     );
   }
 
+  public async uploadContainer(
+    profile: ConnectionProfile,
+    layout: string,
+    recordId: string,
+    fieldName: string,
+    file: ContainerUploadFile,
+    options?: FMClientContainerUploadOptions
+  ): Promise<EditRecordResult> {
+    const normalizedLayout = layout.trim();
+    const normalizedRecordId = recordId.trim();
+    const normalizedFieldName = fieldName.trim();
+    const normalizedFileName = file.fileName.trim();
+    const content = normalizeUploadContent(file.content);
+
+    if (!normalizedLayout) {
+      throw new FMClientError('Layout is required to upload container data.');
+    }
+    if (!normalizedRecordId) {
+      throw new FMClientError('Record ID is required to upload container data.');
+    }
+    if (!normalizedFieldName) {
+      throw new FMClientError('Container field name is required.');
+    }
+    if (!normalizedFileName) {
+      throw new FMClientError('Upload file name is required.');
+    }
+    if (content.byteLength === 0) {
+      throw new FMClientError('Upload file is empty.');
+    }
+    if (options?.maxBytes !== undefined && content.byteLength > options.maxBytes) {
+      throw new FMClientError(
+        `Container upload exceeds the configured limit (${content.byteLength} > ${options.maxBytes} bytes).`,
+        {
+          code: 'CONTAINER_UPLOAD_TOO_LARGE',
+          details: {
+            actualBytes: content.byteLength,
+            maxBytes: options.maxBytes
+          }
+        }
+      );
+    }
+
+    const fieldRepetition = normalizeContainerFieldRepetition(options?.fieldRepetition);
+    const uploadFile = {
+      ...file,
+      fileName: normalizedFileName,
+      content
+    };
+
+    return this.withHistory(
+      {
+        profileId: profile.id,
+        operation: 'uploadContainer',
+        layout: normalizedLayout,
+        endpoint: `POST /layouts/${normalizedLayout}/records/${normalizedRecordId}/containers/${normalizedFieldName}/${fieldRepetition}`
+      },
+      async (trace) => {
+        if (isProxyProfile(profile)) {
+          return this.proxyClient.uploadContainer(
+            profile,
+            normalizedLayout,
+            normalizedRecordId,
+            normalizedFieldName,
+            uploadFile,
+            {
+              fieldRepetition,
+              modId: options?.modId,
+              signal: options?.signal
+            }
+          );
+        }
+
+        const multipart = buildContainerUploadMultipart(uploadFile);
+        const envelope = await this.requestWithAuth<Record<string, unknown>>(
+          profile,
+          {
+            method: 'POST',
+            path:
+              `/layouts/${encodeURIComponent(normalizedLayout)}` +
+              `/records/${encodeURIComponent(normalizedRecordId)}` +
+              `/containers/${encodeURIComponent(normalizedFieldName)}/${fieldRepetition}`,
+            data: multipart.body,
+            headers: {
+              'Content-Type': multipart.contentType,
+              'Content-Length': String(multipart.body.byteLength)
+            },
+            params: options?.modId ? { modId: options.modId } : undefined,
+            signal: options?.signal
+          },
+          true,
+          trace
+        );
+
+        return {
+          recordId: normalizedRecordId,
+          messages: envelope.messages,
+          response: envelope.response
+        };
+      }
+    );
+  }
+
   public async runScript(
     profile: ConnectionProfile,
     request: RunScriptRequest,
@@ -853,7 +963,8 @@ export class FMClient {
         data: request.data,
         params: request.params,
         signal: request.signal,
-        timeout: this.timeoutMs
+        timeout: this.timeoutMs,
+        maxBodyLength: Infinity
       };
 
       const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
@@ -915,6 +1026,7 @@ export class FMClient {
         params: request.params,
         signal: request.signal,
         timeout: this.timeoutMs,
+        maxBodyLength: Infinity,
         validateStatus: (status) => (status >= 200 && status < 300) || status === 304
       };
 
@@ -1148,6 +1260,52 @@ function buildScriptParams(
   }
 
   return params;
+}
+
+function normalizeUploadContent(content: Buffer | Uint8Array): Buffer {
+  return Buffer.isBuffer(content) ? content : Buffer.from(content);
+}
+
+function normalizeContainerFieldRepetition(fieldRepetition: number | undefined): number {
+  if (fieldRepetition === undefined) {
+    return 1;
+  }
+
+  if (!Number.isInteger(fieldRepetition) || fieldRepetition < 1) {
+    throw new FMClientError('Container field repetition must be a positive integer.');
+  }
+
+  return fieldRepetition;
+}
+
+function buildContainerUploadMultipart(file: ContainerUploadFile & { content: Buffer }): {
+  body: Buffer;
+  contentType: string;
+} {
+  const boundary = `----filemaker-data-api-tools-${randomUUID()}`;
+  const contentType = sanitizeMultipartHeaderValue(file.contentType ?? 'application/octet-stream');
+  const fileName = sanitizeMultipartHeaderValue(file.fileName);
+
+  const header = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="upload"; filename="${fileName}"\r\n` +
+      `Content-Type: ${contentType}\r\n\r\n`,
+    'utf8'
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+
+  return {
+    body: Buffer.concat([header, file.content, footer]),
+    contentType: `multipart/form-data; boundary=${boundary}`
+  };
+}
+
+function sanitizeMultipartHeaderValue(value: string): string {
+  const normalized = value
+    .replace(/[\r\n"]/g, '_')
+    .replace(/\\/g, '\\\\')
+    .trim();
+  return normalized.length > 0 ? normalized : 'application/octet-stream';
 }
 
 function isLikelyScriptUnsupportedError(error: unknown): boolean {

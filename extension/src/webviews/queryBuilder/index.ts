@@ -43,6 +43,11 @@ interface CopySnippetPayload extends RunQueryPayload {
   includeAuthHeader?: boolean;
 }
 
+interface UploadContainerPayload {
+  profileId: string;
+  layout: string;
+}
+
 interface QueryExecutionResult {
   profileId: string;
   layout: string;
@@ -64,6 +69,7 @@ type IncomingMessage =
   | { type: 'exportResultsCsvFile' }
   | { type: 'copyFetchSnippet'; payload: CopySnippetPayload }
   | { type: 'copyCurlSnippet'; payload: CopySnippetPayload }
+  | { type: 'uploadContainer'; payload: UploadContainerPayload }
   | { type: 'refreshHistory' };
 
 export class QueryBuilderPanel {
@@ -185,6 +191,9 @@ export class QueryBuilderPanel {
         break;
       case 'copyCurlSnippet':
         await this.copyCurlSnippet(message.payload);
+        break;
+      case 'uploadContainer':
+        await this.uploadContainer(message.payload);
         break;
       case 'refreshHistory':
         await this.sendHistory();
@@ -519,6 +528,24 @@ export class QueryBuilderPanel {
     }
   }
 
+  private async uploadContainer(payload: UploadContainerPayload): Promise<void> {
+    try {
+      const completed = await vscode.commands.executeCommand<boolean>(
+        'filemakerDataApiTools.uploadContainer',
+        payload
+      );
+
+      await this.panel.webview.postMessage({
+        type: 'containerUploadResult',
+        payload: {
+          completed: completed === true
+        }
+      });
+    } catch (error) {
+      await this.postError(this.formatError(error));
+    }
+  }
+
   private toFindSnippetRequest(
     profile: ConnectionProfile,
     layout: string,
@@ -658,6 +685,17 @@ export class QueryBuilderPanel {
           payload
         };
       }
+      case 'uploadContainer': {
+        const payload = this.parseUploadContainerPayload(value.payload);
+        if (!payload) {
+          return undefined;
+        }
+
+        return {
+          type,
+          payload
+        };
+      }
       default:
         return undefined;
     }
@@ -720,6 +758,24 @@ export class QueryBuilderPanel {
     return {
       ...payload,
       includeAuthHeader: raw ? getOptionalBooleanField(raw, 'includeAuthHeader') : undefined
+    };
+  }
+
+  private parseUploadContainerPayload(rawPayload: unknown): UploadContainerPayload | undefined {
+    const payload = toRecord(rawPayload);
+    if (!payload) {
+      return undefined;
+    }
+
+    const profileId = getStringField(payload, 'profileId');
+    const layout = getStringField(payload, 'layout');
+    if (!profileId || !layout) {
+      return undefined;
+    }
+
+    return {
+      profileId,
+      layout
     };
   }
 
@@ -795,6 +851,7 @@ export class QueryBuilderPanel {
         <button id="exportCsvButton">Export CSV File</button>
         <button id="copyFetchButton">Copy as fetch()</button>
         <button id="copyCurlButton">Copy as curl</button>
+        <button id="uploadContainerButton">Upload Container</button>
       </div>
       <div class="saved">
         <label for="savedQueriesSelect">Saved Queries</label>

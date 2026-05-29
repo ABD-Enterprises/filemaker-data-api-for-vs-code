@@ -60,6 +60,12 @@ export interface EditRecordResult {
   response: Record<string, unknown>;
 }
 
+export interface ContainerUploadFile {
+  fileName: string;
+  content: Buffer | Uint8Array;
+  contentType?: string;
+}
+
 export interface SavedQuery {
   id: string;
   name: string;

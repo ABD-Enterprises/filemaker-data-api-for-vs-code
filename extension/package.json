@@ -293,6 +293,10 @@
         "title": "FileMaker: Delete Record"
       },
       {
+        "command": "filemakerDataApiTools.uploadContainer",
+        "title": "FileMaker: Upload to Container"
+      },
+      {
         "command": "filemakerDataApiTools.batchExportFind",
         "title": "FileMaker: Batch Export (Find)"
       },
@@ -495,6 +499,11 @@
           "group": "navigation@7"
         },
         {
+          "command": "filemakerDataApiTools.uploadContainer",
+          "when": "view == filemakerExplorer && viewItem == fmLayout",
+          "group": "navigation@8"
+        },
+        {
           "command": "filemakerDataApiTools.openSchemaSnapshotJson",
           "when": "view == filemakerExplorer && viewItem == fmSchemaSnapshot",
           "group": "inline@1"
@@ -569,6 +578,7 @@
         { "command": "filemakerDataApiTools.editRecordById", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.createRecord", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.deleteRecord", "when": "filemaker.hasProfiles" },
+        { "command": "filemakerDataApiTools.uploadContainer", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.batchExportFind", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.batchUpdateFromFile", "when": "filemaker.hasProfiles" },
         { "command": "filemakerDataApiTools.captureSchemaSnapshot", "when": "filemaker.hasProfiles" },
@@ -740,6 +750,13 @@
           "type": "boolean",
           "default": true,
           "description": "Enable record editor write-back features."
+        },
+        "filemaker.containerUploadMaxBytes": {
+          "type": "number",
+          "default": 104857600,
+          "minimum": 1,
+          "maximum": 2147483647,
+          "description": "Maximum file size, in bytes, allowed by FileMaker: Upload to Container. Default is 100 MB."
         },
         "filemaker.features.batch.enabled": {
           "type": "boolean",

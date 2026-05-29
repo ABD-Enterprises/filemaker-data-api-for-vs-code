@@ -113,6 +113,7 @@ Credentials stay in VS Code `SecretStorage`; they are never written to workspace
 | `FileMaker: Open Record Editor` | Edit a record with preview support |
 | `FileMaker: Create Record` | Create a new record on a layout |
 | `FileMaker: Delete Record` | Delete a record with confirmation |
+| `FileMaker: Upload to Container` | Upload an image, PDF, or binary file to a container field |
 | `FileMaker: Capture Schema Snapshot` | Save metadata for later diffing |
 | `FileMaker: Diff Schema Snapshots` | Compare two snapshots side by side |
 | `FileMaker: Batch Export (Find)` | Export JSONL or CSV from a find request |
