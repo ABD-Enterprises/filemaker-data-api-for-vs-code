@@ -134,6 +134,7 @@ npm run package:check
 Additional project docs:
 
 - [User Guide](./docs/USER_GUIDE.md)
+- [Compatibility](./docs/COMPATIBILITY.md)
 - [Architecture](./ARCHITECTURE.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
