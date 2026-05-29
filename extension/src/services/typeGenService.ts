@@ -8,7 +8,8 @@ import type {
   ConnectionProfile,
   FileMakerFieldMetadata,
   GeneratedLayoutArtifacts,
-  GeneratedSnippetsArtifacts
+  GeneratedSnippetsArtifacts,
+  GeneratedTypeScriptClientArtifacts
 } from '../types/fm';
 import { hashObject } from '../utils/hash';
 import { createNameMap, toPascalCaseIdentifier } from '../utils/nameSanitize';
@@ -127,6 +128,59 @@ export class TypeGenService {
     };
   }
 
+  public async generateTypeScriptClient(
+    profile: ConnectionProfile,
+    layouts: string[],
+    outputDirectory: string
+  ): Promise<GeneratedTypeScriptClientArtifacts> {
+    if (!this.isWorkspaceTrusted()) {
+      throw new Error('Workspace is untrusted. TypeScript client generation to files is disabled.');
+    }
+
+    const selectedLayouts = normalizeLayouts(layouts);
+    if (selectedLayouts.length === 0) {
+      throw new Error('Choose at least one layout to generate a TypeScript client.');
+    }
+
+    const outputDir = resolve(outputDirectory);
+    await mkdir(outputDir, { recursive: true });
+
+    const schemas: GeneratedClientSchema[] = [];
+    for (const layout of selectedLayouts) {
+      const schema = await this.schemaService.getLayoutSchema(profile, layout);
+      if (!schema.supported) {
+        throw new Error(
+          schema.message ?? `Schema metadata is not available for layout "${layout}".`
+        );
+      }
+      schemas.push({ layout, fields: schema.fields });
+    }
+
+    const generatedAt = new Date().toISOString();
+    const layoutNames = createNameMap(selectedLayouts);
+    const typesContent = renderClientTypes(profile, schemas, layoutNames, generatedAt);
+    const clientContent = renderClientSource(profile, schemas, layoutNames, generatedAt);
+    const readmeContent = renderClientReadme(profile, selectedLayouts, generatedAt);
+
+    const typesPath = resolve(outputDir, 'types.ts');
+    const clientPath = resolve(outputDir, 'client.ts');
+    const readmePath = resolve(outputDir, 'README.md');
+
+    await Promise.all([
+      writeFile(typesPath, typesContent, 'utf8'),
+      writeFile(clientPath, clientContent, 'utf8'),
+      writeFile(readmePath, readmeContent, 'utf8')
+    ]);
+
+    return {
+      directory: outputDir,
+      typesPath,
+      clientPath,
+      readmePath,
+      layouts: selectedLayouts
+    };
+  }
+
   private async writeTypeFile(layout: string, content: string): Promise<string> {
     if (!this.isWorkspaceTrusted()) {
       throw new Error('Workspace is untrusted. Type generation to files is disabled.');
@@ -230,6 +284,11 @@ export interface ${findResponseTypeName} {
   }
 }
 
+interface GeneratedClientSchema {
+  layout: string;
+  fields: FileMakerFieldMetadata[];
+}
+
 function toTsType(field: FileMakerFieldMetadata | undefined): string {
   if (!field) {
     return 'unknown';
@@ -258,6 +317,320 @@ function toTsType(field: FileMakerFieldMetadata | undefined): string {
   }
 
   return 'unknown';
+}
+
+function normalizeLayouts(layouts: string[]): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const layout of layouts) {
+    const value = layout.trim();
+    if (!value || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  return normalized;
+}
+
+function renderClientTypes(
+  profile: ConnectionProfile,
+  schemas: GeneratedClientSchema[],
+  layoutNames: ReturnType<typeof createNameMap>,
+  generatedAt: string
+): string {
+  const layoutBlocks = schemas.map((schema) => {
+    const suffix = typeSuffixForLayout(layoutNames, schema.layout);
+    const rows = schema.fields
+      .map((field) => `  ${JSON.stringify(field.name)}?: ${toTsType(field)};`)
+      .join('\n');
+
+    return `export interface ${suffix}FieldData {
+${rows}
+}
+
+export type ${suffix}Record = FileMakerRecord<${suffix}FieldData>;
+
+export interface ${suffix}FindRequest {
+  query: Array<Partial<${suffix}FieldData>>;
+  sort?: Array<Record<string, unknown>>;
+  limit?: number;
+  offset?: number;
+}`;
+  });
+
+  const recordMapRows = schemas
+    .map((schema) => `  ${JSON.stringify(schema.layout)}: ${typeSuffixForLayout(layoutNames, schema.layout)}Record;`)
+    .join('\n');
+  const fieldDataMapRows = schemas
+    .map((schema) => `  ${JSON.stringify(schema.layout)}: ${typeSuffixForLayout(layoutNames, schema.layout)}FieldData;`)
+    .join('\n');
+  const findRequestMapRows = schemas
+    .map((schema) => `  ${JSON.stringify(schema.layout)}: ${typeSuffixForLayout(layoutNames, schema.layout)}FindRequest;`)
+    .join('\n');
+
+  return `/**
+ * AUTO-GENERATED FILE. DO NOT EDIT.
+ * Generated at: ${generatedAt}
+ * Profile: ${profile.name} (${profile.id})
+ * Layouts: ${schemas.map((schema) => schema.layout).join(', ')}
+ */
+
+export interface FileMakerMessage {
+  code: string;
+  message: string;
+}
+
+export interface FileMakerRecord<TFieldData> {
+  recordId: string;
+  modId?: string;
+  fieldData: TFieldData;
+  portalData?: Record<string, Array<Record<string, unknown>>>;
+}
+
+${layoutBlocks.join('\n\n')}
+
+export interface LayoutRecordMap {
+${recordMapRows}
+}
+
+export interface LayoutFieldDataMap {
+${fieldDataMapRows}
+}
+
+export interface LayoutFindRequestMap {
+${findRequestMapRows}
+}
+
+export type LayoutName = keyof LayoutRecordMap;
+`;
+}
+
+function renderClientSource(
+  profile: ConnectionProfile,
+  schemas: GeneratedClientSchema[],
+  layoutNames: ReturnType<typeof createNameMap>,
+  generatedAt: string
+): string {
+  const imports = schemas
+    .flatMap((schema) => {
+      const suffix = typeSuffixForLayout(layoutNames, schema.layout);
+      return [`${suffix}FieldData`, `${suffix}FindRequest`, `${suffix}Record`];
+    })
+    .sort();
+
+  const methods = schemas
+    .map((schema) => renderLayoutClientMethods(schema.layout, typeSuffixForLayout(layoutNames, schema.layout)))
+    .join('\n\n');
+
+  return `/**
+ * AUTO-GENERATED FILE. DO NOT EDIT.
+ * Generated at: ${generatedAt}
+ * Profile: ${profile.name} (${profile.id})
+ */
+
+import type {
+  FileMakerMessage,
+  ${imports.join(',\n  ')}
+} from './types';
+
+export interface FileMakerClientConfig {
+  serverUrl: string;
+  database: string;
+  token: string;
+  apiBasePath?: string;
+  apiVersionPath?: string;
+  fetch?: typeof fetch;
+  headers?: Record<string, string>;
+}
+
+interface DataApiEnvelope<TResponse> {
+  response: TResponse;
+  messages: FileMakerMessage[];
+}
+
+interface FindResponse<TRecord> {
+  data: TRecord[];
+  dataInfo?: Record<string, unknown>;
+}
+
+interface MutateResponse {
+  recordId?: string;
+  modId?: string;
+}
+
+export class FileMakerDataApiClient {
+  private readonly fetchImpl: typeof fetch;
+  private readonly baseUrl: string;
+
+  public constructor(private readonly config: FileMakerClientConfig) {
+    this.fetchImpl = config.fetch ?? globalThis.fetch;
+    if (!this.fetchImpl) {
+      throw new Error('No fetch implementation is available.');
+    }
+
+    const serverUrl = trimSlashes(config.serverUrl);
+    const apiBasePath = trimSlashes(config.apiBasePath ?? 'fmi/data');
+    const apiVersionPath = trimSlashes(config.apiVersionPath ?? 'vLatest');
+    this.baseUrl = \`\${serverUrl}/\${apiBasePath}/\${apiVersionPath}/databases/\${encodeURIComponent(config.database)}\`;
+  }
+
+${indent(methods, 2)}
+
+  private async request<TResponse>(
+    path: string,
+    init: RequestInit
+  ): Promise<DataApiEnvelope<TResponse>> {
+    const response = await this.fetchImpl(\`\${this.baseUrl}\${path}\`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: \`Bearer \${this.config.token}\`,
+        ...this.config.headers,
+        ...init.headers
+      }
+    });
+
+    const text = await response.text();
+    const body = text ? JSON.parse(text) as DataApiEnvelope<TResponse> : undefined;
+
+    if (!response.ok) {
+      const message = body?.messages?.map((item) => item.message).join('; ') || response.statusText;
+      throw new Error(\`FileMaker Data API request failed (\${response.status}): \${message}\`);
+    }
+
+    if (!body) {
+      throw new Error('FileMaker Data API returned an empty response.');
+    }
+
+    return body;
+  }
+}
+
+function trimSlashes(value: string): string {
+  return value.replace(/^\\/+|\\/+$/g, '');
+}
+`;
+}
+
+function renderLayoutClientMethods(layout: string, suffix: string): string {
+  const encodedLayout = `\${encodeURIComponent(${JSON.stringify(layout)})}`;
+
+  return `public async find${suffix}(request: ${suffix}FindRequest): Promise<${suffix}Record[]> {
+  const envelope = await this.request<FindResponse<${suffix}Record>>(
+    \`/layouts/${encodedLayout}/_find\`,
+    {
+      method: 'POST',
+      body: JSON.stringify(request)
+    }
+  );
+  return envelope.response.data;
+}
+
+public async get${suffix}(recordId: string): Promise<${suffix}Record> {
+  const envelope = await this.request<FindResponse<${suffix}Record>>(
+    \`/layouts/${encodedLayout}/records/\${encodeURIComponent(recordId)}\`,
+    { method: 'GET' }
+  );
+  const record = envelope.response.data[0];
+  if (!record) {
+    throw new Error(\`Record not found: \${recordId}\`);
+  }
+  return record;
+}
+
+public async create${suffix}(fieldData: Partial<${suffix}FieldData>): Promise<MutateResponse> {
+  const envelope = await this.request<MutateResponse>(
+    \`/layouts/${encodedLayout}/records\`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ fieldData })
+    }
+  );
+  return envelope.response;
+}
+
+public async edit${suffix}(
+  recordId: string,
+  fieldData: Partial<${suffix}FieldData>
+): Promise<MutateResponse> {
+  const envelope = await this.request<MutateResponse>(
+    \`/layouts/${encodedLayout}/records/\${encodeURIComponent(recordId)}\`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ fieldData })
+    }
+  );
+  return envelope.response;
+}
+
+public async delete${suffix}(recordId: string): Promise<void> {
+  await this.request<Record<string, never>>(
+    \`/layouts/${encodedLayout}/records/\${encodeURIComponent(recordId)}\`,
+    { method: 'DELETE' }
+  );
+}`;
+}
+
+function renderClientReadme(
+  profile: ConnectionProfile,
+  layouts: string[],
+  generatedAt: string
+): string {
+  const firstLayout = layouts[0] ?? 'Layout';
+  const firstMethod = typeSuffixForLayout(createNameMap(layouts), firstLayout);
+
+  return `# FileMaker TypeScript Client
+
+Generated at ${generatedAt} for profile \`${profile.name}\`.
+
+## Files
+
+- \`types.ts\` contains interfaces for the selected layout fields and records.
+- \`client.ts\` contains typed fetch wrappers for find, get, create, edit, and delete operations.
+
+## Usage
+
+\`\`\`ts
+import { FileMakerDataApiClient } from './client';
+
+const client = new FileMakerDataApiClient({
+  serverUrl: 'https://example.filemaker-cloud.com',
+  database: '${escapeReadmeString(profile.database)}',
+  token: process.env.FM_DATA_API_TOKEN ?? ''
+});
+
+const records = await client.find${firstMethod}({
+  query: [{}],
+  limit: 10
+});
+\`\`\`
+
+Selected layouts:
+
+${layouts.map((layout) => `- ${layout}`).join('\n')}
+
+Regenerating this client overwrites these files with a new timestamp.
+`;
+}
+
+function typeSuffixForLayout(layoutNames: ReturnType<typeof createNameMap>, layout: string): string {
+  const friendly = layoutNames.rawToFriendly[layout] ?? sanitizeLayoutFileName(layout);
+  return toPascalCaseIdentifier(friendly);
+}
+
+function indent(value: string, spaces: number): string {
+  const prefix = ' '.repeat(spaces);
+  return value
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${prefix}${line}` : line))
+    .join('\n');
+}
+
+function escapeReadmeString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 function findField(
