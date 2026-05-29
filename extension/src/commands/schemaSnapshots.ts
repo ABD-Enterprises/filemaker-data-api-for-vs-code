@@ -1,14 +1,18 @@
 import * as vscode from 'vscode';
 
 import type { FMClient } from '../services/fmClient';
-import { diffSchemaFields, diffSchemaSnapshots } from '../services/schemaDiff';
+import {
+  diffSchemaFieldsInWorker,
+  diffSchemaSnapshotsInWorker,
+  SchemaDiffCancelledError
+} from '../services/schemaDiff';
 import type { SchemaSnapshotStore } from '../services/schemaSnapshotStore';
 import type { SchemaService } from '../services/schemaService';
 import { extractFieldsFromMetadata } from '../services/schemaService';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
-import type { SchemaSnapshot } from '../types/fm';
+import type { SchemaDiffResult, SchemaSnapshot } from '../types/fm';
 import {
   openJsonDocument,
   parseLayoutArg,
@@ -128,14 +132,36 @@ export function registerSchemaSnapshotCommands(
         return;
       }
 
-      const diff = diffSchemaSnapshots(
-        olderSnapshot,
-        newerSnapshot,
-        extractFieldsFromMetadata(olderSnapshot.metadata),
-        extractFieldsFromMetadata(newerSnapshot.metadata)
-      );
+      try {
+        const diff = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Diffing schema snapshots',
+            cancellable: true
+          },
+          (_progress, token) =>
+            diffSchemaSnapshotsInWorker(
+              olderSnapshot,
+              newerSnapshot,
+              extractFieldsFromMetadata(olderSnapshot.metadata),
+              extractFieldsFromMetadata(newerSnapshot.metadata),
+              token
+            )
+        );
 
-      SchemaDiffPanel.createOrShow(context, diff);
+        SchemaDiffPanel.createOrShow(context, diff);
+      } catch (error) {
+        if (error instanceof SchemaDiffCancelledError) {
+          logger.info('Schema snapshot diff was cancelled.');
+          return;
+        }
+
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to diff schema snapshots.',
+          logger,
+          logMessage: 'Failed to diff selected schema snapshots.'
+        });
+      }
     }),
 
     vscode.commands.registerCommand(
@@ -167,13 +193,24 @@ export function registerSchemaSnapshotCommands(
             return;
           }
 
-          const diff = diffSchemaFields({
-            profileId: profile.id,
-            layout,
-            olderSnapshotId: latest.id,
-            beforeFields: extractFieldsFromMetadata(latest.metadata),
-            afterFields: currentSchema.fields
-          });
+          const diff = await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: 'Diffing schema against latest snapshot',
+              cancellable: true
+            },
+            (_progress, token) =>
+              diffSchemaFieldsInWorker(
+                {
+                  profileId: profile.id,
+                  layout,
+                  olderSnapshotId: latest.id,
+                  beforeFields: extractFieldsFromMetadata(latest.metadata),
+                  afterFields: currentSchema.fields
+                },
+                token
+              )
+          );
 
           SchemaDiffPanel.createOrShow(context, diff);
           publishDiffDiagnosticsIfEnabled(
@@ -184,6 +221,11 @@ export function registerSchemaSnapshotCommands(
             settingsService.isSchemaDiagnosticsEnabled()
           );
         } catch (error) {
+          if (error instanceof SchemaDiffCancelledError) {
+            logger.info('Schema diff against latest snapshot was cancelled.');
+            return;
+          }
+
           await showCommandError(error, {
             fallbackMessage: 'Failed to diff schema against latest snapshot.',
             logger,
@@ -266,7 +308,7 @@ function publishDiffDiagnosticsIfEnabled(
   diagnostics: vscode.DiagnosticCollection,
   profileId: string,
   layout: string,
-  diff: ReturnType<typeof diffSchemaFields>,
+  diff: SchemaDiffResult,
   enabled: boolean
 ): void {
   const uri = vscode.Uri.parse(
