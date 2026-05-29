@@ -1,0 +1,6 @@
+Contact: mailto:alan@abdenterprises.com
+Expires: 2027-05-01T00:00:00Z
+Acknowledgments: https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/security/advisories
+Preferred-Languages: en
+Canonical: https://raw.githubusercontent.com/ABD-Enterprises/filemaker-data-api-for-vs-code/main/.well-known/security.txt
+Policy: https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/blob/main/extension/SECURITY.md

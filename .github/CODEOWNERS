@@ -1,0 +1,4 @@
+# Security policy and disclosure routing
+/.github/CODEOWNERS @deffenda
+/.well-known/security.txt @deffenda
+/extension/SECURITY.md @deffenda
