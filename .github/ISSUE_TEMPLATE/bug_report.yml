@@ -1,0 +1,96 @@
+name: Bug report
+description: Report a reproducible problem with the FileMaker Data API extension.
+title: "Bug: "
+labels:
+  - bug
+  - triage
+body:
+  - type: checkboxes
+    id: existing-issues
+    attributes:
+      label: Existing issues
+      description: Search open and closed issues before filing a duplicate.
+      options:
+        - label: I have searched existing issues.
+          required: true
+
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      description: Copy this from Help > About, or run `code --version`.
+      placeholder: "1.96.2"
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      description: Find this in the Extensions view for FileMaker Data API Tools.
+      placeholder: "1.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      description: Include macOS, Windows, or Linux version details.
+      placeholder: "macOS 14.5 / Windows 11 23H2 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: input
+    id: filemaker-server-version
+    attributes:
+      label: FileMaker Server version
+      description: Include the major/minor version if you know it.
+      placeholder: "FileMaker Server 21.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest reliable sequence that triggers the bug.
+      placeholder: |
+        1. Open...
+        2. Run...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: output-panel-logs
+    attributes:
+      label: Output panel logs
+      description: Paste relevant logs from the FileMaker output channel. Redact server names, usernames, tokens, and secrets.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop screenshots or recordings here if they help explain the problem.
+    validations:
+      required: true
