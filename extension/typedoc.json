@@ -1,0 +1,33 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "FileMaker Data API Tools API",
+  "entryPoints": ["./src/services", "./src/types"],
+  "entryPointStrategy": "expand",
+  "tsconfig": "./tsconfig.json",
+  "out": "../docs/api",
+  "readme": "none",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "intentionallyNotExported": [
+    "BatchServiceOptions",
+    "CaptureSnapshotInput",
+    "ClientRequestControl",
+    "GeneratedLayoutSummary",
+    "JobListener",
+    "JobTask",
+    "OfflineModeService",
+    "SecretLogger",
+    "SettingsServiceOptions",
+    "SnapshotStoreOptions",
+    "TemplateCopySummary",
+    "TypeGenServiceOptions"
+  ],
+  "sort": ["source-order"],
+  "navigation": {
+    "includeGroups": true,
+    "includeCategories": true
+  }
+}

@@ -2,7 +2,7 @@
 
 A free, open-source VS Code extension for the FileMaker Data API. Full CRUD, query building, schema management, batch operations, and more — all from within VS Code.
 
-**[Extension README](extension/README.md)** | **[Release Cadence](docs/RELEASE_CADENCE.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
+**[Extension README](extension/README.md)** | **[API Reference](https://abd-enterprises.github.io/filemaker-data-api-for-vs-code/api/)** | **[Release Cadence](docs/RELEASE_CADENCE.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
 
 ## Monorepo Structure
 
@@ -37,6 +37,7 @@ Launch the extension:
 | `npm run test:coverage` | Run tests with coverage reporting |
 | `npm run typecheck` | Type-check all workspaces |
 | `npm run lint` | Lint all workspaces |
+| `npm run docs:api` | Generate TypeDoc API reference into `docs/api` |
 | `npm run package:check` | Validate VSIX packaging |
 
 ## Extension Packaging
