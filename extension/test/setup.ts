@@ -34,7 +34,12 @@ vi.mock('vscode', () => {
       showOpenDialog: vi.fn(),
       showTextDocument: vi.fn(),
       createOutputChannel: vi.fn(() => outputChannel),
-      createWebviewPanel: vi.fn()
+      createWebviewPanel: vi.fn(),
+      createTreeView: vi.fn(() => ({
+        onDidChangeSelection: vi.fn(() => ({ dispose: vi.fn() })),
+        reveal: vi.fn(),
+        dispose: vi.fn()
+      }))
     },
     commands: {
       executeCommand: vi.fn(),

@@ -43,6 +43,7 @@ interface RegisterCoreCommandDeps {
    */
   refreshConnectionStatus?: () => void;
   onProfileDisconnected?: (profileId: string) => void;
+  onLayoutSelected?: (profileId: string, layout: string) => void;
   /** Resolved at call time so settings updates are picked up live. */
   getConnectBackoffPolicy?: () => BackoffPolicy;
   getConnectionWizardTestPolicy?: () => 'off' | 'warn' | 'block';
@@ -86,7 +87,8 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
     roleGuard,
     refreshExplorer,
     refreshConnectionStatus,
-    onProfileDisconnected
+    onProfileDisconnected,
+    onLayoutSelected
   } = deps;
 
   return [
@@ -201,6 +203,21 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
           refreshExplorer();
           refreshConnectionStatus?.();
           vscode.window.showInformationMessage(`Connected to "${profile.name}".`);
+
+          if (onLayoutSelected) {
+            try {
+              const layout = await promptForLayout(profile, fmClient);
+              if (layout) {
+                onLayoutSelected(profile.id, layout);
+                await vscode.commands.executeCommand('filemakerLayoutInspector.focus');
+              }
+            } catch (error) {
+              logger.warn('Failed to select a layout for the inspector after connect.', {
+                profileId: profile.id,
+                error
+              });
+            }
+          }
         } catch (error) {
           await showCommandError(error, {
             fallbackMessage: 'Failed to connect to FileMaker profile.',

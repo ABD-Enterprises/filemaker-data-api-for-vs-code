@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FEATURE] Added a Layout Inspector view that shows selected layout fields, portals, value lists, and field validation rules with refreshable session caching.
+
 - Attributed the extension to ABD Enterprises in README and `package.json`:
   - new `author` field pointing at `https://abdenterprises.com`
   - `homepage` now resolves to `abdenterprises.com?ref=vscode` (with the GitHub repo still linked via `repository`)

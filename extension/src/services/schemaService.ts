@@ -43,6 +43,10 @@ export class SchemaService {
     }
   }
 
+  public invalidateLayout(profile: ConnectionProfile, layout: string): void {
+    this.cache.delete(buildSchemaCacheKey(profile, layout));
+  }
+
   public async getFields(profile: ConnectionProfile, layout: string): Promise<SchemaMetadataResult> {
     return this.getLayoutSchema(profile, layout);
   }

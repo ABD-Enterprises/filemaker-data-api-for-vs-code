@@ -8,6 +8,7 @@ import { registerFmWebProjectCommands } from './commands/fmWebProject';
 import { registerCoreCommands } from './commands';
 import { registerHistoryCommands } from './commands/history';
 import { registerJobsCommands } from './commands/jobs';
+import { registerLayoutInspectorCommands } from './commands/layoutInspector';
 import { registerOfflineCommands } from './commands/offline';
 import { registerPluginCommands } from './commands/plugins';
 import { registerRecordEditCommands } from './commands/recordEdit';
@@ -41,6 +42,7 @@ import type { CircuitBreakerRegistry } from './performance/circuitBreakerRegistr
 import { PluginRegistry } from './plugins/pluginRegistry';
 import { ConnectionStatusBar } from './views/connectionStatusBar';
 import { FMExplorerProvider } from './views/fmExplorer';
+import { LayoutInspectorProvider } from './views/layoutInspector';
 import { OfflineStatusBar } from './views/offlineStatusBar';
 
 function createLazyFmClient(
@@ -300,11 +302,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     offlineModeService,
     logger
   );
+  const layoutInspectorProvider = new LayoutInspectorProvider(profileStore, schemaService);
 
-  const treeViewDisposable = vscode.window.registerTreeDataProvider(
-    'filemakerExplorer',
-    fmExplorerProvider
-  );
+  const filemakerExplorerTree = vscode.window.createTreeView('filemakerExplorer', {
+    treeDataProvider: fmExplorerProvider
+  });
+  const layoutInspectorTree = vscode.window.createTreeView('filemakerLayoutInspector', {
+    treeDataProvider: layoutInspectorProvider
+  });
+  const layoutSelectionDisposable = filemakerExplorerTree.onDidChangeSelection((event) => {
+    const layoutItem = event.selection.find(
+      (item) => item.kind === 'layout' && item.profileId && item.layoutName
+    );
+
+    if (layoutItem?.profileId && layoutItem.layoutName) {
+      layoutInspectorProvider.selectLayout(layoutItem.profileId, layoutItem.layoutName);
+    }
+  });
 
   // Forward-declared so refreshExplorer (called by registered command handlers)
   // can re-evaluate command-palette contexts after profile / snapshot / project
@@ -336,9 +350,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     refreshConnectionStatus: () => connectionStatusBar.refresh(),
     onProfileDisconnected: (profileId) => {
       schemaService.invalidateProfile(profileId);
+      layoutInspectorProvider.clearProfile(profileId);
     },
+    onLayoutSelected: (profileId, layout) =>
+      layoutInspectorProvider.selectLayout(profileId, layout),
     getConnectBackoffPolicy: () => settingsService.getConnectBackoffPolicy(),
     getConnectionWizardTestPolicy: () => settingsService.getConnectionWizardTestPolicy()
+  });
+
+  const layoutInspectorDisposables = registerLayoutInspectorCommands({
+    profileStore,
+    fmClient,
+    layoutInspectorProvider,
+    logger
   });
 
   const savedQueryDisposables = registerSavedQueriesCommands({
@@ -474,8 +498,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     offlineStatusBar,
     connectionStatusBar,
-    treeViewDisposable,
+    filemakerExplorerTree,
+    layoutInspectorTree,
+    layoutSelectionDisposable,
     ...coreCommandDisposables,
+    ...layoutInspectorDisposables,
     ...savedQueryDisposables,
     ...schemaDisposables,
     ...schemaSnapshotDisposables,
