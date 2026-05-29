@@ -46,6 +46,10 @@ body {
   padding: clamp(12px, 2vw, 24px);
 }
 
+.hidden {
+  display: none !important;
+}
+
 .row {
   display: flex;
   flex-direction: column;
@@ -77,6 +81,75 @@ textarea {
   resize: vertical;
 }
 
+.parameter-input-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.parameter-input-group textarea {
+  min-width: 0;
+}
+
+.builder-panel {
+  margin: 10px 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f8fbfb;
+}
+
+.builder-panel h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.builder-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.builder-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(110px, 140px) minmax(160px, 2fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.builder-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.builder-field textarea {
+  min-height: 36px;
+}
+
+.builder-json-value {
+  min-height: 94px;
+}
+
+.builder-toolbar,
+.builder-actions {
+  margin-top: 10px;
+}
+
+.parameter-preview {
+  min-height: 84px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+  background: #0b1020;
+  color: #d6deeb;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -95,6 +168,15 @@ button {
 
 button:hover {
   background: var(--accent-strong);
+}
+
+button.secondary {
+  background: #e5e7eb;
+  color: var(--text);
+}
+
+button.secondary:hover {
+  background: #d1d5db;
 }
 
 button:disabled {
@@ -173,6 +255,11 @@ button:disabled {
 @media (max-width: 700px) {
   .container {
     padding: 10px;
+  }
+
+  .parameter-input-group,
+  .builder-row {
+    grid-template-columns: 1fr;
   }
 
   button {

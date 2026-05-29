@@ -6,14 +6,25 @@ const state = {
   defaults: undefined,
   layoutsByProfile: new Map(),
   scriptRunnerEnabled: true,
-  includeAuthByDefault: false
+  includeAuthByDefault: false,
+  parameterBuilderEnabled: true
 };
+
+const PARAMETER_VALUE_TYPES = ['string', 'number', 'bool', 'json'];
 
 const profileSelect = document.getElementById('profileSelect');
 const layoutSelect = document.getElementById('layoutSelect');
 const recordIdInput = document.getElementById('recordIdInput');
 const scriptNameInput = document.getElementById('scriptNameInput');
 const scriptParamInput = document.getElementById('scriptParamInput');
+const buildParameterButton = document.getElementById('buildParameterButton');
+const parameterBuilderPanel = document.getElementById('parameterBuilderPanel');
+const parameterRows = document.getElementById('parameterRows');
+const addParameterRowButton = document.getElementById('addParameterRowButton');
+const parameterPreview = document.getElementById('parameterPreview');
+const parameterBuilderStatus = document.getElementById('parameterBuilderStatus');
+const applyParameterButton = document.getElementById('applyParameterButton');
+const closeParameterBuilderButton = document.getElementById('closeParameterBuilderButton');
 const includeAuthCheckbox = document.getElementById('includeAuthCheckbox');
 const runButton = document.getElementById('runButton');
 const copyCurlButton = document.getElementById('copyCurlButton');
@@ -24,6 +35,7 @@ const rawResult = document.getElementById('rawResult');
 const scriptRunnerPanels = Array.from(document.querySelectorAll('.panel'));
 const scriptRunnerSkeleton = createLoadingSkeleton(['short', 'long', 'medium', 'long']);
 let scriptRunnerReady = false;
+let parameterRowCounter = 0;
 
 const scriptRunnerHeader = document.querySelector('.header');
 if (scriptRunnerHeader && scriptRunnerPanels.length > 0) {
@@ -62,6 +74,23 @@ window.addEventListener('message', (event) => {
 
 profileSelect.addEventListener('change', () => {
   requestLayouts(profileSelect.value);
+});
+
+buildParameterButton.addEventListener('click', () => {
+  openParameterBuilder();
+});
+
+addParameterRowButton.addEventListener('click', () => {
+  appendParameterRow();
+  renderParameterPreview();
+});
+
+applyParameterButton.addEventListener('click', () => {
+  applyParameterBuilder();
+});
+
+closeParameterBuilderButton.addEventListener('click', () => {
+  closeParameterBuilder();
 });
 
 runButton.addEventListener('click', () => {
@@ -113,12 +142,19 @@ function applyInit(payload) {
   state.defaults = payload.defaults;
   state.scriptRunnerEnabled = payload.scriptRunnerEnabled !== false;
   state.includeAuthByDefault = payload.includeAuthByDefault === true;
+  state.parameterBuilderEnabled = payload.parameterBuilderEnabled !== false;
 
   includeAuthCheckbox.checked = state.includeAuthByDefault;
   runButton.disabled = !state.scriptRunnerEnabled;
+  buildParameterButton.disabled = !state.scriptRunnerEnabled || !state.parameterBuilderEnabled;
+  buildParameterButton.classList.toggle('hidden', !state.parameterBuilderEnabled);
 
   if (!state.scriptRunnerEnabled) {
     setStatus('Script runner is disabled by setting.', true);
+  }
+
+  if (!state.parameterBuilderEnabled) {
+    closeParameterBuilder();
   }
 
   renderProfiles();
@@ -239,6 +275,347 @@ function collectPayload() {
   };
 }
 
+function openParameterBuilder() {
+  if (!state.parameterBuilderEnabled) {
+    return;
+  }
+
+  parameterRows.replaceChildren();
+  createRowsFromExistingParameter(scriptParamInput.value).forEach((row) => {
+    appendParameterRow(row);
+  });
+
+  parameterBuilderPanel.classList.remove('hidden');
+  buildParameterButton.setAttribute('aria-expanded', 'true');
+  renderParameterPreview();
+
+  const firstKeyInput = parameterRows.querySelector('[data-field="key"]');
+  if (firstKeyInput) {
+    firstKeyInput.focus();
+  }
+}
+
+function closeParameterBuilder() {
+  parameterBuilderPanel.classList.add('hidden');
+  buildParameterButton.setAttribute('aria-expanded', 'false');
+}
+
+function appendParameterRow(row = createEmptyParameterRow()) {
+  const rowId = `parameterBuilderRow${parameterRowCounter}`;
+  parameterRowCounter += 1;
+
+  const rowElement = document.createElement('div');
+  rowElement.className = 'builder-row';
+
+  const keyInput = document.createElement('input');
+  keyInput.id = `${rowId}Key`;
+  keyInput.type = 'text';
+  keyInput.placeholder = 'key';
+  keyInput.value = row.key;
+  keyInput.dataset.field = 'key';
+  keyInput.addEventListener('input', renderParameterPreview);
+
+  const typeSelect = document.createElement('select');
+  typeSelect.id = `${rowId}Type`;
+  typeSelect.dataset.field = 'type';
+  PARAMETER_VALUE_TYPES.forEach((type) => {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = getParameterTypeLabel(type);
+    typeSelect.appendChild(option);
+  });
+  typeSelect.value = normalizeParameterType(row.type);
+
+  const keyField = createBuilderField('Key', keyInput);
+  const typeField = createBuilderField('Type', typeSelect);
+  const valueField = document.createElement('div');
+  valueField.className = 'builder-field builder-value-field';
+
+  renderBuilderValueControl(valueField, rowId, typeSelect.value, row.value);
+
+  typeSelect.addEventListener('change', () => {
+    const existingValue = rowElement.querySelector('[data-field="value"]');
+    renderBuilderValueControl(
+      valueField,
+      rowId,
+      typeSelect.value,
+      existingValue ? existingValue.value : ''
+    );
+    renderParameterPreview();
+  });
+
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.textContent = 'Remove';
+  removeButton.className = 'secondary builder-remove-button';
+  removeButton.addEventListener('click', () => {
+    rowElement.remove();
+
+    if (!parameterRows.querySelector('.builder-row')) {
+      appendParameterRow();
+    }
+
+    renderParameterPreview();
+  });
+
+  rowElement.append(keyField, typeField, valueField, removeButton);
+  parameterRows.appendChild(rowElement);
+}
+
+function createBuilderField(labelText, control) {
+  const field = document.createElement('div');
+  field.className = 'builder-field';
+
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  label.htmlFor = control.id;
+
+  field.append(label, control);
+  return field;
+}
+
+function renderBuilderValueControl(field, rowId, type, value) {
+  const label = document.createElement('label');
+  label.textContent = 'Value';
+  label.htmlFor = `${rowId}Value`;
+
+  const normalizedType = normalizeParameterType(type);
+  let control;
+
+  if (normalizedType === 'bool') {
+    control = document.createElement('select');
+    const trueOption = document.createElement('option');
+    trueOption.value = 'true';
+    trueOption.textContent = 'true';
+    const falseOption = document.createElement('option');
+    falseOption.value = 'false';
+    falseOption.textContent = 'false';
+    control.append(trueOption, falseOption);
+    control.value = value === 'false' ? 'false' : 'true';
+    control.addEventListener('change', renderParameterPreview);
+  } else if (normalizedType === 'number') {
+    control = document.createElement('input');
+    control.type = 'number';
+    control.step = 'any';
+    control.inputMode = 'decimal';
+    control.value = value;
+    control.addEventListener('input', renderParameterPreview);
+  } else {
+    control = document.createElement('textarea');
+    control.rows = normalizedType === 'json' ? 4 : 1;
+    control.value = value;
+    control.addEventListener('input', renderParameterPreview);
+  }
+
+  control.id = `${rowId}Value`;
+  control.dataset.field = 'value';
+  control.className = normalizedType === 'json' ? 'builder-json-value' : '';
+  field.replaceChildren(label, control);
+}
+
+function renderParameterPreview() {
+  const result = buildParameterJson(collectParameterBuilderRows());
+  parameterPreview.textContent = result.json || '';
+  parameterBuilderStatus.textContent = result.error || '';
+  parameterBuilderStatus.classList.toggle('error', Boolean(result.error));
+  applyParameterButton.disabled = Boolean(result.error);
+}
+
+function applyParameterBuilder() {
+  const result = buildParameterJson(collectParameterBuilderRows());
+
+  if (result.error) {
+    renderParameterPreview();
+    return;
+  }
+
+  scriptParamInput.value = result.json;
+  closeParameterBuilder();
+  setStatus('Parameter JSON generated.');
+}
+
+function collectParameterBuilderRows() {
+  return Array.from(parameterRows.querySelectorAll('.builder-row')).map((row) => {
+    const keyInput = row.querySelector('[data-field="key"]');
+    const typeSelect = row.querySelector('[data-field="type"]');
+    const valueInput = row.querySelector('[data-field="value"]');
+
+    return {
+      key: keyInput ? keyInput.value : '',
+      type: typeSelect ? typeSelect.value : 'string',
+      value: valueInput ? valueInput.value : ''
+    };
+  });
+}
+
+function createRowsFromExistingParameter(parameter) {
+  const trimmed = typeof parameter === 'string' ? parameter.trim() : '';
+  if (!trimmed) {
+    return [createEmptyParameterRow()];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return [createEmptyParameterRow()];
+    }
+
+    const rows = Object.entries(parsed).map(([key, value]) => ({
+      key,
+      ...inferParameterRowValue(value)
+    }));
+
+    return rows.length > 0 ? rows : [createEmptyParameterRow()];
+  } catch {
+    return [createEmptyParameterRow()];
+  }
+}
+
+function createEmptyParameterRow() {
+  return {
+    key: '',
+    type: 'string',
+    value: ''
+  };
+}
+
+function inferParameterRowValue(value) {
+  if (typeof value === 'string') {
+    return {
+      type: 'string',
+      value
+    };
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return {
+      type: 'number',
+      value: String(value)
+    };
+  }
+
+  if (typeof value === 'boolean') {
+    return {
+      type: 'bool',
+      value: value ? 'true' : 'false'
+    };
+  }
+
+  return {
+    type: 'json',
+    value: JSON.stringify(value, null, 2)
+  };
+}
+
+function buildParameterJson(rows) {
+  const output = Object.create(null);
+  const seenKeys = new Set();
+
+  for (const [index, row] of rows.entries()) {
+    const key = typeof row.key === 'string' ? row.key.trim() : '';
+    const type = normalizeParameterType(row.type);
+    const value = typeof row.value === 'string' ? row.value : '';
+    const isEmptyRow = key === '' && type === 'string' && value === '';
+
+    if (isEmptyRow) {
+      continue;
+    }
+
+    if (!key) {
+      return {
+        json: '',
+        error: `Row ${index + 1}: key is required.`
+      };
+    }
+
+    if (seenKeys.has(key)) {
+      return {
+        json: '',
+        error: `Row ${index + 1}: key "${key}" is duplicated.`
+      };
+    }
+
+    const parsed = parseParameterValue(type, value, index);
+    if (parsed.error) {
+      return {
+        json: '',
+        error: parsed.error
+      };
+    }
+
+    seenKeys.add(key);
+    output[key] = parsed.value;
+  }
+
+  return {
+    json: JSON.stringify(output, null, 2),
+    error: ''
+  };
+}
+
+function parseParameterValue(type, value, index) {
+  if (type === 'string') {
+    return {
+      value,
+      error: ''
+    };
+  }
+
+  if (type === 'number') {
+    const trimmed = value.trim();
+    const parsed = Number(trimmed);
+
+    if (!trimmed || !Number.isFinite(parsed)) {
+      return {
+        value: undefined,
+        error: `Row ${index + 1}: enter a valid number.`
+      };
+    }
+
+    return {
+      value: parsed,
+      error: ''
+    };
+  }
+
+  if (type === 'bool') {
+    return {
+      value: value === 'true',
+      error: ''
+    };
+  }
+
+  try {
+    return {
+      value: JSON.parse(value.trim()),
+      error: ''
+    };
+  } catch {
+    return {
+      value: undefined,
+      error: `Row ${index + 1}: enter valid JSON.`
+    };
+  }
+}
+
+function normalizeParameterType(type) {
+  return PARAMETER_VALUE_TYPES.includes(type) ? type : 'string';
+}
+
+function getParameterTypeLabel(type) {
+  switch (type) {
+    case 'number':
+      return 'Number';
+    case 'bool':
+      return 'Boolean';
+    case 'json':
+      return 'JSON';
+    case 'string':
+    default:
+      return 'String';
+  }
+}
+
 function createLoadingSkeleton(widths) {
   const skeleton = document.createElement('div');
   skeleton.className = 'loading-skeleton';
@@ -261,7 +638,9 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
     return false;
   }
 
-  const existingOptions = new Map(Array.from(select.options).map((option) => [option.value, option]));
+  const existingOptions = new Map(
+    Array.from(select.options).map((option) => [option.value, option])
+  );
 
   items.forEach((item, index) => {
     const value = getValue(item);
