@@ -983,7 +983,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.1",
-    "@types/vscode": "^1.96.0",
+    "@types/vscode": "^1.120.0",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.33.1",
     "@vitest/coverage-v8": "^4.1.7",
@@ -997,7 +997,7 @@
     "rimraf": "^6.0.1",
     "shx": "^0.4.0",
     "typedoc": "^0.28.19",
-    "typescript": "^5.8.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   }
 }
