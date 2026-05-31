@@ -2,7 +2,7 @@
   "name": "filemaker-data-api-tools",
   "displayName": "FileMaker Data API Tools",
   "description": "Query, edit, and explore FileMaker data without leaving VS Code. Full CRUD for fmrest, visual query builder, schema diffing, batch import/export, and TypeScript type generation for Claris FileMaker Server and FileMaker Cloud.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "deffenda",
   "license": "MIT",
   "author": {

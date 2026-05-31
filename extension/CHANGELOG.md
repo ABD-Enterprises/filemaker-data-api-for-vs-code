@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.0
+
+_Released 2026-05-31._
+
 - [FEATURE] Connection wizard now offers a **Connect Now** action immediately after a profile is saved, so first-run users flow straight from "saved" to an open session without hunting for **FileMaker: Connect** in the Command Palette. Editing an existing profile offers **Reconnect now** instead.
 
 - [FEATURE] Added a Layout Inspector view that shows selected layout fields, portals, value lists, and field validation rules with refreshable session caching.
