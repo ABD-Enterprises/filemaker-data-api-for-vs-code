@@ -203,17 +203,53 @@ export class ConnectionWizardPanel {
         await this.secretStore.deletePassword(profile.id);
       }
 
+      const isNewProfile = !this.editingProfile;
       this.editingProfile = profile;
 
       await this.panel.webview.postMessage({
         type: 'saveSuccess',
-        message: `Profile "${profile.name}" saved. Use FileMaker: Connect to start a session.`
+        message: `Profile "${profile.name}" saved.`
       });
+
+      // Close the gap between "saved" and "connected": the natural next step
+      // after creating a profile is to open a session, but until now the user
+      // had to discover and run FileMaker: Connect themselves. Offer it inline
+      // as a native toast action so first-run onboarding flows straight through.
+      void this.offerConnect(profile, isNewProfile);
     } catch (error) {
       await this.panel.webview.postMessage({
         type: 'saveError',
         message: toUserErrorMessage(error, 'Failed to save profile.')
       });
+    }
+  }
+
+  /**
+   * Surface a "Connect Now" toast after a save so the user can open a session
+   * without hunting for the command. The connect command resolves the profile
+   * from the `{ profileId }` arg, so we hand it the freshly-saved id directly.
+   * Failures here are non-fatal — the profile is already persisted and the user
+   * can connect later from the sidebar or Command Palette.
+   */
+  private async offerConnect(
+    profile: ConnectionProfile,
+    isNewProfile: boolean
+  ): Promise<void> {
+    try {
+      const prompt = isNewProfile
+        ? `Profile "${profile.name}" saved. Connect now to start a session?`
+        : `Profile "${profile.name}" updated. Reconnect now?`;
+      const choice = await vscode.window.showInformationMessage(
+        prompt,
+        'Connect Now'
+      );
+      if (choice === 'Connect Now') {
+        await vscode.commands.executeCommand('filemakerDataApiTools.connect', {
+          profileId: profile.id
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to offer post-save connect.', { error });
     }
   }
 

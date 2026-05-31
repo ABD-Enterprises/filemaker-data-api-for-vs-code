@@ -263,15 +263,17 @@ Skip this scenario if SC-01 passed. Use it if Marketplace install is unavailable
 
 **Steps:**
 1. Click **Save Profile** in the wizard.
-2. Observe the bottom status bar of VS Code.
-3. Run `⌘+Shift+P` → **FileMaker: Connect**. Pick your profile from the list.
+2. Observe the inline status under the form and the toast that appears.
+3. In the `Profile "<name>" saved. Connect now to start a session?` toast, click **Connect Now**.
+4. Observe the bottom status bar of VS Code.
 
 **Expected:**
-- Save: a success toast appears: `Profile "<name>" saved. Use FileMaker: Connect to start a session.`
-- After **Connect**: the bottom status bar shows a persistent indicator like `$(plug) FileMaker: <profile name>`.
+- Save: the inline form status reads `Profile "<name>" saved.` and a toast appears: `Profile "<name>" saved. Connect now to start a session?` with a **Connect Now** action.
+- Clicking **Connect Now** opens a session directly (no need to find **FileMaker: Connect** in the palette). **FileMaker: Connect** from the Command Palette remains available as an alternative.
+- After connecting: the bottom status bar shows a persistent indicator like `$(plug) FileMaker: <profile name>`.
 - The status bar item is **always visible** (not just briefly shown then dismissed).
 
-**Pass criteria:** Save succeeded, persistent status bar item appears and stays.
+**Pass criteria:** Save succeeded, the **Connect Now** action opened a session, persistent status bar item appears and stays.
 
 **On failure:** Capture: status bar screenshot, Output panel.
 
