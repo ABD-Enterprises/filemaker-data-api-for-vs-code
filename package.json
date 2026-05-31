@@ -23,6 +23,9 @@
     "package:vsix": "npm run build --workspaces --if-present && npm run package:vsix -w extension",
     "setup": "node ./setup.mjs"
   },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7"
+  },
   "overrides": {
     "postcss": "^8.5.10"
   }

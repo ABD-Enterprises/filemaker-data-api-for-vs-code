@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "sourceMap": true,
     "types": ["node", "vscode"]
   },

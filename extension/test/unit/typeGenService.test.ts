@@ -146,6 +146,11 @@ void run;
       target: ts.ScriptTarget.ES2020,
       module: ts.ModuleKind.CommonJS,
       moduleResolution: ts.ModuleResolutionKind.Node10,
+      // TypeScript 6.0 deprecates the node10 resolver; this inline program
+      // still targets it deliberately (it mirrors a consumer's classic
+      // CommonJS tsconfig). Silence the deprecation so the diagnostics
+      // assertion below stays focused on the generated code, not tooling.
+      ignoreDeprecations: '6.0',
       lib: ['lib.es2020.d.ts', 'lib.dom.d.ts'],
       skipLibCheck: true
     });

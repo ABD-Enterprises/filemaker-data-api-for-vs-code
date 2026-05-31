@@ -2,10 +2,11 @@
 
 ![Schema and batch tooling visible after connecting](../marketplace/schema-and-batch.png)
 
-Once you've saved a profile, **click Connect**: either the **Connect**
-button in the welcome view, run **FileMaker: Connect** from the Command
-Palette (`Ctrl/Cmd+Shift+P`), or right-click the profile in the FileMaker
-sidebar and choose **Connect**.
+Right after you save a profile, the wizard offers a **Connect Now** action —
+click it to open a session immediately. You can also connect later: use the
+**Connect** button in the welcome view, run **FileMaker: Connect** from the
+Command Palette (`Ctrl/Cmd+Shift+P`), or right-click the profile in the
+FileMaker sidebar and choose **Connect**.
 
 What you'll see:
 
