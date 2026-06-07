@@ -36,3 +36,9 @@ updates:
       - dependency-name: uuid
         update-types:
           - version-update:semver-major
+      # @types/vscode must track the MINIMUM VS Code we support
+      # (engines.vscode in extension/package.json), not the latest release.
+      # `vsce package` hard-fails when @types/vscode > engines.vscode, so
+      # auto-bumps here (e.g. 1.96 -> 1.120) break the package/publish CI.
+      # Bump this only in lockstep with a deliberate engines.vscode raise.
+      - dependency-name: "@types/vscode"
