@@ -41,9 +41,10 @@ monorepo workspaces are ready for `npm test`, `npm run build`, etc.
 - A FileMaker Server. You supply your own server URL + credentials at
   profile-creation time. The demo sandbox (#168) will replace this
   requirement when it's online.
-- Anthropic / OpenAI API keys for the cloud agent. Add them as
-  Codespaces secrets if you want to test the
-  `eas-claude-code-agent.yml` workflow path; otherwise ignore.
+- A model CLI credential (e.g. `codex --login`) if you intend to run the
+  ORC ticket loop from inside the container. Governance for this repo is
+  ORC (see `CLAUDE.md` / `AGENTS.md`); the loop runs via the ORC engine,
+  not a per-repo GitHub Actions agent.
 
 ## Updating the container
 
