@@ -107,25 +107,16 @@ describe('validateEnvelope', () => {
   });
 
   it('walks arrays for forbidden keys', () => {
-    const malicious = {
-      type: 'ready',
-      items: [
-        { ok: true },
-        { __proto__: { polluted: true } }
-      ]
-    };
-    // Object literal short-circuits __proto__; force own-property via JSON.
-    const parsed = JSON.parse(JSON.stringify(malicious).replace('"items":', '"items":'));
-    // Re-inject __proto__ at array element via parsed JSON
+    // A `__proto__` key in an object literal sets the prototype rather than an
+    // own property, so it cannot exercise the array walk. Parse JSON instead,
+    // which produces a genuine own `__proto__` property at an array element.
     const withInjected = JSON.parse(
       '{"type":"ready","items":[{"ok":true},{"__proto__":{"polluted":true}}]}'
     );
     const result = validateEnvelope(withInjected);
     expect(result).toMatchObject({ ok: false, reason: 'prototype-pollution' });
-    // Smoke check: the safe message above is OK
+    // Control: the same shape without the forbidden key validates cleanly.
     const safe = validateEnvelope({ type: 'ready', items: [{ ok: true }] });
     expect(safe.ok).toBe(true);
-    // parsed isn't asserted on; this just exercises the array walk.
-    expect(parsed).toBeTruthy();
   });
 });

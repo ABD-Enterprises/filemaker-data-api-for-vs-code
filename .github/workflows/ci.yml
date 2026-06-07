@@ -9,6 +9,13 @@ on:
       - 'v*'
   pull_request:
 
+# Least-privilege default for every job. The publish job overrides this with
+# the narrower write scope it actually needs; build-test and package are
+# read-only. Explicit top-level permissions also satisfy CodeQL's
+# actions/missing-workflow-permissions hardening rule.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
