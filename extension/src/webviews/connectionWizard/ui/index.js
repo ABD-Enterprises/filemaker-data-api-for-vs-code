@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveBtn = /** @type {HTMLButtonElement} */ (document.getElementById('saveBtn'));
   const testBtn = /** @type {HTMLButtonElement} */ (document.getElementById('testBtn'));
   const statusEl = /** @type {HTMLElement} */ (document.getElementById('status'));
+  const templateLockedFields = new Set();
 
   let authMode = 'direct';
   /** @type {'off'|'warn'|'block'} */
@@ -178,7 +179,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       case 'loadProfile':
+        clearTemplateState();
         populateForm(message.payload);
+        break;
+
+      case 'loadTemplate':
+        populateForm(message.payload && message.payload.template);
+        applyTemplateState(message.payload);
+        break;
+
+      case 'templateWarning':
+        showStatus('warning', message.message || 'Profile template could not be used.');
         break;
     }
   });
@@ -262,6 +273,80 @@ document.addEventListener('DOMContentLoaded', () => {
   function setFieldValue(id, value) {
     const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
     if (el) el.value = value;
+  }
+
+  function applyTemplateState(payload) {
+    clearTemplateState();
+    showTemplateBanner();
+
+    const lockedFields = Array.isArray(payload && payload.lockedFields)
+      ? payload.lockedFields
+      : [];
+    for (const field of lockedFields) {
+      lockTemplateField(String(field));
+    }
+  }
+
+  function clearTemplateState() {
+    hideTemplateBanner();
+    for (const field of templateLockedFields) {
+      unlockTemplateField(String(field));
+    }
+    templateLockedFields.clear();
+  }
+
+  function showTemplateBanner() {
+    let banner = document.getElementById('profileTemplateBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'profileTemplateBanner';
+      banner.className = 'template-banner';
+      banner.setAttribute('role', 'status');
+      const subtitle = document.querySelector('.subtitle');
+      if (subtitle?.parentElement) {
+        subtitle.insertAdjacentElement('afterend', banner);
+      } else {
+        form.insertBefore(banner, form.firstChild);
+      }
+    }
+    banner.textContent = 'Using template from .filemaker/profile-template.json';
+    banner.style.display = '';
+  }
+
+  function hideTemplateBanner() {
+    const banner = document.getElementById('profileTemplateBanner');
+    if (banner) {
+      banner.style.display = 'none';
+      banner.textContent = '';
+    }
+  }
+
+  function lockTemplateField(id) {
+    const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
+    if (!el) return;
+
+    el.readOnly = true;
+    el.setAttribute('aria-readonly', 'true');
+    el.classList.add('template-locked-input');
+    el.closest('.field')?.classList.add('template-locked');
+    templateLockedFields.add(id);
+
+    if (id === 'apiBasePath' || id === 'apiVersionPath') {
+      const advanced = /** @type {HTMLDetailsElement|null} */ (
+        document.querySelector('.advanced-toggle')
+      );
+      if (advanced) advanced.open = true;
+    }
+  }
+
+  function unlockTemplateField(id) {
+    const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
+    if (!el) return;
+
+    el.readOnly = false;
+    el.removeAttribute('aria-readonly');
+    el.classList.remove('template-locked-input');
+    el.closest('.field')?.classList.remove('template-locked');
   }
 
   function showStatus(type, message) {

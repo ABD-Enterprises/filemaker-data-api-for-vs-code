@@ -20,6 +20,7 @@
   --muted: var(--vscode-descriptionForeground, #64748b);
   --error: var(--vscode-errorForeground, #ef4444);
   --success: var(--vscode-testing-iconPassed, #22c55e);
+  --warning: var(--vscode-editorWarning-foreground, #d97706);
 }
 
 body {
@@ -44,6 +45,17 @@ h1 {
 .subtitle {
   color: var(--muted);
   margin: 0 0 24px 0;
+}
+
+.template-banner {
+  border: 1px solid var(--vscode-inputValidation-infoBorder, var(--accent));
+  background: var(--vscode-inputValidation-infoBackground, rgba(14, 165, 233, 0.08));
+  color: var(--vscode-inputValidation-infoForeground, var(--text));
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 0 0 16px 0;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .form-section {
@@ -122,6 +134,15 @@ h1 {
   margin-bottom: 4px;
 }
 
+.field.template-locked label::after {
+  content: "Locked by template";
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .field input,
 .field select {
   width: 100%;
@@ -140,6 +161,11 @@ h1 {
   outline: 1px solid var(--vscode-focusBorder, var(--accent));
   outline-offset: -1px;
   border-color: var(--vscode-focusBorder, var(--accent));
+}
+
+.field input.template-locked-input {
+  color: var(--vscode-disabledForeground, var(--muted));
+  background: var(--vscode-inputOption-activeBackground, rgba(14, 165, 233, 0.08));
 }
 
 .field .hint {
@@ -259,6 +285,13 @@ h1 {
   background: var(--vscode-inputValidation-infoBackground, rgba(34, 197, 94, 0.1));
   color: var(--vscode-testing-iconPassed, var(--success));
   border: 1px solid var(--vscode-testing-iconPassed, var(--success));
+}
+
+.status.warning {
+  display: block;
+  background: var(--vscode-inputValidation-warningBackground, rgba(217, 119, 6, 0.1));
+  color: var(--vscode-inputValidation-warningForeground, var(--warning));
+  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--warning));
 }
 
 .loading-skeleton {

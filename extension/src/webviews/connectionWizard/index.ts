@@ -12,6 +12,10 @@ import {
   validateServerUrl
 } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
+import {
+  loadConnectionProfileTemplate,
+  PROFILE_TEMPLATE_LOCKED_FIELDS
+} from '../../services/profileTemplate';
 
 export type ConnectionWizardTestPolicy = 'off' | 'warn' | 'block';
 
@@ -149,6 +153,31 @@ export class ConnectionWizardPanel {
       await this.panel.webview.postMessage({
         type: 'loadProfile',
         payload: this.editingProfile
+      });
+      return;
+    }
+
+    const result = await loadConnectionProfileTemplate();
+    if (result.warning) {
+      this.logger.warn('Profile template ignored.', {
+        sourcePath: result.sourcePath,
+        message: result.warning
+      });
+      await this.panel.webview.postMessage({
+        type: 'templateWarning',
+        message: result.warning
+      });
+      return;
+    }
+
+    if (result.template) {
+      await this.panel.webview.postMessage({
+        type: 'loadTemplate',
+        payload: {
+          template: result.template,
+          sourcePath: result.sourcePath,
+          lockedFields: result.template.locked ? PROFILE_TEMPLATE_LOCKED_FIELDS : []
+        }
       });
     }
   }
