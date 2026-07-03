@@ -118,6 +118,9 @@ function buildFallbackAxiosMessage(
   status: number | undefined
 ): string {
   if (options?.fallbackMessage) {
+    if (!status && error.message && isTlsCertificateMessage(error.message)) {
+      return `${options.fallbackMessage} (${error.message})`;
+    }
     return status ? `${options.fallbackMessage} (HTTP ${status})` : options.fallbackMessage;
   }
 
@@ -126,6 +129,12 @@ function buildFallbackAxiosMessage(
   }
 
   return error.message || 'Network request failed.';
+}
+
+function isTlsCertificateMessage(message: string): boolean {
+  return /self[- ]signed|certificate verify failed|certificate chain|unable to verify|unable to get local issuer|cert_has_expired|self_signed_cert|unable_to_verify_leaf_signature|unable_to_get_issuer_cert|unable_to_get_issuer_cert_locally|err_tls_cert_altname_invalid/i.test(
+    message
+  );
 }
 
 function mergeOptions(error: NormalizedError, options: NormalizeErrorOptions | undefined): NormalizedError {

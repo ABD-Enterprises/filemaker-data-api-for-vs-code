@@ -102,4 +102,20 @@ describe('ProfileStore', () => {
     expect(profiles).toHaveLength(1);
     expect(profiles[0]?.id).toBe('valid-profile');
   });
+
+  it('persists TLS override fields with normalized profile metadata', async () => {
+    const globalState = new InMemoryMemento();
+    const workspaceState = new InMemoryMemento();
+    const store = new ProfileStore(globalState as never, workspaceState as never);
+
+    await store.upsertProfile({
+      ...createProfile('tls'),
+      allowSelfSigned: true,
+      caBundlePath: '  /workspace/certs/dev-ca.pem  '
+    });
+
+    const profile = await store.getProfile('tls');
+    expect(profile?.allowSelfSigned).toBe(true);
+    expect(profile?.caBundlePath).toBe('/workspace/certs/dev-ca.pem');
+  });
 });

@@ -32,6 +32,7 @@ import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
+import { createHttpsAgentForProfile } from './tlsAgent';
 
 interface LayoutCacheEntry {
   expiresAt: number;
@@ -964,7 +965,8 @@ export class FMClient {
         params: request.params,
         signal: request.signal,
         timeout: this.timeoutMs,
-        maxBodyLength: Infinity
+        maxBodyLength: Infinity,
+        httpsAgent: createHttpsAgentForProfile(profile)
       };
 
       const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
@@ -1027,6 +1029,7 @@ export class FMClient {
         signal: request.signal,
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
+        httpsAgent: createHttpsAgentForProfile(profile),
         validateStatus: (status) => (status >= 200 && status < 300) || status === 304
       };
 
@@ -1086,7 +1089,8 @@ export class FMClient {
       data: request.data,
       params: request.params,
       signal: request.signal,
-      timeout: this.timeoutMs
+      timeout: this.timeoutMs,
+      httpsAgent: createHttpsAgentForProfile(profile)
     };
 
     const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);

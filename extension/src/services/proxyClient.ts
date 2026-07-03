@@ -17,6 +17,7 @@ import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
 import { normalizeError } from '../utils/normalizeError';
 import { redactValue } from '../utils/redact';
+import { createHttpsAgentForProfile } from './tlsAgent';
 
 interface ProxyEnvelope<T> {
   ok?: boolean;
@@ -303,7 +304,8 @@ export class ProxyClient {
         },
         {
           headers,
-          signal
+          signal,
+          httpsAgent: createHttpsAgentForProfile(profile)
         }
       );
 

@@ -134,6 +134,8 @@ function validateConnectionProfile(profile: ConnectionProfile): ConnectionProfil
     username: profile.username?.trim() || undefined,
     apiBasePath: profile.apiBasePath?.trim() || undefined,
     apiVersionPath: profile.apiVersionPath?.trim() || undefined,
-    proxyEndpoint: profile.proxyEndpoint?.trim() || undefined
+    proxyEndpoint: profile.proxyEndpoint?.trim() || undefined,
+    allowSelfSigned: profile.allowSelfSigned === true ? true : undefined,
+    caBundlePath: profile.caBundlePath?.trim() || undefined
   };
 }
