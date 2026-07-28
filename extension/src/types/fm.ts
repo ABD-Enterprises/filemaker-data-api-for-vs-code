@@ -17,6 +17,8 @@ export interface ConnectionProfile {
   apiBasePath?: string;
   apiVersionPath?: string;
   proxyEndpoint?: string;
+  allowSelfSigned?: boolean;
+  caBundlePath?: string;
 }
 
 export interface FileMakerMessage {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import nock from 'nock';
 
 import { ProxyClient } from '../../src/services/proxyClient';
+import * as tlsAgent from '../../src/services/tlsAgent';
 import type { ConnectionProfile } from '../../src/types/fm';
 
 const PROXY_URL = 'https://proxy.example.com';
@@ -44,6 +45,10 @@ function createClient(secretStore?: ReturnType<typeof createSecretStore>) {
   return new ProxyClient(secretStore ?? createSecretStore(), createLogger(), 5000);
 }
 
+class FakeAxios {
+  public readonly post = vi.fn();
+}
+
 describe('ProxyClient', () => {
   describe('createSession', () => {
     it('returns the session token from the proxy', async () => {
@@ -66,6 +71,29 @@ describe('ProxyClient', () => {
       const client = createClient();
       await expect(client.createSession(createProfile())).rejects.toThrow('Invalid credentials');
       scope.done();
+    });
+
+    it('passes per-profile TLS overrides to the proxy HTTPS request', async () => {
+      const agentSpy = vi.spyOn(tlsAgent, 'createHttpsAgentForProfile');
+      const httpClient = new FakeAxios();
+      httpClient.post.mockResolvedValue({ data: { ok: true, data: { token: 'abc-session' } } });
+      const client = new ProxyClient(
+        createSecretStore() as never,
+        createLogger(),
+        5000,
+        httpClient as never
+      );
+
+      await expect(
+        client.createSession(createProfile({ allowSelfSigned: true }))
+      ).resolves.toBe('abc-session');
+
+      expect(agentSpy).toHaveBeenCalledWith(expect.objectContaining({ allowSelfSigned: true }));
+      const requestConfig = httpClient.post.mock.calls[0]?.[2] as {
+        httpsAgent?: unknown;
+      };
+      expect(requestConfig.httpsAgent).toBe(agentSpy.mock.results[0]?.value);
+      agentSpy.mockRestore();
     });
   });
 
