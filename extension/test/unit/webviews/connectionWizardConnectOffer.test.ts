@@ -13,9 +13,10 @@ import { ConnectionWizardPanel } from '../../../src/webviews/connectionWizard';
 interface CapturedPanel {
   fireMessage: (message: unknown) => Promise<void>;
   posted: unknown[];
+  logger: { warn: ReturnType<typeof vi.fn> };
 }
 
-function setupPanel(): CapturedPanel {
+function setupPanel(editingProfile?: Record<string, unknown>): CapturedPanel {
   const posted: unknown[] = [];
   let messageHandler: ((message: unknown) => unknown) | undefined;
 
@@ -70,14 +71,16 @@ function setupPanel(): CapturedPanel {
     profileStore as never,
     secretStore as never,
     fmClient as never,
-    logger as never
+    logger as never,
+    editingProfile as never
   );
 
   return {
     fireMessage: async (message: unknown) => {
       await messageHandler?.(message);
     },
-    posted
+    posted,
+    logger
   };
 }
 
@@ -98,6 +101,8 @@ const validSavePayload = {
 describe('Connection wizard post-save connect offer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockRejectedValue({ code: 'FileNotFound' });
   });
 
   it('offers Connect Now after a successful save', async () => {
@@ -139,6 +144,146 @@ describe('Connection wizard post-save connect offer', () => {
     expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
       'filemakerDataApiTools.connect',
       expect.anything()
+    );
+  });
+});
+
+describe('Connection wizard profile templates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('loads a valid workspace template into the add-profile wizard', async () => {
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockResolvedValue(
+      Buffer.from(
+        JSON.stringify({
+          name: 'Team Dev',
+          authMode: 'direct',
+          serverUrl: 'https://fm-dev.example.com',
+          database: 'TeamApp',
+          apiBasePath: '/fmi/data',
+          apiVersionPath: 'vLatest',
+          username: 'developer',
+          locked: true
+        })
+      )
+    );
+
+    const panel = setupPanel();
+    await panel.fireMessage({ type: 'ready' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const loadTemplate = panel.posted.find(
+      (message) => (message as { type?: string }).type === 'loadTemplate'
+    ) as { payload?: Record<string, unknown> } | undefined;
+    expect(loadTemplate?.payload).toMatchObject({
+      template: {
+        serverUrl: 'https://fm-dev.example.com',
+        database: 'TeamApp',
+        username: 'developer',
+        locked: true
+      },
+      lockedFields: ['serverUrl', 'database', 'apiBasePath', 'apiVersionPath']
+    });
+  });
+
+  it('loads unlocked templates without locking fields', async () => {
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockResolvedValue(
+      Buffer.from(
+        JSON.stringify({
+          name: 'Team Dev',
+          authMode: 'direct',
+          serverUrl: 'https://fm-dev.example.com',
+          database: 'TeamApp',
+          locked: false
+        })
+      )
+    );
+
+    const panel = setupPanel();
+    await panel.fireMessage({ type: 'ready' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const loadTemplate = panel.posted.find(
+      (message) => (message as { type?: string }).type === 'loadTemplate'
+    ) as { payload?: Record<string, unknown> } | undefined;
+    expect(loadTemplate?.payload).toMatchObject({
+      template: {
+        serverUrl: 'https://fm-dev.example.com',
+        database: 'TeamApp',
+        locked: false
+      },
+      lockedFields: []
+    });
+  });
+
+  it('rejects credential-bearing templates without posting secret values', async () => {
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockResolvedValue(
+      Buffer.from(
+        JSON.stringify({
+          serverUrl: 'https://fm-dev.example.com',
+          database: 'TeamApp',
+          password: 'super-secret'
+        })
+      )
+    );
+
+    const panel = setupPanel();
+    await panel.fireMessage({ type: 'ready' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const warning = panel.posted.find(
+      (message) => (message as { type?: string }).type === 'templateWarning'
+    ) as { message?: string } | undefined;
+    expect(warning?.message).toContain('credential fields');
+    expect(JSON.stringify(panel.posted)).not.toContain('super-secret');
+    expect(panel.logger.warn).toHaveBeenCalledWith(
+      'Profile template ignored.',
+      expect.objectContaining({
+        message: expect.not.stringContaining('super-secret')
+      })
+    );
+  });
+
+  it('does not apply workspace templates while editing an existing profile', async () => {
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockResolvedValue(
+      Buffer.from(
+        JSON.stringify({
+          serverUrl: 'https://template.example.com',
+          database: 'TemplateDB'
+        })
+      )
+    );
+
+    const panel = setupPanel({
+      id: 'existing',
+      name: 'Existing',
+      authMode: 'direct',
+      serverUrl: 'https://saved.example.com',
+      database: 'SavedDB',
+      username: 'saved'
+    });
+    await panel.fireMessage({ type: 'ready' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(readFile).not.toHaveBeenCalled();
+    expect(panel.posted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'loadProfile',
+          payload: expect.objectContaining({
+            serverUrl: 'https://saved.example.com',
+            database: 'SavedDB'
+          })
+        })
+      ])
+    );
+    expect(panel.posted).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'loadTemplate' })])
     );
   });
 });

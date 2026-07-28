@@ -86,4 +86,11 @@ describe('Connection wizard HTML/JS structural contract', () => {
     // functional until the HTML side is fixed.
     expect(wizardJsSource).toMatch(/document\.getElementById\(['"]wizardForm['"]\)\s*\|\|\s*document\.body/);
   });
+
+  it('UI script renders template banner and locked-field state', () => {
+    expect(wizardJsSource).toContain('profileTemplateBanner');
+    expect(wizardJsSource).toContain('Using template from .filemaker/profile-template.json');
+    expect(wizardJsSource).toContain('template-locked-input');
+    expect(wizardJsSource).toMatch(/el\.readOnly\s*=\s*true/);
+  });
 });

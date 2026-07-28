@@ -1,0 +1,10 @@
+{
+  "name": "Team Development",
+  "authMode": "direct",
+  "serverUrl": "https://fm-dev.example.com",
+  "database": "TeamApp",
+  "apiBasePath": "/fmi/data",
+  "apiVersionPath": "vLatest",
+  "username": "developer",
+  "locked": true
+}
