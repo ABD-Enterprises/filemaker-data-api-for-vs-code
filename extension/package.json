@@ -977,7 +977,7 @@
     "package:check": "npm run package:vsix"
   },
   "dependencies": {
-    "axios": "^1.18.0",
+    "axios": "^1.18.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
