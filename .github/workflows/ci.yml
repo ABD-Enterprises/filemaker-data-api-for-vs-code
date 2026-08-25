@@ -95,6 +95,7 @@ jobs:
         with:
           name: extension-vsix
           path: artifacts/*.vsix
+          retention-days: 14
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
