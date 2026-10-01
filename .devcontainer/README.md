@@ -24,11 +24,11 @@ seconds** on Codespaces' default 2-core machine.
 2. Clone this repo, open in VS Code.
 3. Command Palette → **Dev Containers: Reopen in Container**.
 
-The container is the same as Codespaces (`mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm`).
+The container is the same as Codespaces (`mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm`).
 
 ## What's preinstalled
 
-- Node.js 20 (matches the CI runner)
+- Node.js 22 (matches the CI runner)
 - Git, GitHub CLI (`gh`)
 - This extension (`deffenda.filemaker-data-api-tools`) from the
   Marketplace, latest published version

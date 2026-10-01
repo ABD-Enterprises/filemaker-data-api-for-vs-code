@@ -32,7 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
-- None.
+- Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
 
 ### [SECURITY]
 

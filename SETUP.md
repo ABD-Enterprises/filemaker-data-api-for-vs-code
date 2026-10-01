@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Git
-- Node.js 20+
+- Node.js 22+
 - npm
 
 ## macOS / Linux
