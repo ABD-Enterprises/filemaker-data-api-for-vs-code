@@ -982,16 +982,16 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.6.4",
     "@types/vscode": "~1.96.0",
-    "@typescript-eslint/eslint-plugin": "^8.70.1",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.33.1",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.3",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.2",
-    "globals": "^17.12.0",
+    "globals": "^17.13.0",
     "nock": "^14.0.17",
     "prettier": "^3.9.9",
     "rimraf": "^6.0.1",
@@ -999,6 +999,6 @@
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
     "typescript6": "npm:typescript@^6.0.3",
-    "vitest": "^4.1.7"
+    "vitest": "^5.0.3"
   }
 }
