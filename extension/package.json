@@ -986,7 +986,7 @@
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.33.1",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
@@ -998,6 +998,7 @@
     "shx": "^0.4.0",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
+    "typescript6": "npm:typescript@^6.0.3",
     "vitest": "^4.1.7"
   }
 }

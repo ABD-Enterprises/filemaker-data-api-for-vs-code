@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import * as ts from 'typescript';
+import * as ts from 'typescript6';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TypeGenService } from '../../src/services/typeGenService';
