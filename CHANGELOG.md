@@ -33,6 +33,7 @@ PR title prefix matches the highest-tier label added:
 ### [INTERNAL]
 
 - Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
+- Restore a passing CI build under TypeScript 7: replace the removed `moduleResolution: node` in the extension tsconfig, point the one compiler-API test at an aliased TypeScript 6, and align `@vitest/coverage-v8` with the installed Vitest major so `test:coverage` runs.
 
 ### [SECURITY]
 
