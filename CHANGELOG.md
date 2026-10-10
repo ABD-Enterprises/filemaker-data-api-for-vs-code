@@ -37,4 +37,4 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
-- None.
+- Harden the GitHub Actions workflows flagged by zizmor: `api-docs.yml` grants `pages: write` and `id-token: write` only to the deploy job; every `actions/checkout` sets `persist-credentials: false`; the CI `setup-node` steps set `package-manager-cache: false` so a future action bump cannot start restoring a package-manager cache in the job that publishes the extension.
