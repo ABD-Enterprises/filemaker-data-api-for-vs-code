@@ -34,6 +34,7 @@ PR title prefix matches the highest-tier label added:
 
 - Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
 - Restore a passing CI build under TypeScript 7: replace the removed `moduleResolution: node` in the extension tsconfig, point the one compiler-API test at an aliased TypeScript 6, and align `@vitest/coverage-v8` with the installed Vitest major so `test:coverage` runs.
+- Harden `dependency-auto-merge.yml` (a `pull_request_target` workflow): gate the job on the pull request author (`github.event.pull_request.user.login`) instead of `github.actor`, and grant `contents: write` / `pull-requests: write` to the job only, with no workflow-level permissions.
 
 ### [SECURITY]
 
