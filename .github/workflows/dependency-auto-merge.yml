@@ -4,14 +4,15 @@ on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   dependabot-dev-deps:
+    permissions:
+      contents: write
+      pull-requests: write
     if: |
-      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.draft == false
     runs-on: ubuntu-latest
