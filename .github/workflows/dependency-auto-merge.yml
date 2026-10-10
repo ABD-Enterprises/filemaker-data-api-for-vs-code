@@ -23,6 +23,35 @@ jobs:
         with:
           github-token: ${{ github.token }}
 
+      # The self-hosted Linux runners do not ship the GitHub CLI. Place a gh
+      # binary at a fixed job-scoped path: reuse one already on PATH, or
+      # download the pinned release for the runner's architecture (no root
+      # needed) and verify its published checksum. The consuming step calls
+      # that path directly, so no GITHUB_PATH or GITHUB_ENV write is needed.
+      - name: Ensure GitHub CLI is available
+        run: |
+          GH_VERSION=2.102.0
+          GH_HOME="${RUNNER_TEMP}/gh-cli"
+          mkdir -p "${GH_HOME}/bin"
+          if command -v gh >/dev/null 2>&1; then
+            ln -sf "$(command -v gh)" "${GH_HOME}/bin/gh"
+          else
+            case "$(uname -m)" in
+              x86_64) GH_ARCH=amd64 ;;
+              aarch64|arm64) GH_ARCH=arm64 ;;
+              *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+            esac
+            ASSET="gh_${GH_VERSION}_linux_${GH_ARCH}.tar.gz"
+            CHECKSUMS="gh_${GH_VERSION}_checksums.txt"
+            BASE_URL="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
+            curl -sSfL -o "${GH_HOME}/${ASSET}" "${BASE_URL}/${ASSET}"
+            curl -sSfL -o "${GH_HOME}/${CHECKSUMS}" "${BASE_URL}/${CHECKSUMS}"
+            (cd "${GH_HOME}" && grep " ${ASSET}$" "${CHECKSUMS}" | sha256sum -c -)
+            tar -xzf "${GH_HOME}/${ASSET}" -C "${GH_HOME}" --strip-components=1 \
+              "gh_${GH_VERSION}_linux_${GH_ARCH}/bin/gh"
+          fi
+          "${GH_HOME}/bin/gh" --version
+
       - name: Enable auto-merge for safe dev dependencies
         if: |
           steps.metadata.outputs.dependency-type == 'direct:development' &&
@@ -33,4 +62,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          "$RUNNER_TEMP/gh-cli/bin/gh" pr merge --auto --squash "$PR_URL"
