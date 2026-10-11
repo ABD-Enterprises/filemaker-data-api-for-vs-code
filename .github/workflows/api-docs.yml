@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}
     # configure-pages only reads the Pages site; publishing and the OIDC
     # token belong to the deploy job.
     permissions:
@@ -54,7 +54,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}
     permissions:
       contents: read
       pages: write
