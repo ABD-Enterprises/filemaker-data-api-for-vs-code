@@ -8,7 +8,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SchemaService } from '../services/schemaService';
 import { LayoutModePanel } from '../webviews/layoutMode';
-import { resolveProfileFromArg, pickProfile, showCommandError } from './common';
+import { resolveProfileFromArg, showCommandError } from './common';
 
 interface RegisterFmWebProjectCommandDeps {
   context: vscode.ExtensionContext;
@@ -61,8 +61,7 @@ export function registerFmWebProjectCommands(
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.selectActiveProfile', async (arg: unknown) => {
-      const resolved = await resolveProfileFromArg(arg, profileStore, true);
-      const profile = resolved ?? (await pickProfile(profileStore, true));
+      const profile = await resolveProfileFromArg(arg, profileStore);
       if (!profile) {
         return;
       }

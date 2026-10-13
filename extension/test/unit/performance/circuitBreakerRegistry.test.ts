@@ -30,9 +30,9 @@ describe('CircuitBreakerRegistry', () => {
     breaker.recordFailure(1_002);
     const entries = registry.list(1_500);
     expect(entries).toHaveLength(1);
-    expect(entries[0].diagnostics.state).toBe('open');
-    expect(entries[0].transitions).toHaveLength(1);
-    expect(entries[0].transitions[0].reason).toBe('failure-threshold');
+    expect(entries[0]?.diagnostics.state).toBe('open');
+    expect(entries[0]?.transitions).toHaveLength(1);
+    expect(entries[0]?.transitions[0]?.reason).toBe('failure-threshold');
   });
 
   it('records auto-half-open transition when the open window elapses', () => {
@@ -44,8 +44,8 @@ describe('CircuitBreakerRegistry', () => {
     // Past the openMs window
     breaker.getState(3_000);
     const entries = registry.list(3_000);
-    expect(entries[0].diagnostics.state).toBe('half-open');
-    expect(entries[0].transitions.map((t) => t.to)).toEqual(['open', 'half-open']);
+    expect(entries[0]?.diagnostics.state).toBe('half-open');
+    expect(entries[0]?.transitions.map((t) => t.to)).toEqual(['open', 'half-open']);
   });
 
   it('replaces prior entry on duplicate registration (last writer wins)', () => {
@@ -55,7 +55,7 @@ describe('CircuitBreakerRegistry', () => {
     registry.register('shared', a, 0);
     registry.register('shared', b, 100);
     expect(registry.size()).toBe(1);
-    expect(registry.list(200)[0].registeredAt).toBe(100);
+    expect(registry.list(200)[0]?.registeredAt).toBe(100);
   });
 
   it('caps recorded transitions at 25', () => {
@@ -71,10 +71,10 @@ describe('CircuitBreakerRegistry', () => {
       });
     }
     const entries = registry.list();
-    expect(entries[0].transitions.length).toBe(25);
+    expect(entries[0]?.transitions.length).toBe(25);
     // Most-recent are kept; oldest 25 dropped
-    expect(entries[0].transitions[0].at).toBe(25);
-    expect(entries[0].transitions[24].at).toBe(49);
+    expect(entries[0]?.transitions[0]?.at).toBe(25);
+    expect(entries[0]?.transitions[24]?.at).toBe(49);
   });
 
   it('unregister removes the breaker', () => {

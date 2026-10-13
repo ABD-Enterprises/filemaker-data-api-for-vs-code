@@ -22,8 +22,10 @@ describe('writeJsonlFile', () => {
     const content = readFileSync(path, 'utf8');
     const lines = content.trim().split('\n');
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0])).toEqual({ id: 1, name: 'Alice' });
-    expect(JSON.parse(lines[1])).toEqual({ id: 2, name: 'Bob' });
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      { id: 1, name: 'Alice' },
+      { id: 2, name: 'Bob' }
+    ]);
 
     rmSync(dir, { recursive: true });
   });
@@ -53,8 +55,11 @@ describe('writeJsonlFile', () => {
     const content = readFileSync(path, 'utf8');
     const lines = content.trim().split('\n');
     expect(lines).toHaveLength(3);
-    expect(JSON.parse(lines[0]).text).toBe('line1\nline2');
-    expect(JSON.parse(lines[2]).text).toBe('quote"inside');
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      { text: 'line1\nline2' },
+      { text: 'tab\there' },
+      { text: 'quote"inside' }
+    ]);
 
     rmSync(dir, { recursive: true });
   });

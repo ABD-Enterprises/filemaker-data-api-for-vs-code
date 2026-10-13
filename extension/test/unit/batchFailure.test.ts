@@ -74,12 +74,13 @@ describe('batch service failure scenarios', () => {
   it('should throw on empty result set when server returns an error', async () => {
     const mockClient = {
       findRecords: vi.fn(async () => {
-        const error: Record<string, unknown> = new Error('No records match the request');
-        error.isAxiosError = true;
-        error.response = {
-          status: 401,
-          data: { messages: [{ code: '401', message: 'No records match the request' }] }
-        };
+        const error = Object.assign(new Error('No records match the request'), {
+          isAxiosError: true,
+          response: {
+            status: 401,
+            data: { messages: [{ code: '401', message: 'No records match the request' }] }
+          }
+        });
         throw error;
       })
     } as unknown as FMClient;

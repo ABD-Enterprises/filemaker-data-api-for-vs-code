@@ -1,3 +1,15 @@
+import { AxiosHeaders, type AxiosResponse } from 'axios';
+
+export function createAxiosResponse<T>(response: Pick<AxiosResponse<T>, 'data'>): AxiosResponse<T> {
+  return {
+    ...response,
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: { headers: new AxiosHeaders() }
+  };
+}
+
 export class InMemoryMemento {
   private readonly values = new Map<string, unknown>();
 

@@ -29,9 +29,12 @@ export class FmBridgeServer {
   private rateLimitWarningEmitted = false;
 
   public constructor(
-    private readonly profileStore: ProfileStore,
-    private readonly fmClient: FMClient,
-    private readonly fmWebProjectService: FmWebProjectService,
+    private readonly profileStore: Pick<ProfileStore, 'getActiveProfileId' | 'getProfile'>,
+    private readonly fmClient: Pick<
+      FMClient,
+      'findRecords' | 'getRecord' | 'editRecord' | 'createRecord' | 'deleteRecord' | 'runScript'
+    >,
+    private readonly fmWebProjectService: Pick<FmWebProjectService, 'isWorkspaceTrusted' | 'readProjectConfig'>,
     private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>,
     private readonly options: FmBridgeServerOptions = {}
   ) {}

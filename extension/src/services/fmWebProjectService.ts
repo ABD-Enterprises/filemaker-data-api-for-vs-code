@@ -35,9 +35,9 @@ const DEFAULT_FEATURE_FLAGS: FmWebFeatureFlags = {
 
 export class FmWebProjectService {
   public constructor(
-    private readonly profileStore: ProfileStore,
-    private readonly fmClient: FMClient,
-    private readonly schemaService: SchemaService,
+    private readonly profileStore: Pick<ProfileStore, 'setActiveProfileId'>,
+    private readonly fmClient: Pick<FMClient, 'listLayouts' | 'getLayoutMetadata' | 'listScripts'>,
+    private readonly schemaService: Pick<SchemaService, 'getLayoutSchema'>,
     private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>
   ) {}
 

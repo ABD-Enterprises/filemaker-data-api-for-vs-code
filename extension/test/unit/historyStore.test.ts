@@ -38,7 +38,7 @@ describe('HistoryStore', () => {
     const entries = store.listEntries();
 
     expect(entries).toHaveLength(2);
-    expect(entries[0].operation).toBe('getRecord');
-    expect(entries[1].operation).toBe('findRecords');
+    expect(entries[0]?.operation).toBe('getRecord');
+    expect(entries[1]?.operation).toBe('findRecords');
   });
 });

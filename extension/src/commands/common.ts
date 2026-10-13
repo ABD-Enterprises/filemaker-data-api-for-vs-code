@@ -45,7 +45,13 @@ export async function pickProfile(
   const profiles = await profileStore.listProfiles();
 
   if (profiles.length === 0) {
-    vscode.window.showWarningMessage('No FileMaker connection profiles configured.');
+    const action = await vscode.window.showWarningMessage(
+      'No FileMaker connection profiles configured.',
+      'Add Connection Profile'
+    );
+    if (action === 'Add Connection Profile') {
+      await vscode.commands.executeCommand('filemakerDataApiTools.addConnectionProfile');
+    }
     return undefined;
   }
 
@@ -57,17 +63,24 @@ export async function pickProfile(
         return activeProfile;
       }
     }
+
+    if (profiles.length === 1) {
+      return profiles[0];
+    }
   }
 
   const picked = await vscode.window.showQuickPick(
     profiles.map((profile) => ({
       label: profile.name,
-      detail: `${profile.database} • ${profile.authMode}`,
+      description: profile.id === profileStore.getActiveProfileId() ? 'Active' : undefined,
+      detail: `${profile.database} • ${new URL(profile.serverUrl).origin} • ${profile.authMode}`,
       profile
     })),
     {
       title: 'Select FileMaker Connection Profile',
-      placeHolder: 'Choose a connection profile'
+      placeHolder: 'Choose a connection profile',
+      matchOnDetail: true,
+      ignoreFocusOut: true
     }
   );
 
@@ -78,19 +91,52 @@ export async function promptForLayout(
   profile: ConnectionProfile,
   fmClient: FMClient
 ): Promise<string | undefined> {
-  const layouts = await fmClient.listLayouts(profile);
+  let layouts: string[];
+  try {
+    layouts = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Window,
+        title: `FileMaker: Loading layouts for ${profile.name}`
+      },
+      () => fmClient.listLayouts(profile)
+    );
+  } catch (error) {
+    await showCommandError(error, {
+      fallbackMessage: `Failed to load layouts for "${profile.name}".`,
+      actions: { profileId: profile.id, settingsKey: 'filemaker.requestTimeoutMs' }
+    });
+    return undefined;
+  }
 
   if (layouts.length === 0) {
-    vscode.window.showWarningMessage('No layouts available for the selected profile.');
+    vscode.window.showWarningMessage(
+      `No layouts available for "${profile.name}" (${profile.database}).`
+    );
     return undefined;
   }
 
   const picked = await vscode.window.showQuickPick(layouts, {
-    title: 'Select Layout',
-    placeHolder: 'Choose a layout'
+    title: `Select Layout — ${profile.name}`,
+    placeHolder: `Choose a layout in ${profile.database}`,
+    ignoreFocusOut: true
   });
 
   return picked;
+}
+
+export async function resolveLayoutContext(
+  arg: unknown,
+  profileStore: ProfileStore,
+  fmClient: FMClient
+): Promise<{ profile: ConnectionProfile; layout: string } | undefined> {
+  const contextArg = parseLayoutArg(arg);
+  const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+  if (!profile) {
+    return undefined;
+  }
+
+  const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+  return layout ? { profile, layout } : undefined;
 }
 
 export function parseProfileId(arg: unknown): string | undefined {
@@ -153,9 +199,6 @@ export function formatError(error: unknown): string {
   return toUserErrorMessage(error, 'Unexpected error.');
 }
 
-export async function showCommandError(
-  error: unknown,
-  options?: ShowErrorOptions
-): Promise<void> {
+export async function showCommandError(error: unknown, options?: ShowErrorOptions): Promise<void> {
   await showErrorWithDetails(error, options);
 }

@@ -1,12 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 
-import {
-  parseProfileId,
-  parseLayoutArg,
-  formatError
-} from '../../../src/commands/common';
+import { parseProfileId, parseLayoutArg, formatError } from '../../../src/commands/common';
 import { registerCoreCommands } from '../../../src/commands/index';
+import { registerRecordEditCommands } from '../../../src/commands/recordEdit';
+import { registerScriptRunnerCommands } from '../../../src/commands/scriptRunner';
+import { registerFmWebProjectCommands } from '../../../src/commands/fmWebProject';
+import { RecordViewerPanel } from '../../../src/webviews/recordViewer';
+import { RecordEditorPanel } from '../../../src/webviews/recordEditor';
+import { ScriptRunnerPanel } from '../../../src/webviews/scriptRunner';
 
 describe('parseProfileId', () => {
   it('returns profileId from valid arg', () => {
@@ -60,7 +62,11 @@ describe('formatError', () => {
 describe('registerCoreCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.window.showInputBox).mockReset();
+    vi.mocked(vscode.window.showQuickPick).mockReset();
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   function createMockDeps() {
     return {
@@ -92,7 +98,8 @@ describe('registerCoreCommands', () => {
         createSession: vi.fn(),
         deleteSession: vi.fn(),
         invalidateProfileCache: vi.fn(),
-        listLayouts: vi.fn().mockResolvedValue([])
+        listLayouts: vi.fn().mockResolvedValue([]),
+        findRecords: vi.fn().mockResolvedValue({ data: [] })
       } as never,
       logger: {
         debug: vi.fn(),
@@ -121,9 +128,9 @@ describe('registerCoreCommands', () => {
     const deps = createMockDeps();
     registerCoreCommands(deps);
 
-    const registeredNames = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
-      ([name]) => name
-    );
+    const registeredNames = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.map(([name]) => name);
     expect(registeredNames).toContain('filemakerDataApiTools.connect');
   });
 
@@ -131,9 +138,9 @@ describe('registerCoreCommands', () => {
     const deps = createMockDeps();
     registerCoreCommands(deps);
 
-    const registeredNames = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
-      ([name]) => name
-    );
+    const registeredNames = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.map(([name]) => name);
     expect(registeredNames).toContain('filemakerDataApiTools.disconnect');
   });
 
@@ -141,9 +148,9 @@ describe('registerCoreCommands', () => {
     const deps = createMockDeps();
     registerCoreCommands(deps);
 
-    const registeredNames = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
-      ([name]) => name
-    );
+    const registeredNames = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.map(([name]) => name);
     expect(registeredNames).toContain('filemakerDataApiTools.addConnectionProfile');
   });
 
@@ -151,9 +158,9 @@ describe('registerCoreCommands', () => {
     const deps = createMockDeps();
     registerCoreCommands(deps);
 
-    const registeredNames = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
-      ([name]) => name
-    );
+    const registeredNames = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.map(([name]) => name);
     expect(registeredNames).toContain('filemakerDataApiTools.removeConnectionProfile');
   });
 
@@ -161,9 +168,158 @@ describe('registerCoreCommands', () => {
     const deps = createMockDeps();
     registerCoreCommands(deps);
 
-    const registeredNames = vi.mocked(vscode.commands.registerCommand).mock.calls.map(
-      ([name]) => name
-    );
+    const registeredNames = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.map(([name]) => name);
     expect(registeredNames).toContain('filemakerDataApiTools.editConnectionProfile');
+  });
+
+  const profile = {
+    id: 'p1',
+    name: 'Dev',
+    database: 'Contacts',
+    authMode: 'direct',
+    serverUrl: 'https://fm.example.com'
+  };
+
+  function command(name: string) {
+    const callback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([id]) => id === `filemakerDataApiTools.${name}`)?.[1];
+    if (!callback) throw new Error(`Command ${name} was not registered`);
+    return callback;
+  }
+
+  function createSelectionDeps() {
+    const deps = createMockDeps();
+    Object.assign(deps.profileStore, {
+      getProfile: vi.fn().mockResolvedValue(profile),
+      listProfiles: vi.fn().mockResolvedValue([profile]),
+      getActiveProfileId: vi.fn().mockReturnValue(profile.id)
+    });
+    Object.assign(deps.fmClient, { listLayouts: vi.fn().mockResolvedValue(['Contacts']) });
+    return {
+      ...deps,
+      schemaService: {} as never,
+      settingsService: { isRecordEditEnabled: vi.fn().mockReturnValue(true) } as never,
+      fmWebProjectService: { setActiveProfile: vi.fn() } as never,
+      fmWebRuntimeGenerator: {} as never,
+      fmBridgeServer: {} as never
+    };
+  }
+
+  it.each([0, 1, 2, 3])('stops Run Find when input step %i is cancelled', async (step) => {
+    const deps = createSelectionDeps();
+    registerCoreCommands(deps);
+    const inputs = ['[{}]', '', '', ''];
+    for (const input of inputs.slice(0, step)) {
+      vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(input);
+    }
+    vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(undefined);
+    await command('runFindJson')({ profileId: profile.id, layout: 'Contacts' });
+    expect(vscode.window.showInputBox).toHaveBeenCalledTimes(step + 1);
+    expect(
+      (deps.fmClient as { findRecords: ReturnType<typeof vi.fn> }).findRecords
+    ).not.toHaveBeenCalled();
+    expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+  });
+
+  it('accepts blank optional find inputs and validates mistakes before submission', async () => {
+    const deps = createSelectionDeps();
+    registerCoreCommands(deps);
+    vi.mocked(vscode.window.showInputBox)
+      .mockResolvedValueOnce('[{"Name":"Alice"}]')
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce('');
+    await command('runFindJson')({ profileId: profile.id, layout: 'Contacts' });
+    expect(
+      (deps.fmClient as { findRecords: ReturnType<typeof vi.fn> }).findRecords
+    ).toHaveBeenCalledWith(profile, 'Contacts', {
+      query: [{ Name: 'Alice' }],
+      sort: undefined,
+      limit: undefined,
+      offset: undefined
+    });
+    const prompts = vi.mocked(vscode.window.showInputBox).mock.calls.map(([options]) => options);
+    expect(prompts[0]?.validateInput?.('{')).toContain('valid JSON');
+    expect(prompts[1]?.validateInput?.('{}')).toContain('array');
+    expect(prompts[1]?.validateInput?.('')).toBeUndefined();
+    expect(prompts[2]?.validateInput?.('-1')).toContain('non-negative integer');
+    expect(prompts[3]?.validateInput?.('1.5')).toContain('non-negative integer');
+  });
+
+  const panels = [
+    { name: 'openRecordViewer', register: registerCoreCommands, panel: RecordViewerPanel },
+    { name: 'openRecordEditor', register: registerRecordEditCommands, panel: RecordEditorPanel },
+    { name: 'openScriptRunner', register: registerScriptRunnerCommands, panel: ScriptRunnerPanel }
+  ];
+
+  it.each(panels)(
+    '$name does not open after cancelling layout selection',
+    async ({ name, register, panel }) => {
+      const deps = createSelectionDeps();
+      const open = vi.spyOn(panel, 'createOrShow').mockImplementation(() => {});
+      register(deps);
+      vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(undefined);
+      await command(name)({ profileId: profile.id });
+      expect(open).not.toHaveBeenCalled();
+      expect(vscode.window.showInputBox).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(panels)(
+    '$name stops when the optional record prompt is cancelled',
+    async ({ name, register, panel }) => {
+      const deps = createSelectionDeps();
+      const open = vi.spyOn(panel, 'createOrShow').mockImplementation(() => {});
+      register(deps);
+      vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(undefined);
+      await command(name)({ profileId: profile.id, layout: 'Contacts' });
+      expect(open).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(panels)(
+    '$name accepts a blank record ID to browse',
+    async ({ name, register, panel }) => {
+      const deps = createSelectionDeps();
+      const open = vi.spyOn(panel, 'createOrShow').mockImplementation(() => {});
+      register(deps);
+      vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('  ');
+      await command(name)({ profileId: profile.id, layout: 'Contacts' });
+      expect(open).toHaveBeenCalledOnce();
+      expect(open.mock.calls[0]?.at(-1)).toEqual({
+        profileId: profile.id,
+        layout: 'Contacts',
+        recordId: undefined
+      });
+    }
+  );
+
+  it('allows selecting another FM Web profile even when one is active', async () => {
+    const deps = createSelectionDeps();
+    const other = { ...profile, id: 'p2', name: 'Staging' };
+    Object.assign(deps.profileStore, { listProfiles: vi.fn().mockResolvedValue([profile, other]) });
+    registerFmWebProjectCommands(deps);
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce({
+      label: other.name,
+      profile: other
+    } as never);
+    await command('selectActiveProfile')();
+    expect(
+      (deps.fmWebProjectService as { setActiveProfile: ReturnType<typeof vi.fn> }).setActiveProfile
+    ).toHaveBeenCalledWith(other.id);
+  });
+
+  it('does not reopen the FM Web profile picker after cancellation', async () => {
+    const deps = createSelectionDeps();
+    registerFmWebProjectCommands(deps);
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValueOnce(undefined);
+    await command('selectActiveProfile')();
+    expect(vscode.window.showQuickPick).toHaveBeenCalledTimes(1);
+    expect(
+      (deps.fmWebProjectService as { setActiveProfile: ReturnType<typeof vi.fn> }).setActiveProfile
+    ).not.toHaveBeenCalled();
   });
 });

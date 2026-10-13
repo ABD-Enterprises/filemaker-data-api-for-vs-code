@@ -123,11 +123,17 @@ describe('extension lazy FM runtime loading', () => {
 
 function installActivationVsCodeMocks(): void {
   const disposable = () => ({ dispose: vi.fn() });
-  const createStatusBarItem = () => ({
+  const createStatusBarItem = (): vscode.StatusBarItem => ({
+    id: 'filemaker-test',
+    alignment: vscode.StatusBarAlignment.Left,
+    priority: undefined,
+    name: undefined,
     text: '',
-    tooltip: undefined as string | undefined,
-    command: undefined as string | undefined,
-    backgroundColor: undefined as unknown,
+    tooltip: undefined,
+    command: undefined,
+    color: undefined,
+    backgroundColor: undefined,
+    accessibilityInformation: undefined,
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn()

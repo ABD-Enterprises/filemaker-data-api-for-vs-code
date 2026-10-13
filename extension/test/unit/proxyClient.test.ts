@@ -169,7 +169,7 @@ describe('ProxyClient', () => {
       });
 
       expect(result.data).toHaveLength(1);
-      expect(result.data[0].fieldData).toEqual({ Name: 'Bob' });
+      expect(result.data[0]?.fieldData).toEqual({ Name: 'Bob' });
       scope.done();
     });
   });

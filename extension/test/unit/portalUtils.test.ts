@@ -23,11 +23,11 @@ describe('extractPortals', () => {
     const portals = extractPortals(record);
 
     expect(portals).toHaveLength(1);
-    expect(portals[0].name).toBe('LineItems');
-    expect(portals[0].recordCount).toBe(2);
-    expect(portals[0].fieldNames).toContain('LineItems::Product');
-    expect(portals[0].fieldNames).toContain('LineItems::Qty');
-    expect(portals[0].fieldNames).not.toContain('recordId');
+    expect(portals[0]?.name).toBe('LineItems');
+    expect(portals[0]?.recordCount).toBe(2);
+    expect(portals[0]?.fieldNames).toContain('LineItems::Product');
+    expect(portals[0]?.fieldNames).toContain('LineItems::Qty');
+    expect(portals[0]?.fieldNames).not.toContain('recordId');
   });
 
   it('handles multiple portals', () => {
@@ -63,8 +63,8 @@ describe('extractPortals', () => {
 
     const portals = extractPortals(record);
     expect(portals).toHaveLength(1);
-    expect(portals[0].recordCount).toBe(0);
-    expect(portals[0].fieldNames).toEqual([]);
+    expect(portals[0]?.recordCount).toBe(0);
+    expect(portals[0]?.fieldNames).toEqual([]);
   });
 });
 
@@ -81,8 +81,8 @@ describe('extractPortalMetadata', () => {
 
     const result = extractPortalMetadata(metadata);
     expect(result.LineItems).toHaveLength(2);
-    expect(result.LineItems[0].name).toBe('LineItems::Product');
-    expect(result.LineItems[0].result).toBe('text');
+    expect(result.LineItems?.[0]?.name).toBe('LineItems::Product');
+    expect(result.LineItems?.[0]?.result).toBe('text');
   });
 
   it('returns empty object when no portalMetaData', () => {

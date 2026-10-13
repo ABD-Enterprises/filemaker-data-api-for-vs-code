@@ -28,10 +28,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
-- None.
+- Honor picker and input cancellation, restore FM Web profile switching, and prevent stale connection-status updates while simplifying profile and layout selection.
 
 ### [INTERNAL]
 
+- Isolate the generated-client compilation test from ambient package types and give its full TypeScript compile a dedicated 30-second timeout on shared CI runners.
+- Fix all extension test-file type errors with typed fixtures and focused service contracts; include source and tests in the standard typecheck command.
 - Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
 - Restore a passing CI build under TypeScript 7: replace the removed `moduleResolution: node` in the extension tsconfig, point the one compiler-API test at an aliased TypeScript 6, and align `@vitest/coverage-v8` with the installed Vitest major so `test:coverage` runs.
 - Route every GitHub Actions job (`ci.yml`, `api-docs.yml`, `dependency-auto-merge.yml`, `secret-rotation-reminder.yml`) to the organization's self-hosted Linux runners via `${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}`; GitHub-hosted runners are no longer available to this organization.

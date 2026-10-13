@@ -90,6 +90,6 @@ describe('saved query run integration (mocked HTTP)', () => {
     const execution = await executeSavedQueryAgainstClient(saved, profile, fmClient);
 
     expect(execution.request.query).toEqual([{ FirstName: 'Ada' }]);
-    expect(execution.result.data[0].recordId).toBe('100');
+    expect(execution.result.data[0]?.recordId).toBe('100');
   });
 });

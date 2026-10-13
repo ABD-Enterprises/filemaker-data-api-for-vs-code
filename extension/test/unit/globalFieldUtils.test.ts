@@ -51,7 +51,7 @@ describe('parseGlobalFieldsPayload', () => {
       globalFields: { good: 'yes', bad: 42 }
     });
     expect(result).toHaveLength(1);
-    expect(result[0].fieldName).toBe('good');
+    expect(result[0]?.fieldName).toBe('good');
   });
 });
 

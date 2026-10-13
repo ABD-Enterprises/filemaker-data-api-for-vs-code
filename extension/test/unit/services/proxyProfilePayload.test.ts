@@ -35,15 +35,12 @@ describe('buildProxyProfilePayload', () => {
   });
 
   it('omits the proxyEndpoint (the proxy already knows its own URL)', () => {
-    const payload = buildProxyProfilePayload(profile()) as Record<string, unknown>;
+    const payload = buildProxyProfilePayload(profile());
     expect('proxyEndpoint' in payload).toBe(false);
   });
 
   it('omits the username (proxy auth does not use FM Basic creds)', () => {
-    const payload = buildProxyProfilePayload(profile({ username: 'admin' })) as Record<
-      string,
-      unknown
-    >;
+    const payload = buildProxyProfilePayload(profile({ username: 'admin' }));
     expect('username' in payload).toBe(false);
   });
 

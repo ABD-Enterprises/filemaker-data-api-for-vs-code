@@ -1,10 +1,9 @@
-import type { AxiosResponse } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
-import { InMemorySecretStorage } from './mocks';
+import { createAxiosResponse, InMemorySecretStorage } from './mocks';
 
 class FakeAxios {
   public readonly request = vi.fn();
@@ -38,22 +37,22 @@ describe('FMClient (unit)', () => {
     await secretStore.setPassword(profile.id, 'pass');
 
     axios.request
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             token: 'token-a'
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>)
-      .mockResolvedValueOnce({
+      }))
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             layouts: [{ name: 'Contacts' }]
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>);
+      }));
 
     const client = new FMClient(secretStore, logger, 15_000, axios as never);
     await client.listLayouts(profile);
@@ -80,14 +79,14 @@ describe('FMClient (unit)', () => {
     await secretStore.setPassword(profile.id, 'pass');
 
     axios.request
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             token: 'token-a'
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>)
+      }))
       .mockRejectedValueOnce({
         isAxiosError: true,
         message: 'Request failed with status code 500',
@@ -120,14 +119,14 @@ describe('FMClient (unit)', () => {
     await secretStore.setPassword(profile.id, 'pass');
 
     axios.request
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             token: 'old-token'
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>)
+      }))
       .mockRejectedValueOnce({
         isAxiosError: true,
         message: 'Unauthorized',
@@ -138,22 +137,22 @@ describe('FMClient (unit)', () => {
           }
         }
       })
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             token: 'new-token'
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>)
-      .mockResolvedValueOnce({
+      }))
+      .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
             layouts: [{ name: 'Contacts' }]
           },
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>);
+      }));
 
     const client = new FMClient(secretStore, logger, 15_000, axios as never);
 
@@ -181,12 +180,12 @@ describe('FMClient (unit)', () => {
 
       await secretStore.setSessionToken(profile.id, 'token-a');
 
-      axios.request.mockResolvedValueOnce({
+      axios.request.mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {},
           messages: [{ code: '0', message: 'OK' }]
         }
-      } as AxiosResponse<Record<string, unknown>>);
+      }));
 
       const client = new FMClient(secretStore, logger, 15_000, axios as never);
       const result = await client.uploadContainer(

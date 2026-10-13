@@ -28,11 +28,11 @@ describe('extractValueLists', () => {
     const result = extractValueLists(metadata);
 
     expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('Colors');
-    expect(result[0].values).toHaveLength(3);
-    expect(result[0].values[0]).toEqual({ value: 'Red', displayValue: 'Red' });
-    expect(result[1].name).toBe('Sizes');
-    expect(result[1].values[1]).toEqual({ value: 'M', displayValue: 'Medium' });
+    expect(result[0]?.name).toBe('Colors');
+    expect(result[0]?.values).toHaveLength(3);
+    expect(result[0]?.values[0]).toEqual({ value: 'Red', displayValue: 'Red' });
+    expect(result[1]?.name).toBe('Sizes');
+    expect(result[1]?.values[1]).toEqual({ value: 'M', displayValue: 'Medium' });
   });
 
   it('returns empty array when no valueLists field', () => {
@@ -53,7 +53,7 @@ describe('extractValueLists', () => {
 
     const result = extractValueLists(metadata);
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('Valid');
+    expect(result[0]?.name).toBe('Valid');
   });
 
   it('handles entries with empty values array', () => {
@@ -63,7 +63,7 @@ describe('extractValueLists', () => {
 
     const result = extractValueLists(metadata);
     expect(result).toHaveLength(1);
-    expect(result[0].values).toEqual([]);
+    expect(result[0]?.values).toEqual([]);
   });
 
   it('handles entries with missing values field', () => {
@@ -73,7 +73,7 @@ describe('extractValueLists', () => {
 
     const result = extractValueLists(metadata);
     expect(result).toHaveLength(1);
-    expect(result[0].values).toEqual([]);
+    expect(result[0]?.values).toEqual([]);
   });
 
   it('uses value as displayValue fallback', () => {
@@ -87,6 +87,6 @@ describe('extractValueLists', () => {
     };
 
     const result = extractValueLists(metadata);
-    expect(result[0].values[0]).toEqual({ value: 'OnlyValue', displayValue: 'OnlyValue' });
+    expect(result[0]?.values[0]).toEqual({ value: 'OnlyValue', displayValue: 'OnlyValue' });
   });
 });

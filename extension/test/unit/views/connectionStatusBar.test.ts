@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 
-import { computeConnectionStatus } from '../../../src/views/connectionStatusBar';
+import {
+  ConnectionStatusBar,
+  computeConnectionStatus
+} from '../../../src/views/connectionStatusBar';
+import type { ConnectionProfile } from '../../../src/types/fm';
 
 describe('computeConnectionStatus', () => {
   it('renders the disconnected state with a clear CTA tooltip', () => {
@@ -34,5 +39,81 @@ describe('computeConnectionStatus', () => {
     // re-running Connect "to be sure".
     const model = computeConnectionStatus({ name: 'Staging-EU', database: 'Sales' });
     expect(model.text).toContain('Staging-EU');
+  });
+});
+
+describe('ConnectionStatusBar updates', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function setup() {
+    let activeProfileId: string | undefined = 'p1';
+    const pending = new Map<string, (value: ConnectionProfile | undefined) => void>();
+    const getProfile = vi.fn(
+      (id: string) =>
+        new Promise<ConnectionProfile | undefined>((resolve) => {
+          pending.set(id, resolve);
+        })
+    );
+    const bar = new ConnectionStatusBar({
+      getActiveProfileId: () => activeProfileId,
+      getProfile
+    } as never);
+    const item = vi.mocked(vscode.window.createStatusBarItem).mock.results.at(-1)
+      ?.value as vscode.StatusBarItem;
+    function finish(id: string, name: string) {
+      pending.get(id)?.({ id, name, database: 'Contacts' } as ConnectionProfile);
+    }
+    return {
+      bar,
+      item,
+      getProfile,
+      finish,
+      setActive: (id?: string) => {
+        activeProfileId = id;
+      }
+    };
+  }
+
+  it('does not restore an old connection after disconnecting', async () => {
+    const { bar, item, finish, setActive } = setup();
+    setActive(undefined);
+    bar.refresh();
+    finish('p1', 'Old');
+    await Promise.resolve();
+    expect(item.text).toBe(computeConnectionStatus(undefined).text);
+    bar.dispose();
+  });
+
+  it('keeps the newest profile when earlier requests finish later', async () => {
+    const { bar, item, finish, setActive } = setup();
+    setActive('p2');
+    bar.refresh();
+    finish('p2', 'New');
+    await Promise.resolve();
+    finish('p1', 'Old');
+    await Promise.resolve();
+    expect(item.text).toBe('$(plug) FileMaker: New');
+    bar.dispose();
+  });
+
+  it('does not write to a disposed status item', async () => {
+    const { bar, item, finish, getProfile } = setup();
+    bar.dispose();
+    const textAtDisposal = item.text;
+    finish('p1', 'Old');
+    await Promise.resolve();
+    bar.refresh();
+    expect(item.text).toBe(textAtDisposal);
+    expect(getProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles the loading state when the profile lookup fails', async () => {
+    const getProfile = vi.fn().mockRejectedValue(new Error('Storage unavailable'));
+    const bar = new ConnectionStatusBar({ getActiveProfileId: () => 'p1', getProfile } as never);
+    await Promise.resolve();
+    const item = vi.mocked(vscode.window.createStatusBarItem).mock.results.at(-1)
+      ?.value as vscode.StatusBarItem;
+    expect(item.text).toBe(computeConnectionStatus(undefined).text);
+    bar.dispose();
   });
 });

@@ -18,6 +18,7 @@ import {
   parseLayoutArg,
   promptForLayout,
   resolveProfileFromArg,
+  resolveLayoutContext,
   showCommandError
 } from './common';
 import { ConnectionWizardPanel } from '../webviews/connectionWizard';
@@ -293,22 +294,18 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.runFindJson', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
         return;
       }
-
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
+      const { profile, layout } = selection;
 
       const findJsonInput = await vscode.window.showInputBox({
         title: 'Run Find',
         prompt: 'Enter find query JSON array',
         value: '[{}]',
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
+        validateInput: (value) => parseFindJson(value).error
       });
       if (!findJsonInput) {
         return;
@@ -317,20 +314,32 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       const sortJsonInput = await vscode.window.showInputBox({
         title: 'Run Find',
         prompt: 'Enter sort JSON array (optional)',
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
+        validateInput: (value) => value.trim() ? parseSortJson(value).error : undefined
       });
+      if (sortJsonInput === undefined) {
+        return;
+      }
 
       const limitInput = await vscode.window.showInputBox({
         title: 'Run Find',
         prompt: 'Enter limit (optional)',
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
+        validateInput: (value) => validateOptionalInteger(value, 'Limit')
       });
+      if (limitInput === undefined) {
+        return;
+      }
 
       const offsetInput = await vscode.window.showInputBox({
         title: 'Run Find',
         prompt: 'Enter offset (optional)',
-        ignoreFocusOut: true
+        ignoreFocusOut: true,
+        validateInput: (value) => validateOptionalInteger(value, 'Offset')
       });
+      if (offsetInput === undefined) {
+        return;
+      }
 
       try {
         const findValidation = parseFindJson(findJsonInput);
@@ -373,16 +382,11 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.getRecordById', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
         return;
       }
-
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
+      const { profile, layout } = selection;
 
       const recordId = await vscode.window.showInputBox({
         title: 'Get Record by ID',
@@ -412,38 +416,22 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.openRecordViewer', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-      let recordId: string | undefined;
-
-      if (!profileId) {
-        const profile = await resolveProfileFromArg(undefined, profileStore, true);
-        if (!profile) {
-          return;
-        }
-
-        profileId = profile.id;
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
+        return;
       }
-
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
-        }
-
-        layout = await promptForLayout(profile, fmClient);
+      const { profile, layout } = selection;
+      const profileId = profile.id;
+      const enteredRecordId = await vscode.window.showInputBox({
+        title: 'Open Record Viewer',
+        prompt: 'Record ID (optional; leave blank to browse)',
+        ignoreFocusOut: true,
+        validateInput: (value) => value.trim() ? validateRecordId(value).error : undefined
+      });
+      if (enteredRecordId === undefined) {
+        return;
       }
-
-      if (layout) {
-        recordId = await vscode.window.showInputBox({
-          title: 'Open Record Viewer',
-          prompt: 'Record ID (optional)',
-          ignoreFocusOut: true
-        });
-      }
+      const recordId = enteredRecordId.trim() || undefined;
 
       RecordViewerPanel.createOrShow(context, profileStore, fmClient, logger, {
         profileId,
@@ -464,4 +452,13 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       refreshExplorer();
     })
   ];
+}
+
+function validateOptionalInteger(value: string, label: string): string | undefined {
+  try {
+    parseOptionalNonNegativeInteger(value, label);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : `${label} must be a non-negative integer.`;
+  }
 }

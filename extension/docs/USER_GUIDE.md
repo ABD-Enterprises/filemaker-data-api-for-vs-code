@@ -93,6 +93,12 @@ After creating a profile:
 
 To disconnect later: **FileMaker: Disconnect**.
 
+Click the **FileMaker** status bar item for connection actions. Profile pickers show the server and database, and you can search either to distinguish similarly named connections.
+
+Data commands use your active profile, or your only saved profile, without another profile prompt. With no profiles saved, the command offers **Add Connection Profile**. Layout selection shows loading progress and names the profile and database being used.
+
+Press **Escape** to cancel a command's picker or input prompt. For optional record IDs, press **Enter** on an empty input to open the panel without a record selected. **Run Find (JSON)** validates each input before you proceed; leave optional sort, limit, and offset inputs blank to use defaults.
+
 ---
 
 ## Browsing Your Database

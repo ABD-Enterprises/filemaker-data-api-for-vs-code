@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SecretStore } from '../../src/services/secretStore';
+import { SecretStore, type SecretStoreOptions } from '../../src/services/secretStore';
 import { InMemoryMemento, InMemorySecretStorage } from './mocks';
 
 class FailingSecretStorage {
@@ -29,7 +29,7 @@ class FailingSecretStorage {
   }
 }
 
-function createSilentLogger(): { warn: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> } {
+function createSilentLogger() {
   return {
     warn: vi.fn(),
     info: vi.fn(),
@@ -71,7 +71,7 @@ describe('SecretStore', () => {
   describe('workspace-state fallback mode', () => {
     let memento: InMemoryMemento;
     let logger: ReturnType<typeof createSilentLogger>;
-    let onFallbackEngaged: ReturnType<typeof vi.fn>;
+    let onFallbackEngaged: ReturnType<typeof vi.fn<NonNullable<SecretStoreOptions['onFallbackEngaged']>>>;
 
     beforeEach(() => {
       memento = new InMemoryMemento();
@@ -103,7 +103,9 @@ describe('SecretStore', () => {
       const map = memento.get<Record<string, unknown>>('filemakerDataApiTools.fallbackSecrets.v1') ?? {};
       const keys = Object.keys(map);
       expect(keys).toHaveLength(1);
-      const envelope = map[keys[0]] as Record<string, string>;
+      const [key] = keys;
+      assert.isDefined(key);
+      const envelope = map[key] as Record<string, string>;
       expect(envelope.ciphertextHex).toBeDefined();
       expect(envelope.ciphertextHex).not.toContain('super-secret');
       expect(envelope.tagHex).toBeDefined();

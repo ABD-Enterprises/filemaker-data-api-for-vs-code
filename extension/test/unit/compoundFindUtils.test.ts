@@ -48,7 +48,7 @@ describe('parseCompoundFindQuery', () => {
 
   it('handles boolean omit values', () => {
     const rows = parseCompoundFindQuery([{ X: 'Y', omit: true }]);
-    expect(rows[0].omit).toBe(true);
+    expect(rows[0]?.omit).toBe(true);
   });
 });
 
