@@ -85,32 +85,19 @@ function createProfileStoreStub(): {
   };
 }
 
-function createFmClientStub(overrides?: {
-  listLayouts?: (profile: ConnectionProfile) => Promise<string[]>;
-  listScripts?: (profile: ConnectionProfile) => Promise<string[]>;
-  getLayoutMetadata?: (
-    profile: ConnectionProfile,
-    layoutName: string
-  ) => Promise<Record<string, unknown>>;
-}): {
-  listLayouts: (profile: ConnectionProfile) => Promise<string[]>;
-  listScripts: (profile: ConnectionProfile) => Promise<string[]>;
-  getLayoutMetadata: (profile: ConnectionProfile, layoutName: string) => Promise<Record<string, unknown>>;
-} {
+type ProjectClient = ConstructorParameters<typeof FmWebProjectService>[1];
+
+function createFmClientStub(overrides: Partial<ProjectClient> = {}): ProjectClient {
   return {
-    listLayouts: overrides?.listLayouts ?? (async () => ['Main']),
-    listScripts: overrides?.listScripts ?? (async () => []),
-    getLayoutMetadata: overrides?.getLayoutMetadata ?? (async () => ({}))
+    listLayouts: vi.fn(async () => ['Main']),
+    listScripts: vi.fn(async () => []),
+    getLayoutMetadata: vi.fn(async () => ({})),
+    ...overrides
   };
 }
 
-function createSchemaServiceStub(): {
-  getLayoutSchema: (
-    profile: ConnectionProfile,
-    layoutName: string
-  ) => Promise<{ fields: Array<{ name: string }> }>;
-} {
+function createSchemaServiceStub(): ConstructorParameters<typeof FmWebProjectService>[2] {
   return {
-    getLayoutSchema: vi.fn(async () => ({ fields: [] }))
+    getLayoutSchema: vi.fn(async () => ({ supported: true, fromCache: false, fields: [] }))
   };
 }

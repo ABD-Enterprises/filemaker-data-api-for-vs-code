@@ -215,173 +215,36 @@ function createProfileStoreStub(): {
   };
 }
 
-function createFmClientStub(overrides?: {
-  findRecords?: (
-    profile: ConnectionProfile,
-    layout: string,
-    request: unknown,
-    control?: { signal?: AbortSignal }
-  ) => Promise<FindRecordsResult>;
-  getRecord?: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  editRecord?: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    fieldData: Record<string, unknown>,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  createRecord?: (
-    profile: ConnectionProfile,
-    layout: string,
-    fieldData: Record<string, unknown>,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  deleteRecord?: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  runScript?: (
-    profile: ConnectionProfile,
-    request: {
-      layout: string;
-      scriptName: string;
-      scriptParam?: string;
-      recordId?: string;
-    },
-    control?: { signal?: AbortSignal }
-  ) => Promise<RunScriptResult>;
-}): {
-  findRecords: (
-    profile: ConnectionProfile,
-    layout: string,
-    request: unknown,
-    control?: { signal?: AbortSignal }
-  ) => Promise<FindRecordsResult>;
-  getRecord: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  editRecord: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    fieldData: Record<string, unknown>,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  createRecord: (
-    profile: ConnectionProfile,
-    layout: string,
-    fieldData: Record<string, unknown>,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  deleteRecord: (
-    profile: ConnectionProfile,
-    layout: string,
-    recordId: string,
-    control?: { signal?: AbortSignal }
-  ) => Promise<Record<string, unknown>>;
-  runScript: (
-    profile: ConnectionProfile,
-    request: {
-      layout: string;
-      scriptName: string;
-      scriptParam?: string;
-      recordId?: string;
-    },
-    control?: { signal?: AbortSignal }
-  ) => Promise<RunScriptResult>;
-} {
+type BridgeClient = ConstructorParameters<typeof FmBridgeServer>[1];
+
+function createFmClientStub(overrides: Partial<BridgeClient> = {}): BridgeClient {
   return {
-    findRecords:
-      overrides?.findRecords ??
-      (vi.fn(async () => ({
-        data: []
-      })) as unknown as (
-        profile: ConnectionProfile,
-        layout: string,
-        request: unknown,
-        control?: { signal?: AbortSignal }
-      ) => Promise<FindRecordsResult>),
-    getRecord:
-      overrides?.getRecord ??
-      (vi.fn(async () => ({
-        recordId: '1',
-        fieldData: {}
-      })) as unknown as (
-        profile: ConnectionProfile,
-        layout: string,
-        recordId: string,
-        control?: { signal?: AbortSignal }
-      ) => Promise<Record<string, unknown>>),
-    editRecord:
-      overrides?.editRecord ??
-      (vi.fn(async () => ({
-        recordId: '1',
-        response: {}
-      })) as unknown as (
-        profile: ConnectionProfile,
-        layout: string,
-        recordId: string,
-        fieldData: Record<string, unknown>,
-        control?: { signal?: AbortSignal }
-      ) => Promise<Record<string, unknown>>),
-    createRecord:
-      overrides?.createRecord ??
-      (vi.fn(async () => ({
-        recordId: '1',
-        response: {}
-      })) as unknown as (
-        profile: ConnectionProfile,
-        layout: string,
-        fieldData: Record<string, unknown>,
-        control?: { signal?: AbortSignal }
-      ) => Promise<Record<string, unknown>>),
-    deleteRecord:
-      overrides?.deleteRecord ??
-      (vi.fn(async () => ({
-        recordId: '1',
-        response: {}
-      })) as unknown as (
-        profile: ConnectionProfile,
-        layout: string,
-        recordId: string,
-        control?: { signal?: AbortSignal }
-      ) => Promise<Record<string, unknown>>),
-    runScript:
-      overrides?.runScript ??
-      (vi.fn(async () => ({
-        response: {},
-        messages: []
-      })) as unknown as (
-        profile: ConnectionProfile,
-        request: {
-          layout: string;
-          scriptName: string;
-          scriptParam?: string;
-          recordId?: string;
-        },
-        control?: { signal?: AbortSignal }
-      ) => Promise<RunScriptResult>)
+    findRecords: vi.fn(async () => ({ data: [] })),
+    getRecord: vi.fn(async () => ({ recordId: '1', fieldData: {} })),
+    editRecord: vi.fn(async () => ({ recordId: '1', response: {}, messages: [] })),
+    createRecord: vi.fn(async () => ({ recordId: '1', response: {}, messages: [] })),
+    deleteRecord: vi.fn(async () => ({ recordId: '1', response: {}, messages: [] })),
+    runScript: vi.fn(async () => ({ response: {}, messages: [] })),
+    ...overrides
   };
 }
 
-function createFmWebProjectServiceStub(): {
-  isWorkspaceTrusted: () => boolean;
-  readProjectConfig: () => Promise<{ activeProfileId?: string }>;
-} {
+function createFmWebProjectServiceStub(): ConstructorParameters<typeof FmBridgeServer>[2] {
+  const now = new Date().toISOString();
   return {
     isWorkspaceTrusted: () => true,
     readProjectConfig: vi.fn(async () => ({
-      activeProfileId: profile.id
+      schemaVersion: 1,
+      name: 'Test Project',
+      activeProfileId: profile.id,
+      environments: [],
+      featureFlags: {
+        runtimeGenerationEnabled: true,
+        bridgeServerEnabled: true,
+        commercialModeEnabled: false
+      },
+      createdAt: now,
+      updatedAt: now
     }))
   };
 }

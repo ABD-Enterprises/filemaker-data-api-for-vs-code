@@ -249,7 +249,7 @@ describe('parseBatchUpdateInput', () => {
     ]);
     const entries = parseBatchUpdateInput(input, 'json');
     expect(entries).toHaveLength(2);
-    expect(entries[0].recordId).toBe('1');
+    expect(entries[0]?.recordId).toBe('1');
   });
 
   it('rejects JSON that is not an array', () => {

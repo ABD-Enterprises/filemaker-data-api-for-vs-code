@@ -79,7 +79,7 @@ describe('ProfileStore', () => {
 
     const savedQueries = store.listSavedQueries();
     expect(savedQueries).toHaveLength(1);
-    expect(savedQueries[0].id).toBe('q-b');
+    expect(savedQueries[0]?.id).toBe('q-b');
   });
 
   it('ignores invalid stored profiles during hydration', async () => {

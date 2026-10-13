@@ -55,7 +55,7 @@ Run before submitting:
 
 ```bash
 npm run lint            # zero warnings enforced
-npm run typecheck       # tsc --noEmit
+npm run typecheck       # tsc --noEmit for source and tests
 npm test                # vitest
 npm run test:coverage   # with coverage reporting
 ```

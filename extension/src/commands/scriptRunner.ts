@@ -4,7 +4,7 @@ import type { RoleGuard } from '../enterprise/roleGuard';
 import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
-import { parseLayoutArg, pickProfile, promptForLayout } from './common';
+import { resolveLayoutContext } from './common';
 import { ScriptRunnerPanel } from '../webviews/scriptRunner';
 
 interface RegisterScriptRunnerCommandDeps {
@@ -26,40 +26,22 @@ export function registerScriptRunnerCommands(
         return;
       }
 
-      const contextArg = parseLayoutArg(arg);
-
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-      let recordId: string | undefined;
-
-      if (!profileId) {
-        const profile = await pickProfile(profileStore, true);
-        if (!profile) {
-          return;
-        }
-
-        profileId = profile.id;
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
+        return;
       }
+      const { profile, layout } = selection;
+      const profileId = profile.id;
 
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
-        }
-
-        layout = await promptForLayout(profile, fmClient);
+      const inputRecordId = await vscode.window.showInputBox({
+        title: 'Script Runner',
+        prompt: 'Record ID (optional; leave blank for no record context)',
+        ignoreFocusOut: true
+      });
+      if (inputRecordId === undefined) {
+        return;
       }
-
-      if (layout) {
-        const inputRecordId = await vscode.window.showInputBox({
-          title: 'Script Runner',
-          prompt: 'Record ID (optional)',
-          ignoreFocusOut: true
-        });
-
-        recordId = inputRecordId?.trim() || undefined;
-      }
+      const recordId = inputRecordId.trim() || undefined;
 
       ScriptRunnerPanel.createOrShow(context, profileStore, fmClient, logger, {
         profileId,

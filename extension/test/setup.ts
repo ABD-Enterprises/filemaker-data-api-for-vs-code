@@ -33,7 +33,14 @@ vi.mock('vscode', () => {
       showSaveDialog: vi.fn(),
       showOpenDialog: vi.fn(),
       showTextDocument: vi.fn(),
+      withProgress: vi.fn((_options, task) => task()),
       createOutputChannel: vi.fn(() => outputChannel),
+      createStatusBarItem: vi.fn(() => ({
+        text: '',
+        tooltip: '',
+        show: vi.fn(),
+        dispose: vi.fn()
+      })),
       createWebviewPanel: vi.fn(),
       createTreeView: vi.fn(() => ({
         onDidChangeSelection: vi.fn(() => ({ dispose: vi.fn() })),
@@ -66,6 +73,13 @@ vi.mock('vscode', () => {
     },
     ViewColumn: {
       One: 1
+    },
+    ProgressLocation: {
+      Window: 10
+    },
+    StatusBarAlignment: {
+      Left: 1,
+      Right: 2
     },
     TreeItemCollapsibleState: {
       None: 0,

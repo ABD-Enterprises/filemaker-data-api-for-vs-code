@@ -9,7 +9,7 @@ interface FakeStore {
 
 function fakeConfig(stores: Record<string, FakeStore> = {}): (section?: string) => never {
   return (section?: string) => {
-    const store = (section && stores[section]) ?? {};
+    const store = (section ? stores[section] : undefined) ?? {};
     const merged = { ...(store.global ?? {}), ...(store.workspace ?? {}) };
     return {
       get<T>(key: string, defaultValue: T): T {

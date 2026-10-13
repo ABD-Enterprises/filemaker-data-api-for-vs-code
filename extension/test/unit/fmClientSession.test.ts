@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
-import { InMemorySecretStorage } from './mocks';
+import { createAxiosResponse, InMemorySecretStorage } from './mocks';
 
 class FakeAxios {
   public readonly request = vi.fn();
@@ -33,21 +33,21 @@ function createLogger() {
 }
 
 function mockSessionResponse(token: string) {
-  return {
+  return createAxiosResponse({
     data: {
       response: { token },
       messages: [{ code: '0', message: 'OK' }]
     }
-  } as AxiosResponse<Record<string, unknown>>;
+  });
 }
 
 function mockListLayoutsResponse() {
-  return {
+  return createAxiosResponse({
     data: {
       response: { layouts: [{ name: 'Contacts' }] },
       messages: [{ code: '0', message: 'OK' }]
     }
-  } as AxiosResponse<Record<string, unknown>>;
+  });
 }
 
 describe('FMClient — proactive session refresh (#47)', () => {
@@ -152,7 +152,7 @@ describe('FMClient — proactive session refresh (#47)', () => {
     const now = 3_000_000;
     axios.request
       .mockResolvedValueOnce(mockSessionResponse('tok-1'))
-      .mockResolvedValueOnce({ data: { response: {}, messages: [{ code: '0', message: 'OK' }] } } as AxiosResponse<Record<string, unknown>>);
+      .mockResolvedValueOnce(createAxiosResponse({ data: { response: {}, messages: [{ code: '0', message: 'OK' }] } }));
 
     const client = new FMClient(
       secretStore,

@@ -31,7 +31,7 @@ describe('computeBackoffDelayMs', () => {
 
 describe('retryWithBackoff', () => {
   const policy = { maxRetries: 3, initialMs: 10, maxMs: 100, multiplier: 2, ...NO_JITTER };
-  let sleep: ReturnType<typeof vi.fn>;
+  let sleep: ReturnType<typeof vi.fn<(ms: number) => Promise<void>>>;
   const random = () => 0.5;
 
   beforeEach(() => {

@@ -62,7 +62,7 @@ describe('runScript integration (mocked HTTP)', () => {
     });
 
     expect(result.response).toMatchObject({ scriptResult: 'done' });
-    expect(result.messages[0].code).toBe('0');
+    expect(result.messages[0]?.code).toBe('0');
   });
 
   it('maps unsupported script endpoints to SCRIPT_UNSUPPORTED', async () => {

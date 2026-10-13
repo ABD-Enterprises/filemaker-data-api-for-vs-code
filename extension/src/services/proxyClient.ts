@@ -78,7 +78,7 @@ export class ProxyClient {
   private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>;
 
   public constructor(
-    private readonly secretStore: SecretStore,
+    private readonly secretStore: Pick<SecretStore, 'getProxyApiKey'>,
     logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>,
     timeoutMs: number,
     httpClient?: AxiosInstance

@@ -46,6 +46,8 @@ export function computeConnectionStatus(
  */
 export class ConnectionStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
+  private revision = 0;
+  private disposed = false;
 
   public constructor(private readonly profileStore: ProfileStore) {
     this.item = vscode.window.createStatusBarItem(
@@ -63,6 +65,8 @@ export class ConnectionStatusBar implements vscode.Disposable {
    * disconnect, remove, add).
    */
   public refresh(): void {
+    if (this.disposed) return;
+    const revision = ++this.revision;
     const activeProfileId = this.profileStore.getActiveProfileId();
 
     if (!activeProfileId) {
@@ -75,12 +79,20 @@ export class ConnectionStatusBar implements vscode.Disposable {
     // rather than a stale "not connected" label flashing during a connect.
     this.item.text = '$(plug) FileMaker: …';
     this.item.tooltip = 'Resolving active profile…';
-    void this.renderConnected(activeProfileId);
+    void this.renderConnected(activeProfileId, revision);
   }
 
-  private async renderConnected(profileId: string): Promise<void> {
-    const profile = await this.profileStore.getProfile(profileId);
-    this.applyModel(computeConnectionStatus(profile));
+  private async renderConnected(profileId: string, revision: number): Promise<void> {
+    try {
+      const profile = await this.profileStore.getProfile(profileId);
+      if (!this.disposed && revision === this.revision) {
+        this.applyModel(computeConnectionStatus(profile));
+      }
+    } catch {
+      if (!this.disposed && revision === this.revision) {
+        this.applyModel(computeConnectionStatus(undefined));
+      }
+    }
   }
 
   private applyModel(model: ConnectionStatusModel): void {
@@ -90,6 +102,7 @@ export class ConnectionStatusBar implements vscode.Disposable {
   }
 
   public dispose(): void {
+    this.disposed = true;
     this.item.dispose();
   }
 }

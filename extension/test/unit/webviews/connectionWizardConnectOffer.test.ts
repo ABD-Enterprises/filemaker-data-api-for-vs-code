@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
 import { ConnectionWizardPanel } from '../../../src/webviews/connectionWizard';
@@ -113,7 +113,9 @@ describe('Connection wizard post-save connect offer', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(vscode.window.showInformationMessage).toHaveBeenCalledTimes(1);
-    const [prompt, action] = vi.mocked(vscode.window.showInformationMessage).mock.calls[0];
+    const call = vi.mocked(vscode.window.showInformationMessage).mock.calls[0];
+    assert.isDefined(call);
+    const [prompt, action] = call;
     expect(prompt).toContain('Connect now');
     expect(action).toBe('Connect Now');
   });

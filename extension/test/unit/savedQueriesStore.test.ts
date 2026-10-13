@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 
 import { SavedQueriesStore } from '../../src/services/savedQueriesStore';
 import type { SavedQuery } from '../../src/types/fm';
@@ -39,6 +39,7 @@ describe('SavedQueriesStore', () => {
 
     const afterCreate = await store.listSavedQueries();
     expect(afterCreate).toHaveLength(1);
+    assert.isDefined(afterCreate[0]);
 
     await store.saveSavedQuery({
       ...afterCreate[0],
@@ -46,7 +47,7 @@ describe('SavedQueriesStore', () => {
     });
 
     const afterUpdate = await store.listSavedQueries();
-    expect(afterUpdate[0].name).toBe('Renamed Query');
+    expect(afterUpdate[0]?.name).toBe('Renamed Query');
   });
 
   it('migrates legacy saved query payloads and sets schema version', async () => {
@@ -74,7 +75,7 @@ describe('SavedQueriesStore', () => {
     const queries = await store.listSavedQueries();
 
     expect(queries).toHaveLength(1);
-    expect(queries[0].findJson).toEqual([{ Name: 'Ada' }]);
+    expect(queries[0]?.findJson).toEqual([{ Name: 'Ada' }]);
     expect(workspaceState.get(DATA_VERSION_KEY)).toBe(1);
   });
 

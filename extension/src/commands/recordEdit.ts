@@ -8,7 +8,7 @@ import type { SchemaService } from '../services/schemaService';
 import type { SettingsService } from '../services/settingsService';
 import { validateRecordId } from '../utils/jsonValidate';
 import { readContainerUploadFile } from '../utils/containerUpload';
-import { parseLayoutArg, pickProfile, promptForLayout, showCommandError } from './common';
+import { parseLayoutArg, resolveLayoutContext, showCommandError } from './common';
 import { RecordEditorPanel } from '../webviews/recordEditor';
 
 interface RegisterRecordEditCommandsDeps {
@@ -44,39 +44,23 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         return;
       }
 
-      const contextArg = parseLayoutArg(arg);
-
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-      let recordId: string | undefined;
-
-      if (!profileId) {
-        const profile = await pickProfile(profileStore, true);
-        if (!profile) {
-          return;
-        }
-
-        profileId = profile.id;
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
+        return;
       }
+      const { profile, layout } = selection;
+      const profileId = profile.id;
 
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
-        }
-
-        layout = await promptForLayout(profile, fmClient);
+      const enteredRecordId = await vscode.window.showInputBox({
+        title: 'Open Record Editor',
+        prompt: 'Record ID (optional; leave blank to browse)',
+        ignoreFocusOut: true,
+        validateInput: (value) => (value.trim() ? validateRecordId(value).error : undefined)
+      });
+      if (enteredRecordId === undefined) {
+        return;
       }
-
-      if (layout) {
-        const enteredRecordId = await vscode.window.showInputBox({
-          title: 'Open Record Editor',
-          prompt: 'Record ID (optional)',
-          ignoreFocusOut: true
-        });
-        recordId = enteredRecordId?.trim() || undefined;
-      }
+      const recordId = enteredRecordId.trim() || undefined;
 
       RecordEditorPanel.createOrShow(context, profileStore, fmClient, schemaService, logger, {
         profileId,
@@ -94,30 +78,12 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         return;
       }
 
-      const contextArg = parseLayoutArg(arg);
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-
-      if (!profileId) {
-        const profile = await pickProfile(profileStore, true);
-        if (!profile) {
-          return;
-        }
-        profileId = profile.id;
-      }
-
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
-        }
-        layout = await promptForLayout(profile, fmClient);
-      }
-
-      if (!layout) {
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
         return;
       }
+      const { profile, layout } = selection;
+      const profileId = profile.id;
 
       const recordId = await vscode.window.showInputBox({
         title: 'Edit Record by ID',
@@ -146,30 +112,12 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         return;
       }
 
-      const contextArg = parseLayoutArg(arg);
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-
-      if (!profileId) {
-        const profile = await pickProfile(profileStore, true);
-        if (!profile) {
-          return;
-        }
-        profileId = profile.id;
-      }
-
-      if (!layout) {
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
-          return;
-        }
-        layout = await promptForLayout(profile, fmClient);
-      }
-
-      if (!layout) {
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
         return;
       }
+      const { profile, layout } = selection;
+      const profileId = profile.id;
 
       RecordEditorPanel.createOrShow(context, profileStore, fmClient, schemaService, logger, {
         profileId,
@@ -187,31 +135,11 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         return;
       }
 
-      const contextArg = parseLayoutArg(arg);
-      let profileId = contextArg.profileId;
-      let layout = contextArg.layout;
-
-      if (!profileId) {
-        const profile = await pickProfile(profileStore, true);
-        if (!profile) {
-          return;
-        }
-        profileId = profile.id;
-      }
-
-      const profile = await profileStore.getProfile(profileId);
-      if (!profile) {
-        vscode.window.showErrorMessage('Selected profile not found.');
+      const selection = await resolveLayoutContext(arg, profileStore, fmClient);
+      if (!selection) {
         return;
       }
-
-      if (!layout) {
-        layout = await promptForLayout(profile, fmClient);
-      }
-
-      if (!layout) {
-        return;
-      }
+      const { profile, layout } = selection;
 
       const recordId = await vscode.window.showInputBox({
         title: 'Delete Record',
@@ -266,30 +194,11 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         }
 
         const contextArg = parseContainerUploadArg(arg);
-        let profileId = contextArg.profileId;
-        let layout = contextArg.layout;
-
-        if (!profileId) {
-          const profile = await pickProfile(profileStore, true);
-          if (!profile) {
-            return false;
-          }
-          profileId = profile.id;
-        }
-
-        const profile = await profileStore.getProfile(profileId);
-        if (!profile) {
-          vscode.window.showErrorMessage('Selected profile not found.');
+        const selection = await resolveLayoutContext(contextArg, profileStore, fmClient);
+        if (!selection) {
           return false;
         }
-
-        if (!layout) {
-          layout = await promptForLayout(profile, fmClient);
-        }
-
-        if (!layout) {
-          return false;
-        }
+        const { profile, layout } = selection;
 
         const recordId = contextArg.recordId ?? (await promptForRecordId());
         if (!recordId) {
@@ -301,7 +210,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
           return false;
         }
 
-        const selection = await vscode.window.showOpenDialog({
+        const files = await vscode.window.showOpenDialog({
           title: 'Select File to Upload',
           openLabel: 'Upload',
           canSelectFiles: true,
@@ -309,7 +218,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
           canSelectMany: false
         });
 
-        const uri = selection?.[0];
+        const uri = files?.[0];
         if (!uri) {
           return false;
         }

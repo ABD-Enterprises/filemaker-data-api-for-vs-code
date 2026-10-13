@@ -77,7 +77,7 @@ describe('FMExplorerProvider', () => {
 
       const profileNodes = children.filter((c) => c.kind === 'profile');
       expect(profileNodes).toHaveLength(1);
-      expect(profileNodes[0].label).toBe('Dev Server');
+      expect(profileNodes[0]?.label).toBe('Dev Server');
     });
 
     it('omits Environment Sets root when zero env sets exist', async () => {
@@ -142,7 +142,7 @@ describe('FMExplorerProvider', () => {
 
       const badges = children.filter((c) => c.kind === 'offlineBadge');
       expect(badges).toHaveLength(1);
-      expect(badges[0].label).toBe('OFFLINE MODE');
+      expect(badges[0]?.label).toBe('OFFLINE MODE');
     });
   });
 
