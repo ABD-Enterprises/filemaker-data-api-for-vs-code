@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Keep the generated-client compilation test independent of ambient package types and allow 30 seconds for its full TypeScript compile on shared CI runners.
 - [FIX] Simplify profile and layout selection with searchable connection details, a setup action for missing profiles, and loading feedback; validate find inputs, honor cancellation, restore FM Web profile switching, and prevent stale connection-status updates.
 - [INTERNAL] Consolidate command selection logic, correct test fixture types and checked array access, and include source and tests in the standard typecheck command.
 

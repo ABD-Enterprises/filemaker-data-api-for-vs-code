@@ -152,12 +152,13 @@ void run;
       // assertion below stays focused on the generated code, not tooling.
       ignoreDeprecations: '6.0',
       lib: ['lib.es2020.d.ts', 'lib.dom.d.ts'],
+      types: [],
       skipLibCheck: true
     });
     const diagnostics = ts.getPreEmitDiagnostics(program);
 
     expect(diagnostics.map(formatDiagnostic)).toEqual([]);
-  });
+  }, 30_000);
 });
 
 function formatDiagnostic(diagnostic: ts.Diagnostic): string {

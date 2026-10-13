@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Isolate the generated-client compilation test from ambient package types and give its full TypeScript compile a dedicated 30-second timeout on shared CI runners.
 - Fix all extension test-file type errors with typed fixtures and focused service contracts; include source and tests in the standard typecheck command.
 - Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
 - Restore a passing CI build under TypeScript 7: replace the removed `moduleResolution: node` in the extension tsconfig, point the one compiler-API test at an aliased TypeScript 6, and align `@vitest/coverage-v8` with the installed Vitest major so `test:coverage` runs.
