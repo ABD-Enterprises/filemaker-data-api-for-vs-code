@@ -93,38 +93,44 @@ export class SettingsService {
   }
 
   /**
-   * Copies every explicitly set deprecated `filemakerDataApiTools.*` value to its
-   * `filemaker.*` replacement (unless the new key is already set in that scope)
-   * and removes the old value. Covers user and workspace scopes; folder-level
+   * Moves explicitly set deprecated `filemakerDataApiTools.*` values to their
+   * `filemaker.*` replacements without changing any effective value, then
+   * removes the old values. Covers user and workspace scopes; folder-level
    * values are left alone. Returns the old keys that were migrated.
+   *
+   * getPreferred reads the old key only where the new key is unset, so, judged
+   * against the settings as they were before migrating:
+   * - an old user value is copied unless a new user value exists (a new
+   *   workspace value elsewhere still overrides it there, as before);
+   * - an old workspace value is copied only when the new key has neither a
+   *   user nor a workspace value, since otherwise it was already ignored here.
    */
   public async migrateDeprecatedSettings(): Promise<string[]> {
     const oldConfig = this.getConfiguration(LEGACY_SECTION);
     const newConfig = this.getConfiguration('filemaker');
-    const scopes: Array<['globalValue' | 'workspaceValue', vscode.ConfigurationTarget]> = [
-      ['globalValue', vscode.ConfigurationTarget.Global],
-      ['workspaceValue', vscode.ConfigurationTarget.Workspace]
-    ];
     const migrated = new Set<string>();
 
     for (const [oldKey, newKey] of DEPRECATED_SETTING_KEYS) {
       const oldInspect = oldConfig.inspect<unknown>(oldKey);
       const newInspect = newConfig.inspect<unknown>(newKey);
-      // getPreferred ignores the old key once the new one is set in any scope, so
-      // copying would change the effective value; only clear the old one then.
-      const newSetAnywhere =
-        newInspect?.globalValue !== undefined ||
-        newInspect?.workspaceValue !== undefined ||
-        newInspect?.workspaceFolderValue !== undefined;
-      for (const [scope, target] of scopes) {
-        const oldValue = oldInspect?.[scope];
-        if (oldValue === undefined) {
-          continue;
+      const newGlobal = newInspect?.globalValue;
+      const newWorkspace = newInspect?.workspaceValue;
+
+      const oldGlobal = oldInspect?.globalValue;
+      if (oldGlobal !== undefined) {
+        if (newGlobal === undefined) {
+          await newConfig.update(newKey, oldGlobal, vscode.ConfigurationTarget.Global);
         }
-        if (!newSetAnywhere) {
-          await newConfig.update(newKey, oldValue, target);
+        await oldConfig.update(oldKey, undefined, vscode.ConfigurationTarget.Global);
+        migrated.add(`${LEGACY_SECTION}.${oldKey}`);
+      }
+
+      const oldWorkspace = oldInspect?.workspaceValue;
+      if (oldWorkspace !== undefined) {
+        if (newGlobal === undefined && newWorkspace === undefined) {
+          await newConfig.update(newKey, oldWorkspace, vscode.ConfigurationTarget.Workspace);
         }
-        await oldConfig.update(oldKey, undefined, target);
+        await oldConfig.update(oldKey, undefined, vscode.ConfigurationTarget.Workspace);
         migrated.add(`${LEGACY_SECTION}.${oldKey}`);
       }
     }

@@ -862,6 +862,9 @@ function requestLayouts(profileId, preferredLayout) {
 
   if (preferredLayout) {
     state.pendingLayoutByProfile.set(profileId, preferredLayout);
+  } else {
+    // A manual profile pick replaces any layout left over from an earlier, failed load.
+    state.pendingLayoutByProfile.delete(profileId);
   }
   setStatus('Loading layouts…');
   vscode.postMessage({

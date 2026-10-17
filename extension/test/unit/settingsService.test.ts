@@ -166,6 +166,36 @@ describe('SettingsService.migrateDeprecatedSettings', () => {
     expect(store.filemakerDataApiTools?.requestTimeoutMs?.workspaceValue).toBeUndefined();
   });
 
+  it('copies a legacy user value even when one workspace sets the new key', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { requestTimeoutMs: { globalValue: 60000 } },
+      filemaker: { requestTimeoutMs: { workspaceValue: 30000 } }
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    // Other workspaces relied on the legacy user value; this one keeps its override.
+    expect(store.filemaker?.requestTimeoutMs).toEqual({ globalValue: 60000, workspaceValue: 30000 });
+    expect(store.filemakerDataApiTools?.requestTimeoutMs?.globalValue).toBeUndefined();
+  });
+
+  it('copies both legacy scopes when the new key is unset, keeping the workspace override', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { defaultApiVersionPath: { globalValue: 'v1', workspaceValue: 'v2' } },
+      filemaker: {}
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    expect(store.filemaker?.defaultApiVersionPath).toEqual({ globalValue: 'v1', workspaceValue: 'v2' });
+    expect(store.filemakerDataApiTools?.defaultApiVersionPath).toEqual({
+      globalValue: undefined,
+      workspaceValue: undefined
+    });
+  });
+
   it('does nothing when no legacy keys are set', async () => {
     const { settings, updates } = createMigratableSettings({ filemakerDataApiTools: {}, filemaker: {} });
     expect(await settings.migrateDeprecatedSettings()).toEqual([]);

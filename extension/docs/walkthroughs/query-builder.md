@@ -18,8 +18,8 @@ Run **FileMaker: Open Query Builder**, or right-click a layout and choose
 
 - pick a profile and layout from dropdowns
 - build the find with a **form**: choose a field (the layout's field names
-  autocomplete), a condition such as *equals*, *contains*, or *between*, and a
-  value. Add more requests to OR them together, or tick **Omit** to exclude
+  autocomplete), a condition such as *equals (whole field)*,
+  *contains phrase*, or *between*, and a value. Add more requests to OR them together, or tick **Omit** to exclude
   matches. The **JSON** tab shows the same request as raw Data API JSON.
 - run it with **Run** or `Ctrl/Cmd+Enter`
 - page through results, sort the current page by any column, and double-click
