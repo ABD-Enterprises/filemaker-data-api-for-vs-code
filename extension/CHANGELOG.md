@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FIX] A find that matches nothing, or an offset past the last match, now returns an empty result. FileMaker reports that case as HTTP 404 with error 401, and the extension treated it as a failure, so an empty Query Builder result showed an error and a batch export failed on its final request whenever the match count was an exact multiple of the page size, or when nothing matched.
+- [FIX] When a session expires, parallel requests now share one renewal instead of each opening its own FileMaker session. Before, five simultaneous requests opened five sessions and left four orphaned on the server until they timed out.
 ## 1.3.0
 
 - [SECURITY] Webview Content Security Policy nonces now come from the OS random number generator (`crypto.randomInt`) instead of `Math.random()`.
