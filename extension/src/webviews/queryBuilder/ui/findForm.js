@@ -28,17 +28,75 @@
 
   const OPERATOR_IDS = new Set(OPERATORS.map((operator) => operator.id));
 
+  // Characters FileMaker treats as find operators. Values typed under any
+  // condition except "matches" are escaped with a backslash so they match literally.
+  const SPECIAL_CHARACTERS = /[@#*\\?!"~=<>…]/g;
+
+  function escapeFindText(value) {
+    return String(value ?? '')
+      .replace(SPECIAL_CHARACTERS, '\\$&')
+      .replace(/\.\.\./g, '\\.\\.\\.')
+      .replace(/\/\//g, '\\/\\/');
+  }
+
+  /** A range bound also escapes a leading or trailing period so `a.` + `...` + `b` stays unambiguous. */
+  function escapeRangeBound(value) {
+    let escaped = escapeFindText(value);
+    if (escaped.startsWith('.')) {
+      escaped = `\\${escaped}`;
+    }
+    if (escaped.length > 0 && escaped.endsWith('.') && !isEscapedAt(escaped, escaped.length - 1)) {
+      escaped = `${escaped.slice(0, -1)}\\.`;
+    }
+    return escaped;
+  }
+
+  /** True when the character at `index` is preceded by an odd number of backslashes. */
+  function isEscapedAt(text, index) {
+    let backslashes = 0;
+    for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) {
+      backslashes += 1;
+    }
+    return backslashes % 2 === 1;
+  }
+
+  function unescapeFindText(value) {
+    return String(value).replace(/\\(.)/g, '$1');
+  }
+
+  /** Index of `token` in `text` that is not part of a backslash escape, or -1. */
+  function indexOfUnescaped(text, token, fromIndex = 0) {
+    for (let index = fromIndex; index <= text.length - token.length; index += 1) {
+      if (text[index] === '\\') {
+        index += 1;
+        continue;
+      }
+      if (text.startsWith(token, index)) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function endsWithUnescapedStar(text) {
+    return text.endsWith('*') && !isEscapedAt(text, text.length - 1);
+  }
+
   function getOperator(id) {
     return OPERATORS.find((operator) => operator.id === id) || OPERATORS[0];
   }
 
   function criterionToFindValue(criterion) {
-    const value = String(criterion.value ?? '');
+    if (criterion.operator === 'match' || !OPERATOR_IDS.has(criterion.operator)) {
+      // "matches" passes FileMaker find syntax through untouched.
+      return String(criterion.value ?? '');
+    }
+    const value = escapeFindText(criterion.value);
     switch (criterion.operator) {
       case 'equals':
         return `==${value}`;
       case 'begins':
-        return `${value}*`;
+        return `==${value}*`;
       case 'contains':
         return `*${value}*`;
       case 'gt':
@@ -50,7 +108,7 @@
       case 'lte':
         return `<=${value}`;
       case 'between':
-        return `${value}...${String(criterion.value2 ?? '')}`;
+        return `${escapeRangeBound(criterion.value)}...${escapeRangeBound(criterion.value2)}`;
       case 'empty':
         return '=';
       case 'notEmpty':
@@ -75,34 +133,33 @@
       return { ...base, operator: 'notEmpty', value: '' };
     }
     if (value.startsWith('==')) {
-      return { ...base, operator: 'equals', value: value.slice(2) };
+      const rest = value.slice(2);
+      if (rest.length > 0 && endsWithUnescapedStar(rest)) {
+        return { ...base, operator: 'begins', value: unescapeFindText(rest.slice(0, -1)) };
+      }
+      return { ...base, operator: 'equals', value: unescapeFindText(rest) };
     }
-    if (value.startsWith('>=')) {
-      return { ...base, operator: 'gte', value: value.slice(2) };
+    for (const [prefix, operator] of [
+      ['>=', 'gte'],
+      ['<=', 'lte'],
+      ['>', 'gt'],
+      ['<', 'lt']
+    ]) {
+      if (value.startsWith(prefix)) {
+        return { ...base, operator, value: unescapeFindText(value.slice(prefix.length)) };
+      }
     }
-    if (value.startsWith('<=')) {
-      return { ...base, operator: 'lte', value: value.slice(2) };
-    }
-    if (value.startsWith('>')) {
-      return { ...base, operator: 'gt', value: value.slice(1) };
-    }
-    if (value.startsWith('<')) {
-      return { ...base, operator: 'lt', value: value.slice(1) };
-    }
-    const rangeIndex = value.indexOf('...');
+    const rangeIndex = indexOfUnescaped(value, '...');
     if (rangeIndex > 0 && rangeIndex < value.length - 3) {
       return {
         ...base,
         operator: 'between',
-        value: value.slice(0, rangeIndex),
-        value2: value.slice(rangeIndex + 3)
+        value: unescapeFindText(value.slice(0, rangeIndex)),
+        value2: unescapeFindText(value.slice(rangeIndex + 3))
       };
     }
-    if (value.length > 2 && value.startsWith('*') && value.endsWith('*')) {
-      return { ...base, operator: 'contains', value: value.slice(1, -1) };
-    }
-    if (value.length > 1 && value.endsWith('*') && !value.startsWith('*')) {
-      return { ...base, operator: 'begins', value: value.slice(0, -1) };
+    if (value.length > 2 && value.startsWith('*') && endsWithUnescapedStar(value)) {
+      return { ...base, operator: 'contains', value: unescapeFindText(value.slice(1, -1)) };
     }
     return base;
   }
@@ -144,6 +201,25 @@
     // The Data API rejects an empty array; `[{}]` is not valid either, so a form
     // with no criteria yields an empty request the host validator reports clearly.
     return query.length > 0 ? query : [{}];
+  }
+
+  /** First field name used twice in one request, or undefined. The Data API keeps only one value per field. */
+  function findDuplicateField(model) {
+    const requests = Array.isArray(model && model.requests) ? model.requests : [];
+    for (const request of requests) {
+      const seen = new Set();
+      for (const criterion of request.criteria || []) {
+        const field = String(criterion.field || '').trim();
+        if (!field) {
+          continue;
+        }
+        if (seen.has(field)) {
+          return field;
+        }
+        seen.add(field);
+      }
+    }
+    return undefined;
   }
 
   function modelToSort(model) {
@@ -230,9 +306,11 @@
     getOperator,
     criterionToFindValue,
     findValueToCriterion,
+    escapeFindText,
     createEmptyModel,
     createEmptyRequest,
     modelToFindQuery,
+    findDuplicateField,
     modelToSort,
     jsonToModel
   };

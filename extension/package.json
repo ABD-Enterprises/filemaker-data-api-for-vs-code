@@ -1343,12 +1343,6 @@
         "key": "ctrl+alt+shift+q",
         "mac": "cmd+alt+shift+q",
         "when": "filemaker.hasProfiles"
-      },
-      {
-        "command": "filemakerDataApiTools.openConnectionMenu",
-        "key": "ctrl+alt+shift+c",
-        "mac": "cmd+alt+shift+c",
-        "when": "filemaker.hasProfiles"
       }
     ]
   },

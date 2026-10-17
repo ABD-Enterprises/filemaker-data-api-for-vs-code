@@ -4,6 +4,8 @@ const FindForm = window.FindForm;
 const DEFAULT_LIMIT = 100;
 const VIRTUALIZE_THRESHOLD = 50;
 const MAX_COLUMNS = 60;
+const MAX_CLIPBOARD_TEXT_LENGTH = 5_000_000;
+const US_DATE_PATTERN = /^\d{1,2}\/\d{1,2}\/\d{4}(?: \d{1,2}:\d{2}(?::\d{2})?)?$/;
 
 const state = {
   profiles: [],
@@ -20,7 +22,10 @@ const state = {
   model: FindForm.createEmptyModel(),
   fieldNames: [],
   resultSort: undefined,
-  resultView: 'table'
+  resultView: 'table',
+  running: false,
+  latestRunId: 0,
+  recordEditEnabled: true
 };
 
 const profileSelect = document.getElementById('profileSelect');
@@ -90,7 +95,9 @@ window.addEventListener('message', (event) => {
       applyFieldNames(message.payload);
       break;
     case 'queryResult':
-      renderQueryResult(message.payload);
+      if (isCurrentRun(message.payload)) {
+        renderQueryResult(message.payload);
+      }
       break;
     case 'savedQueries':
       state.savedQueries = Array.isArray(message.payload) ? message.payload : [];
@@ -196,8 +203,12 @@ function handleTabArrowKeys(event) {
   const tabs = Array.from(event.currentTarget.parentElement.querySelectorAll('[role="tab"]'));
   const index = tabs.indexOf(event.currentTarget);
   const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-  next.focus();
   next.click();
+  // A refused switch (JSON the form can't show) leaves focus on the selected tab.
+  const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
+  if (selected) {
+    selected.focus();
+  }
 }
 
 function writeModelToJson() {
@@ -271,6 +282,8 @@ function renderRequest(request, requestIndex) {
       makeButton('Remove request', 'link danger', () => {
         state.model.requests.splice(requestIndex, 1);
         renderForm();
+        const neighbour = requestList.children[Math.min(requestIndex, requestList.children.length - 1)];
+        focusFirst(neighbour, '.criterion-field');
       })
     );
   }
@@ -339,6 +352,13 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
       request.criteria.push({ field: '', operator: 'match', value: '', value2: '' });
     }
     renderForm();
+    const fields = requestList.children[requestIndex]
+      ? requestList.children[requestIndex].querySelectorAll('.criterion-field')
+      : [];
+    const target = fields[Math.min(criterionIndex, fields.length - 1)];
+    if (target) {
+      target.focus();
+    }
   });
   removeButton.textContent = '×';
   removeButton.setAttribute('aria-label', 'Remove criterion');
@@ -391,6 +411,9 @@ function renderSortRow(item, sortIndex) {
   const removeButton = makeButton('×', 'icon', () => {
     state.model.sort.splice(sortIndex, 1);
     renderForm();
+    const fields = sortList.querySelectorAll('.sort-field');
+    const target = fields[Math.min(sortIndex, fields.length - 1)] || addSortButton;
+    target.focus();
   });
   removeButton.setAttribute('aria-label', 'Remove sort field');
   removeButton.title = 'Remove sort field';
@@ -406,6 +429,13 @@ function makeButton(label, className, onClick) {
   button.textContent = label;
   button.addEventListener('click', onClick);
   return button;
+}
+
+function focusFirst(container, selector) {
+  const match = container ? container.querySelector(selector) : null;
+  if (match) {
+    match.focus();
+  }
 }
 
 function focusLast(container, selector) {
@@ -457,18 +487,25 @@ runButton.addEventListener('click', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
-    runQuery();
+    if (!state.running) {
+      runQuery();
+    }
   } else if (event.key === 'Escape') {
     closeMenus();
   }
 });
 
 function runQuery() {
+  if (state.running) {
+    return;
+  }
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
+  state.latestRunId += 1;
+  payload.runId = state.latestRunId;
   state.currentPayload = payload;
   setRunning(true);
   setStatus('Running query…');
@@ -509,6 +546,10 @@ copyTableButton.addEventListener('click', () => {
   const text = buildResultsTsv();
   if (!text) {
     setStatus('Run a query first. There are no results to copy.', true);
+    return;
+  }
+  if (text.length > MAX_CLIPBOARD_TEXT_LENGTH) {
+    setStatus('The results are too large to copy. Use Export → Save results as CSV instead.', true);
     return;
   }
   vscode.postMessage({ type: 'copyText', text, label: 'results table' });
@@ -583,26 +624,38 @@ function closeMenus() {
 // ---------------------------------------------------------------------------
 
 prevButton.addEventListener('click', () => {
-  const { start, limit } = currentPage();
+  const { start, limit } = shownPage();
   offsetInput.value = String(Math.max(1, start - limit));
+  limitInput.value = String(limit);
   runQuery();
 });
 
 nextButton.addEventListener('click', () => {
-  const { start, limit } = currentPage();
+  const { start, limit } = shownPage();
   offsetInput.value = String(start + limit);
+  limitInput.value = String(limit);
   runQuery();
 });
 
-/** FileMaker offsets are 1-based: offset 1 is the first record. */
-function currentPage() {
-  const limit = parseNumber(limitInput.value) || DEFAULT_LIMIT;
-  const start = Math.max(1, parseNumber(offsetInput.value) || 1);
+/**
+ * Start and page size of the results on screen, taken from the request that
+ * produced them rather than the (possibly edited) inputs. FileMaker offsets are
+ * 1-based: offset 1 is the first record.
+ */
+function shownPage() {
+  const query = (state.lastResult && state.lastResult.query) || {};
+  const limit = parseNumber(query.limit) || DEFAULT_LIMIT;
+  const start = Math.max(1, parseNumber(query.offset) || 1);
   return { start, limit };
 }
 
 function updatePager(returned, foundCount) {
-  const { start, limit } = currentPage();
+  if (!state.lastResult) {
+    prevButton.disabled = true;
+    nextButton.disabled = true;
+    return;
+  }
+  const { start, limit } = shownPage();
   prevButton.disabled = start <= 1;
   nextButton.disabled =
     typeof foundCount === 'number' ? start + returned - 1 >= foundCount : returned < limit;
@@ -625,7 +678,19 @@ function collectPayload() {
       focusLast(requestList, '.criterion-field');
       return undefined;
     }
+    const duplicate = FindForm.findDuplicateField(state.model);
+    if (duplicate) {
+      setStatus(
+        `"${duplicate}" appears twice in one request, and FileMaker keeps only one. Use "between" for a range, or put the second condition in another request.`,
+        true
+      );
+      return undefined;
+    }
     writeModelToJson();
+  } else if (!findJson.value.trim()) {
+    setStatus('Enter a find request, for example [{"Status": "Open"}].', true);
+    findJson.focus();
+    return undefined;
   }
 
   return {
@@ -678,6 +743,7 @@ function applyInit(payload) {
   state.defaults = payload.defaults;
 
   includeAuthCheckbox.checked = payload.includeAuthByDefault === true;
+  state.recordEditEnabled = payload.recordEditEnabled !== false;
 
   renderProfiles();
   renderSavedQueries();
@@ -902,6 +968,10 @@ function renderResultView() {
   }
 
   const columns = collectColumns(records);
+  const totalColumns = collectColumns(records, Infinity).length;
+  if (totalColumns > columns.length) {
+    resultSummary.textContent += ` · first ${columns.length} of ${totalColumns} fields shown (Export includes all)`;
+  }
   const sorted = sortRecords(records);
 
   if (sorted.length >= VIRTUALIZE_THRESHOLD) {
@@ -918,7 +988,7 @@ function describeResults(returned, dataInfo) {
     return layout ? `No records found on ${layout}.` : 'No records found.';
   }
 
-  const start = Math.max(1, (state.currentPayload && state.currentPayload.offset) || 1);
+  const { start } = shownPage();
   const end = start + returned - 1;
   const parts = [`Showing ${formatCount(start)}–${formatCount(end)}`];
   if (typeof dataInfo.foundCount === 'number') {
@@ -937,7 +1007,7 @@ function formatCount(value) {
   return Number(value).toLocaleString();
 }
 
-function collectColumns(records) {
+function collectColumns(records, maxColumns = MAX_COLUMNS) {
   const seen = new Set();
 
   for (const record of records) {
@@ -945,7 +1015,7 @@ function collectColumns(records) {
     Object.keys(fieldData).forEach((key) => seen.add(key));
   }
 
-  return Array.from(seen).slice(0, MAX_COLUMNS);
+  return Array.from(seen).slice(0, maxColumns);
 }
 
 function getCellRaw(record, column) {
@@ -975,13 +1045,25 @@ function sortRecords(records) {
       if (leftEmpty !== rightEmpty) {
         return leftEmpty ? 1 : -1;
       }
-      const compared =
-        typeof left === 'number' && typeof right === 'number'
-          ? left - right
-          : collator.compare(toCellValue(left), toCellValue(right));
+      const compared = compareCells(left, right, collator);
       return compared === 0 ? a.index - b.index : compared * factor;
     })
     .map((item) => item.record);
+}
+
+function compareCells(left, right, collator) {
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
+  }
+  // FileMaker returns dates and timestamps as MM/DD/YYYY [HH:MM[:SS]] strings.
+  if (typeof left === 'string' && typeof right === 'string' && US_DATE_PATTERN.test(left) && US_DATE_PATTERN.test(right)) {
+    const leftTime = Date.parse(left);
+    const rightTime = Date.parse(right);
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+      return leftTime - rightTime;
+    }
+  }
+  return collator.compare(toCellValue(left), toCellValue(right));
 }
 
 function toggleResultSort(column) {
@@ -1061,9 +1143,14 @@ function buildRow(record, columns) {
   if (recordId) {
     const view = makeButton('View', 'link', () => openRecord(recordId, 'view'));
     view.setAttribute('aria-label', `View record ${recordId}`);
-    const edit = makeButton('Edit', 'link', () => openRecord(recordId, 'edit'));
-    edit.setAttribute('aria-label', `Edit record ${recordId}`);
-    actionsCell.append(view, edit);
+    view.dataset.action = 'view';
+    actionsCell.appendChild(view);
+    if (state.recordEditEnabled) {
+      const edit = makeButton('Edit', 'link', () => openRecord(recordId, 'edit'));
+      edit.setAttribute('aria-label', `Edit record ${recordId}`);
+      edit.dataset.action = 'edit';
+      actionsCell.appendChild(edit);
+    }
   }
   row.appendChild(actionsCell);
 
@@ -1160,7 +1247,20 @@ function renderVirtualizedTable(records, columns) {
     }
     sliceRows.push(spacer(Math.max(0, (records.length - end) * rowHeight)));
 
+    // Rebuilding rows would drop keyboard focus; put it back on the same record's button.
+    const focused = document.activeElement;
+    const focusedRow = focused && tbody.contains(focused) ? focused.closest('tr') : null;
+    const focusKey = focusedRow ? { recordId: focusedRow.dataset.recordId, action: focused.dataset.action } : null;
+
     tbody.replaceChildren(...sliceRows);
+
+    if (focusKey && focusKey.recordId && focusKey.action) {
+      const row = Array.from(tbody.rows).find((candidate) => candidate.dataset.recordId === focusKey.recordId);
+      const button = row ? row.querySelector(`button[data-action="${focusKey.action}"]`) : null;
+      if (button) {
+        button.focus({ preventScroll: true });
+      }
+    }
   };
 
   let rafPending = false;
@@ -1184,7 +1284,7 @@ function buildResultsTsv() {
     return '';
   }
 
-  const columns = ['recordId', ...collectColumns(records)];
+  const columns = ['recordId', ...collectColumns(records, Infinity)];
   const clean = (value) => toCellValue(value).replace(/[\t\r\n]+/g, ' ');
   const lines = [columns.map(clean).join('\t')];
   sortRecords(records).forEach((record) => {
@@ -1320,7 +1420,14 @@ function revealQueryBuilder() {
   setElementsVisible(queryBuilderPanels, true);
 }
 
+/** Results from an older run (one that a newer Run superseded) are ignored. */
+function isCurrentRun(payload) {
+  const runId = payload && payload.query ? payload.query.runId : undefined;
+  return runId === undefined || runId === state.latestRunId;
+}
+
 function setRunning(isRunning) {
+  state.running = isRunning;
   runButton.disabled = isRunning;
   runButton.textContent = isRunning ? 'Running…' : 'Run';
 }

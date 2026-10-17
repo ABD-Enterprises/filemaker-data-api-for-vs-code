@@ -33,6 +33,8 @@ interface RunQueryPayload {
   limit?: number;
   offset?: number;
   queryId?: string;
+  /** Webview-assigned sequence number, echoed back so stale results can be ignored. */
+  runId?: number;
 }
 
 interface SaveQueryPayload extends RunQueryPayload {
@@ -171,9 +173,40 @@ export class QueryBuilderPanel {
   private async handleMessage(rawMessage: unknown): Promise<void> {
     const message = this.parseIncomingMessage(rawMessage);
     if (!message) {
+      await this.reportRejectedRequest(rawMessage);
       return;
     }
 
+    try {
+      await this.dispatchMessage(message);
+    } catch (error) {
+      this.logger.error('Query builder request failed.', { type: message.type, error });
+      await this.postError(this.formatError(error));
+    }
+  }
+
+  /**
+   * The webview waits for a reply to requests it makes (Run shows "Running…"),
+   * so a request that fails validation still gets an error back.
+   */
+  private async reportRejectedRequest(rawMessage: unknown): Promise<void> {
+    const value = toRecord(rawMessage);
+    const type = value ? getStringField(value, 'type') : undefined;
+    const messages: Record<string, string> = {
+      runQuery: 'Enter a find request before running the query.',
+      saveQuery: 'Enter a find request before saving the query.',
+      copyFetchSnippet: 'Enter a find request before copying it.',
+      copyCurlSnippet: 'Enter a find request before copying it.',
+      copyText: 'The results are too large to copy. Save them as CSV instead.',
+      openRecord: 'That row has no record ID to open.'
+    };
+    const text = type ? messages[type] : undefined;
+    if (text) {
+      await this.postError(text);
+    }
+  }
+
+  private async dispatchMessage(message: IncomingMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
         await this.sendInitState();
@@ -227,9 +260,9 @@ export class QueryBuilderPanel {
     const profiles = await this.profileStore.listProfiles();
     const savedQueries = await this.savedQueriesStore.listSavedQueries();
 
-    const includeAuthByDefault = vscode.workspace
-      .getConfiguration('filemaker')
-      .get<boolean>('snippets.includeAuthByDefault', false);
+    const filemakerConfig = vscode.workspace.getConfiguration('filemaker');
+    const includeAuthByDefault = filemakerConfig.get<boolean>('snippets.includeAuthByDefault', false);
+    const recordEditEnabled = filemakerConfig.get<boolean>('features.recordEdit.enabled', true);
 
     await this.panel.webview.postMessage({
       type: 'init',
@@ -243,7 +276,8 @@ export class QueryBuilderPanel {
         activeProfileId: this.profileStore.getActiveProfileId(),
         savedQueries,
         defaults: this.pendingDefaults,
-        includeAuthByDefault
+        includeAuthByDefault,
+        recordEditEnabled
       }
     });
 
@@ -789,7 +823,8 @@ export class QueryBuilderPanel {
       sortJson: getStringField(payload, 'sortJson'),
       limit: getOptionalNumberField(payload, 'limit'),
       offset: getOptionalNumberField(payload, 'offset'),
-      queryId: getStringField(payload, 'queryId')
+      queryId: getStringField(payload, 'queryId'),
+      runId: getOptionalNumberField(payload, 'runId')
     };
   }
 
@@ -913,7 +948,7 @@ export class QueryBuilderPanel {
 
       <div class="tabs" role="tablist" aria-label="Query editor">
         <button id="formTab" type="button" role="tab" aria-selected="true" aria-controls="formEditor">Form</button>
-        <button id="jsonTab" type="button" role="tab" aria-selected="false" aria-controls="jsonEditor">JSON</button>
+        <button id="jsonTab" type="button" role="tab" aria-selected="false" aria-controls="jsonEditor" tabindex="-1">JSON</button>
       </div>
 
       <div id="formEditor" role="tabpanel" aria-labelledby="formTab">
@@ -955,18 +990,18 @@ export class QueryBuilderPanel {
         <button id="saveButton" type="button" class="secondary" title="Save this query (asks for a name)">Save…</button>
         <details class="menu" id="exportMenu">
           <summary class="secondary">Export</summary>
-          <div class="menu-items" role="menu">
-            <button id="copyTableButton" type="button" role="menuitem">Copy results as table</button>
-            <button id="exportCsvButton" type="button" role="menuitem">Save results as CSV…</button>
-            <button id="exportJsonButton" type="button" role="menuitem">Save results as JSON…</button>
-            <button id="exportEditorButton" type="button" role="menuitem">Open results in editor</button>
+          <div class="menu-items">
+            <button id="copyTableButton" type="button">Copy results as table</button>
+            <button id="exportCsvButton" type="button">Save results as CSV…</button>
+            <button id="exportJsonButton" type="button">Save results as JSON…</button>
+            <button id="exportEditorButton" type="button">Open results in editor</button>
           </div>
         </details>
         <details class="menu" id="copyRequestMenu">
           <summary class="secondary">Copy request</summary>
-          <div class="menu-items" role="menu">
-            <button id="copyFetchButton" type="button" role="menuitem">Copy as fetch()</button>
-            <button id="copyCurlButton" type="button" role="menuitem">Copy as curl</button>
+          <div class="menu-items">
+            <button id="copyFetchButton" type="button">Copy as fetch()</button>
+            <button id="copyCurlButton" type="button">Copy as curl</button>
             <label class="toggle menu-toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header</label>
           </div>
         </details>
@@ -979,8 +1014,8 @@ export class QueryBuilderPanel {
       <div class="results-header">
         <h2 id="resultsHeading">Results</h2>
         <div class="tabs compact" role="tablist" aria-label="Results view">
-          <button id="tableViewTab" type="button" role="tab" aria-selected="true">Table</button>
-          <button id="rawViewTab" type="button" role="tab" aria-selected="false">JSON</button>
+          <button id="tableViewTab" type="button" role="tab" aria-selected="true" aria-controls="tableContainer">Table</button>
+          <button id="rawViewTab" type="button" role="tab" aria-selected="false" aria-controls="rawContainer" tabindex="-1">JSON</button>
         </div>
       </div>
       <div class="results-toolbar">
@@ -990,8 +1025,8 @@ export class QueryBuilderPanel {
           <button id="nextButton" type="button" class="secondary" disabled>Next page</button>
         </div>
       </div>
-      <div id="tableContainer" class="table-wrap"></div>
-      <pre id="rawContainer" class="raw hidden"></pre>
+      <div id="tableContainer" class="table-wrap" role="tabpanel" aria-labelledby="tableViewTab"></div>
+      <pre id="rawContainer" class="raw hidden" role="tabpanel" aria-labelledby="rawViewTab"></pre>
     </section>
 
     <details class="panel history-panel">

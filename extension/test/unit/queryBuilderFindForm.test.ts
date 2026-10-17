@@ -20,6 +20,7 @@ interface FindFormApi {
   findValueToCriterion(field: string, raw: string | number): Criterion;
   createEmptyModel(): FindFormModel;
   modelToFindQuery(model: FindFormModel): Array<Record<string, string>>;
+  findDuplicateField(model: FindFormModel): string | undefined;
   modelToSort(model: FindFormModel): Array<{ fieldName: string; sortOrder: string }>;
   jsonToModel(findText: string, sortText?: string): { ok: boolean; reason?: string; model?: FindFormModel };
 }
@@ -33,7 +34,7 @@ describe('Query Builder find form', () => {
     const cases: Array<[string, Partial<Criterion>, string]> = [
       ['match', { value: 'Smith' }, 'Smith'],
       ['equals', { value: 'Smith' }, '==Smith'],
-      ['begins', { value: 'Sm' }, 'Sm*'],
+      ['begins', { value: 'Sm' }, '==Sm*'],
       ['contains', { value: 'mit' }, '*mit*'],
       ['gt', { value: '10' }, '>10'],
       ['gte', { value: '10' }, '>=10'],
@@ -52,6 +53,56 @@ describe('Query Builder find form', () => {
       expect(parsed.operator).toBe(operator);
       expect(FindForm.criterionToFindValue(parsed)).toBe(expected);
     }
+  });
+
+  it('escapes FileMaker operator characters except under "matches"', () => {
+    expect(FindForm.criterionToFindValue({ operator: 'equals', value: 'a@b.com' })).toBe('==a\\@b.com');
+    expect(FindForm.criterionToFindValue({ operator: 'contains', value: '50%*' })).toBe('*50%\\**');
+    expect(FindForm.criterionToFindValue({ operator: 'match', value: 'a@b.com' })).toBe('a@b.com');
+    expect(FindForm.findValueToCriterion('Email', '==a\\@b.com')).toMatchObject({
+      operator: 'equals',
+      value: 'a@b.com'
+    });
+  });
+
+  it('round-trips every non-"matches" condition for awkward values', () => {
+    const chars = ['*', '=', '>', '<', '.', 'a', ' ', '@', '\\', '/', '…'];
+    const values: string[] = [];
+    for (const first of chars) {
+      for (const second of chars) {
+        for (const third of ['', ...chars]) {
+          values.push(first + second + third);
+        }
+      }
+    }
+    const operators = FindForm.OPERATORS.map((op) => op.id).filter(
+      (id) => !['match', 'empty', 'notEmpty'].includes(id)
+    );
+    for (const operator of operators) {
+      for (const value of values) {
+        const value2 = operator === 'between' ? [...value].reverse().join('') : '';
+        const encoded = FindForm.criterionToFindValue({ operator, value, value2 });
+        expect(FindForm.findValueToCriterion('F', encoded), `${operator} ${encoded}`).toMatchObject({
+          operator,
+          value,
+          value2
+        });
+      }
+    }
+  });
+
+  it('reports a field used twice in one request', () => {
+    const model = FindForm.createEmptyModel();
+    model.requests[0] = {
+      omit: false,
+      criteria: [
+        { field: 'Date', operator: 'gte', value: '1/1/2026', value2: '' },
+        { field: 'Date ', operator: 'lte', value: '12/31/2026', value2: '' }
+      ]
+    };
+    expect(FindForm.findDuplicateField(model)).toBe('Date');
+    model.requests[0].criteria.pop();
+    expect(FindForm.findDuplicateField(model)).toBeUndefined();
   });
 
   it('builds OR requests, omit flags, and skips rows without a field', () => {
