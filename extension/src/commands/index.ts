@@ -16,6 +16,7 @@ import {
 import {
   openJsonDocument,
   parseLayoutArg,
+  parseRecordIdArg,
   promptForLayout,
   resolveProfileFromArg,
   resolveLayoutContext,
@@ -422,6 +423,15 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       }
       const { profile, layout } = selection;
       const profileId = profile.id;
+      const knownRecordId = parseRecordIdArg(arg);
+      if (knownRecordId) {
+        RecordViewerPanel.createOrShow(context, profileStore, fmClient, logger, {
+          profileId,
+          layout,
+          recordId: knownRecordId
+        });
+        return;
+      }
       const enteredRecordId = await vscode.window.showInputBox({
         title: 'Open Record Viewer',
         prompt: 'Record ID (optional; leave blank to browse)',

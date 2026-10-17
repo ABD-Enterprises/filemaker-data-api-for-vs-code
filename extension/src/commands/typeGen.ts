@@ -7,7 +7,13 @@ import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { TypeGenService } from '../services/typeGenService';
 import type { ConnectionProfile } from '../types/fm';
-import { parseLayoutArg, promptForLayout, resolveProfileFromArg, showCommandError } from './common';
+import {
+  parseLayoutArg,
+  promptForLayout,
+  resolveProfileFromArg,
+  showCommandError,
+  withProgressNotification
+} from './common';
 
 interface RegisterTypeGenCommandsDeps {
   profileStore: ProfileStore;
@@ -38,7 +44,9 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       }
 
       try {
-        const artifact = await typeGenService.generateTypesForLayout(profile, layout);
+        const artifact = await withProgressNotification(`Generating types for ${layout}…`, () =>
+          typeGenService.generateTypesForLayout(profile, layout)
+        );
         await openGeneratedFile(artifact.filePath);
         vscode.window.showInformationMessage(`Generated types for ${layout}.`);
       } catch (error) {
@@ -61,7 +69,9 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       }
 
       try {
-        const artifacts = await typeGenService.generateTypesForAllLayouts(profile);
+        const artifacts = await withProgressNotification(`Generating types for every layout in ${profile.name}…`, () =>
+          typeGenService.generateTypesForAllLayouts(profile)
+        );
         vscode.window.showInformationMessage(`Generated ${artifacts.length} layout type files.`);
       } catch (error) {
         await showCommandError(error, {
@@ -89,7 +99,9 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       }
 
       try {
-        const artifact = await typeGenService.generateSnippetsForLayout(profile, layout);
+        const artifact = await withProgressNotification(`Generating snippets for ${layout}…`, () =>
+          typeGenService.generateSnippetsForLayout(profile, layout)
+        );
         await openGeneratedFile(artifact.filePath);
         vscode.window.showInformationMessage(`Generated snippets for ${layout}.`);
       } catch (error) {
@@ -125,10 +137,8 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
       }
 
       try {
-        const artifacts = await typeGenService.generateTypeScriptClient(
-          profile,
-          layouts,
-          outputDirectory
+        const artifacts = await withProgressNotification('Generating TypeScript client…', () =>
+          typeGenService.generateTypeScriptClient(profile, layouts, outputDirectory)
         );
         await openGeneratedFile(artifacts.readmePath);
         vscode.window.showInformationMessage(

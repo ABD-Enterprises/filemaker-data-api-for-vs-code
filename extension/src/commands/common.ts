@@ -167,6 +167,30 @@ export function parseLayoutArg(arg: unknown): LayoutCommandArg {
   };
 }
 
+/**
+ * Runs a task behind a progress notification so long operations show that work
+ * is under way. Not cancellable: the services underneath take no cancel token.
+ */
+export function withProgressNotification<T>(title: string, task: () => Promise<T>): Thenable<T> {
+  return vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `FileMaker: ${title}` },
+    task
+  );
+}
+
+/** Record ID passed by a caller that already knows it (e.g. a Query Builder row). */
+export function parseRecordIdArg(arg: unknown): string | undefined {
+  if (!arg || typeof arg !== 'object') {
+    return undefined;
+  }
+
+  const value = (arg as { recordId?: unknown }).recordId;
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return String(value);
+  }
+  return typeof value === 'string' && /^\d+$/.test(value.trim()) ? value.trim() : undefined;
+}
+
 export function parseSavedQueryArg(arg: unknown): SavedQueryCommandArg {
   if (!arg || typeof arg !== 'object') {
     return {};
