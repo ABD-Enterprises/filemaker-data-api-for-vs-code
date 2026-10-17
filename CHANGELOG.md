@@ -24,14 +24,22 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Query Builder form-based find editor, actionable results (View/Edit, found-count summary, page sorting, copy as table), theme-aware styling, grouped settings with one-click migration, clearer command titles, two more walkthrough steps, and progress for code generation and environment compare (#364).
 
 ### [FIX]
 
+- Query Builder paging uses FileMaker's 1-based offsets, so the next page no longer repeats a record (#364).
+- Renamed settings resolve scope by scope, so a more specific value wins whichever name it uses (#364); non-string API path settings fall back to their defaults (#365).
+- Remove the never-implemented Export/Import Connection Profiles commands (#366).
+- Apply enterprise, offline and performance setting changes one at a time, with failures logged.
+- Remove the unused `filemaker.telemetry.enabled` setting.
 - Honor picker and input cancellation, restore FM Web profile switching, and prevent stale connection-status updates while simplifying profile and layout selection.
 
 ### [INTERNAL]
 
+- Release 1.3.0 under the SureForgeTech Marketplace publisher; the repository moved to the SureForgeTech GitHub org and in-repo links now point there.
+- Workflows install with `npm ci`; coverage thresholds gate CI; the orphaned `scripts/validate.sh` is removed; the root `package.json` declares Node >=22; `.vscodeignore` keeps local coverage reports out of the VSIX (#317, #318, #309, #301).
+- A test activates the extension and fails when a contributed command is not registered (#366).
 - Isolate the generated-client compilation test from ambient package types and give its full TypeScript compile a dedicated 30-second timeout on shared CI runners.
 - Fix all extension test-file type errors with typed fixtures and focused service contracts; include source and tests in the standard typecheck command.
 - Move CI, `.nvmrc`, the devcontainer, and setup docs from Node 20 (end of life 2026-04-30) to Node 22.
@@ -41,4 +49,5 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Generate webview CSP nonces with `crypto.randomInt` instead of `Math.random()` (#292).
 - Harden the GitHub Actions workflows flagged by zizmor: `api-docs.yml` grants `pages: write` and `id-token: write` only to the deploy job; every `actions/checkout` sets `persist-credentials: false`; the CI `setup-node` steps set `package-manager-cache: false` so a future action bump cannot start restoring a package-manager cache in the job that publishes the extension.

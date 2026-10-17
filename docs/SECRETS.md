@@ -80,7 +80,7 @@ The most-rotated secret. Steps:
 4. Copy the token (shown once).
 5. Update the GitHub secret:
    ```bash
-   gh secret set VSCE_PAT --repo ABD-Enterprises/filemaker-data-api-for-vs-code
+   gh secret set VSCE_PAT --repo SureForgeTech/filemaker-data-api-for-vs-code
    # paste at the prompt
    ```
 6. Test by running the publish job on a pre-release tag:
@@ -94,7 +94,7 @@ The most-rotated secret. Steps:
 
 1. Locally: `claude setup-token` (prints a new token).
 2. Copy the token (shown once).
-3. `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ABD-Enterprises/filemaker-data-api-for-vs-code` — paste.
+3. `gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo SureForgeTech/filemaker-data-api-for-vs-code` — paste.
 4. Test by dispatching the cloud agent workflow on a safe ticket
    (any in `ai/ready-for-work`): `gh workflow run claude-code-agent.yml -f issue_number=<N>`.
 5. Update the calendar table above in a PR.
@@ -104,12 +104,12 @@ The most-rotated secret. Steps:
 1. Go to https://github.com/settings/personal-access-tokens.
 2. Find the existing fine-grained PAT (or create a new one):
    - Name: `prs-filemaker-vscode-YYYY-MM`
-   - Resource owner: `ABD-Enterprises`
+   - Resource owner: `SureForgeTech`
    - Repository access: `filemaker-data-api-for-vs-code` only
    - Permissions: Contents r/w, Issues r/w, Pull requests r/w
    - Expiration: 1 year
 3. Generate, copy.
-4. `gh secret set PRS_PAT --repo ABD-Enterprises/filemaker-data-api-for-vs-code` — paste.
+4. `gh secret set PRS_PAT --repo SureForgeTech/filemaker-data-api-for-vs-code` — paste.
 5. Test by dispatching the cloud agent workflow.
 6. Update the calendar table.
 

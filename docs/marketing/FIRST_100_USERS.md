@@ -26,7 +26,7 @@ decomposed into **24 GitHub tickets (#251–#274)**, all in `ai/ready-for-work`.
 
 Ordered by independent skeptic confidence (highest first), then by urgency.
 
-### 1. Publish a launch post on Claris Community + FMSoup ([conf 0.85](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues?q=is%3Aissue+author%3A%40me+251))
+### 1. Publish a launch post on Claris Community + FMSoup ([conf 0.85](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues?q=is%3Aissue+author%3A%40me+251))
 
 | | |
 |---|---|
@@ -42,7 +42,7 @@ reaches the exact buyer at zero cost. Multiple research angles converged
 on this as the single highest-leverage first move because the niche has
 one well-defined watering hole.
 
-### 2. Personal feedback-request DMs to 10 FM power users ([conf 0.85](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/255))
+### 2. Personal feedback-request DMs to 10 FM power users ([conf 0.85](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/255))
 
 | | |
 |---|---|
@@ -58,7 +58,7 @@ A personal "I built this, would love honest feedback, no expectation
 of promotion" note historically converts 2–3 of 10 into podcast mentions,
 blog posts, or in-house adoption inside their consultancies.
 
-### 3. Pitch FileMaker Weekly + ISO FileMaker Magazine ([conf 0.85](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/257))
+### 3. Pitch FileMaker Weekly + ISO FileMaker Magazine ([conf 0.85](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/257))
 
 | | |
 |---|---|
@@ -73,7 +73,7 @@ SEO will match. Each newsletter touches a concentrated slice of the
 active dev population in one send. Cost: 30 minutes of email drafting
 per outlet.
 
-### 4. Publish to Open VSX (Cursor + Windsurf reach) ([conf 0.85](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/265))
+### 4. Publish to Open VSX (Cursor + Windsurf reach) ([conf 0.85](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/265))
 
 | | |
 |---|---|
@@ -87,7 +87,7 @@ and cannot install from the VS Code Marketplace. The submission was
 already tracked as issue #160 — these tickets are the concrete
 decomposition. One publish step in CI, zero ongoing maintenance.
 
-### 5. Ship self-signed cert handling ([conf 0.82](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/259))
+### 5. Ship self-signed cert handling ([conf 0.82](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/259))
 
 | | |
 |---|---|
@@ -103,7 +103,7 @@ recovery path. Adding a per-profile "Allow self-signed" toggle, a
 CA-bundle picker, and mapped error messages prevents the "I gave up at
 Test Connection" outcome that no marketing budget can recover.
 
-### 6. Map FM error codes 212 and 9 to actionable docs ([conf 0.78](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/262))
+### 6. Map FM error codes 212 and 9 to actionable docs ([conf 0.78](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/262))
 
 | | |
 |---|---|
@@ -118,7 +118,7 @@ password is wrong. Mapping FM error code 212 to a specific message with
 a 3-screenshot doc converts confused churners into successful first-query
 users — a half-day fix that catches a substantial wedge of evaluators.
 
-### 7. Rework the Marketplace listing ([conf 0.78](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/267))
+### 7. Rework the Marketplace listing ([conf 0.78](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/267))
 
 | | |
 |---|---|
@@ -133,7 +133,7 @@ with a benefit hook, leading with a Contacts-layout query-builder
 screenshot, and adding one sub-2 MB connection-wizard GIF is a half-day
 rework that lifts conversion on every existing impression.
 
-### 8. Verified publisher + trust signals ([conf 0.78](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/272))
+### 8. Verified publisher + trust signals ([conf 0.78](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/272))
 
 | | |
 |---|---|
@@ -150,7 +150,7 @@ blue checkmark, and a brief SECURITY-summary section in the README
 workspaces, passwords stored in OS keychain") answers the FM admin's
 first question before they ask it.
 
-### 9. Postman vs VS Code comparison post + collection importer ([conf 0.72](https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues/270))
+### 9. Postman vs VS Code comparison post + collection importer ([conf 0.72](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues/270))
 
 | | |
 |---|---|

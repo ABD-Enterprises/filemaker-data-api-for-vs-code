@@ -493,6 +493,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   offlineStatusBar.start();
 
+  let configChangeQueue: Promise<void> = Promise.resolve();
   context.subscriptions.push(
     offlineStatusBar,
     connectionStatusBar,
@@ -524,16 +525,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await pluginRegistry.reload();
       refreshExplorer();
     }),
-    vscode.workspace.onDidChangeConfiguration(async (event) => {
+    vscode.workspace.onDidChangeConfiguration((event) => {
       if (
         event.affectsConfiguration('filemaker.enterprise.mode') ||
         event.affectsConfiguration('filemaker.enterprise.role') ||
         event.affectsConfiguration('filemaker.offline.mode') ||
         event.affectsConfiguration('filemaker.performance.mode')
       ) {
-        await roleGuard.applyContexts();
-        await pluginRegistry.reload();
-        refreshExplorer();
+        // Run one reapply at a time so overlapping changes cannot interleave
+        // role contexts and plugin reloads; a failure is logged, not unhandled.
+        configChangeQueue = configChangeQueue
+          .then(async () => {
+            await roleGuard.applyContexts();
+            await pluginRegistry.reload();
+            refreshExplorer();
+          })
+          .catch((error: unknown) => {
+            logger.error('Failed to apply FileMaker configuration change.', { error });
+          });
       }
     }),
     pluginRegistry,

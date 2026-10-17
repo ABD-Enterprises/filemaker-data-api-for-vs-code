@@ -36,7 +36,7 @@ class FilemakerVscode < Formula
       Command Palette, and pick the file above.
 
       If you prefer the Marketplace path:
-        code --install-extension deffenda.filemaker-data-api-tools
+        code --install-extension SureForgeTech.filemaker-data-api-tools
 
       The brew path is for users who manage all their tools via brew.
       It is NOT required.

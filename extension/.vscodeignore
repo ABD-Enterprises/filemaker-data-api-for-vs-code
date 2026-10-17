@@ -7,3 +7,4 @@ typedoc.json
 vitest.config.ts
 ../**
 node_modules/**
+coverage/**

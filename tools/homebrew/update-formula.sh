@@ -29,7 +29,7 @@ if [ ! -f "$TEMPLATE" ]; then
   exit 1
 fi
 
-REPO="ABD-Enterprises/filemaker-data-api-for-vs-code"
+REPO="SureForgeTech/filemaker-data-api-for-vs-code"
 TAP_REPO="deffenda/homebrew-tap"
 VSIX_NAME="filemaker-data-api-tools-${VERSION}.vsix"
 VSIX_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${VSIX_NAME}"

@@ -13,7 +13,7 @@ This is the path 99% of users want.
 Or from the command line:
 
 ```bash
-code --install-extension deffenda.filemaker-data-api-tools
+code --install-extension SureForgeTech.filemaker-data-api-tools
 ```
 
 Auto-updates land in VS Code on its normal extension-update cadence.
@@ -25,7 +25,7 @@ Useful when you need a specific version, pre-release builds, or air-gapped insta
 ```bash
 # Download the VSIX from the GitHub release of your choice:
 curl -L -o filemaker-data-api-tools-1.1.0.vsix \
-  https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
+  https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/releases/download/v1.1.0/filemaker-data-api-tools-1.1.0.vsix
 
 # Install:
 code --install-extension filemaker-data-api-tools-1.1.0.vsix
@@ -72,7 +72,7 @@ After install, verify in VS Code:
   entry → **Uninstall**.
 - **VSIX** install: same as above; the source doesn't matter.
 - **Homebrew** install: `brew uninstall filemaker-vscode`, then run
-  `code --uninstall-extension deffenda.filemaker-data-api-tools` (brew
+  `code --uninstall-extension SureForgeTech.filemaker-data-api-tools` (brew
   doesn't unwind the VS Code-side install on its own).
 
 Profiles and saved queries are not removed by uninstall — see
@@ -81,7 +81,7 @@ lifecycle.
 
 ## Reporting an install bug
 
-Open an issue at https://github.com/ABD-Enterprises/filemaker-data-api-for-vs-code/issues
+Open an issue at https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues
 with the title prefixed `install:`. Include:
 
 - Your install path (Marketplace / VSIX / brew)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.0
+
+- [SECURITY] Webview Content Security Policy nonces now come from the OS random number generator (`crypto.randomInt`) instead of `Math.random()`.
+- [FIX] Changes to the enterprise, offline and performance settings are applied one at a time, so overlapping changes can no longer interleave role contexts and plugin reloads, and a failure is logged instead of left unhandled.
+- [FIX] Remove the unused `filemaker.telemetry.enabled` setting. The extension collects no telemetry, and the setting did nothing.
+- [INTERNAL] Published under the **SureForgeTech** Marketplace publisher (`SureForgeTech.filemaker-data-api-tools`); the source moved to github.com/SureForgeTech/filemaker-data-api-for-vs-code.
 - [FIX] Remove the **Export Connection Profiles** and **Import Connection Profiles** commands. They were listed in power-user mode but never implemented, so running them failed with "command not found". A test now activates the extension and fails if a contributed command is not registered.
 - [FIX] A hand-edited `filemaker.defaultApiBasePath` or `filemaker.defaultApiVersionPath` (or its deprecated `filemakerDataApiTools.*` name) that is not a string, such as `2` or `null`, now falls back to the default (`/fmi/data`, `vLatest`) instead of throwing.
 - [FIX] Settings renamed from `filemakerDataApiTools.*` to `filemaker.*` now resolve scope by scope, so a workspace or folder value wins over a user value whichever name it uses, and within one scope the new name wins. Before, any new-name value anywhere hid every old-name value, even a more specific one.
@@ -12,7 +18,7 @@
 
 ## 1.2.0
 
-_Released 2026-05-31._
+_First published to the VS Code Marketplace on 2026-10-17 by manual upload under the SureForgeTech publisher. This version was never tagged in git._
 
 - [FEATURE] Connection wizard now offers a **Connect Now** action immediately after a profile is saved, so first-run users flow straight from "saved" to an open session without hunting for **FileMaker: Connect** in the Command Palette. Editing an existing profile offers **Reconnect now** instead.
 

@@ -220,7 +220,7 @@ function createActivationContext(): vscode.ExtensionContext {
       onDidChange: vi.fn()
     },
     extension: {
-      id: 'deffenda.filemaker-data-api-tools',
+      id: 'SureForgeTech.filemaker-data-api-tools',
       packageJSON: { version: '1.1.0' }
     },
     extensionMode: 1,
