@@ -60,9 +60,7 @@ describe('extension manifest UX contract', () => {
       'openDiagnosticsDashboard',
       'showCircuitBreakerStatus',
       'reloadPlugins',
-      'listActivePlugins',
-      'exportProfiles',
-      'importProfiles'
+      'listActivePlugins'
     ];
     for (const name of advanced) {
       expect(palette.get(id(name)), name).toBe('filemaker.powerUserMode');

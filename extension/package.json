@@ -489,16 +489,6 @@
         "command": "filemakerDataApiTools.startFmWebPreviewServer",
         "title": "Start FM Web Preview Server",
         "category": "FileMaker"
-      },
-      {
-        "command": "filemakerDataApiTools.exportProfiles",
-        "title": "Export Connection Profiles",
-        "category": "FileMaker"
-      },
-      {
-        "command": "filemakerDataApiTools.importProfiles",
-        "title": "Import Connection Profiles",
-        "category": "FileMaker"
       }
     ],
     "menus": {
@@ -922,14 +912,6 @@
         },
         {
           "command": "filemakerDataApiTools.listActivePlugins",
-          "when": "filemaker.powerUserMode"
-        },
-        {
-          "command": "filemakerDataApiTools.exportProfiles",
-          "when": "filemaker.powerUserMode"
-        },
-        {
-          "command": "filemakerDataApiTools.importProfiles",
           "when": "filemaker.powerUserMode"
         }
       ]
