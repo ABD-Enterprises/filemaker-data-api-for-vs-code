@@ -88,6 +88,19 @@ describe('SettingsService', () => {
 
     expect(settings.getSchemaSnapshotsStorage()).toBe('workspaceState');
   });
+
+  it('falls back to the default API paths when a hand-edited value is not a non-empty string', () => {
+    for (const section of ['filemaker', 'filemakerDataApiTools']) {
+      for (const value of [2, null, '']) {
+        const settings = createSettings({
+          [section]: { defaultApiBasePath: value, defaultApiVersionPath: value }
+        });
+        const label = `${section} = ${JSON.stringify(value)}`;
+        expect(settings.getDefaultApiBasePath(), label).toBe('/fmi/data');
+        expect(settings.getDefaultApiVersionPath(), label).toBe('vLatest');
+      }
+    }
+  });
 });
 
 describe('SettingsService.migrateDeprecatedSettings', () => {
@@ -230,6 +243,24 @@ describe('SettingsService legacy resolution across workspaces', () => {
 
     settings.workspaces.W!.filemaker = { requestTimeoutMs: 30000 };
     expect(serviceFor(settings, 'W').getRequestTimeoutMs()).toBe(30000);
+  });
+
+  it('prefers a legacy folder value over a new workspace value', () => {
+    const scoped: Record<string, Record<string, { workspaceFolderValue?: unknown; workspaceValue?: unknown }>> = {
+      filemakerDataApiTools: { requestTimeoutMs: { workspaceFolderValue: 45000 } },
+      filemaker: { requestTimeoutMs: { workspaceValue: 30000 } }
+    };
+    const service = new SettingsService({
+      getConfiguration: (section?: string) =>
+        ({
+          get: <T>(_key: string, defaultValue?: T): T => defaultValue as T,
+          inspect: (key: string) => ({ key, ...scoped[section ?? '']?.[key] })
+        }) as never,
+      isWorkspaceTrusted: () => true
+    });
+
+    expect(service.getRequestTimeoutMs()).toBe(45000);
+    expect(service.consumeDeprecatedSettingsUsed()).toEqual(['filemakerDataApiTools.requestTimeoutMs']);
   });
 
   it('keeps every effective value in every workspace when migrating in one workspace, then the other', async () => {
