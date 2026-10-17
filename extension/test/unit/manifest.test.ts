@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 
 import { describe, expect, it } from 'vitest';
@@ -60,13 +60,32 @@ describe('extension manifest UX contract', () => {
       'openDiagnosticsDashboard',
       'showCircuitBreakerStatus',
       'reloadPlugins',
-      'listActivePlugins',
-      'exportProfiles',
-      'importProfiles'
+      'listActivePlugins'
     ];
     for (const name of advanced) {
       expect(palette.get(id(name)), name).toBe('filemaker.powerUserMode');
     }
+  });
+
+  it('registers every contributed command somewhere in the source', () => {
+    // A contributed command with no registerCommand call shows in menus and the
+    // palette but fails with "command not found" when run.
+    const registered = new Set<string>();
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const file = join(dir, entry);
+        if (statSync(file).isDirectory()) {
+          walk(file);
+        } else if (file.endsWith('.ts')) {
+          for (const match of readFileSync(file, 'utf8').matchAll(/registerCommand\(\s*['"]([^'"]+)['"]/g)) {
+            registered.add(match[1] as string);
+          }
+        }
+      }
+    };
+    walk(join(extensionRoot, 'src'));
+
+    expect(commands.map((command) => command.command).filter((command) => !registered.has(command))).toEqual([]);
   });
 
   it('only references contributed commands from menus and keybindings', () => {
