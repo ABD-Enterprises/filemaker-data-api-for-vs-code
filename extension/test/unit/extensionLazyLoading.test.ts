@@ -101,6 +101,22 @@ describe('extension lazy FM runtime loading', () => {
     expect(lazyModules.circuitBreakerModuleLoaded).not.toHaveBeenCalled();
   });
 
+  it('registers every contributed command during activation', async () => {
+    // A command listed in package.json but never registered shows in menus and the
+    // palette, then fails with "command not found" when run.
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+
+    const registered = new Set(vi.mocked(vscode.commands.registerCommand).mock.calls.map(([id]) => id));
+    disposeSubscriptions(context);
+
+    const { contributes } = (await import('../../package.json')) as {
+      contributes: { commands: Array<{ command: string }> };
+    };
+    expect(contributes.commands.map(({ command }) => command).filter((id) => !registered.has(id))).toEqual([]);
+  });
+
   it('loads and caches the FM client module on the first Connect command', async () => {
     const { activate } = await import('../../src/extension');
     const context = createActivationContext();
