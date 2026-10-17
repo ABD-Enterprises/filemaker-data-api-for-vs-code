@@ -33,7 +33,7 @@ jobs:
           node-version: 22
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Generate API Docs
         run: npm run docs:api

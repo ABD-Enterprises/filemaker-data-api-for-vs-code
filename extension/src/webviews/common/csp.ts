@@ -1,3 +1,5 @@
+import { randomInt } from 'crypto';
+
 import type * as vscode from 'vscode';
 
 interface CspOptions {
@@ -7,12 +9,13 @@ interface CspOptions {
   imageSources?: string[];
 }
 
+/** A CSP nonce from the OS CSPRNG; `randomInt` draws without modulo bias. */
 export function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let value = '';
 
   for (let index = 0; index < 32; index += 1) {
-    value += chars.charAt(Math.floor(Math.random() * chars.length));
+    value += chars.charAt(randomInt(chars.length));
   }
 
   return value;

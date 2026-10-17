@@ -1,6 +1,9 @@
 {
   "name": "fmweb-ide-monorepo",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "version": "0.1.0",
   "workspaces": [
     "shared",

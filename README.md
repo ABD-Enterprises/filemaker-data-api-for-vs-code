@@ -2,13 +2,13 @@
 
 A free, open-source VS Code extension for the FileMaker Data API. Full CRUD, query building, schema management, batch operations, and more — all from within VS Code.
 
-**[Extension README](extension/README.md)** | **[API Reference](https://abd-enterprises.github.io/filemaker-data-api-for-vs-code/api/)** | **[Release Cadence](docs/RELEASE_CADENCE.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
+**[Extension README](extension/README.md)** | **[API Reference](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/)** | **[Release Cadence](docs/RELEASE_CADENCE.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
 
 ## Monorepo Structure
 
 | Package | Description |
 |---------|------------|
-| `extension/` | VS Code extension — FileMaker Data API Tools v1.0.0 |
+| `extension/` | VS Code extension — FileMaker Data API Tools |
 | `shared/` | Shared schema, types, and UI renderer utilities |
 | `designer-ui/` | React webview app for Layout Mode |
 | `runtime-next/` | Next.js runtime template for generated apps |

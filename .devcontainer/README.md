@@ -30,7 +30,7 @@ The container is the same as Codespaces (`mcr.microsoft.com/devcontainers/javasc
 
 - Node.js 22 (matches the CI runner)
 - Git, GitHub CLI (`gh`)
-- This extension (`deffenda.filemaker-data-api-tools`) from the
+- This extension (`SureForgeTech.filemaker-data-api-tools`) from the
   Marketplace, latest published version
 
 `npm install` runs automatically after container creation so the

@@ -364,10 +364,6 @@ export class SettingsService {
     return 'sha256';
   }
 
-  public isTelemetryEnabled(): boolean {
-    return this.getConfiguration('filemaker').get<boolean>('telemetry.enabled', false);
-  }
-
   public getConnectBackoffPolicy(): {
     maxRetries: number;
     initialMs: number;

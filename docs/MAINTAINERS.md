@@ -21,7 +21,7 @@ this extension regularly and would like to help keep it healthy, see the
 
 - Cuts releases per the cadence policy
   ([release runbook](./RELEASE.md), filed in issue #140)
-- Holds the VS Code Marketplace publisher credentials (the `deffenda`
+- Holds the VS Code Marketplace publisher credentials (the `SureForgeTech`
   publisher on https://marketplace.visualstudio.com)
 - Holds the Azure DevOps account that owns the publisher
 - Holds the Open VSX publisher (once issue #160 lands)

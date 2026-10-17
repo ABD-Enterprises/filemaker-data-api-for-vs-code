@@ -9,7 +9,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "deffenda.filemaker-data-api-tools"
+        "SureForgeTech.filemaker-data-api-tools"
       ],
       "settings": {
         "files.exclude": {

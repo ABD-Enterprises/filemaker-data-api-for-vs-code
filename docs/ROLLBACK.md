@@ -1,6 +1,6 @@
 # Marketplace Rollback Playbook
 
-Use this playbook when a published VS Code Marketplace release of `deffenda.filemaker-data-api-tools` is broken, unsafe, or misleading.
+Use this playbook when a published VS Code Marketplace release of `SureForgeTech.filemaker-data-api-tools` is broken, unsafe, or misleading.
 
 ## Decision Tree
 
@@ -24,12 +24,12 @@ Current `vsce` help documents unpublishing the extension as a whole, not safely 
 4. If the release is severe enough to hide, unpublish the extension:
    ```bash
    cd extension
-   npx @vscode/vsce unpublish deffenda.filemaker-data-api-tools
+   npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools
    ```
 5. For non-interactive emergency use by a trusted local maintainer only:
    ```bash
    cd extension
-   VSCE_PAT=... npx @vscode/vsce unpublish deffenda.filemaker-data-api-tools --force
+   VSCE_PAT=... npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools --force
    ```
 
 Unpublishing removes the extension from normal Marketplace download flow. It is heavier than publishing a fixed patch and should be reserved for severe defects.

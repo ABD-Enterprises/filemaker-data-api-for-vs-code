@@ -14,7 +14,7 @@
 
 class FilemakerVscode < Formula
   desc "VS Code extension: FileMaker Data API tooling (query, edit, schema diff)"
-  homepage "https://github.com/deffenda/filemaker-data-api-for-vs-code"
+  homepage "https://github.com/SureForgeTech/filemaker-data-api-for-vs-code"
   url "__VSIX_URL__"
   sha256 "__VSIX_SHA256__"
   version "__VERSION__"
@@ -36,7 +36,7 @@ class FilemakerVscode < Formula
       Command Palette, and pick the file above.
 
       If you prefer the Marketplace path:
-        code --install-extension deffenda.filemaker-data-api-tools
+        code --install-extension SureForgeTech.filemaker-data-api-tools
 
       The brew path is for users who manage all their tools via brew.
       It is NOT required.
