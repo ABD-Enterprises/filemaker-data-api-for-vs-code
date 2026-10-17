@@ -126,9 +126,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const deprecatedKeys = settingsService.consumeDeprecatedSettingsUsed();
   if (deprecatedKeys.length > 0) {
     const newNames = deprecatedKeys.map((k) => k.replace('filemakerDataApiTools.', 'filemaker.'));
-    void vscode.window.showWarningMessage(
-      `FileMaker: ${deprecatedKeys.length} deprecated setting${deprecatedKeys.length === 1 ? '' : 's'} in use (${deprecatedKeys.join(', ')}). Migrate to ${newNames.join(', ')}.`
-    );
+    void offerDeprecatedSettingsMigration(settingsService, deprecatedKeys, newNames, logger);
     logger.warn('Deprecated settings in use; falling back to the legacy values.', {
       deprecatedKeys,
       newNames
@@ -598,6 +596,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 const WALKTHROUGH_STEP_ID = 'filemakerGettingStarted';
 const FIRST_RUN_FLAG = 'filemaker.walkthrough.shownOnce';
+
+async function offerDeprecatedSettingsMigration(
+  settingsService: SettingsService,
+  deprecatedKeys: string[],
+  newNames: string[],
+  logger: Logger
+): Promise<void> {
+  const plural = deprecatedKeys.length === 1 ? '' : 's';
+  const choice = await vscode.window.showWarningMessage(
+    `FileMaker: ${deprecatedKeys.length} deprecated setting${plural} in use (${deprecatedKeys.join(', ')}). They are now ${newNames.join(', ')}.`,
+    'Migrate Settings',
+    'Open Settings'
+  );
+
+  if (choice === 'Open Settings') {
+    await vscode.commands.executeCommand('workbench.action.openSettings', 'filemakerDataApiTools');
+    return;
+  }
+  if (choice !== 'Migrate Settings') {
+    return;
+  }
+
+  try {
+    const migrated = await settingsService.migrateDeprecatedSettings();
+    void vscode.window.showInformationMessage(
+      migrated.length > 0
+        ? `FileMaker: migrated ${migrated.length} setting${migrated.length === 1 ? '' : 's'} to the filemaker.* names.`
+        : 'FileMaker: nothing to migrate in user or workspace settings. Check folder-level settings.'
+    );
+  } catch (error) {
+    logger.error('Failed to migrate deprecated settings.', { error });
+    void vscode.window.showErrorMessage('FileMaker: could not migrate settings. Edit them in Settings instead.');
+  }
+}
 
 /**
  * The fully qualified walkthrough id must match `publisher.name#stepId` exactly.

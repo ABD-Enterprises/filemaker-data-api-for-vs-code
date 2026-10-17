@@ -26,6 +26,16 @@ export function resetSupportedHashAlgorithmCacheForTesting(): void {
   cachedHashAlgorithms = undefined;
 }
 
+const LEGACY_SECTION = 'filemakerDataApiTools';
+
+/** Deprecated `filemakerDataApiTools.<old>` keys and their `filemaker.<new>` replacements. */
+export const DEPRECATED_SETTING_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ['logLevel', 'logging.level'],
+  ['requestTimeoutMs', 'requestTimeoutMs'],
+  ['defaultApiBasePath', 'defaultApiBasePath'],
+  ['defaultApiVersionPath', 'defaultApiVersionPath']
+];
+
 interface SettingsServiceOptions {
   getConfiguration?: (section?: string) => vscode.WorkspaceConfiguration;
   isWorkspaceTrusted?: () => boolean;
@@ -48,10 +58,11 @@ export class SettingsService {
   }
 
   /**
-   * Prefer the modern `filemaker.<key>` value; fall back to the deprecated
-   * `filemakerDataApiTools.<oldKey>` when the new one isn't explicitly set.
-   * Records the deprecated key into deprecatedKeysSeen so the caller can
-   * surface a one-time deprecation toast.
+   * Resolves a setting that moved from `filemakerDataApiTools.<oldKey>` to
+   * `filemaker.<newKey>` scope by scope, most specific first: folder, then
+   * workspace, then user. Within a scope the new key wins over the old one.
+   * When the old key supplies the value it is recorded in deprecatedKeysSeen so
+   * the caller can offer a one-time migration.
    */
   private getPreferred<T>(
     newSection: string,
@@ -60,26 +71,62 @@ export class SettingsService {
     oldKey: string,
     defaultValue: T
   ): T {
-    const newConfig = this.getConfiguration(newSection).inspect<T>(newKey);
-    if (
-      newConfig &&
-      (newConfig.globalValue !== undefined ||
-        newConfig.workspaceValue !== undefined ||
-        newConfig.workspaceFolderValue !== undefined)
-    ) {
-      return this.getConfiguration(newSection).get<T>(newKey, defaultValue);
+    const newConfig = this.getConfiguration(newSection);
+    const newInspect = newConfig.inspect<T>(newKey);
+    const oldInspect = this.getConfiguration(oldSection).inspect<T>(oldKey);
+    const scopes = ['workspaceFolderValue', 'workspaceValue', 'globalValue'] as const;
+
+    for (const scope of scopes) {
+      const newValue = newInspect?.[scope];
+      if (newValue !== undefined) {
+        return newValue;
+      }
+      const oldValue = oldInspect?.[scope];
+      if (oldValue !== undefined) {
+        this.deprecatedKeysSeen.add(`${oldSection}.${oldKey}`);
+        return oldValue;
+      }
     }
-    const oldConfig = this.getConfiguration(oldSection).inspect<T>(oldKey);
-    const oldExplicit =
-      oldConfig &&
-      (oldConfig.globalValue !== undefined ||
-        oldConfig.workspaceValue !== undefined ||
-        oldConfig.workspaceFolderValue !== undefined);
-    if (oldExplicit) {
-      this.deprecatedKeysSeen.add(`${oldSection}.${oldKey}`);
-      return this.getConfiguration(oldSection).get<T>(oldKey, defaultValue);
+
+    return newConfig.get<T>(newKey, defaultValue);
+  }
+
+  /**
+   * Moves explicitly set deprecated `filemakerDataApiTools.*` values to their
+   * `filemaker.*` replacements and removes the old values. Because getPreferred
+   * resolves scope by scope with the new key winning inside each scope, copying
+   * old to new in a scope where the new key is unset (and dropping an old value
+   * the new key already shadows) leaves every effective value unchanged, in this
+   * workspace and in any other workspace sharing the user settings. Covers user
+   * and workspace scopes; folder-level values are left alone. Returns the old
+   * keys that were migrated.
+   */
+  public async migrateDeprecatedSettings(): Promise<string[]> {
+    const oldConfig = this.getConfiguration(LEGACY_SECTION);
+    const newConfig = this.getConfiguration('filemaker');
+    const scopes: Array<['globalValue' | 'workspaceValue', vscode.ConfigurationTarget]> = [
+      ['globalValue', vscode.ConfigurationTarget.Global],
+      ['workspaceValue', vscode.ConfigurationTarget.Workspace]
+    ];
+    const migrated = new Set<string>();
+
+    for (const [oldKey, newKey] of DEPRECATED_SETTING_KEYS) {
+      const oldInspect = oldConfig.inspect<unknown>(oldKey);
+      const newInspect = newConfig.inspect<unknown>(newKey);
+      for (const [scope, target] of scopes) {
+        const oldValue = oldInspect?.[scope];
+        if (oldValue === undefined) {
+          continue;
+        }
+        if (newInspect?.[scope] === undefined) {
+          await newConfig.update(newKey, oldValue, target);
+        }
+        await oldConfig.update(oldKey, undefined, target);
+        migrated.add(`${LEGACY_SECTION}.${oldKey}`);
+      }
     }
-    return this.getConfiguration(newSection).get<T>(newKey, defaultValue);
+
+    return [...migrated];
   }
 
   /** Returns the deprecated setting keys observed this session and clears the set. */

@@ -1,30 +1,57 @@
 const vscode = acquireVsCodeApi();
+const FindForm = window.FindForm;
+
+const DEFAULT_LIMIT = 100;
+const VIRTUALIZE_THRESHOLD = 50;
+const MAX_COLUMNS = 60;
+const MAX_CLIPBOARD_TEXT_LENGTH = 5_000_000;
+const US_DATE_PATTERN = /^\d{1,2}\/\d{1,2}\/\d{4}(?: \d{1,2}:\d{2}(?::\d{2})?)?$/;
 
 const state = {
   profiles: [],
   activeProfileId: undefined,
   layoutsByProfile: new Map(),
+  pendingLayoutByProfile: new Map(),
   savedQueries: [],
   currentPayload: undefined,
   currentQueryId: undefined,
+  currentQueryName: '',
   lastResult: undefined,
   defaults: undefined,
-  history: []
+  history: [],
+  editorMode: 'form',
+  model: FindForm.createEmptyModel(),
+  fieldNames: [],
+  resultSort: undefined,
+  resultView: 'table',
+  running: false,
+  latestRunId: 0,
+  recordEditEnabled: true
 };
 
 const profileSelect = document.getElementById('profileSelect');
 const layoutSelect = document.getElementById('layoutSelect');
+const formTab = document.getElementById('formTab');
+const jsonTab = document.getElementById('jsonTab');
+const formEditor = document.getElementById('formEditor');
+const jsonEditor = document.getElementById('jsonEditor');
+const fieldNameOptions = document.getElementById('fieldNameOptions');
+const fieldNamesHint = document.getElementById('fieldNamesHint');
+const requestList = document.getElementById('requestList');
+const addRequestButton = document.getElementById('addRequestButton');
+const sortList = document.getElementById('sortList');
+const addSortButton = document.getElementById('addSortButton');
 const findJson = document.getElementById('findJson');
 const sortJson = document.getElementById('sortJson');
 const limitInput = document.getElementById('limitInput');
 const offsetInput = document.getElementById('offsetInput');
-const queryNameInput = document.getElementById('queryNameInput');
 const includeAuthCheckbox = document.getElementById('includeAuthCheckbox');
 const runButton = document.getElementById('runButton');
 const saveButton = document.getElementById('saveButton');
 const exportEditorButton = document.getElementById('exportEditorButton');
 const exportJsonButton = document.getElementById('exportJsonButton');
 const exportCsvButton = document.getElementById('exportCsvButton');
+const copyTableButton = document.getElementById('copyTableButton');
 const copyFetchButton = document.getElementById('copyFetchButton');
 const copyCurlButton = document.getElementById('copyCurlButton');
 const uploadContainerButton = document.getElementById('uploadContainerButton');
@@ -32,21 +59,16 @@ const savedQueriesSelect = document.getElementById('savedQueriesSelect');
 const loadSavedButton = document.getElementById('loadSavedButton');
 const prevButton = document.getElementById('prevButton');
 const nextButton = document.getElementById('nextButton');
-const refreshHistoryButton = document.getElementById('refreshHistoryButton');
-const rawToggle = document.getElementById('rawToggle');
+const tableViewTab = document.getElementById('tableViewTab');
+const rawViewTab = document.getElementById('rawViewTab');
 const status = document.getElementById('status');
 const resultSummary = document.getElementById('resultSummary');
 const tableContainer = document.getElementById('tableContainer');
 const rawContainer = document.getElementById('rawContainer');
 const historyContainer = document.getElementById('historyContainer');
+const menus = Array.from(document.querySelectorAll('details.menu'));
 const queryBuilderPanels = Array.from(document.querySelectorAll('.panel'));
 const queryBuilderSkeleton = createLoadingSkeleton(['short', 'long', 'medium', 'long', 'medium']);
-const standardResultTable = {
-  columnsKey: '',
-  wrapper: undefined,
-  tbody: undefined,
-  rows: new Map()
-};
 let queryBuilderReady = false;
 
 const queryBuilderHeader = document.querySelector('.header');
@@ -71,15 +93,24 @@ window.addEventListener('message', (event) => {
       requestFieldNamesForCurrentLayout();
       break;
     case 'fieldNamesLoaded':
-      renderFieldNames(message.payload);
+      applyFieldNames(message.payload);
       break;
     case 'queryResult':
-      renderQueryResult(message.payload);
+      if (isCurrentRun(message.payload)) {
+        renderQueryResult(message.payload);
+      }
       break;
     case 'savedQueries':
       state.savedQueries = Array.isArray(message.payload) ? message.payload : [];
       renderSavedQueries();
-      setStatus('Saved queries updated.');
+      break;
+    case 'querySaved':
+      if (message.payload && typeof message.payload.id === 'string') {
+        state.currentQueryId = message.payload.id;
+        state.currentQueryName = String(message.payload.name || '');
+        savedQueriesSelect.value = message.payload.id;
+        setStatus(`Saved query "${state.currentQueryName}".`);
+      }
       break;
     case 'history':
       state.history = Array.isArray(message.payload) ? message.payload : [];
@@ -96,6 +127,12 @@ window.addEventListener('message', (event) => {
       );
       break;
     case 'error':
+      if (typeof message.runId === 'number') {
+        if (message.runId !== state.latestRunId) {
+          break; // a superseded run failed; the current one is still going
+        }
+        setRunning(false);
+      }
       setStatus(message.message || 'Unknown error.', true);
       break;
     default:
@@ -103,30 +140,386 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Source selection
+// ---------------------------------------------------------------------------
+
 profileSelect.addEventListener('change', () => {
-  const profileId = profileSelect.value;
-  requestLayouts(profileId);
+  requestLayouts(profileSelect.value);
 });
 
-if (layoutSelect) {
-  layoutSelect.addEventListener('change', () => {
-    requestFieldNamesForCurrentLayout();
-  });
+layoutSelect.addEventListener('change', () => {
+  requestFieldNamesForCurrentLayout();
+});
+
+loadSavedButton.addEventListener('click', () => {
+  const selected = state.savedQueries.find((item) => item.id === savedQueriesSelect.value);
+  if (!selected) {
+    setStatus('Choose a saved query to load.', true);
+    return;
+  }
+
+  applySavedQuery(selected);
+  setStatus(`Loaded saved query "${selected.name}".`);
+});
+
+// ---------------------------------------------------------------------------
+// Editor tabs
+// ---------------------------------------------------------------------------
+
+formTab.addEventListener('click', () => switchEditorMode('form'));
+jsonTab.addEventListener('click', () => switchEditorMode('json'));
+[formTab, jsonTab].forEach((tab) => tab.addEventListener('keydown', handleTabArrowKeys));
+
+function switchEditorMode(mode) {
+  if (mode === state.editorMode) {
+    return;
+  }
+
+  if (mode === 'json') {
+    writeModelToJson();
+  } else {
+    const parsed = FindForm.jsonToModel(findJson.value, sortJson.value);
+    if (!parsed.ok) {
+      setStatus(`${parsed.reason} Keep editing it as JSON, or fix it to use the form.`, true);
+      return;
+    }
+    state.model = parsed.model;
+    renderForm();
+  }
+
+  setEditorMode(mode);
 }
 
+function setEditorMode(mode) {
+  state.editorMode = mode;
+  const isForm = mode === 'form';
+  formTab.setAttribute('aria-selected', String(isForm));
+  jsonTab.setAttribute('aria-selected', String(!isForm));
+  formTab.tabIndex = isForm ? 0 : -1;
+  jsonTab.tabIndex = isForm ? -1 : 0;
+  formEditor.classList.toggle('hidden', !isForm);
+  jsonEditor.classList.toggle('hidden', isForm);
+}
+
+function handleTabArrowKeys(event) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    return;
+  }
+  const tabs = Array.from(event.currentTarget.parentElement.querySelectorAll('[role="tab"]'));
+  const index = tabs.indexOf(event.currentTarget);
+  const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+  next.click();
+  // A refused switch (JSON the form can't show) leaves focus on the selected tab.
+  const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true');
+  if (selected) {
+    selected.focus();
+  }
+}
+
+function writeModelToJson() {
+  findJson.value = JSON.stringify(FindForm.modelToFindQuery(state.model), null, 2);
+  const sort = FindForm.modelToSort(state.model);
+  sortJson.value = sort.length > 0 ? JSON.stringify(sort, null, 2) : '';
+}
+
+// ---------------------------------------------------------------------------
+// Form editor
+// ---------------------------------------------------------------------------
+
+addRequestButton.addEventListener('click', () => {
+  state.model.requests.push(FindForm.createEmptyRequest());
+  renderForm();
+  focusLast(requestList, '.criterion-field');
+});
+
+addSortButton.addEventListener('click', () => {
+  state.model.sort.push({ fieldName: '', sortOrder: 'ascend' });
+  renderForm();
+  focusLast(sortList, '.sort-field');
+});
+
+function renderForm() {
+  requestList.replaceChildren(
+    ...state.model.requests.map((request, requestIndex) => renderRequest(request, requestIndex))
+  );
+  sortList.replaceChildren(...state.model.sort.map((item, sortIndex) => renderSortRow(item, sortIndex)));
+}
+
+function renderRequest(request, requestIndex) {
+  const card = document.createElement('fieldset');
+  card.className = 'request-card';
+
+  const legend = document.createElement('legend');
+  legend.textContent =
+    state.model.requests.length > 1
+      ? `${requestIndex === 0 ? 'Find' : 'Or find'} records where`
+      : 'Find records where';
+  card.appendChild(legend);
+
+  request.criteria.forEach((criterion, criterionIndex) => {
+    card.appendChild(renderCriterion(request, criterion, requestIndex, criterionIndex));
+  });
+
+  const footer = document.createElement('div');
+  footer.className = 'request-footer';
+
+  footer.appendChild(
+    makeButton('Add criterion', 'secondary small', () => {
+      request.criteria.push({ field: '', operator: 'match', value: '', value2: '' });
+      renderForm();
+      focusLast(requestList.children[requestIndex], '.criterion-field');
+    })
+  );
+
+  const omitLabel = document.createElement('label');
+  omitLabel.className = 'toggle';
+  const omit = document.createElement('input');
+  omit.type = 'checkbox';
+  omit.checked = request.omit === true;
+  omit.addEventListener('change', () => {
+    request.omit = omit.checked;
+  });
+  omitLabel.append(omit, document.createTextNode(' Omit these records'));
+  footer.appendChild(omitLabel);
+
+  if (state.model.requests.length > 1) {
+    footer.appendChild(
+      makeButton('Remove request', 'link danger', () => {
+        state.model.requests.splice(requestIndex, 1);
+        renderForm();
+        const neighbour = requestList.children[Math.min(requestIndex, requestList.children.length - 1)];
+        focusFirst(neighbour, '.criterion-field');
+      })
+    );
+  }
+
+  card.appendChild(footer);
+  return card;
+}
+
+function renderCriterion(request, criterion, requestIndex, criterionIndex) {
+  const row = document.createElement('div');
+  row.className = 'criterion-row';
+  const idPrefix = `req${requestIndex}-crit${criterionIndex}`;
+
+  const field = document.createElement('input');
+  field.className = 'criterion-field';
+  field.setAttribute('list', 'fieldNameOptions');
+  field.placeholder = 'Field name';
+  field.value = criterion.field;
+  field.setAttribute('aria-label', 'Field');
+  field.id = `${idPrefix}-field`;
+  field.addEventListener('input', () => {
+    criterion.field = field.value;
+  });
+
+  const operator = document.createElement('select');
+  operator.className = 'criterion-operator';
+  operator.setAttribute('aria-label', 'Condition');
+  FindForm.OPERATORS.forEach((option) => {
+    const element = document.createElement('option');
+    element.value = option.id;
+    element.textContent = option.label;
+    operator.appendChild(element);
+  });
+  operator.value = criterion.operator;
+  operator.addEventListener('change', () => {
+    criterion.operator = operator.value;
+    renderForm();
+    const refreshed = requestList.children[requestIndex];
+    const select = refreshed && refreshed.querySelectorAll('.criterion-operator')[criterionIndex];
+    if (select) {
+      select.focus();
+    }
+  });
+
+  row.append(field, operator);
+
+  const definition = FindForm.getOperator(criterion.operator);
+  if (definition.needsValue) {
+    row.appendChild(
+      makeValueInput(criterion.value, definition.needsSecondValue ? 'From' : 'Value', (value) => {
+        criterion.value = value;
+      })
+    );
+  }
+  if (definition.needsSecondValue) {
+    row.appendChild(
+      makeValueInput(criterion.value2, 'To', (value) => {
+        criterion.value2 = value;
+      })
+    );
+  }
+
+  const removeButton = makeButton('Remove', 'icon', () => {
+    request.criteria.splice(criterionIndex, 1);
+    if (request.criteria.length === 0) {
+      request.criteria.push({ field: '', operator: 'match', value: '', value2: '' });
+    }
+    renderForm();
+    const fields = requestList.children[requestIndex]
+      ? requestList.children[requestIndex].querySelectorAll('.criterion-field')
+      : [];
+    const target = fields[Math.min(criterionIndex, fields.length - 1)];
+    if (target) {
+      target.focus();
+    }
+  });
+  removeButton.textContent = '×';
+  removeButton.setAttribute('aria-label', 'Remove criterion');
+  removeButton.title = 'Remove criterion';
+  row.appendChild(removeButton);
+
+  return row;
+}
+
+function makeValueInput(value, label, onInput) {
+  const input = document.createElement('input');
+  input.className = 'criterion-value';
+  input.placeholder = label;
+  input.setAttribute('aria-label', label);
+  input.value = value || '';
+  input.addEventListener('input', () => onInput(input.value));
+  return input;
+}
+
+function renderSortRow(item, sortIndex) {
+  const row = document.createElement('div');
+  row.className = 'criterion-row';
+
+  const field = document.createElement('input');
+  field.className = 'sort-field';
+  field.setAttribute('list', 'fieldNameOptions');
+  field.placeholder = 'Field name';
+  field.setAttribute('aria-label', 'Sort field');
+  field.value = item.fieldName;
+  field.addEventListener('input', () => {
+    item.fieldName = field.value;
+  });
+
+  const order = document.createElement('select');
+  order.setAttribute('aria-label', 'Sort order');
+  [
+    ['ascend', 'Ascending'],
+    ['descend', 'Descending']
+  ].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    order.appendChild(option);
+  });
+  order.value = item.sortOrder;
+  order.addEventListener('change', () => {
+    item.sortOrder = order.value;
+  });
+
+  const removeButton = makeButton('×', 'icon', () => {
+    state.model.sort.splice(sortIndex, 1);
+    renderForm();
+    const fields = sortList.querySelectorAll('.sort-field');
+    const target = fields[Math.min(sortIndex, fields.length - 1)] || addSortButton;
+    target.focus();
+  });
+  removeButton.setAttribute('aria-label', 'Remove sort field');
+  removeButton.title = 'Remove sort field';
+
+  row.append(field, order, removeButton);
+  return row;
+}
+
+function makeButton(label, className, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function focusFirst(container, selector) {
+  const match = container ? container.querySelector(selector) : null;
+  if (match) {
+    match.focus();
+  }
+}
+
+function focusLast(container, selector) {
+  if (!container) {
+    return;
+  }
+  const matches = container.querySelectorAll(selector);
+  const last = matches[matches.length - 1];
+  if (last) {
+    last.focus();
+  }
+}
+
+function applyFieldNames(payload) {
+  const currentProfile = profileSelect.value;
+  const currentLayout = layoutSelect.value;
+  if (payload && (payload.profileId !== currentProfile || payload.layout !== currentLayout) && payload.layout) {
+    return;
+  }
+
+  state.fieldNames = Array.isArray(payload && payload.fieldNames) ? payload.fieldNames : [];
+  fieldNameOptions.replaceChildren(
+    ...state.fieldNames.map((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      return option;
+    })
+  );
+
+  fieldNamesHint.classList.remove('error');
+  if (payload && payload.error) {
+    fieldNamesHint.textContent = `Couldn't load this layout's fields (${payload.error}). You can still type field names.`;
+    fieldNamesHint.classList.add('error');
+  } else if (state.fieldNames.length > 0) {
+    fieldNamesHint.textContent = `${state.fieldNames.length} fields on this layout. Start typing a field name to pick one.`;
+  } else {
+    fieldNamesHint.textContent = '';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+
 runButton.addEventListener('click', () => {
+  runQuery();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    if (!state.running) {
+      runQuery();
+    }
+  } else if (event.key === 'Escape') {
+    closeMenus();
+  }
+});
+
+function runQuery() {
+  if (state.running) {
+    return;
+  }
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
+  state.latestRunId += 1;
+  payload.runId = state.latestRunId;
   state.currentPayload = payload;
-  setStatus('Running query...');
+  setRunning(true);
+  setStatus('Running query…');
   vscode.postMessage({
     type: 'runQuery',
     payload
   });
-});
+}
 
 saveButton.addEventListener('click', () => {
   const payload = collectPayload();
@@ -134,17 +527,11 @@ saveButton.addEventListener('click', () => {
     return;
   }
 
-  const name = queryNameInput.value.trim();
-  if (!name) {
-    setStatus('Enter a name before saving query.', true);
-    return;
-  }
-
   vscode.postMessage({
     type: 'saveQuery',
     payload: {
       ...payload,
-      name
+      name: state.currentQueryName
     }
   });
 });
@@ -161,35 +548,41 @@ exportCsvButton.addEventListener('click', () => {
   vscode.postMessage({ type: 'exportResultsCsvFile' });
 });
 
-copyFetchButton.addEventListener('click', () => {
-  const payload = collectPayload();
-  if (!payload) {
+copyTableButton.addEventListener('click', () => {
+  const text = buildResultsTsv();
+  if (!text) {
+    setStatus('Run a query first. There are no results to copy.', true);
     return;
   }
+  if (text.length > MAX_CLIPBOARD_TEXT_LENGTH) {
+    setStatus('The results are too large to copy. Use Export → Save results as CSV instead.', true);
+    return;
+  }
+  vscode.postMessage({ type: 'copyText', text, label: 'results table' });
+});
 
-  vscode.postMessage({
-    type: 'copyFetchSnippet',
-    payload: {
-      ...payload,
-      includeAuthHeader: includeAuthCheckbox.checked
-    }
-  });
+copyFetchButton.addEventListener('click', () => {
+  postSnippetRequest('copyFetchSnippet');
 });
 
 copyCurlButton.addEventListener('click', () => {
+  postSnippetRequest('copyCurlSnippet');
+});
+
+function postSnippetRequest(type) {
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
   vscode.postMessage({
-    type: 'copyCurlSnippet',
+    type,
     payload: {
       ...payload,
       includeAuthHeader: includeAuthCheckbox.checked
     }
   });
-});
+}
 
 uploadContainerButton.addEventListener('click', () => {
   const payload = collectProfileLayoutPayload();
@@ -197,47 +590,169 @@ uploadContainerButton.addEventListener('click', () => {
     return;
   }
 
-  setStatus('Opening container upload...');
+  setStatus('Opening container upload…');
   vscode.postMessage({
     type: 'uploadContainer',
     payload
   });
 });
 
-loadSavedButton.addEventListener('click', () => {
-  const selectedId = savedQueriesSelect.value;
-  const selected = state.savedQueries.find((item) => item.id === selectedId);
+// Menus close after a choice, on outside click, and on Escape.
+menus.forEach((menu) => {
+  menu.addEventListener('click', (event) => {
+    if (event.target instanceof HTMLButtonElement && event.target.closest('.menu-items')) {
+      menu.open = false;
+    }
+  });
+  menu.addEventListener('toggle', () => {
+    if (menu.open) {
+      menus.filter((other) => other !== menu).forEach((other) => {
+        other.open = false;
+      });
+    }
+  });
+});
 
-  if (!selected) {
-    setStatus('Select a saved query to load.', true);
-    return;
+document.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element) || !event.target.closest('details.menu')) {
+    closeMenus();
   }
-
-  applySavedQuery(selected);
-  setStatus(`Loaded saved query "${selected.name}".`);
 });
 
-rawToggle.addEventListener('change', () => {
-  renderResultView();
-});
+function closeMenus() {
+  menus.forEach((menu) => {
+    menu.open = false;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Paging
+// ---------------------------------------------------------------------------
 
 prevButton.addEventListener('click', () => {
-  const limit = parseNumber(limitInput.value) ?? 100;
-  const currentOffset = parseNumber(offsetInput.value) ?? 0;
-  offsetInput.value = String(Math.max(0, currentOffset - limit));
-  runButton.click();
+  const { start, limit } = shownPage();
+  runShownQueryAt(Math.max(1, start - limit), limit);
 });
 
 nextButton.addEventListener('click', () => {
-  const limit = parseNumber(limitInput.value) ?? 100;
-  const currentOffset = parseNumber(offsetInput.value) ?? 0;
-  offsetInput.value = String(currentOffset + limit);
-  runButton.click();
+  const { start, limit } = shownPage();
+  runShownQueryAt(start + limit, limit);
 });
 
-refreshHistoryButton.addEventListener('click', () => {
-  vscode.postMessage({ type: 'refreshHistory' });
-});
+/** Pages through the query whose results are on screen, even if the form has been edited since. */
+function runShownQueryAt(offset, limit) {
+  const query = state.lastResult && state.lastResult.query;
+  if (!query || state.running) {
+    return;
+  }
+  offsetInput.value = String(offset);
+  limitInput.value = String(limit);
+  state.latestRunId += 1;
+  const payload = { ...query, offset, limit, runId: state.latestRunId };
+  state.currentPayload = payload;
+  setRunning(true);
+  setStatus('Loading page…');
+  vscode.postMessage({ type: 'runQuery', payload });
+}
+
+/**
+ * Start and page size of the results on screen, taken from the request that
+ * produced them rather than the (possibly edited) inputs. FileMaker offsets are
+ * 1-based: offset 1 is the first record.
+ */
+function shownPage() {
+  const query = (state.lastResult && state.lastResult.query) || {};
+  const limit = parseNumber(query.limit) || DEFAULT_LIMIT;
+  const start = Math.max(1, parseNumber(query.offset) || 1);
+  return { start, limit };
+}
+
+function updatePager(returned, foundCount) {
+  if (!state.lastResult) {
+    prevButton.disabled = true;
+    nextButton.disabled = true;
+    return;
+  }
+  const { start, limit } = shownPage();
+  prevButton.disabled = start <= 1;
+  nextButton.disabled =
+    typeof foundCount === 'number' ? start + returned - 1 >= foundCount : returned < limit;
+}
+
+// ---------------------------------------------------------------------------
+// Payload helpers
+// ---------------------------------------------------------------------------
+
+function collectPayload() {
+  const base = collectProfileLayoutPayload();
+  if (!base) {
+    return undefined;
+  }
+
+  if (state.editorMode === 'form') {
+    const query = FindForm.modelToFindQuery(state.model);
+    if (query.length === 1 && Object.keys(query[0]).length === 0) {
+      setStatus('Add at least one field to search on.', true);
+      focusLast(requestList, '.criterion-field');
+      return undefined;
+    }
+    const duplicate = FindForm.findDuplicateField(state.model);
+    if (duplicate) {
+      setStatus(
+        `"${duplicate}" appears twice in one request, and FileMaker keeps only one. Use "between" for a range, or put the second condition in another request.`,
+        true
+      );
+      return undefined;
+    }
+    writeModelToJson();
+  } else if (!findJson.value.trim()) {
+    setStatus('Enter a find request, for example [{"Status": "Open"}].', true);
+    findJson.focus();
+    return undefined;
+  }
+
+  return {
+    ...base,
+    findJson: findJson.value,
+    sortJson: sortJson.value,
+    limit: parseNumber(limitInput.value),
+    offset: parseNumber(offsetInput.value),
+    queryId: state.currentQueryId
+  };
+}
+
+function collectProfileLayoutPayload() {
+  const profileId = profileSelect.value;
+  const layout = layoutSelect.value;
+
+  if (!profileId) {
+    setStatus('Select a profile.', true);
+    return undefined;
+  }
+
+  if (!layout) {
+    setStatus('Select a layout.', true);
+    return undefined;
+  }
+
+  return {
+    profileId,
+    layout
+  };
+}
+
+function parseNumber(value) {
+  if (value === '' || value === undefined || value === null) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Init, profiles, layouts, saved queries
+// ---------------------------------------------------------------------------
 
 function applyInit(payload) {
   state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
@@ -246,23 +761,20 @@ function applyInit(payload) {
   state.defaults = payload.defaults;
 
   includeAuthCheckbox.checked = payload.includeAuthByDefault === true;
+  state.recordEditEnabled = payload.recordEditEnabled !== false;
 
   renderProfiles();
   renderSavedQueries();
-
-  const defaultFind = findJson.value.trim();
-  if (!defaultFind) {
-    findJson.value = '[{}]';
-  }
+  renderForm();
+  setEditorMode(state.editorMode);
 
   if (payload.defaults && payload.defaults.savedQuery) {
     applySavedQuery(payload.defaults.savedQuery);
   }
 
-  setStatus('Ready.');
+  setStatus('Ready. Press Ctrl/Cmd+Enter to run.');
 
-  // Focus the profile select once the init data has rendered so SR + keyboard
-  // users land on the primary control instead of the document root.
+  // Land keyboard and screen-reader users on the primary control.
   if (profileSelect && typeof profileSelect.focus === 'function') {
     profileSelect.focus();
   }
@@ -274,10 +786,16 @@ function applyLayouts(payload) {
   }
 
   state.layoutsByProfile.set(payload.profileId, payload.layouts);
+  // A saved query loaded before this profile's layouts arrived names the layout to select.
+  const pendingLayout = state.pendingLayoutByProfile.get(payload.profileId);
+  state.pendingLayoutByProfile.delete(payload.profileId);
 
   if (profileSelect.value === payload.profileId) {
-    renderLayouts(payload.layouts, state.defaults && state.defaults.layout);
+    renderLayouts(payload.layouts, pendingLayout || (state.defaults && state.defaults.layout));
     state.defaults = undefined;
+    if (status.textContent === 'Loading layouts…') {
+      setStatus('Ready. Press Ctrl/Cmd+Enter to run.');
+    }
   }
 }
 
@@ -338,147 +856,187 @@ function requestLayouts(profileId, preferredLayout) {
   const cachedLayouts = state.layoutsByProfile.get(profileId);
   if (cachedLayouts) {
     renderLayouts(cachedLayouts, preferredLayout);
+    requestFieldNamesForCurrentLayout();
     return;
   }
 
-  setStatus('Loading layouts...');
+  if (preferredLayout) {
+    state.pendingLayoutByProfile.set(profileId, preferredLayout);
+  } else {
+    // A manual profile pick replaces any layout left over from an earlier, failed load.
+    state.pendingLayoutByProfile.delete(profileId);
+  }
+  setStatus('Loading layouts…');
   vscode.postMessage({
     type: 'loadLayouts',
     profileId
   });
 }
 
-function collectPayload() {
-  const base = collectProfileLayoutPayload();
-  if (!base) {
-    return undefined;
-  }
-
-  return {
-    ...base,
-    findJson: findJson.value,
-    sortJson: sortJson.value,
-    limit: parseNumber(limitInput.value),
-    offset: parseNumber(offsetInput.value),
-    queryId: state.currentQueryId
-  };
-}
-
-function collectProfileLayoutPayload() {
+function requestFieldNamesForCurrentLayout() {
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
-
-  if (!profileId) {
-    setStatus('Select a profile.', true);
-    return undefined;
+  if (!profileId || !layout) {
+    applyFieldNames({ profileId: '', layout: '', fieldNames: [] });
+    return;
   }
-
-  if (!layout) {
-    setStatus('Select a layout.', true);
-    return undefined;
-  }
-
-  return {
-    profileId,
-    layout
-  };
+  vscode.postMessage({ type: 'loadFieldNames', profileId, layout });
 }
 
-function parseNumber(value) {
-  if (value === '' || value === undefined || value === null) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function createLoadingSkeleton(widths) {
-  const skeleton = document.createElement('div');
-  skeleton.className = 'loading-skeleton';
-
-  widths.forEach((width) => {
-    const line = document.createElement('div');
-    line.className = `skeleton-line ${width}`;
-    skeleton.appendChild(line);
-  });
-
-  return skeleton;
-}
-
-function setElementsVisible(elements, isVisible) {
-  elements.forEach((element) => {
-    element.style.display = isVisible ? '' : 'none';
-  });
-
-  queryBuilderSkeleton.classList.toggle('hidden', isVisible);
-}
-
-function revealQueryBuilder() {
-  if (queryBuilderReady) {
+function renderSavedQueries() {
+  if (!Array.isArray(state.savedQueries) || state.savedQueries.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No saved queries';
+    savedQueriesSelect.replaceChildren(option);
+    loadSavedButton.disabled = true;
     return;
   }
 
-  queryBuilderReady = true;
-  setElementsVisible(queryBuilderPanels, true);
+  loadSavedButton.disabled = false;
+  savedQueriesSelect.replaceChildren(
+    ...state.savedQueries.map((query) => {
+      const option = document.createElement('option');
+      option.value = query.id;
+      option.textContent = `${query.name} (${query.layout})`;
+      return option;
+    })
+  );
+  if (state.currentQueryId) {
+    savedQueriesSelect.value = state.currentQueryId;
+  }
+}
+
+function applySavedQuery(query) {
+  state.currentQueryId = query.id;
+  state.currentQueryName = query.name || '';
+
+  profileSelect.value = query.profileId;
+  requestLayouts(query.profileId, query.layout);
+
+  findJson.value = JSON.stringify(query.findJson || [], null, 2);
+  sortJson.value = query.sortJson ? JSON.stringify(query.sortJson, null, 2) : '';
+  limitInput.value = query.limit !== undefined ? String(query.limit) : '';
+  offsetInput.value = query.offset !== undefined ? String(query.offset) : '';
+
+  const parsed = FindForm.jsonToModel(findJson.value, sortJson.value);
+  if (parsed.ok) {
+    state.model = parsed.model;
+    renderForm();
+    setEditorMode('form');
+  } else {
+    setEditorMode('json');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Results
+// ---------------------------------------------------------------------------
+
+tableViewTab.addEventListener('click', () => setResultView('table'));
+rawViewTab.addEventListener('click', () => setResultView('raw'));
+[tableViewTab, rawViewTab].forEach((tab) => tab.addEventListener('keydown', handleTabArrowKeys));
+
+function setResultView(view) {
+  state.resultView = view;
+  tableViewTab.setAttribute('aria-selected', String(view === 'table'));
+  rawViewTab.setAttribute('aria-selected', String(view === 'raw'));
+  tableViewTab.tabIndex = view === 'table' ? 0 : -1;
+  rawViewTab.tabIndex = view === 'raw' ? 0 : -1;
+  renderResultView();
 }
 
 function renderQueryResult(payload) {
+  setRunning(false);
   state.lastResult = payload;
+  state.resultSort = undefined;
   renderResultView();
 
-  const total = Array.isArray(payload.result && payload.result.data) ? payload.result.data.length : 0;
-  setStatus(`Query completed. Returned ${total} records.`);
+  const records = getResultRecords();
+  setStatus(`Query completed. ${formatCount(records.length)} record${records.length === 1 ? '' : 's'} returned.`);
+}
 
-  vscode.postMessage({ type: 'refreshHistory' });
+function getResultRecords() {
+  const result = (state.lastResult && state.lastResult.result) || {};
+  return Array.isArray(result.data) ? result.data : [];
+}
+
+function getDataInfo() {
+  const result = (state.lastResult && state.lastResult.result) || {};
+  return result.dataInfo && typeof result.dataInfo === 'object' ? result.dataInfo : {};
 }
 
 function renderResultView() {
   if (!state.lastResult) {
-    resultSummary.textContent = 'No results yet.';
-    clearTableContainer();
+    resultSummary.textContent = 'No results yet. Run a query to see records here.';
+    tableContainer.replaceChildren();
     rawContainer.textContent = '';
+    updatePager(0, 0);
     return;
   }
 
-  const result = state.lastResult.result || {};
-  const records = Array.isArray(result.data) ? result.data : [];
-
-  const summaryParts = [`Records: ${records.length}`];
-  if (state.lastResult.query) {
-    summaryParts.push(`Layout: ${state.lastResult.query.layout}`);
-  }
-  resultSummary.textContent = summaryParts.join(' | ');
+  const records = getResultRecords();
+  const dataInfo = getDataInfo();
+  const foundCount = typeof dataInfo.foundCount === 'number' ? dataInfo.foundCount : undefined;
+  resultSummary.textContent = describeResults(records.length, dataInfo);
+  updatePager(records.length, foundCount);
 
   rawContainer.textContent = JSON.stringify(state.lastResult, null, 2);
 
-  if (rawToggle.checked) {
+  if (state.resultView === 'raw') {
     rawContainer.classList.remove('hidden');
-    clearTableContainer();
+    tableContainer.replaceChildren();
     return;
   }
 
   rawContainer.classList.add('hidden');
 
   if (records.length === 0) {
-    clearTableContainer();
-    tableContainer.appendChild(createEmptyMessage('No records returned.'));
+    tableContainer.replaceChildren(createEmptyMessage('No records match this find.'));
     return;
   }
 
   const columns = collectColumns(records);
+  const totalColumns = collectColumns(records, Infinity).length;
+  if (totalColumns > columns.length) {
+    resultSummary.textContent += ` · first ${columns.length} of ${totalColumns} fields shown (Export includes all)`;
+  }
+  const sorted = sortRecords(records);
 
-  if (records.length >= 50) {
-    resetStandardResultTable();
-    tableContainer.replaceChildren();
-    renderVirtualizedTable(records, columns);
+  if (sorted.length >= VIRTUALIZE_THRESHOLD) {
+    renderVirtualizedTable(sorted, columns);
     return;
   }
 
-  renderStandardTable(records, columns);
+  renderStandardTable(sorted, columns);
 }
 
-function collectColumns(records) {
+function describeResults(returned, dataInfo) {
+  const layout = state.lastResult && state.lastResult.query ? state.lastResult.query.layout : '';
+  if (returned === 0) {
+    return layout ? `No records found on ${layout}.` : 'No records found.';
+  }
+
+  const { start } = shownPage();
+  const end = start + returned - 1;
+  const parts = [`Showing ${formatCount(start)}–${formatCount(end)}`];
+  if (typeof dataInfo.foundCount === 'number') {
+    parts[0] += ` of ${formatCount(dataInfo.foundCount)} found`;
+  }
+  if (typeof dataInfo.totalRecordCount === 'number') {
+    parts.push(`${formatCount(dataInfo.totalRecordCount)} in table`);
+  }
+  if (layout) {
+    parts.push(layout);
+  }
+  return parts.join(' · ');
+}
+
+function formatCount(value) {
+  return Number(value).toLocaleString();
+}
+
+function collectColumns(records, maxColumns = MAX_COLUMNS) {
   const seen = new Set();
 
   for (const record of records) {
@@ -486,7 +1044,70 @@ function collectColumns(records) {
     Object.keys(fieldData).forEach((key) => seen.add(key));
   }
 
-  return Array.from(seen).slice(0, 60);
+  return Array.from(seen).slice(0, maxColumns);
+}
+
+function getCellRaw(record, column) {
+  if (column === 'recordId') {
+    return record.recordId;
+  }
+  const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
+  return fieldData[column];
+}
+
+function sortRecords(records) {
+  if (!state.resultSort) {
+    return records;
+  }
+
+  const { column, direction } = state.resultSort;
+  const factor = direction === 'descending' ? -1 : 1;
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((a, b) => {
+      const left = getCellRaw(a.record, column);
+      const right = getCellRaw(b.record, column);
+      const leftEmpty = left === undefined || left === null || left === '';
+      const rightEmpty = right === undefined || right === null || right === '';
+      if (leftEmpty !== rightEmpty) {
+        return leftEmpty ? 1 : -1;
+      }
+      const compared = compareCells(left, right, collator);
+      return compared === 0 ? a.index - b.index : compared * factor;
+    })
+    .map((item) => item.record);
+}
+
+function compareCells(left, right, collator) {
+  if (typeof left === 'number' && typeof right === 'number') {
+    return left - right;
+  }
+  // FileMaker returns dates and timestamps as MM/DD/YYYY [HH:MM[:SS]] strings.
+  if (typeof left === 'string' && typeof right === 'string' && US_DATE_PATTERN.test(left) && US_DATE_PATTERN.test(right)) {
+    const leftTime = Date.parse(left);
+    const rightTime = Date.parse(right);
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+      return leftTime - rightTime;
+    }
+  }
+  return collator.compare(toCellValue(left), toCellValue(right));
+}
+
+function toggleResultSort(column) {
+  if (!state.resultSort || state.resultSort.column !== column) {
+    state.resultSort = { column, direction: 'ascending' };
+  } else if (state.resultSort.direction === 'ascending') {
+    state.resultSort = { column, direction: 'descending' };
+  } else {
+    state.resultSort = undefined;
+  }
+  renderResultView();
+  const header = tableContainer.querySelector(`th button[data-column="${CSS.escape(column)}"]`);
+  if (header) {
+    header.focus();
+  }
 }
 
 function toCellValue(value) {
@@ -505,41 +1126,209 @@ function toCellValue(value) {
   }
 }
 
-function renderSavedQueries() {
-  savedQueriesSelect.innerHTML = '';
+function buildHeaderRow(columns) {
+  const headerRow = document.createElement('tr');
 
-  if (!Array.isArray(state.savedQueries) || state.savedQueries.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'No saved queries';
-    savedQueriesSelect.appendChild(option);
+  const actionsHeader = document.createElement('th');
+  actionsHeader.className = 'actions-col';
+  actionsHeader.textContent = 'Open';
+  headerRow.appendChild(actionsHeader);
+
+  ['recordId', ...columns].forEach((column) => {
+    const th = document.createElement('th');
+    const sortState = state.resultSort && state.resultSort.column === column ? state.resultSort.direction : 'none';
+    th.setAttribute('aria-sort', sortState);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sort-header';
+    button.dataset.column = column;
+    button.title = 'Sort this page by this column';
+    button.textContent = column;
+    if (sortState !== 'none') {
+      const indicator = document.createElement('span');
+      indicator.className = 'sort-indicator';
+      indicator.setAttribute('aria-hidden', 'true');
+      indicator.textContent = sortState === 'ascending' ? ' ▲' : ' ▼';
+      button.appendChild(indicator);
+    }
+    th.appendChild(button);
+    headerRow.appendChild(th);
+  });
+
+  return headerRow;
+}
+
+function buildRow(record, columns) {
+  const row = document.createElement('tr');
+  const recordId = record && record.recordId !== undefined && record.recordId !== null ? String(record.recordId) : '';
+  row.dataset.recordId = recordId;
+  if (recordId) {
+    row.title = 'Double-click to open this record';
+  }
+
+  const actionsCell = document.createElement('td');
+  actionsCell.className = 'actions-col';
+  if (recordId) {
+    const view = makeButton('View', 'link', () => openRecord(recordId, 'view'));
+    view.setAttribute('aria-label', `View record ${recordId}`);
+    view.dataset.action = 'view';
+    actionsCell.appendChild(view);
+    if (state.recordEditEnabled) {
+      const edit = makeButton('Edit', 'link', () => openRecord(recordId, 'edit'));
+      edit.setAttribute('aria-label', `Edit record ${recordId}`);
+      edit.dataset.action = 'edit';
+      actionsCell.appendChild(edit);
+    }
+  }
+  row.appendChild(actionsCell);
+
+  ['recordId', ...columns].forEach((column) => {
+    const td = document.createElement('td');
+    const text = toCellValue(getCellRaw(record, column));
+    td.textContent = text;
+    if (text.length > 40) {
+      td.title = text;
+    }
+    row.appendChild(td);
+  });
+
+  return row;
+}
+
+function openRecord(recordId, mode) {
+  const query = state.lastResult && state.lastResult.query;
+  if (!query || !recordId) {
     return;
   }
+  vscode.postMessage({
+    type: 'openRecord',
+    payload: { profileId: query.profileId, layout: query.layout, recordId, mode }
+  });
+}
 
-  for (const query of state.savedQueries) {
-    const option = document.createElement('option');
-    option.value = query.id;
-    option.textContent = `${query.name} (${query.layout})`;
-    savedQueriesSelect.appendChild(option);
+tableContainer.addEventListener('click', (event) => {
+  const header = event.target instanceof Element ? event.target.closest('button.sort-header') : null;
+  if (header && header.dataset.column) {
+    toggleResultSort(header.dataset.column);
   }
+});
+
+tableContainer.addEventListener('dblclick', (event) => {
+  if (!(event.target instanceof Element) || event.target.closest('button')) {
+    return;
+  }
+  const row = event.target.closest('tbody tr');
+  if (row && row.dataset.recordId) {
+    openRecord(row.dataset.recordId, 'view');
+  }
+});
+
+function createTable(columns) {
+  const table = document.createElement('table');
+  table.className = 'results-table';
+  const thead = document.createElement('thead');
+  thead.appendChild(buildHeaderRow(columns));
+  const tbody = document.createElement('tbody');
+  table.append(thead, tbody);
+  return { table, tbody };
 }
 
-function applySavedQuery(query) {
-  state.currentQueryId = query.id;
-
-  profileSelect.value = query.profileId;
-  requestLayouts(query.profileId, query.layout);
-
-  findJson.value = JSON.stringify(query.findJson || [], null, 2);
-  sortJson.value = query.sortJson ? JSON.stringify(query.sortJson, null, 2) : '';
-  limitInput.value = query.limit !== undefined ? String(query.limit) : '';
-  offsetInput.value = query.offset !== undefined ? String(query.offset) : '';
-  queryNameInput.value = query.name;
+function renderStandardTable(records, columns) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-scroll-wrapper';
+  const { table, tbody } = createTable(columns);
+  records.forEach((record) => tbody.appendChild(buildRow(record, columns)));
+  wrapper.appendChild(table);
+  tableContainer.replaceChildren(wrapper);
 }
+
+function renderVirtualizedTable(records, columns) {
+  const container = document.createElement('div');
+  container.className = 'virtual-wrap';
+
+  const { table, tbody } = createTable(columns);
+  container.appendChild(table);
+  tableContainer.replaceChildren(container);
+
+  const rowHeight = 30;
+  const buffer = 18;
+  const colSpan = columns.length + 2;
+
+  const spacer = (height) => {
+    const row = document.createElement('tr');
+    row.className = 'spacer';
+    row.style.height = `${height}px`;
+    const cell = document.createElement('td');
+    cell.colSpan = colSpan;
+    row.appendChild(cell);
+    return row;
+  };
+
+  const renderSlice = () => {
+    const visibleCount = Math.ceil(container.clientHeight / rowHeight) + buffer;
+    const start = Math.max(0, Math.floor(container.scrollTop / rowHeight) - Math.floor(buffer / 2));
+    const end = Math.min(records.length, start + visibleCount);
+
+    const sliceRows = [spacer(start * rowHeight)];
+    for (let index = start; index < end; index += 1) {
+      sliceRows.push(buildRow(records[index], columns));
+    }
+    sliceRows.push(spacer(Math.max(0, (records.length - end) * rowHeight)));
+
+    // Rebuilding rows would drop keyboard focus; put it back on the same record's button.
+    const focused = document.activeElement;
+    const focusedRow = focused && tbody.contains(focused) ? focused.closest('tr') : null;
+    const focusKey = focusedRow ? { recordId: focusedRow.dataset.recordId, action: focused.dataset.action } : null;
+
+    tbody.replaceChildren(...sliceRows);
+
+    if (focusKey && focusKey.recordId && focusKey.action) {
+      const row = Array.from(tbody.rows).find((candidate) => candidate.dataset.recordId === focusKey.recordId);
+      const button = row ? row.querySelector(`button[data-action="${focusKey.action}"]`) : null;
+      if (button) {
+        button.focus({ preventScroll: true });
+      }
+    }
+  };
+
+  let rafPending = false;
+  container.addEventListener('scroll', () => {
+    if (rafPending) {
+      return;
+    }
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      renderSlice();
+    });
+  });
+  renderSlice();
+}
+
+/** Tab-separated text of the visible page, in the on-screen sort order. Pastes into spreadsheets. */
+function buildResultsTsv() {
+  const records = getResultRecords();
+  if (!state.lastResult || records.length === 0) {
+    return '';
+  }
+
+  const columns = ['recordId', ...collectColumns(records, Infinity)];
+  const clean = (value) => toCellValue(value).replace(/[\t\r\n]+/g, ' ');
+  const lines = [columns.map(clean).join('\t')];
+  sortRecords(records).forEach((record) => {
+    lines.push(columns.map((column) => clean(getCellRaw(record, column))).join('\t'));
+  });
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
 
 function renderHistory() {
   if (!Array.isArray(state.history) || state.history.length === 0) {
-    historyContainer.replaceChildren(createEmptyMessage('No history entries yet.'));
+    historyContainer.replaceChildren(createEmptyMessage('No requests yet.'));
     return;
   }
 
@@ -559,16 +1348,17 @@ function renderHistory() {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  const profileNames = new Map(state.profiles.map((profile) => [profile.id, profile.name]));
 
   for (const entry of state.history) {
     const row = document.createElement('tr');
 
     addCell(row, entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '');
     addCell(row, entry.operation || '');
-    addCell(row, entry.profileId || '');
+    addCell(row, profileNames.get(entry.profileId) || entry.profileId || '');
     addCell(row, entry.layout || '-');
     addCell(row, entry.success ? 'Success' : 'Failure');
-    addCell(row, `${entry.durationMs || 0}ms`);
+    addCell(row, `${entry.durationMs || 0} ms`);
 
     tbody.appendChild(row);
   }
@@ -584,13 +1374,13 @@ function addCell(row, text) {
   row.appendChild(td);
 }
 
-function clearTableContainer() {
-  resetStandardResultTable();
-  tableContainer.replaceChildren();
-}
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
 
 function createEmptyMessage(message) {
   const empty = document.createElement('p');
+  empty.className = 'empty';
   empty.textContent = message;
   return empty;
 }
@@ -629,286 +1419,51 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
   return true;
 }
 
-function resetStandardResultTable() {
-  standardResultTable.columnsKey = '';
-  standardResultTable.wrapper = undefined;
-  standardResultTable.tbody = undefined;
-  standardResultTable.rows.clear();
-}
+function createLoadingSkeleton(widths) {
+  const skeleton = document.createElement('div');
+  skeleton.className = 'loading-skeleton';
 
-function renderStandardTable(records, columns) {
-  const columnsKey = columns.join('\u0000');
-  if (!standardResultTable.tbody || standardResultTable.columnsKey !== columnsKey) {
-    const tableState = buildStandardTableState(columns);
-    standardResultTable.columnsKey = columnsKey;
-    standardResultTable.wrapper = tableState.wrapper;
-    standardResultTable.tbody = tableState.tbody;
-    standardResultTable.rows.clear();
-    tableContainer.replaceChildren(tableState.wrapper);
-  } else if (standardResultTable.wrapper && tableContainer.firstElementChild !== standardResultTable.wrapper) {
-    tableContainer.replaceChildren(standardResultTable.wrapper);
-  }
-
-  const rowKeys = createStableRowKeys(records);
-  rowKeys.forEach((rowKey, index) => {
-    let rowState = standardResultTable.rows.get(rowKey);
-    if (!rowState) {
-      rowState = createResultRowState(columns);
-      standardResultTable.rows.set(rowKey, rowState);
-    }
-
-    updateResultRowState(rowState, records[index], columns);
-    standardResultTable.tbody.appendChild(rowState.row);
+  widths.forEach((width) => {
+    const line = document.createElement('div');
+    line.className = `skeleton-line ${width}`;
+    skeleton.appendChild(line);
   });
 
-  Array.from(standardResultTable.rows.entries()).forEach(([rowKey, rowState]) => {
-    if (!rowKeys.includes(rowKey)) {
-      rowState.row.remove();
-      standardResultTable.rows.delete(rowKey);
-    }
-  });
+  return skeleton;
 }
 
-function buildStandardTableState(columns) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'table-scroll-wrapper';
-
-  const table = document.createElement('table');
-
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-
-  const idHeader = document.createElement('th');
-  idHeader.textContent = 'recordId';
-  headerRow.appendChild(idHeader);
-
-  for (const column of columns) {
-    const th = document.createElement('th');
-    th.textContent = column;
-    headerRow.appendChild(th);
-  }
-
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement('tbody');
-
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
-
-  return { wrapper, tbody };
-}
-
-function createResultRowState(columns) {
-  const row = document.createElement('tr');
-  const idCell = document.createElement('td');
-  row.appendChild(idCell);
-
-  const cells = new Map();
-  for (const column of columns) {
-    const td = document.createElement('td');
-    cells.set(column, td);
-    row.appendChild(td);
-  }
-
-  return { row, idCell, cells };
-}
-
-function updateResultRowState(rowState, record, columns) {
-  const nextRecordId = String(record.recordId || '');
-  if (rowState.idCell.textContent !== nextRecordId) {
-    rowState.idCell.textContent = nextRecordId;
-  }
-
-  const fieldData =
-    record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
-  columns.forEach((column) => {
-    const cell = rowState.cells.get(column);
-    const nextValue = toCellValue(fieldData[column]);
-    if (cell && cell.textContent !== nextValue) {
-      cell.textContent = nextValue;
-    }
-  });
-}
-
-function createStableRowKeys(records) {
-  const counts = new Map();
-  records.forEach((record) => {
-    const recordId =
-      record && record.recordId !== undefined && record.recordId !== null
-        ? String(record.recordId)
-        : '';
-    counts.set(recordId, (counts.get(recordId) || 0) + 1);
+function setElementsVisible(elements, isVisible) {
+  elements.forEach((element) => {
+    element.style.display = isVisible ? '' : 'none';
   });
 
-  return records.map((record, index) => {
-    const recordId =
-      record && record.recordId !== undefined && record.recordId !== null
-        ? String(record.recordId)
-        : '';
-    if (!recordId || counts.get(recordId) > 1) {
-      return `row-${index}`;
-    }
-
-    return `record-${recordId}`;
-  });
+  queryBuilderSkeleton.classList.toggle('hidden', isVisible);
 }
 
-function renderVirtualizedTable(records, columns) {
-  const container = document.createElement('div');
-  container.className = 'virtual-wrap';
-  container.style.height = '360px';
-  container.style.overflow = 'auto';
-
-  const table = document.createElement('table');
-  const thead = document.createElement('thead');
-  const headerRow = document.createElement('tr');
-
-  const idHeader = document.createElement('th');
-  idHeader.textContent = 'recordId';
-  headerRow.appendChild(idHeader);
-
-  for (const column of columns) {
-    const th = document.createElement('th');
-    th.textContent = column;
-    headerRow.appendChild(th);
+function revealQueryBuilder() {
+  if (queryBuilderReady) {
+    return;
   }
 
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
+  queryBuilderReady = true;
+  setElementsVisible(queryBuilderPanels, true);
+}
 
-  const tbody = document.createElement('tbody');
-  table.appendChild(tbody);
+/** Results from an older run (one that a newer Run superseded) are ignored. */
+function isCurrentRun(payload) {
+  const runId = payload && payload.query ? payload.query.runId : undefined;
+  return runId === undefined || runId === state.latestRunId;
+}
 
-  container.appendChild(table);
-  tableContainer.appendChild(container);
-
-  const rowHeight = 30;
-  const buffer = 18;
-
-  const renderSlice = () => {
-    const visibleCount = Math.ceil(container.clientHeight / rowHeight) + buffer;
-    const start = Math.max(0, Math.floor(container.scrollTop / rowHeight) - Math.floor(buffer / 2));
-    const end = Math.min(records.length, start + visibleCount);
-
-    const topSpacer = document.createElement('tr');
-    topSpacer.style.height = `${start * rowHeight}px`;
-    const topSpacerCell = document.createElement('td');
-    topSpacerCell.colSpan = columns.length + 1;
-    topSpacer.appendChild(topSpacerCell);
-
-    const sliceRows = [topSpacer];
-
-    for (let index = start; index < end; index += 1) {
-      const rowState = createResultRowState(columns);
-      updateResultRowState(rowState, records[index], columns);
-      sliceRows.push(rowState.row);
-    }
-
-    const bottomSpacer = document.createElement('tr');
-    bottomSpacer.style.height = `${Math.max(0, (records.length - end) * rowHeight)}px`;
-    const bottomSpacerCell = document.createElement('td');
-    bottomSpacerCell.colSpan = columns.length + 1;
-    bottomSpacer.appendChild(bottomSpacerCell);
-    sliceRows.push(bottomSpacer);
-
-    tbody.replaceChildren(...sliceRows);
-  };
-
-  let rafPending = false;
-  const scheduleRenderSlice = () => {
-    if (rafPending) {
-      return;
-    }
-
-    rafPending = true;
-    requestAnimationFrame(() => {
-      rafPending = false;
-      renderSlice();
-    });
-  };
-
-  container.addEventListener('scroll', scheduleRenderSlice);
-  scheduleRenderSlice();
+function setRunning(isRunning) {
+  state.running = isRunning;
+  runButton.disabled = isRunning;
+  runButton.textContent = isRunning ? 'Running…' : 'Run';
 }
 
 function setStatus(message, isError = false) {
   status.textContent = message;
   status.classList.toggle('error', isError);
-}
-
-function requestFieldNamesForCurrentLayout() {
-  const profileId = profileSelect ? profileSelect.value : '';
-  const layout = layoutSelect ? layoutSelect.value : '';
-  if (!profileId || !layout) {
-    renderFieldNames({ profileId: '', layout: '', fieldNames: [] });
-    return;
-  }
-  vscode.postMessage({ type: 'loadFieldNames', profileId, layout });
-}
-
-function renderFieldNames(payload) {
-  let panel = document.getElementById('fieldNamesPanel');
-  if (!panel) {
-    const findContainer = findJson ? findJson.parentElement : null;
-    if (!findContainer) return;
-    panel = document.createElement('div');
-    panel.id = 'fieldNamesPanel';
-    panel.className = 'field-names-panel';
-    findContainer.insertBefore(panel, findJson);
-  }
-
-  const names = Array.isArray(payload && payload.fieldNames) ? payload.fieldNames : [];
-  const error = payload && payload.error;
-  panel.innerHTML = '';
-
-  if (error) {
-    const msg = document.createElement('div');
-    msg.className = 'field-names-error';
-    msg.textContent = `Layout fields unavailable: ${error}`;
-    panel.appendChild(msg);
-    return;
-  }
-
-  if (names.length === 0) {
-    panel.style.display = 'none';
-    return;
-  }
-
-  panel.style.display = '';
-
-  const header = document.createElement('div');
-  header.className = 'field-names-header';
-  header.textContent = `Layout fields (${names.length}) — click to insert`;
-  panel.appendChild(header);
-
-  const chipRow = document.createElement('div');
-  chipRow.className = 'field-names-chips';
-  for (const name of names) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'field-name-chip';
-    chip.textContent = name;
-    chip.title = `Insert "${name}" into the find JSON`;
-    chip.addEventListener('click', () => insertFieldNameIntoFindJson(name));
-    chipRow.appendChild(chip);
-  }
-  panel.appendChild(chipRow);
-}
-
-function insertFieldNameIntoFindJson(fieldName) {
-  if (!findJson) return;
-  const insertion = `"${fieldName}": ""`;
-  const start = findJson.selectionStart ?? findJson.value.length;
-  const end = findJson.selectionEnd ?? findJson.value.length;
-  const before = findJson.value.slice(0, start);
-  const after = findJson.value.slice(end);
-  const needsComma = /[}\]"]\s*$/.test(before.trim());
-  const prefix = needsComma ? ', ' : '';
-  findJson.value = `${before}${prefix}${insertion}${after}`;
-  const cursor = (before + prefix + insertion).length - 1; // place caret between the empty quotes
-  findJson.focus();
-  findJson.setSelectionRange(cursor, cursor);
 }
 
 vscode.postMessage({ type: 'ready' });

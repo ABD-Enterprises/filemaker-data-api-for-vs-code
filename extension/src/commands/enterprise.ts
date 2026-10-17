@@ -7,7 +7,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
 import type { ConnectionProfile, EnvironmentCompareResult, EnvironmentSet } from '../types/fm';
-import { openJsonDocument, showCommandError } from './common';
+import { openJsonDocument, showCommandError, withProgressNotification } from './common';
 import { EnvironmentComparePanel } from '../webviews/environmentCompare';
 
 interface RegisterEnterpriseCommandsDeps {
@@ -91,10 +91,12 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
 
       try {
         const profiles = await resolveProfilesForSet(environmentSet, profileStore);
-        const result = await compareService.compareEnvironmentSet(environmentSet, profiles, {
-          concurrency: settingsService.getBatchConcurrency(),
-          hashAlgorithm: settingsService.getSchemaHashAlgorithm()
-        });
+        const result = await withProgressNotification(`Comparing environments in ${environmentSet.name}…`, () =>
+          compareService.compareEnvironmentSet(environmentSet, profiles, {
+            concurrency: settingsService.getBatchConcurrency(),
+            hashAlgorithm: settingsService.getSchemaHashAlgorithm()
+          })
+        );
 
         lastCompareResult = result;
         EnvironmentComparePanel.createOrShow({ compare: result }, `Env Compare: ${environmentSet.name}`);

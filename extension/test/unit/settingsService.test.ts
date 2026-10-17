@@ -89,3 +89,179 @@ describe('SettingsService', () => {
     expect(settings.getSchemaSnapshotsStorage()).toBe('workspaceState');
   });
 });
+
+describe('SettingsService.migrateDeprecatedSettings', () => {
+  type Scoped = { globalValue?: unknown; workspaceValue?: unknown };
+  type Store = Record<string, Record<string, Scoped>>;
+
+  function createMigratableSettings(store: Store): {
+    settings: SettingsService;
+    updates: Array<[string, string, unknown, number]>;
+  } {
+    const updates: Array<[string, string, unknown, number]> = [];
+    const settings = new SettingsService({
+      getConfiguration: (section?: string) =>
+        ({
+          get: <T>(_key: string, defaultValue?: T): T => defaultValue as T,
+          inspect: (key: string) => ({ key, ...(store[section ?? '']?.[key] ?? {}) }),
+          update: async (key: string, value: unknown, target: number) => {
+            updates.push([section ?? '', key, value, target]);
+            const sectionStore = (store[section ?? ''] ??= {});
+            const scoped = (sectionStore[key] ??= {});
+            if (target === 1) {
+              scoped.globalValue = value;
+            } else {
+              scoped.workspaceValue = value;
+            }
+          }
+        }) as never,
+      isWorkspaceTrusted: () => true
+    });
+    return { settings, updates };
+  }
+
+  it('moves legacy values to the new keys per scope and clears the legacy keys', async () => {
+    const store: Store = {
+      filemakerDataApiTools: {
+        logLevel: { globalValue: 'debug' },
+        requestTimeoutMs: { workspaceValue: 30000 }
+      },
+      filemaker: {}
+    };
+    const { settings, updates } = createMigratableSettings(store);
+
+    const migrated = await settings.migrateDeprecatedSettings();
+
+    expect(migrated.sort()).toEqual(['filemakerDataApiTools.logLevel', 'filemakerDataApiTools.requestTimeoutMs']);
+    expect(store.filemaker?.['logging.level']?.globalValue).toBe('debug');
+    expect(store.filemaker?.requestTimeoutMs?.workspaceValue).toBe(30000);
+    expect(store.filemakerDataApiTools?.logLevel?.globalValue).toBeUndefined();
+    expect(store.filemakerDataApiTools?.requestTimeoutMs?.workspaceValue).toBeUndefined();
+    expect(updates).toHaveLength(4);
+  });
+
+  it('keeps an explicitly set new value and still clears the legacy one', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { defaultApiBasePath: { globalValue: '/old' } },
+      filemaker: { defaultApiBasePath: { globalValue: '/new' } }
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    expect(store.filemaker?.defaultApiBasePath?.globalValue).toBe('/new');
+    expect(store.filemakerDataApiTools?.defaultApiBasePath?.globalValue).toBeUndefined();
+  });
+
+  it('copies a legacy user value even when one workspace sets the new key', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { requestTimeoutMs: { globalValue: 60000 } },
+      filemaker: { requestTimeoutMs: { workspaceValue: 30000 } }
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    // Other workspaces relied on the legacy user value; this one keeps its override.
+    expect(store.filemaker?.requestTimeoutMs).toEqual({ globalValue: 60000, workspaceValue: 30000 });
+    expect(store.filemakerDataApiTools?.requestTimeoutMs?.globalValue).toBeUndefined();
+  });
+
+  it('copies both legacy scopes when the new key is unset, keeping the workspace override', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { defaultApiVersionPath: { globalValue: 'v1', workspaceValue: 'v2' } },
+      filemaker: {}
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    expect(store.filemaker?.defaultApiVersionPath).toEqual({ globalValue: 'v1', workspaceValue: 'v2' });
+    expect(store.filemakerDataApiTools?.defaultApiVersionPath).toEqual({
+      globalValue: undefined,
+      workspaceValue: undefined
+    });
+  });
+
+  it('does nothing when no legacy keys are set', async () => {
+    const { settings, updates } = createMigratableSettings({ filemakerDataApiTools: {}, filemaker: {} });
+    expect(await settings.migrateDeprecatedSettings()).toEqual([]);
+    expect(updates).toEqual([]);
+  });
+});
+
+describe('SettingsService legacy resolution across workspaces', () => {
+  type Scoped = Record<string, Record<string, unknown>>;
+  interface Settings {
+    user: Scoped;
+    workspaces: Record<string, Scoped>;
+  }
+
+  /** A SettingsService for one workspace; every workspace shares the same user settings. */
+  function serviceFor(settings: Settings, workspace: string): SettingsService {
+    return new SettingsService({
+      getConfiguration: (section?: string) => {
+        const name = section ?? '';
+        const user = (settings.user[name] ??= {});
+        const local = ((settings.workspaces[workspace] ??= {})[name] ??= {});
+        return {
+          get: <T>(key: string, defaultValue?: T): T => (local[key] ?? user[key] ?? defaultValue) as T,
+          inspect: (key: string) => ({ key, globalValue: user[key], workspaceValue: local[key] }),
+          update: async (key: string, value: unknown, target: number) => {
+            const scope = target === 1 ? user : local;
+            if (value === undefined) {
+              delete scope[key];
+            } else {
+              scope[key] = value;
+            }
+          }
+        } as never;
+      },
+      isWorkspaceTrusted: () => true
+    });
+  }
+
+  it('prefers the more specific scope, and the new key within a scope', () => {
+    const settings: Settings = {
+      user: { filemaker: { requestTimeoutMs: 20000 } },
+      workspaces: { W: { filemakerDataApiTools: { requestTimeoutMs: 60000 } } }
+    };
+    expect(serviceFor(settings, 'W').getRequestTimeoutMs()).toBe(60000);
+
+    settings.workspaces.W!.filemaker = { requestTimeoutMs: 30000 };
+    expect(serviceFor(settings, 'W').getRequestTimeoutMs()).toBe(30000);
+  });
+
+  it('keeps every effective value in every workspace when migrating in one workspace, then the other', async () => {
+    const values = { userOld: 1001, userNew: 1002, wOld: 1003, wNew: 1004, xOld: 1005, xNew: 1006 };
+    const names = Object.keys(values) as Array<keyof typeof values>;
+
+    for (let mask = 0; mask < 1 << names.length; mask += 1) {
+      const set = (name: keyof typeof values): number | undefined =>
+        mask & (1 << names.indexOf(name)) ? values[name] : undefined;
+      const scoped = (oldValue: number | undefined, newValue: number | undefined): Scoped => ({
+        filemakerDataApiTools: oldValue === undefined ? {} : { requestTimeoutMs: oldValue },
+        filemaker: newValue === undefined ? {} : { requestTimeoutMs: newValue }
+      });
+      const settings: Settings = {
+        user: scoped(set('userOld'), set('userNew')),
+        workspaces: { W: scoped(set('wOld'), set('wNew')), X: scoped(set('xOld'), set('xNew')) }
+      };
+      const effective = (): [number, number] => [
+        serviceFor(settings, 'W').getRequestTimeoutMs(),
+        serviceFor(settings, 'X').getRequestTimeoutMs()
+      ];
+
+      const before = effective();
+      await serviceFor(settings, 'W').migrateDeprecatedSettings();
+      expect(effective(), `after W, mask ${mask}`).toEqual(before);
+      await serviceFor(settings, 'X').migrateDeprecatedSettings();
+      expect(effective(), `after X, mask ${mask}`).toEqual(before);
+
+      const leftover = [settings.user, settings.workspaces.W, settings.workspaces.X].some(
+        (scope) => scope?.filemakerDataApiTools?.requestTimeoutMs !== undefined
+      );
+      expect(leftover, `legacy value left behind, mask ${mask}`).toBe(false);
+    }
+  });
+});
