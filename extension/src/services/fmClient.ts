@@ -87,6 +87,11 @@ export interface FMClientSessionOptions {
   now?: () => number;
 }
 
+/** FileMaker reports "no records match the request" as HTTP 404 with error code 401. */
+function isNoRecordsFound(error: unknown): boolean {
+  return error instanceof FMClientError && error.status === 404 && error.code === '401';
+}
+
 export class FMClient {
   private readonly httpClient: AxiosInstance;
   private readonly proxyClient: ProxyClient;
@@ -423,17 +428,27 @@ export class FMClient {
           payload.offset = body.offset;
         }
 
-        const envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
-          profile,
-          {
-            method: 'POST',
-            path: `/layouts/${encodeURIComponent(layout)}/_find`,
-            data: payload,
-            signal: control?.signal
-          },
-          true,
-          trace
-        );
+        let envelope: DataApiEnvelope<DataApiListRecordsResponse>;
+        try {
+          envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
+            profile,
+            {
+              method: 'POST',
+              path: `/layouts/${encodeURIComponent(layout)}/_find`,
+              data: payload,
+              signal: control?.signal
+            },
+            true,
+            trace
+          );
+        } catch (error) {
+          // FileMaker answers a find with no matches (or an offset past the last match)
+          // with HTTP 404 and error 401, not an empty list. That is a result, not a failure.
+          if (isNoRecordsFound(error)) {
+            return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+          }
+          throw error;
+        }
 
         return {
           data: envelope.response.data ?? [],
@@ -938,6 +953,41 @@ export class FMClient {
     return refreshPromise;
   }
 
+  /**
+   * Replaces a session token the server rejected. Parallel requests that all hit the
+   * expired token share one renewal: a request that finds a newer token already stored
+   * just retries with it, and one that finds a renewal under way waits for it. Without
+   * this, N parallel requests would open N sessions and leave N-1 orphaned on the server.
+   */
+  private async renewRejectedSession(
+    profile: ConnectionProfile,
+    rejectedToken: string,
+    control?: ClientRequestControl
+  ): Promise<void> {
+    const current = await this.secretStore.getSessionToken(profile.id);
+    if (current && current !== rejectedToken) {
+      return;
+    }
+
+    const inFlight = this.inFlightRefresh.get(profile.id);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
+    // Registered synchronously (no await between the check above and the set below),
+    // so concurrent callers resuming after their own awaits see it.
+    const renewal = (async () => {
+      await this.secretStore.deleteSessionToken(profile.id);
+      this.sessionTracker.clear(profile.id);
+      return this.createSession(profile, control);
+    })().finally(() => {
+      this.inFlightRefresh.delete(profile.id);
+    });
+    this.inFlightRefresh.set(profile.id, renewal);
+    await renewal;
+  }
+
   private async requestWithAuth<TResponse extends Record<string, unknown>>(
     profile: ConnectionProfile,
     request: RequestOptions,
@@ -981,9 +1031,7 @@ export class FMClient {
           profileId: profile.id,
           requestId: trace?.requestId
         });
-        await this.secretStore.deleteSessionToken(profile.id);
-        this.sessionTracker.clear(profile.id);
-        await this.createSession(profile, { signal: request.signal });
+        await this.renewRejectedSession(profile, token, { signal: request.signal });
 
         return this.requestWithAuth(profile, request, false, trace);
       }
@@ -1057,9 +1105,7 @@ export class FMClient {
           profileId: profile.id,
           requestId: trace?.requestId
         });
-        await this.secretStore.deleteSessionToken(profile.id);
-        this.sessionTracker.clear(profile.id);
-        await this.createSession(profile, { signal: request.signal });
+        await this.renewRejectedSession(profile, token, { signal: request.signal });
 
         return this.requestWithAuthRaw(profile, request, false, trace);
       }

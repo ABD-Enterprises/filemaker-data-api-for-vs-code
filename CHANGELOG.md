@@ -28,6 +28,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.
+- Share one session renewal between parallel requests after a session expires, instead of opening one session per request and orphaning the rest.
 - Query Builder paging uses FileMaker's 1-based offsets, so the next page no longer repeats a record (#364).
 - Renamed settings resolve scope by scope, so a more specific value wins whichever name it uses (#364); non-string API path settings fall back to their defaults (#365).
 - Remove the never-implemented Export/Import Connection Profiles commands (#366).

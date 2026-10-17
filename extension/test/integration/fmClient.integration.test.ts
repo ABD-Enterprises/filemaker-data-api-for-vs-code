@@ -41,6 +41,151 @@ async function createClient(timeoutMs = 5_000) {
 }
 
 describe('FMClient integration (mocked HTTP)', () => {
+
+  describe('find with no matches', () => {
+    const noMatch = {
+      messages: [{ code: '401', message: 'No records match the request' }],
+      response: {}
+    };
+
+    it('returns an empty result when FileMaker reports error 401', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-none' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server)
+        .post(`${apiBase}/layouts/Contacts/_find`)
+        .matchHeader('authorization', 'Bearer token-none')
+        .reply(404, noMatch);
+
+      await expect(
+        client.findRecords(profile, 'Contacts', { query: [{ Email: 'nobody@example.com' }] })
+      ).resolves.toEqual({ data: [], dataInfo: { foundCount: 0, returnedCount: 0 } });
+    });
+
+    it('treats an offset past the last match the same way', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-past' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server)
+        .post(`${apiBase}/layouts/Contacts/_find`, (body: { offset?: number }) => body.offset === 101)
+        .reply(404, noMatch);
+
+      const result = await client.findRecords(profile, 'Contacts', {
+        query: [{ Status: 'Open' }],
+        limit: 100,
+        offset: 101
+      });
+      expect(result.data).toEqual([]);
+    });
+
+    it('still reports other 404 errors, such as a missing layout', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-404' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server)
+        .post(`${apiBase}/layouts/Nope/_find`)
+        .reply(404, { messages: [{ code: '105', message: 'Layout is missing' }], response: {} });
+
+      await expect(client.findRecords(profile, 'Nope', { query: [{}] })).rejects.toThrow(/105|Layout is missing/);
+    });
+  });
+
+  describe('expired session with parallel requests', () => {
+    const rejected = { messages: [{ code: '952', message: 'Invalid FileMaker Data API token (*)' }] };
+    const okFind = { response: { data: [], dataInfo: {} }, messages: [{ code: '0', message: 'OK' }] };
+
+    it('renews the session once for requests that all hit the expired token', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+      const sessions = vi.fn();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'old' }, messages: [{ code: '0', message: 'OK' }] });
+      await client.createSession(profile);
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .times(5)
+        .reply(() => {
+          sessions();
+          return [200, { response: { token: 'fresh' }, messages: [{ code: '0', message: 'OK' }] }];
+        });
+      nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer old').times(5).reply(401, rejected);
+      nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer fresh').times(5).reply(200, okFind);
+
+      const results = await Promise.all(
+        [1, 2, 3, 4, 5].map((limit) => client.findRecords(profile, 'Contacts', { query: [{}], limit }))
+      );
+
+      expect(results).toHaveLength(5);
+      expect(sessions).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a request whose rejection arrives after the renewal reuse the new token', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+      const sessions = vi.fn();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'old' }, messages: [{ code: '0', message: 'OK' }] });
+      await client.createSession(profile);
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .times(2)
+        .reply(() => {
+          sessions();
+          return [200, { response: { token: 'fresh' }, messages: [{ code: '0', message: 'OK' }] }];
+        });
+      const find = nock(server).post(`${apiBase}/layouts/Contacts/_find`);
+      find.matchHeader('authorization', 'Bearer old').reply(401, rejected);
+      nock(server)
+        .post(`${apiBase}/layouts/Contacts/_find`)
+        .matchHeader('authorization', 'Bearer old')
+        .delay(150)
+        .reply(401, rejected);
+      nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer fresh').times(2).reply(200, okFind);
+
+      await Promise.all([
+        client.findRecords(profile, 'Contacts', { query: [{}], limit: 1 }),
+        client.findRecords(profile, 'Contacts', { query: [{}], limit: 2 })
+      ]);
+
+      expect(sessions).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a failed renewal to every waiting request', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'old' }, messages: [{ code: '0', message: 'OK' }] });
+      await client.createSession(profile);
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(401, { messages: [{ code: '212', message: 'Invalid user account and/or password' }] });
+      nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer old').times(3).reply(401, rejected);
+
+      const settled = await Promise.allSettled(
+        [1, 2, 3].map((limit) => client.findRecords(profile, 'Contacts', { query: [{}], limit }))
+      );
+
+      expect(settled.every((entry) => entry.status === 'rejected')).toBe(true);
+    });
+  });
   it('lists layouts successfully', async () => {
     const profile = createProfile();
     const { client, logger } = await createClient();
