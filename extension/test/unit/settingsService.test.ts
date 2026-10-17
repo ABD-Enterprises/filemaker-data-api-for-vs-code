@@ -153,6 +153,19 @@ describe('SettingsService.migrateDeprecatedSettings', () => {
     expect(store.filemakerDataApiTools?.defaultApiBasePath?.globalValue).toBeUndefined();
   });
 
+  it('does not copy a legacy value that the new key in another scope already overrides', async () => {
+    const store: Store = {
+      filemakerDataApiTools: { requestTimeoutMs: { workspaceValue: 60000 } },
+      filemaker: { requestTimeoutMs: { globalValue: 20000 } }
+    };
+    const { settings } = createMigratableSettings(store);
+
+    await settings.migrateDeprecatedSettings();
+
+    expect(store.filemaker?.requestTimeoutMs).toEqual({ globalValue: 20000 });
+    expect(store.filemakerDataApiTools?.requestTimeoutMs?.workspaceValue).toBeUndefined();
+  });
+
   it('does nothing when no legacy keys are set', async () => {
     const { settings, updates } = createMigratableSettings({ filemakerDataApiTools: {}, filemaker: {} });
     expect(await settings.migrateDeprecatedSettings()).toEqual([]);

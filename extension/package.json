@@ -1336,14 +1336,6 @@
           }
         }
       }
-    ],
-    "keybindings": [
-      {
-        "command": "filemakerDataApiTools.openQueryBuilder",
-        "key": "ctrl+alt+shift+q",
-        "mac": "cmd+alt+shift+q",
-        "when": "filemaker.hasProfiles"
-      }
     ]
   },
   "scripts": {

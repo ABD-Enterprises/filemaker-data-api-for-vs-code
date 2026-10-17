@@ -12,7 +12,7 @@ interface MenuEntry {
 interface Manifest {
   contributes: {
     commands: Array<{ command: string; title: string; category?: string }>;
-    keybindings: Array<{ command: string; key: string; mac?: string; when?: string }>;
+    keybindings?: Array<{ command: string; key: string; mac?: string; when?: string }>;
     menus: Record<string, MenuEntry[]>;
     configuration: Array<{ title: string; properties: Record<string, unknown> }>;
     walkthroughs: Array<{ steps: Array<{ id: string; media?: { markdown?: string } }> }>;
@@ -75,7 +75,7 @@ describe('extension manifest UX contract', () => {
         expect(commandIds.has(entry.command), `${menu}: ${entry.command}`).toBe(true);
       }
     }
-    for (const binding of keybindings) {
+    for (const binding of keybindings ?? []) {
       expect(commandIds.has(binding.command), binding.command).toBe(true);
       expect(binding.mac, binding.command).toBeTruthy();
     }
@@ -90,6 +90,16 @@ describe('extension manifest UX contract', () => {
     }
     for (const [when, count] of inlineCounts) {
       expect(count, when).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('never binds macOS system chords such as Log Out (Shift+Option+Cmd+Q)', () => {
+    const reserved = new Set(['cmd+alt+shift+q', 'cmd+shift+q', 'cmd+q', 'cmd+alt+esc', 'ctrl+cmd+q']);
+    for (const binding of keybindings ?? []) {
+      const mac = (binding.mac ?? binding.key).toLowerCase().split('+').sort().join('+');
+      for (const chord of reserved) {
+        expect(mac, binding.command).not.toBe(chord.split('+').sort().join('+'));
+      }
     }
   });
 

@@ -12,8 +12,9 @@ layout row open the Query Builder and create a new record.
 
 ## Powerful: the Query Builder
 
-Run **FileMaker: Open Query Builder** (`Ctrl+Alt+Shift+Q`, or
-`Cmd+Alt+Shift+Q` on macOS). The Query Builder lets you:
+Run **FileMaker: Open Query Builder**, or right-click a layout and choose
+**Open Query Builder**. To give it a shortcut, search for it in
+**Keyboard Shortcuts** (`Ctrl/Cmd+K Ctrl/Cmd+S`). The Query Builder lets you:
 
 - pick a profile and layout from dropdowns
 - build the find with a **form**: choose a field (the layout's field names

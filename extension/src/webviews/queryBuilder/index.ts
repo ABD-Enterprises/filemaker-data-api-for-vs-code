@@ -200,7 +200,7 @@ export class QueryBuilderPanel {
       saveQuery: 'Enter a find request before saving the query.',
       copyFetchSnippet: 'Enter a find request before copying it.',
       copyCurlSnippet: 'Enter a find request before copying it.',
-      copyText: 'The results are too large to copy. Save them as CSV instead.',
+      copyText: 'Nothing to copy, or the results are too large to copy. Save them as CSV instead.',
       openRecord: 'That row has no record ID to open.'
     };
     const text = type ? messages[type] : undefined;
@@ -376,10 +376,15 @@ export class QueryBuilderPanel {
         type: 'queryResult',
         payload: this.lastResult
       });
-
-      await this.sendHistory();
     } catch (error) {
       await this.postError(this.formatError(error), payload.runId);
+      return;
+    }
+
+    try {
+      await this.sendHistory();
+    } catch (error) {
+      this.logger.warn('Failed to refresh query builder history.', { error });
     }
   }
 

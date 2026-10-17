@@ -14,9 +14,9 @@
    */
   const OPERATORS = [
     { id: 'match', label: 'matches', needsValue: true },
-    { id: 'equals', label: 'equals exactly', needsValue: true },
+    { id: 'equals', label: 'equals (whole field)', needsValue: true },
     { id: 'begins', label: 'begins with', needsValue: true },
-    { id: 'contains', label: 'contains', needsValue: true },
+    { id: 'contains', label: 'contains phrase', needsValue: true },
     { id: 'gt', label: 'greater than', needsValue: true },
     { id: 'gte', label: 'at least', needsValue: true },
     { id: 'lt', label: 'less than', needsValue: true },
@@ -60,6 +60,10 @@
     return backslashes % 2 === 1;
   }
 
+  function quoteLiteral(value) {
+    return String(value ?? '').replace(/["\\]/g, '\\$&');
+  }
+
   function unescapeFindText(value) {
     return String(value).replace(/\\(.)/g, '$1');
   }
@@ -98,7 +102,8 @@
       case 'begins':
         return `==${value}*`;
       case 'contains':
-        return `*${value}*`;
+        // `*"…"` finds the literal phrase anywhere in the field; inside quotes only `"` and `\` need escaping.
+        return `*"${quoteLiteral(criterion.value)}"`;
       case 'gt':
         return `>${value}`;
       case 'gte':
@@ -157,6 +162,10 @@
         return { ...base, operator, value: unescapeFindText(value.slice(prefix.length)) };
       }
     }
+    // A quoted phrase is literal, so check it before looking for a range inside it.
+    if (value.length >= 3 && value.startsWith('*"') && value.endsWith('"') && !isEscapedAt(value, value.length - 1)) {
+      return { ...base, operator: 'contains', value: unescapeFindText(value.slice(2, -1)) };
+    }
     const rangeIndex = indexOfUnescaped(value, '...');
     if (rangeIndex > 0 && rangeIndex < value.length - 3) {
       return {
@@ -165,9 +174,6 @@
         value: unescapeFindText(value.slice(0, rangeIndex)),
         value2: unescapeFindText(value.slice(rangeIndex + 3))
       };
-    }
-    if (value.length > 2 && value.startsWith('*') && endsWithUnescapedStar(value)) {
-      return { ...base, operator: 'contains', value: unescapeFindText(value.slice(1, -1)) };
     }
     return base;
   }

@@ -110,12 +110,18 @@ export class SettingsService {
     for (const [oldKey, newKey] of DEPRECATED_SETTING_KEYS) {
       const oldInspect = oldConfig.inspect<unknown>(oldKey);
       const newInspect = newConfig.inspect<unknown>(newKey);
+      // getPreferred ignores the old key once the new one is set in any scope, so
+      // copying would change the effective value; only clear the old one then.
+      const newSetAnywhere =
+        newInspect?.globalValue !== undefined ||
+        newInspect?.workspaceValue !== undefined ||
+        newInspect?.workspaceFolderValue !== undefined;
       for (const [scope, target] of scopes) {
         const oldValue = oldInspect?.[scope];
         if (oldValue === undefined) {
           continue;
         }
-        if (newInspect?.[scope] === undefined) {
+        if (!newSetAnywhere) {
           await newConfig.update(newKey, oldValue, target);
         }
         await oldConfig.update(oldKey, undefined, target);

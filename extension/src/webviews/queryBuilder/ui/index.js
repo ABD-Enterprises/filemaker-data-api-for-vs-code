@@ -11,6 +11,7 @@ const state = {
   profiles: [],
   activeProfileId: undefined,
   layoutsByProfile: new Map(),
+  pendingLayoutByProfile: new Map(),
   savedQueries: [],
   currentPayload: undefined,
   currentQueryId: undefined,
@@ -785,9 +786,12 @@ function applyLayouts(payload) {
   }
 
   state.layoutsByProfile.set(payload.profileId, payload.layouts);
+  // A saved query loaded before this profile's layouts arrived names the layout to select.
+  const pendingLayout = state.pendingLayoutByProfile.get(payload.profileId);
+  state.pendingLayoutByProfile.delete(payload.profileId);
 
   if (profileSelect.value === payload.profileId) {
-    renderLayouts(payload.layouts, state.defaults && state.defaults.layout);
+    renderLayouts(payload.layouts, pendingLayout || (state.defaults && state.defaults.layout));
     state.defaults = undefined;
     if (status.textContent === 'Loading layouts…') {
       setStatus('Ready. Press Ctrl/Cmd+Enter to run.');
@@ -856,6 +860,9 @@ function requestLayouts(profileId, preferredLayout) {
     return;
   }
 
+  if (preferredLayout) {
+    state.pendingLayoutByProfile.set(profileId, preferredLayout);
+  }
   setStatus('Loading layouts…');
   vscode.postMessage({
     type: 'loadLayouts',

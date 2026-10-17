@@ -35,7 +35,7 @@ describe('Query Builder find form', () => {
       ['match', { value: 'Smith' }, 'Smith'],
       ['equals', { value: 'Smith' }, '==Smith'],
       ['begins', { value: 'Sm' }, '==Sm*'],
-      ['contains', { value: 'mit' }, '*mit*'],
+      ['contains', { value: 'John Smith' }, '*"John Smith"'],
       ['gt', { value: '10' }, '>10'],
       ['gte', { value: '10' }, '>=10'],
       ['lt', { value: '10' }, '<10'],
@@ -57,7 +57,7 @@ describe('Query Builder find form', () => {
 
   it('escapes FileMaker operator characters except under "matches"', () => {
     expect(FindForm.criterionToFindValue({ operator: 'equals', value: 'a@b.com' })).toBe('==a\\@b.com');
-    expect(FindForm.criterionToFindValue({ operator: 'contains', value: '50%*' })).toBe('*50%\\**');
+    expect(FindForm.criterionToFindValue({ operator: 'contains', value: 'say "hi" 50%*' })).toBe('*"say \\"hi\\" 50%*"');
     expect(FindForm.criterionToFindValue({ operator: 'match', value: 'a@b.com' })).toBe('a@b.com');
     expect(FindForm.findValueToCriterion('Email', '==a\\@b.com')).toMatchObject({
       operator: 'equals',
