@@ -494,6 +494,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   offlineStatusBar.start();
 
   let configChangeQueue: Promise<void> = Promise.resolve();
+  let configChangesStopped = false;
   context.subscriptions.push(
     offlineStatusBar,
     connectionStatusBar,
@@ -536,6 +537,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // role contexts and plugin reloads; a failure is logged, not unhandled.
         configChangeQueue = configChangeQueue
           .then(async () => {
+            if (configChangesStopped) {
+              return; // the extension is shutting down; the registry may already be disposed
+            }
             await roleGuard.applyContexts();
             await pluginRegistry.reload();
             refreshExplorer();
@@ -544,6 +548,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             logger.error('Failed to apply FileMaker configuration change.', { error });
           });
       }
+    }),
+    new vscode.Disposable(() => {
+      configChangesStopped = true;
     }),
     pluginRegistry,
     new vscode.Disposable(() => fmBridgeServer.dispose()),
