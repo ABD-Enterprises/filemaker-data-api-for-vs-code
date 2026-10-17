@@ -597,11 +597,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 const WALKTHROUGH_STEP_ID = 'filemakerGettingStarted';
 const FIRST_RUN_FLAG = 'filemaker.walkthrough.shownOnce';
 
-/**
- * The fully qualified walkthrough id must match `publisher.name#stepId` exactly.
- * Computing it from context.extension.id at runtime avoids a silent break if
- * package.json publisher/name ever change (typo fix, fork, ownership transfer).
- */
 async function offerDeprecatedSettingsMigration(
   settingsService: SettingsService,
   deprecatedKeys: string[],
@@ -636,6 +631,11 @@ async function offerDeprecatedSettingsMigration(
   }
 }
 
+/**
+ * The fully qualified walkthrough id must match `publisher.name#stepId` exactly.
+ * Computing it from context.extension.id at runtime avoids a silent break if
+ * package.json publisher/name ever change (typo fix, fork, ownership transfer).
+ */
 function walkthroughId(context: vscode.ExtensionContext): string {
   return `${context.extension.id}#${WALKTHROUGH_STEP_ID}`;
 }

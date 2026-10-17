@@ -91,6 +91,27 @@ describe('Query Builder find form', () => {
     }
   });
 
+  it('leaves raw find JSON unchanged when it passes through the form', () => {
+    const raw = ['<//', '==*@gmail.com', '*a@b*', '1/1/2020...//', '==C:\\temp', 'Sm*', '1..5', '**'];
+    const parsed = FindForm.jsonToModel(JSON.stringify(raw.map((value) => ({ F: value }))));
+    expect(parsed.ok).toBe(true);
+    expect(FindForm.modelToFindQuery(parsed.model!).map((request) => request.F)).toEqual(raw);
+
+    const chars = ['*', '=', '>', '<', '.', 'a', '@', '\\', '/', '…'];
+    for (const first of chars) {
+      for (const second of chars) {
+        for (const third of ['', ...chars]) {
+          const value = first + second + third;
+          expect(FindForm.criterionToFindValue(FindForm.findValueToCriterion('F', value)), value).toBe(value);
+        }
+      }
+    }
+  });
+
+  it('escapes two-period runs so equals never becomes a range', () => {
+    expect(FindForm.criterionToFindValue({ operator: 'equals', value: 'a..b' })).toBe('==a\\.\\.b');
+  });
+
   it('reports a field used twice in one request', () => {
     const model = FindForm.createEmptyModel();
     model.requests[0] = {

@@ -93,9 +93,19 @@ describe('QueryBuilderPanel messages', () => {
   });
 
   it('answers a run request that fails validation instead of leaving the webview waiting', async () => {
-    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '' } });
-    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error' }));
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '', runId: 3 } });
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 3 }));
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+  });
+
+  it('tags a failed run with its run id', async () => {
+    panel.close();
+    panel = openPanel({ findRecords: vi.fn(async () => Promise.reject(new Error('Field is missing'))) });
+    await panel.send({
+      type: 'runQuery',
+      payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Status":"Open"}]', runId: 9 }
+    });
+    expect(panel.posted).toContainEqual({ type: 'error', message: 'Field is missing', runId: 9 });
   });
 
   it('echoes the run id with query results', async () => {

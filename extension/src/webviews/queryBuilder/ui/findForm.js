@@ -35,7 +35,7 @@
   function escapeFindText(value) {
     return String(value ?? '')
       .replace(SPECIAL_CHARACTERS, '\\$&')
-      .replace(/\.\.\./g, '\\.\\.\\.')
+      .replace(/\.{2,}/g, (run) => run.replace(/\./g, '\\.'))
       .replace(/\/\//g, '\\/\\/');
   }
 
@@ -124,6 +124,14 @@
    */
   function findValueToCriterion(field, raw) {
     const value = String(raw);
+    const parsed = parseFindValue(field, value);
+    // Only show a condition when it re-encodes to exactly the same text. Raw JSON
+    // (older saved queries, pasted finds) can use operators and wildcards the form
+    // would otherwise escape on the next run, so anything else stays "matches".
+    return criterionToFindValue(parsed) === value ? parsed : { field, operator: 'match', value, value2: '' };
+  }
+
+  function parseFindValue(field, value) {
     const base = { field, operator: 'match', value, value2: '' };
 
     if (value === '=') {

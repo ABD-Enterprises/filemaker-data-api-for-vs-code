@@ -126,7 +126,12 @@ window.addEventListener('message', (event) => {
       );
       break;
     case 'error':
-      setRunning(false);
+      if (typeof message.runId === 'number') {
+        if (message.runId !== state.latestRunId) {
+          break; // a superseded run failed; the current one is still going
+        }
+        setRunning(false);
+      }
       setStatus(message.message || 'Unknown error.', true);
       break;
     default:
@@ -625,17 +630,29 @@ function closeMenus() {
 
 prevButton.addEventListener('click', () => {
   const { start, limit } = shownPage();
-  offsetInput.value = String(Math.max(1, start - limit));
-  limitInput.value = String(limit);
-  runQuery();
+  runShownQueryAt(Math.max(1, start - limit), limit);
 });
 
 nextButton.addEventListener('click', () => {
   const { start, limit } = shownPage();
-  offsetInput.value = String(start + limit);
-  limitInput.value = String(limit);
-  runQuery();
+  runShownQueryAt(start + limit, limit);
 });
+
+/** Pages through the query whose results are on screen, even if the form has been edited since. */
+function runShownQueryAt(offset, limit) {
+  const query = state.lastResult && state.lastResult.query;
+  if (!query || state.running) {
+    return;
+  }
+  offsetInput.value = String(offset);
+  limitInput.value = String(limit);
+  state.latestRunId += 1;
+  const payload = { ...query, offset, limit, runId: state.latestRunId };
+  state.currentPayload = payload;
+  setRunning(true);
+  setStatus('Loading page…');
+  vscode.postMessage({ type: 'runQuery', payload });
+}
 
 /**
  * Start and page size of the results on screen, taken from the request that
@@ -772,7 +789,9 @@ function applyLayouts(payload) {
   if (profileSelect.value === payload.profileId) {
     renderLayouts(payload.layouts, state.defaults && state.defaults.layout);
     state.defaults = undefined;
-    setStatus('Ready. Press Ctrl/Cmd+Enter to run.');
+    if (status.textContent === 'Loading layouts…') {
+      setStatus('Ready. Press Ctrl/Cmd+Enter to run.');
+    }
   }
 }
 

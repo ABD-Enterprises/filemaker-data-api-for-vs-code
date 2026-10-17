@@ -181,7 +181,10 @@ export class QueryBuilderPanel {
       await this.dispatchMessage(message);
     } catch (error) {
       this.logger.error('Query builder request failed.', { type: message.type, error });
-      await this.postError(this.formatError(error));
+      await this.postError(
+        this.formatError(error),
+        message.type === 'runQuery' ? message.payload.runId : undefined
+      );
     }
   }
 
@@ -202,7 +205,9 @@ export class QueryBuilderPanel {
     };
     const text = type ? messages[type] : undefined;
     if (text) {
-      await this.postError(text);
+      const payload = value ? toRecord(value.payload) : undefined;
+      const runId = type === 'runQuery' && payload ? getOptionalNumberField(payload, 'runId') : undefined;
+      await this.postError(text, runId);
     }
   }
 
@@ -349,7 +354,7 @@ export class QueryBuilderPanel {
   private async handleRunQuery(payload: RunQueryPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('The selected connection profile no longer exists.');
+      await this.postError('The selected connection profile no longer exists.', payload.runId);
       return;
     }
 
@@ -374,7 +379,7 @@ export class QueryBuilderPanel {
 
       await this.sendHistory();
     } catch (error) {
-      await this.postError(this.formatError(error));
+      await this.postError(this.formatError(error), payload.runId);
     }
   }
 
@@ -682,10 +687,12 @@ export class QueryBuilderPanel {
     return 'Unknown error while processing query builder request.';
   }
 
-  private async postError(message: string): Promise<void> {
+  /** `runId` ties a failure to the run that caused it, so the webview can end that run's busy state. */
+  private async postError(message: string, runId?: number): Promise<void> {
     await this.panel.webview.postMessage({
       type: 'error',
-      message
+      message,
+      ...(runId === undefined ? {} : { runId })
     });
   }
 
