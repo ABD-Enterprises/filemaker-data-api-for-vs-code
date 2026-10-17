@@ -168,25 +168,32 @@ export class SettingsService {
   }
 
   public getDefaultApiBasePath(): string {
-    const configured = this.getPreferred<string>(
+    const configured = this.getPreferred<unknown>(
       'filemaker',
       'defaultApiBasePath',
       'filemakerDataApiTools',
       'defaultApiBasePath',
       '/fmi/data'
     );
+    // A hand-edited settings.json can hold any JSON type here.
+    if (typeof configured !== 'string') {
+      return '/fmi/data';
+    }
 
     return normalizeApiPath(configured, '/fmi/data');
   }
 
   public getDefaultApiVersionPath(): string {
-    const configured = this.getPreferred<string>(
+    const configured = this.getPreferred<unknown>(
       'filemaker',
       'defaultApiVersionPath',
       'filemakerDataApiTools',
       'defaultApiVersionPath',
       'vLatest'
     );
+    if (typeof configured !== 'string') {
+      return 'vLatest';
+    }
     const trimmed = configured.trim();
 
     return trimmed.length > 0 ? trimmed.replace(/^\/+|\/+$/g, '') : 'vLatest';
