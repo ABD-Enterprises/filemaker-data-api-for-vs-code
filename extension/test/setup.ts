@@ -58,6 +58,11 @@ vi.mock('vscode', () => {
       },
       openExternal: vi.fn()
     },
+    ConfigurationTarget: {
+      Global: 1,
+      Workspace: 2,
+      WorkspaceFolder: 3
+    },
     Uri: {
       parse: vi.fn((value: string) => createUri(value)),
       file: vi.fn((value: string) => createUri(value)),

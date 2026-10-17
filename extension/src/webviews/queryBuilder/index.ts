@@ -33,11 +33,24 @@ interface RunQueryPayload {
   limit?: number;
   offset?: number;
   queryId?: string;
+  /** Webview-assigned sequence number, echoed back so stale results can be ignored. */
+  runId?: number;
 }
 
 interface SaveQueryPayload extends RunQueryPayload {
+  /** Empty when the webview has no name yet; the host then asks for one. */
   name: string;
 }
+
+interface OpenRecordPayload {
+  profileId: string;
+  layout: string;
+  recordId: string;
+  mode: 'view' | 'edit';
+}
+
+/** Upper bound for text the webview may put on the clipboard in one call. */
+const MAX_CLIPBOARD_TEXT_LENGTH = 5_000_000;
 
 interface CopySnippetPayload extends RunQueryPayload {
   includeAuthHeader?: boolean;
@@ -70,6 +83,8 @@ type IncomingMessage =
   | { type: 'copyFetchSnippet'; payload: CopySnippetPayload }
   | { type: 'copyCurlSnippet'; payload: CopySnippetPayload }
   | { type: 'uploadContainer'; payload: UploadContainerPayload }
+  | { type: 'openRecord'; payload: OpenRecordPayload }
+  | { type: 'copyText'; text: string; label: string }
   | { type: 'refreshHistory' };
 
 export class QueryBuilderPanel {
@@ -158,9 +173,45 @@ export class QueryBuilderPanel {
   private async handleMessage(rawMessage: unknown): Promise<void> {
     const message = this.parseIncomingMessage(rawMessage);
     if (!message) {
+      await this.reportRejectedRequest(rawMessage);
       return;
     }
 
+    try {
+      await this.dispatchMessage(message);
+    } catch (error) {
+      this.logger.error('Query builder request failed.', { type: message.type, error });
+      await this.postError(
+        this.formatError(error),
+        message.type === 'runQuery' ? message.payload.runId : undefined
+      );
+    }
+  }
+
+  /**
+   * The webview waits for a reply to requests it makes (Run shows "Running…"),
+   * so a request that fails validation still gets an error back.
+   */
+  private async reportRejectedRequest(rawMessage: unknown): Promise<void> {
+    const value = toRecord(rawMessage);
+    const type = value ? getStringField(value, 'type') : undefined;
+    const messages: Record<string, string> = {
+      runQuery: 'Enter a find request before running the query.',
+      saveQuery: 'Enter a find request before saving the query.',
+      copyFetchSnippet: 'Enter a find request before copying it.',
+      copyCurlSnippet: 'Enter a find request before copying it.',
+      copyText: 'The results are too large to copy. Save them as CSV instead.',
+      openRecord: 'That row has no record ID to open.'
+    };
+    const text = type ? messages[type] : undefined;
+    if (text) {
+      const payload = value ? toRecord(value.payload) : undefined;
+      const runId = type === 'runQuery' && payload ? getOptionalNumberField(payload, 'runId') : undefined;
+      await this.postError(text, runId);
+    }
+  }
+
+  private async dispatchMessage(message: IncomingMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
         await this.sendInitState();
@@ -195,6 +246,13 @@ export class QueryBuilderPanel {
       case 'uploadContainer':
         await this.uploadContainer(message.payload);
         break;
+      case 'openRecord':
+        await this.openRecord(message.payload);
+        break;
+      case 'copyText':
+        await vscode.env.clipboard.writeText(message.text);
+        vscode.window.showInformationMessage(`Copied ${message.label} to clipboard.`);
+        break;
       case 'refreshHistory':
         await this.sendHistory();
         break;
@@ -207,9 +265,9 @@ export class QueryBuilderPanel {
     const profiles = await this.profileStore.listProfiles();
     const savedQueries = await this.savedQueriesStore.listSavedQueries();
 
-    const includeAuthByDefault = vscode.workspace
-      .getConfiguration('filemaker')
-      .get<boolean>('snippets.includeAuthByDefault', false);
+    const filemakerConfig = vscode.workspace.getConfiguration('filemaker');
+    const includeAuthByDefault = filemakerConfig.get<boolean>('snippets.includeAuthByDefault', false);
+    const recordEditEnabled = filemakerConfig.get<boolean>('features.recordEdit.enabled', true);
 
     await this.panel.webview.postMessage({
       type: 'init',
@@ -223,7 +281,8 @@ export class QueryBuilderPanel {
         activeProfileId: this.profileStore.getActiveProfileId(),
         savedQueries,
         defaults: this.pendingDefaults,
-        includeAuthByDefault
+        includeAuthByDefault,
+        recordEditEnabled
       }
     });
 
@@ -295,7 +354,7 @@ export class QueryBuilderPanel {
   private async handleRunQuery(payload: RunQueryPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('The selected connection profile no longer exists.');
+      await this.postError('The selected connection profile no longer exists.', payload.runId);
       return;
     }
 
@@ -320,7 +379,7 @@ export class QueryBuilderPanel {
 
       await this.sendHistory();
     } catch (error) {
-      await this.postError(this.formatError(error));
+      await this.postError(this.formatError(error), payload.runId);
     }
   }
 
@@ -337,9 +396,22 @@ export class QueryBuilderPanel {
         ? await this.savedQueriesStore.getSavedQuery(payload.queryId)
         : undefined;
 
+      const name = await vscode.window.showInputBox({
+        title: existing ? 'Save Query' : 'Save Query As',
+        prompt: existing
+          ? 'Query name. Keep it to update the saved query, or change it to rename.'
+          : 'Name for the new saved query',
+        value: payload.name.trim() || existing?.name || payload.layout,
+        ignoreFocusOut: true,
+        validateInput: (value) => (value.trim() ? undefined : 'Enter a name.')
+      });
+      if (!name) {
+        return;
+      }
+
       const query = await this.savedQueriesStore.saveSavedQuery({
         id: existing?.id ?? payload.queryId,
-        name: payload.name.trim(),
+        name: name.trim(),
         profileId: payload.profileId,
         database: profile.database,
         layout: payload.layout,
@@ -353,6 +425,11 @@ export class QueryBuilderPanel {
       await this.panel.webview.postMessage({
         type: 'savedQueries',
         payload: await this.savedQueriesStore.listSavedQueries()
+      });
+
+      await this.panel.webview.postMessage({
+        type: 'querySaved',
+        payload: { id: query.id, name: query.name }
       });
 
       await vscode.commands.executeCommand('filemakerDataApiTools.refreshExplorer');
@@ -546,6 +623,20 @@ export class QueryBuilderPanel {
     }
   }
 
+  private async openRecord(payload: OpenRecordPayload): Promise<void> {
+    const command =
+      payload.mode === 'edit' ? 'filemakerDataApiTools.openRecordEditor' : 'filemakerDataApiTools.openRecordViewer';
+    try {
+      await vscode.commands.executeCommand(command, {
+        profileId: payload.profileId,
+        layout: payload.layout,
+        recordId: payload.recordId
+      });
+    } catch (error) {
+      await this.postError(this.formatError(error));
+    }
+  }
+
   private toFindSnippetRequest(
     profile: ConnectionProfile,
     layout: string,
@@ -596,10 +687,12 @@ export class QueryBuilderPanel {
     return 'Unknown error while processing query builder request.';
   }
 
-  private async postError(message: string): Promise<void> {
+  /** `runId` ties a failure to the run that caused it, so the webview can end that run's busy state. */
+  private async postError(message: string, runId?: number): Promise<void> {
     await this.panel.webview.postMessage({
       type: 'error',
-      message
+      message,
+      ...(runId === undefined ? {} : { runId })
     });
   }
 
@@ -696,6 +789,18 @@ export class QueryBuilderPanel {
           payload
         };
       }
+      case 'openRecord': {
+        const payload = this.parseOpenRecordPayload(value.payload);
+        return payload ? { type, payload } : undefined;
+      }
+      case 'copyText': {
+        const text = typeof value.text === 'string' ? value.text : undefined;
+        const label = getStringField(value, 'label') ?? 'text';
+        if (text === undefined || text.length === 0 || text.length > MAX_CLIPBOARD_TEXT_LENGTH) {
+          return undefined;
+        }
+        return { type, text, label: label.slice(0, 80) };
+      }
       default:
         return undefined;
     }
@@ -725,7 +830,8 @@ export class QueryBuilderPanel {
       sortJson: getStringField(payload, 'sortJson'),
       limit: getOptionalNumberField(payload, 'limit'),
       offset: getOptionalNumberField(payload, 'offset'),
-      queryId: getStringField(payload, 'queryId')
+      queryId: getStringField(payload, 'queryId'),
+      runId: getOptionalNumberField(payload, 'runId')
     };
   }
 
@@ -737,13 +843,31 @@ export class QueryBuilderPanel {
 
     const raw = toRecord(rawPayload);
     const name = raw ? getStringField(raw, 'name') : undefined;
-    if (!name || name.trim().length === 0) {
+
+    return {
+      ...payload,
+      name: (name ?? '').trim()
+    };
+  }
+
+  private parseOpenRecordPayload(rawPayload: unknown): OpenRecordPayload | undefined {
+    const payload = toRecord(rawPayload);
+    if (!payload) {
+      return undefined;
+    }
+
+    const profileId = getStringField(payload, 'profileId');
+    const layout = getStringField(payload, 'layout');
+    const recordId = getStringField(payload, 'recordId');
+    if (!profileId || !layout || !recordId || !/^\d+$/.test(recordId)) {
       return undefined;
     }
 
     return {
-      ...payload,
-      name: name.trim()
+      profileId,
+      layout,
+      recordId,
+      mode: getStringField(payload, 'mode') === 'edit' ? 'edit' : 'view'
     };
   }
 
@@ -780,13 +904,13 @@ export class QueryBuilderPanel {
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', 'styles.css')
-    );
-
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', 'index.js')
-    );
+    const uiUri = (file: string): vscode.Uri =>
+      webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', file)
+      );
+    const styleUri = uiUri('styles.css');
+    const findFormUri = uiUri('findForm.js');
+    const scriptUri = uiUri('index.js');
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
@@ -806,80 +930,119 @@ export class QueryBuilderPanel {
   <div class="container">
     <header class="header">
       <h1>FileMaker Query Builder</h1>
-      <p>Build Data API find requests and inspect results.</p>
+      <p>Build a find request, run it, and open any record from the results.</p>
     </header>
 
-    <section class="panel">
-      <div class="row">
-        <label for="profileSelect">Profile</label>
-        <select id="profileSelect"></select>
-      </div>
-      <div class="row">
-        <label for="layoutSelect">Layout</label>
-        <select id="layoutSelect"></select>
-      </div>
-      <div class="row">
-        <label for="findJson">Find JSON (array)</label>
-        <textarea id="findJson" rows="6">[{ }]</textarea>
-      </div>
-      <div class="row">
-        <label for="sortJson">Sort JSON (optional array)</label>
-        <textarea id="sortJson" rows="3"></textarea>
-      </div>
-      <div class="grid">
+    <section class="panel" aria-labelledby="queryHeading">
+      <h2 id="queryHeading" class="visually-hidden">Query</h2>
+      <div class="grid source-grid">
         <div>
-          <label for="limitInput">Limit</label>
-          <input id="limitInput" type="number" min="0" placeholder="100" />
+          <label for="profileSelect">Profile</label>
+          <select id="profileSelect"></select>
         </div>
         <div>
-          <label for="offsetInput">Offset</label>
-          <input id="offsetInput" type="number" min="0" placeholder="1" />
+          <label for="layoutSelect">Layout</label>
+          <select id="layoutSelect"></select>
         </div>
         <div>
-          <label for="queryNameInput">Saved Query Name</label>
-          <input id="queryNameInput" type="text" placeholder="My Find Query" />
+          <label for="savedQueriesSelect">Saved query</label>
+          <div class="inline-control">
+            <select id="savedQueriesSelect"></select>
+            <button id="loadSavedButton" type="button" class="secondary">Load</button>
+          </div>
         </div>
       </div>
-      <div class="row inline">
-        <label class="toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header in snippets</label>
+
+      <div class="tabs" role="tablist" aria-label="Query editor">
+        <button id="formTab" type="button" role="tab" aria-selected="true" aria-controls="formEditor">Form</button>
+        <button id="jsonTab" type="button" role="tab" aria-selected="false" aria-controls="jsonEditor" tabindex="-1">JSON</button>
       </div>
+
+      <div id="formEditor" role="tabpanel" aria-labelledby="formTab">
+        <datalist id="fieldNameOptions"></datalist>
+        <div id="fieldNamesHint" class="hint"></div>
+        <div id="requestList" class="request-list"></div>
+        <button id="addRequestButton" type="button" class="secondary">Add request (OR)</button>
+        <fieldset class="sort-editor">
+          <legend>Sort</legend>
+          <div id="sortList"></div>
+          <button id="addSortButton" type="button" class="secondary">Add sort field</button>
+        </fieldset>
+      </div>
+
+      <div id="jsonEditor" role="tabpanel" aria-labelledby="jsonTab" class="hidden">
+        <div class="row">
+          <label for="findJson">Find JSON (array of requests)</label>
+          <textarea id="findJson" rows="6" spellcheck="false">[{}]</textarea>
+        </div>
+        <div class="row">
+          <label for="sortJson">Sort JSON (optional array)</label>
+          <textarea id="sortJson" rows="3" spellcheck="false"></textarea>
+        </div>
+      </div>
+
+      <div class="grid paging-grid">
+        <div>
+          <label for="limitInput">Records per page</label>
+          <input id="limitInput" type="number" min="1" placeholder="100" />
+        </div>
+        <div>
+          <label for="offsetInput">Start at record</label>
+          <input id="offsetInput" type="number" min="1" placeholder="1" />
+        </div>
+      </div>
+
       <div class="actions">
-        <button id="runButton">Run</button>
-        <button id="saveButton">Save Query</button>
-        <button id="exportEditorButton">Open JSON in Editor</button>
-        <button id="exportJsonButton">Export JSON File</button>
-        <button id="exportCsvButton">Export CSV File</button>
-        <button id="copyFetchButton">Copy as fetch()</button>
-        <button id="copyCurlButton">Copy as curl</button>
-        <button id="uploadContainerButton">Upload Container</button>
-      </div>
-      <div class="saved">
-        <label for="savedQueriesSelect">Saved Queries</label>
-        <select id="savedQueriesSelect"></select>
-      </div>
-      <div class="actions compact">
-        <button id="loadSavedButton">Load Saved Query</button>
-        <button id="prevButton">Prev Page</button>
-        <button id="nextButton">Next Page</button>
-        <button id="refreshHistoryButton">Refresh History</button>
-        <label class="toggle"><input id="rawToggle" type="checkbox" /> Raw JSON</label>
+        <button id="runButton" type="button" title="Run query (Ctrl/Cmd+Enter)">Run</button>
+        <button id="saveButton" type="button" class="secondary" title="Save this query (asks for a name)">Save…</button>
+        <details class="menu" id="exportMenu">
+          <summary class="secondary">Export</summary>
+          <div class="menu-items">
+            <button id="copyTableButton" type="button">Copy results as table</button>
+            <button id="exportCsvButton" type="button">Save results as CSV…</button>
+            <button id="exportJsonButton" type="button">Save results as JSON…</button>
+            <button id="exportEditorButton" type="button">Open results in editor</button>
+          </div>
+        </details>
+        <details class="menu" id="copyRequestMenu">
+          <summary class="secondary">Copy request</summary>
+          <div class="menu-items">
+            <button id="copyFetchButton" type="button">Copy as fetch()</button>
+            <button id="copyCurlButton" type="button">Copy as curl</button>
+            <label class="toggle menu-toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header</label>
+          </div>
+        </details>
+        <button id="uploadContainerButton" type="button" class="secondary">Upload to container…</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="panel">
-      <h2>Results</h2>
-      <div id="resultSummary" class="summary" role="status" aria-live="polite"></div>
-      <div id="tableContainer" class="table-wrap"></div>
-      <pre id="rawContainer" class="raw hidden"></pre>
+    <section class="panel" aria-labelledby="resultsHeading">
+      <div class="results-header">
+        <h2 id="resultsHeading">Results</h2>
+        <div class="tabs compact" role="tablist" aria-label="Results view">
+          <button id="tableViewTab" type="button" role="tab" aria-selected="true" aria-controls="tableContainer">Table</button>
+          <button id="rawViewTab" type="button" role="tab" aria-selected="false" aria-controls="rawContainer" tabindex="-1">JSON</button>
+        </div>
+      </div>
+      <div class="results-toolbar">
+        <div id="resultSummary" class="summary" role="status" aria-live="polite"></div>
+        <div class="pager">
+          <button id="prevButton" type="button" class="secondary" disabled>Previous page</button>
+          <button id="nextButton" type="button" class="secondary" disabled>Next page</button>
+        </div>
+      </div>
+      <div id="tableContainer" class="table-wrap" role="tabpanel" aria-labelledby="tableViewTab"></div>
+      <pre id="rawContainer" class="raw hidden" role="tabpanel" aria-labelledby="rawViewTab"></pre>
     </section>
 
-    <section class="panel">
-      <h2>History (Last Requests)</h2>
+    <details class="panel history-panel">
+      <summary><h2>Request history</h2></summary>
       <div id="historyContainer" class="history"></div>
-    </section>
+    </details>
   </div>
 
+  <script nonce="${nonce}" src="${findFormUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

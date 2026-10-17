@@ -26,6 +26,16 @@ export function resetSupportedHashAlgorithmCacheForTesting(): void {
   cachedHashAlgorithms = undefined;
 }
 
+const LEGACY_SECTION = 'filemakerDataApiTools';
+
+/** Deprecated `filemakerDataApiTools.<old>` keys and their `filemaker.<new>` replacements. */
+export const DEPRECATED_SETTING_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ['logLevel', 'logging.level'],
+  ['requestTimeoutMs', 'requestTimeoutMs'],
+  ['defaultApiBasePath', 'defaultApiBasePath'],
+  ['defaultApiVersionPath', 'defaultApiVersionPath']
+];
+
 interface SettingsServiceOptions {
   getConfiguration?: (section?: string) => vscode.WorkspaceConfiguration;
   isWorkspaceTrusted?: () => boolean;
@@ -80,6 +90,40 @@ export class SettingsService {
       return this.getConfiguration(oldSection).get<T>(oldKey, defaultValue);
     }
     return this.getConfiguration(newSection).get<T>(newKey, defaultValue);
+  }
+
+  /**
+   * Copies every explicitly set deprecated `filemakerDataApiTools.*` value to its
+   * `filemaker.*` replacement (unless the new key is already set in that scope)
+   * and removes the old value. Covers user and workspace scopes; folder-level
+   * values are left alone. Returns the old keys that were migrated.
+   */
+  public async migrateDeprecatedSettings(): Promise<string[]> {
+    const oldConfig = this.getConfiguration(LEGACY_SECTION);
+    const newConfig = this.getConfiguration('filemaker');
+    const scopes: Array<['globalValue' | 'workspaceValue', vscode.ConfigurationTarget]> = [
+      ['globalValue', vscode.ConfigurationTarget.Global],
+      ['workspaceValue', vscode.ConfigurationTarget.Workspace]
+    ];
+    const migrated = new Set<string>();
+
+    for (const [oldKey, newKey] of DEPRECATED_SETTING_KEYS) {
+      const oldInspect = oldConfig.inspect<unknown>(oldKey);
+      const newInspect = newConfig.inspect<unknown>(newKey);
+      for (const [scope, target] of scopes) {
+        const oldValue = oldInspect?.[scope];
+        if (oldValue === undefined) {
+          continue;
+        }
+        if (newInspect?.[scope] === undefined) {
+          await newConfig.update(newKey, oldValue, target);
+        }
+        await oldConfig.update(oldKey, undefined, target);
+        migrated.add(`${LEGACY_SECTION}.${oldKey}`);
+      }
+    }
+
+    return [...migrated];
   }
 
   /** Returns the deprecated setting keys observed this session and clears the set. */

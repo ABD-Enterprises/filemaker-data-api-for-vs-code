@@ -8,7 +8,7 @@ import type { SchemaService } from '../services/schemaService';
 import type { SettingsService } from '../services/settingsService';
 import { validateRecordId } from '../utils/jsonValidate';
 import { readContainerUploadFile } from '../utils/containerUpload';
-import { parseLayoutArg, resolveLayoutContext, showCommandError } from './common';
+import { parseLayoutArg, parseRecordIdArg, resolveLayoutContext, showCommandError } from './common';
 import { RecordEditorPanel } from '../webviews/recordEditor';
 
 interface RegisterRecordEditCommandsDeps {
@@ -50,6 +50,15 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
       }
       const { profile, layout } = selection;
       const profileId = profile.id;
+      const knownRecordId = parseRecordIdArg(arg);
+      if (knownRecordId) {
+        RecordEditorPanel.createOrShow(context, profileStore, fmClient, schemaService, logger, {
+          profileId,
+          layout,
+          recordId: knownRecordId
+        });
+        return;
+      }
 
       const enteredRecordId = await vscode.window.showInputBox({
         title: 'Open Record Editor',
