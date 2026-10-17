@@ -35,6 +35,9 @@ const saveButton = document.getElementById('saveButton');
 const discardButton = document.getElementById('discardButton');
 const exportButton = document.getElementById('exportButton');
 const statusEl = document.getElementById('status');
+const conflictBanner = document.getElementById('conflictBanner');
+const conflictText = document.getElementById('conflictText');
+const reloadAfterConflictButton = document.getElementById('reloadAfterConflictButton');
 const fieldEditor = document.getElementById('fieldEditor');
 const patchPreview = document.getElementById('patchPreview');
 const rawRecord = document.getElementById('rawRecord');
@@ -86,6 +89,9 @@ window.addEventListener('message', (event) => {
       break;
     case 'saveCancelled':
       setStatus('Save cancelled.');
+      break;
+    case 'saveConflict':
+      showConflict(message.payload);
       break;
     case 'error':
       setStatus(message.message || 'Unknown error.', true);
@@ -180,6 +186,7 @@ function applyRecord(payload) {
   }
 
   debouncedMarkDirtyState.cancel();
+  hideConflict();
   state.loaded = payload;
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);
@@ -217,6 +224,7 @@ function applySaved(payload) {
     return;
   }
 
+  hideConflict();
   debouncedMarkDirtyState.cancel();
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);
@@ -226,6 +234,36 @@ function applySaved(payload) {
   revealRecordEditor();
   setStatus('Record saved.');
 }
+
+function showConflict(payload) {
+  const recordId = payload && payload.recordId ? payload.recordId : recordIdInput.value.trim();
+  const others = payload && Array.isArray(payload.changedByOthers) ? payload.changedByOthers : [];
+  const overlap = payload && Array.isArray(payload.overlap) ? payload.overlap : [];
+
+  let text = `Not saved: record ${recordId} was changed by someone else after you opened it.`;
+  if (others.length > 0) {
+    text += ` Fields changed since: ${others.join(', ')}.`;
+  }
+  if (overlap.length > 0) {
+    text += ` You both edited: ${overlap.join(', ')}.`;
+  }
+  text += ' Your edits are still in the form. Reload to see the current values, then redo your changes.';
+
+  conflictText.textContent = text;
+  conflictBanner.classList.remove('hidden');
+  setStatus('Save blocked: the record changed since you loaded it.', true);
+  reloadAfterConflictButton.focus();
+}
+
+function hideConflict() {
+  conflictBanner.classList.add('hidden');
+  conflictText.textContent = '';
+}
+
+reloadAfterConflictButton.addEventListener('click', () => {
+  hideConflict();
+  loadButton.click();
+});
 
 function createLoadingSkeleton(widths) {
   const skeleton = document.createElement('div');

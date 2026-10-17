@@ -1,6 +1,7 @@
 import nock from 'nock';
 import { describe, expect, it, vi } from 'vitest';
 
+import { FMClientError, isRecordModifiedConflict } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
@@ -41,6 +42,71 @@ async function createClient(timeoutMs = 5_000) {
 }
 
 describe('FMClient integration (mocked HTTP)', () => {
+
+  describe('edit with a modification id', () => {
+    const conflict = { messages: [{ code: '306', message: 'Record modification ID does not match' }], response: {} };
+
+    it('sends modId with the edit when one is given', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+      let sent: Record<string, unknown> | undefined;
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-edit' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server)
+        .patch(`${apiBase}/layouts/Contacts/records/7`, (body: Record<string, unknown>) => {
+          sent = body;
+          return true;
+        })
+        .reply(200, { response: { modId: '4' }, messages: [{ code: '0', message: 'OK' }] });
+
+      const result = await client.editRecord(profile, 'Contacts', '7', { Status: 'Closed' }, undefined, {
+        modId: '3'
+      });
+
+      expect(sent).toEqual({ fieldData: { Status: 'Closed' }, modId: '3' });
+      expect(result.modId).toBe('4');
+    });
+
+    it('sends no modId when none is given, as before', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+      let sent: Record<string, unknown> | undefined;
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-edit2' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server)
+        .patch(`${apiBase}/layouts/Contacts/records/7`, (body: Record<string, unknown>) => {
+          sent = body;
+          return true;
+        })
+        .reply(200, { response: { modId: '4' }, messages: [{ code: '0', message: 'OK' }] });
+
+      await client.editRecord(profile, 'Contacts', '7', { Status: 'Closed' });
+
+      expect(sent).toEqual({ fieldData: { Status: 'Closed' } });
+    });
+
+    it('reports FileMaker error 306 as a conflict the caller can recognise', async () => {
+      const profile = createProfile();
+      const { client } = await createClient();
+
+      nock(server)
+        .post(`${apiBase}/sessions`)
+        .reply(200, { response: { token: 'token-306' }, messages: [{ code: '0', message: 'OK' }] });
+      nock(server).patch(`${apiBase}/layouts/Contacts/records/7`).reply(500, conflict);
+
+      const error = await client
+        .editRecord(profile, 'Contacts', '7', { Status: 'Open' }, undefined, { modId: '1' })
+        .catch((caught: unknown) => caught);
+
+      expect(isRecordModifiedConflict(error)).toBe(true);
+      expect(isRecordModifiedConflict(new Error('306'))).toBe(false);
+      expect(isRecordModifiedConflict(new FMClientError('other', { code: '101' }))).toBe(false);
+    });
+  });
 
   describe('find with no matches', () => {
     const noMatch = {

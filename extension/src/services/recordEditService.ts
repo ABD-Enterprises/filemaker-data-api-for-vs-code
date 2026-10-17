@@ -68,7 +68,8 @@ export class RecordEditService {
     layout: string,
     recordId: string,
     originalFieldData: Record<string, unknown>,
-    draftFieldData: Record<string, unknown>
+    draftFieldData: Record<string, unknown>,
+    options?: { modId?: string }
   ): Promise<EditRecordResult> {
     const validation = this.validateDraft(draftFieldData);
     if (!validation.valid) {
@@ -81,7 +82,7 @@ export class RecordEditService {
       throw new Error('No field changes detected.');
     }
 
-    return this.fmClient.editRecord(profile, layout, recordId, patch);
+    return this.fmClient.editRecord(profile, layout, recordId, patch, undefined, options);
   }
 
   public computePatch(

@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 
+import { isRecordModifiedConflict } from '../../services/errors';
 import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { RecordEditService } from '../../services/recordEditService';
 import type { SchemaService } from '../../services/schemaService';
-import type { FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
+import type { ConnectionProfile, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 
@@ -279,13 +280,26 @@ export class RecordEditorPanel {
       return;
     }
 
+    // Send the modification id of the record as it was loaded, so FileMaker refuses the
+    // edit (error 306) if someone else changed the record in the meantime. It comes from
+    // the host's own copy of the loaded record, not from the webview.
+    const loaded = this.loadedRecord;
+    const modId =
+      loaded &&
+      loaded.profileId === payload.profileId &&
+      loaded.layout === payload.layout &&
+      String(loaded.record.recordId) === payload.recordId
+        ? loaded.record.modId
+        : undefined;
+
     try {
       const saveResult = await this.recordEditService.saveRecord(
         profile,
         payload.layout,
         payload.recordId,
         payload.originalFieldData,
-        payload.draftFieldData
+        payload.draftFieldData,
+        modId !== undefined ? { modId } : undefined
       );
       const refreshedRecord = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
       this.loadedRecord = {
@@ -302,8 +316,48 @@ export class RecordEditorPanel {
         }
       });
     } catch (error) {
+      if (isRecordModifiedConflict(error)) {
+        await this.reportSaveConflict(profile, payload, preview.changedFields);
+        return;
+      }
       await this.postError(formatError(error));
     }
+  }
+
+  /**
+   * The record changed on the server after it was loaded. Nothing was written. Tell the
+   * webview which fields differ now so the user can decide, and keep the draft in place
+   * until they reload.
+   */
+  private async reportSaveConflict(
+    profile: ConnectionProfile,
+    payload: DraftPayload,
+    yourFields: string[]
+  ): Promise<void> {
+    let changedByOthers: string[] = [];
+    try {
+      const current = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
+      changedByOthers = Object.keys(
+        this.recordEditService.computePatch(payload.originalFieldData, current.fieldData)
+      ).sort((left, right) => left.localeCompare(right));
+    } catch (error) {
+      this.logger.warn('Could not read the current record to describe an edit conflict.', {
+        error,
+        profileId: payload.profileId,
+        layout: payload.layout,
+        recordId: payload.recordId
+      });
+    }
+
+    await this.panel.webview.postMessage({
+      type: 'saveConflict',
+      payload: {
+        recordId: payload.recordId,
+        changedByOthers,
+        yourFields,
+        overlap: yourFields.filter((field) => changedByOthers.includes(field))
+      }
+    });
   }
 
   private async handleCreateRecord(payload: {
@@ -433,6 +487,10 @@ export class RecordEditorPanel {
         <button id="exportButton">Export Record JSON</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div id="conflictBanner" class="conflict hidden" role="alert">
+        <p id="conflictText"></p>
+        <button id="reloadAfterConflictButton" type="button">Reload record (discard my edits)</button>
+      </div>
     </section>
 
     <section class="panel">

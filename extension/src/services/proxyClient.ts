@@ -176,12 +176,14 @@ export class ProxyClient {
     layout: string,
     recordId: string,
     fieldDataPartial: Record<string, unknown>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    modId?: string
   ): Promise<EditRecordResult> {
     const data = await this.invoke<ProxyEditRecordResponse>(profile, 'editRecord', {
       layout,
       recordId,
-      fieldData: fieldDataPartial
+      fieldData: fieldDataPartial,
+      ...(modId !== undefined ? { modId } : {})
     }, signal);
 
     if (!data.result) {

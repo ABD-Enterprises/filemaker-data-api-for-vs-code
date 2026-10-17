@@ -190,3 +190,20 @@ th {
     flex: 1;
   }
 }
+
+.conflict {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  background: rgba(180, 35, 24, 0.06);
+}
+
+.conflict p {
+  margin: 0 0 8px;
+  color: var(--error);
+}
+
+.conflict.hidden {
+  display: none;
+}

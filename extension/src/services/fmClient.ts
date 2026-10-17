@@ -87,6 +87,12 @@ export interface FMClientSessionOptions {
   now?: () => number;
 }
 
+/** Optional guards for an edit. */
+export interface EditRecordOptions {
+  /** The record's modification id as loaded; the edit is refused if the record has changed since. */
+  modId?: string;
+}
+
 /** FileMaker reports "no records match the request" as HTTP 404 with error code 401. */
 function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.status === 404 && error.code === '401';
@@ -520,7 +526,8 @@ export class FMClient {
     layout: string,
     recordId: string,
     fieldDataPartial: Record<string, unknown>,
-    control?: ClientRequestControl
+    control?: ClientRequestControl,
+    options?: EditRecordOptions
   ): Promise<EditRecordResult> {
     return this.withHistory(
       {
@@ -536,7 +543,8 @@ export class FMClient {
             layout,
             recordId,
             fieldDataPartial,
-            control?.signal
+            control?.signal,
+            options?.modId
           );
         }
 
@@ -550,7 +558,9 @@ export class FMClient {
             method: 'PATCH',
             path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
             data: {
-              fieldData: fieldDataPartial
+              fieldData: fieldDataPartial,
+              // When given, FileMaker refuses the edit (error 306) if the record changed since this modId.
+              ...(options?.modId !== undefined ? { modId: options.modId } : {})
             },
             signal: control?.signal
           },
