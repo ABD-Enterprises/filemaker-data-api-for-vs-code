@@ -59,6 +59,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Record edit, create and upload and the Script Runner require a trusted workspace (commands, panels and panel messages), matching the documented behaviour; the manifest's untrusted-workspace description lists them.
 - Escape database-supplied names in generated types, clients and snippets; give punctuation-only-different layouts distinct file names and safe Windows names.
 - Neutralize spreadsheet formulas in CSV exports.
 - Validate the workspace snapshot index entries so a repository's index cannot make pruning delete other files; reject Windows drive-relative output folders.

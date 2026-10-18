@@ -57,7 +57,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Reading layout metadata, browsing the FileMaker Explorer, and running Find queries work in untrusted workspaces. Write operations (record edit/create/delete, batch updates, type generation, FM Web project init) and enterprise environment comparisons require a trusted workspace. Trust the workspace via VS Code's banner to enable them.",
+      "description": "Reading layout metadata, browsing the FileMaker Explorer, and running Find queries work in untrusted workspaces. Editing, creating, deleting and uploading to records, the Script Runner, batch updates, type generation, FM Web project init, workspace plugins and enterprise environment comparisons require a trusted workspace. Trust the workspace via VS Code's banner to enable them.",
       "restrictedConfigurations": [
         "filemaker.features.batch.enabled",
         "filemaker.features.recordEdit.enabled",

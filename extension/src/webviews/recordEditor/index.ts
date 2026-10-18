@@ -29,6 +29,9 @@ interface DraftPayload extends LoadRecordPayload {
   draftFieldData: Record<string, unknown>;
 }
 
+const UNTRUSTED_EDITOR_MESSAGE =
+  'The record editor is disabled in untrusted workspaces. Trust the workspace to edit or create records.';
+
 type IncomingMessage =
   | { type: 'ready' }
   | { type: 'loadLayouts'; profileId: string }
@@ -77,6 +80,11 @@ export class RecordEditorPanel {
     logger: Logger,
     defaults?: RecordEditorOpenOptions
   ): void {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showWarningMessage(UNTRUSTED_EDITOR_MESSAGE);
+      return;
+    }
+
     const column = vscode.ViewColumn.One;
 
     if (RecordEditorPanel.currentPanel) {
@@ -119,6 +127,13 @@ export class RecordEditorPanel {
   private async handleMessage(message: unknown): Promise<void> {
     const incoming = parseIncomingMessage(message);
     if (!incoming) {
+      return;
+    }
+
+    // Defence in depth: the commands refuse in an untrusted workspace, and so does every
+    // message that reads or changes data, in case a panel outlives a change of trust.
+    if (!vscode.workspace.isTrusted && incoming.type !== 'ready') {
+      await this.postError(UNTRUSTED_EDITOR_MESSAGE);
       return;
     }
 

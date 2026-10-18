@@ -32,6 +32,9 @@ interface CopySnippetPayload extends RunScriptPayload {
   includeAuthHeader?: boolean;
 }
 
+const UNTRUSTED_RUNNER_MESSAGE =
+  'The Script Runner is disabled in untrusted workspaces. Trust the workspace to run scripts.';
+
 type IncomingMessage =
   | { type: 'ready' }
   | { type: 'loadLayouts'; profileId: string }
@@ -72,6 +75,11 @@ export class ScriptRunnerPanel {
     logger: Logger,
     defaults?: ScriptRunnerOpenOptions
   ): void {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showWarningMessage(UNTRUSTED_RUNNER_MESSAGE);
+      return;
+    }
+
     const column = vscode.ViewColumn.One;
 
     if (ScriptRunnerPanel.currentPanel) {
@@ -102,6 +110,15 @@ export class ScriptRunnerPanel {
   private async handleMessage(rawMessage: unknown): Promise<void> {
     const message = this.parseMessage(rawMessage);
     if (!message) {
+      return;
+    }
+
+    // Defence in depth, as in the record editor: scripts run only in a trusted workspace.
+    if (!vscode.workspace.isTrusted && message.type !== 'ready') {
+      await this.panel.webview.postMessage({
+        type: 'unsupported',
+        message: UNTRUSTED_RUNNER_MESSAGE
+      });
       return;
     }
 
