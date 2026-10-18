@@ -266,3 +266,9 @@ button:disabled {
     flex: 1;
   }
 }
+
+.fm-version {
+  margin: 12px 16px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #5f6c7b);
+}

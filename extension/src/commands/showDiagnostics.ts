@@ -47,7 +47,11 @@ export async function buildDiagnosticReport(
   // Version facts (same block as FileMaker: About / Show Version) ---------
   push('## Version details');
   push('');
-  push(aboutFactsMarkdown(context).markdown);
+  try {
+    push(aboutFactsMarkdown(context).markdown);
+  } catch {
+    push('_Version details are unavailable._');
+  }
   push('');
 
   // Active profile (redacted) -------------------------------------------

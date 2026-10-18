@@ -13,6 +13,7 @@ import {
   toRecord
 } from '../common/messageValidation';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface ScriptRunnerOpenOptions {
   profileId?: string;
@@ -480,6 +481,7 @@ export class ScriptRunnerPanel {
     </section>
   </div>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

@@ -27,7 +27,7 @@ body:
     id: extension-version
     attributes:
       label: Extension version
-      description: Run "FileMaker: About / Show Version" from the Command Palette (it is also in the status bar tooltip and the sidebar title).
+      description: Run "FileMaker: About / Show Version" from the Command Palette (the version is also in the status bar tooltip and on the line under the FileMaker Explorer title).
       placeholder: "1.4.0"
     validations:
       required: true

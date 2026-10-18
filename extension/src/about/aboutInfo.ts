@@ -52,16 +52,27 @@ function token(value: string | undefined, max = 40): string {
   return /^[A-Za-z0-9._+-]+$/.test(text) && text.length <= max ? text : UNKNOWN;
 }
 
-/** Free text from the host (app name, remote name): cleaned of paths and secrets, then bounded. */
-function text(value: string | undefined, max = 60): string {
-  return scrubPaths(redactString((value ?? '').replace(/[\r\n|`]+/g, ' ').trim())).slice(0, max) || UNKNOWN;
+/**
+ * A host name such as "Visual Studio Code - Insiders" or a remote kind such as "ssh-remote" or
+ * "dev-container": letters, digits, spaces, dots, dashes and underscores only, so a path, an
+ * `alice@host` address, a `key=value` pair or a pipe cannot pass. Anything else becomes 'unknown'.
+ */
+function name(value: string | undefined, max = 40): string {
+  const text = (value ?? '').trim();
+  return text.length > 0 && text.length <= max && /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(text) ? text : UNKNOWN;
 }
 
-/** Replaces a user's home directory (and a bare `user@`) in any text with `~`. */
+/**
+ * Replaces a user's home directory, a UNC share, temp folders and a bare `user@host` in any text
+ * with `~` or a placeholder. Over-redacts on purpose (a folder name with spaces is taken whole).
+ */
 export function scrubPaths(input: string): string {
   return input
-    .replace(/[A-Za-z]:\\Users\\[^\\\s]+/gi, '~')
-    .replace(/\/(?:Users|home)\/[^/\s]+/g, '~')
+    .replace(/\\\\[^\\\s]+(?:\\[^\s]*)?/g, '~')
+    .replace(/[A-Za-z]:[\\/]Users[\\/][^\\/\r\n]+/gi, '~')
+    .replace(/\/(?:private\/)?var\/folders\/\S*/g, '~')
+    .replace(/\/(?:Users|home)\/[^/\r\n]+/g, '~')
+    .replace(/\/root(?=[/\s]|$)/g, '~')
     .replace(/\b[\w.-]+@[\w.-]+/g, '<redacted>');
 }
 
@@ -71,11 +82,11 @@ export function scrubPaths(input: string): string {
  * name or path cannot reach the block even if the caller passes extra data.
  */
 export function buildAboutFacts(inputs: AboutInputs): AboutFact[] {
-  const remote = inputs.remoteName ? text(inputs.remoteName, 30) : 'none (local window)';
+  const remote = inputs.remoteName ? name(inputs.remoteName, 30) : 'none (local window)';
   return [
     { label: 'Extension', value: `FileMaker Data API Tools ${token(inputs.extensionVersion)}` },
-    { label: 'Build', value: `${token(inputs.buildCommit, 12)} (${token(inputs.buildDate, 30)})` },
-    { label: 'VS Code', value: `${token(inputs.vscodeVersion)} (${text(inputs.appName, 30)})` },
+    { label: 'Build', value: `${token(inputs.buildCommit, 16)} (${token(inputs.buildDate, 30)})` },
+    { label: 'VS Code', value: `${token(inputs.vscodeVersion)} (${name(inputs.appName, 30)})` },
     {
       label: 'Extension host',
       value: `Node ${token(inputs.nodeVersion)}, Electron ${token(inputs.electronVersion)}`
@@ -100,7 +111,7 @@ export function formatFactsMarkdown(facts: AboutFact[]): string {
 export function formatActivationLine(inputs: AboutInputs): string {
   return redactString(
     scrubPaths(
-      `FileMaker Data API Tools v${token(inputs.extensionVersion)} (${token(inputs.buildCommit, 12)}) ` +
+      `FileMaker Data API Tools v${token(inputs.extensionVersion)} (${token(inputs.buildCommit, 16)}) ` +
         `on VS Code ${token(inputs.vscodeVersion)}, ${token(inputs.platform)}-${token(inputs.arch)}`
     )
   );
@@ -120,8 +131,11 @@ export function versionLabel(version: string | undefined): string {
 export function buildIssueUrl(facts: AboutFact[], markdown: string, maxLength = MAX_ISSUE_URL_LENGTH): string {
   const pick = (label: string): string => facts.find((fact) => fact.label === label)?.value ?? UNKNOWN;
   const base = `${REPO_URL}/issues/new`;
+  // VS Code's opener decodes the query and re-emits it with `+`, `&`, `#` and `=` raw, which
+  // GitHub reads as a space or a new field. Those four never go into a value.
+  const safe = (value: string): string => value.replace(/[&#+=]/g, '_');
   const build = (fields: Array<[string, string]>): string =>
-    `${base}?${fields.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&')}`;
+    `${base}?${fields.map(([key, value]) => `${key}=${encodeURIComponent(safe(value))}`).join('&')}`;
   const core: Array<[string, string]> = [
     ['template', 'bug_report.yml'],
     ['extension-version', pick('Extension').replace('FileMaker Data API Tools ', '')],

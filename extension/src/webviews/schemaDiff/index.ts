@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { SchemaDiffResult } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { toRecord } from '../common/messageValidation';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface SchemaDiffWebviewMessage {
   type: 'ready' | 'exportJson';
@@ -148,6 +149,7 @@ export class SchemaDiffPanel {
     </section>
   </main>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

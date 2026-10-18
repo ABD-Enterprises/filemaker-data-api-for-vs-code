@@ -117,6 +117,27 @@ describe('extension lazy FM runtime loading', () => {
     expect(contributes.commands.map(({ command }) => command).filter((id) => !registered.has(id))).toEqual([]);
   });
 
+  it('shows the installed version at activation: runtime version, Output line, Explorer description, status bar', async () => {
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    disposeSubscriptions(context);
+
+    const { getRuntimeVersion } = await import('../../src/about/runtimeVersion');
+    expect(getRuntimeVersion()).toBe('1.1.0');
+
+    const channel = vi.mocked(vscode.window.createOutputChannel).mock.results[0]?.value as { appendLine: ReturnType<typeof vi.fn> };
+    const lines = channel.appendLine.mock.calls.map(([line]) => String(line));
+    expect(lines.some((line) => line.includes('FileMaker Data API Tools v1.1.0 (unknown) on VS Code 1.96.0'))).toBe(true);
+
+    const treeCall = vi.mocked(vscode.window.createTreeView).mock.calls.findIndex(([id]) => id === 'filemakerExplorer');
+    const tree = vi.mocked(vscode.window.createTreeView).mock.results[treeCall]?.value as { description?: string };
+    expect(tree.description).toBe('v1.1.0');
+
+    const tooltips = vi.mocked(vscode.window.createStatusBarItem).mock.results.map((r) => String((r.value as { tooltip?: string }).tooltip));
+    expect(tooltips.some((tooltip) => tooltip.includes('FileMaker Data API Tools v1.1.0'))).toBe(true);
+  });
+
   it('only asks the AI server controller to autostart (it starts nothing by itself), once', async () => {
     const { AiMcpController } = await import('../../src/ai/mcp/aiMcpController');
     const autostart = vi.spyOn(AiMcpController.prototype, 'autostart').mockResolvedValue(undefined);

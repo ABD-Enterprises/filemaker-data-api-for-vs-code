@@ -427,3 +427,15 @@ button:disabled {
   font-size: 11px;
   padding: 8px;
 }
+
+/* Version footer from the extension host (FileMaker: About / Show Version). Lives here because the
+   packaged Layout Mode stylesheet is this bundle, not the extension's fallback copy. */
+.fm-version {
+  position: fixed;
+  right: 8px;
+  bottom: 4px;
+  font-size: 11px;
+  color: var(--ink);
+  opacity: 0.7;
+  pointer-events: none;
+}

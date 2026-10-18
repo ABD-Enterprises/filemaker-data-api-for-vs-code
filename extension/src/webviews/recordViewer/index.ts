@@ -6,6 +6,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface RecordViewerOpenOptions {
   profileId?: string;
@@ -334,6 +335,7 @@ export class RecordViewerPanel {
     </section>
   </div>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

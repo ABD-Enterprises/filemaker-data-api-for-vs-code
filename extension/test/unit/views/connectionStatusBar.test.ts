@@ -127,3 +127,21 @@ describe('computeConnectionStatus version', () => {
     expect(computeConnectionStatus(undefined).tooltip).not.toContain('FileMaker Data API Tools');
   });
 });
+
+describe('ConnectionStatusBar version wiring', () => {
+  it('puts the version in the tooltip without a profile and with one, keeping the click command', async () => {
+    const none = new ConnectionStatusBar({ getActiveProfileId: () => undefined, getProfile: vi.fn() } as never, '3.2.1');
+    const noneItem = vi.mocked(vscode.window.createStatusBarItem).mock.results.at(-1)?.value as vscode.StatusBarItem;
+    expect(noneItem.tooltip).toBe('No active FileMaker profile. Click for actions.\nFileMaker Data API Tools v3.2.1');
+    expect(noneItem.command).toBe('filemakerDataApiTools.openConnectionMenu');
+    none.dispose();
+
+    const getProfile = vi.fn().mockResolvedValue({ id: 'p1', name: 'Prod', database: 'Sales' });
+    const bar = new ConnectionStatusBar({ getActiveProfileId: () => 'p1', getProfile } as never, '3.2.1');
+    const item = vi.mocked(vscode.window.createStatusBarItem).mock.results.at(-1)?.value as vscode.StatusBarItem;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(item.text).toBe('$(plug) FileMaker: Prod');
+    expect(item.tooltip).toBe('Connected to Prod (Sales). Click for actions.\nFileMaker Data API Tools v3.2.1');
+    bar.dispose();
+  });
+});

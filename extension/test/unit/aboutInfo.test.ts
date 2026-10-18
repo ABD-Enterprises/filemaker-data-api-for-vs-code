@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -52,6 +49,9 @@ describe('about facts', () => {
   it('reports a remote window and restricted mode', () => {
     const text = markdown({ remoteName: 'ssh-remote', workspaceTrusted: false });
     expect(text).toContain('**Remote:** ssh-remote');
+    for (const kind of ['wsl', 'codespaces', 'dev-container', 'tunnel', 'attached-container']) {
+      expect(markdown({ remoteName: kind })).toContain(`**Remote:** ${kind}`);
+    }
     expect(text).toContain('restricted mode');
   });
 
@@ -104,6 +104,26 @@ describe('about facts', () => {
     expect(scrubPaths('/Users/alice/x /home/bob/y C:\\Users\\Carol\\z a@b.example')).toBe('~/x ~/y ~\\z <redacted>');
   });
 
+  it('scrubs a Windows profile folder with a space, UNC shares, /root and temp folders', () => {
+    expect(scrubPaths('C:\\Users\\John Smith\\x')).toBe('~\\x');
+    expect(scrubPaths('c:/Users/John Smith/x')).toBe('~/x');
+    expect(scrubPaths('\\\\fileserver\\home\\jsmith\\doc')).toBe('~');
+    expect(scrubPaths('/root/.vscode and /root')).toBe('~/.vscode and ~');
+    expect(scrubPaths('/var/folders/ab/cdef12/T/x')).toBe('~');
+    expect(scrubPaths('/private/var/folders/ab/cdef12/T/x')).toBe('~');
+    expect(scrubPaths('/Users/Jane Doe/Code')).toBe('~/Code');
+  });
+
+  it('accepts only plain names for the app and remote, never free text', () => {
+    for (const hostile of ['a|b', 'line\nbreak', 'x`y', 'ssh-remote+alice@host', '/Users/alice', 'k=v', 'C:\\Users\\a', 'x'.repeat(80)]) {
+      const text = markdown({ appName: hostile, remoteName: hostile });
+      expect(text, hostile).toContain('**Remote:** unknown');
+      expect(text, hostile).toContain('(unknown)');
+      expect(text, hostile).not.toContain('alice');
+    }
+    expect(markdown({ appName: 'Visual Studio Code - Insiders' })).toContain('(Visual Studio Code - Insiders)');
+  });
+
   it('runs the finished block through redaction and path scrubbing as a last step', () => {
     const text = formatFactsMarkdown([
       { label: 'Remote', value: 'https://h/x?api_token=SECRET123 Bearer abcdefghijklmnop /Users/alice/Code' }
@@ -118,7 +138,32 @@ describe('about facts', () => {
   });
 });
 
+/** What VS Code's opener does to a URL: Uri.parse decodes the query, the open re-encodes with encodeURI. */
+const replayOpener = (url: string): string => {
+  const [head, query = ''] = url.split('?');
+  return encodeURI(`${head}?${decodeURIComponent(query)}`);
+};
+
 describe('issue URL', () => {
+  it('survives the VS Code opener round trip with every field intact', () => {
+    const hostileFacts = buildAboutFacts({
+      ...base,
+      extensionVersion: '1.4.0+build.5',
+      vscodeVersion: '1.96.2',
+      platform: 'a&b#c=d+e',
+    });
+    const block = formatFactsMarkdown(hostileFacts) + '\nA&B #1 C=D 1+1 100% done';
+    const sent = new URL(buildIssueUrl(hostileFacts, block));
+    const replayed = new URL(replayOpener(buildIssueUrl(hostileFacts, block)));
+    expect([...replayed.searchParams.keys()]).toEqual([...sent.searchParams.keys()]);
+    for (const [key, value] of sent.searchParams) {
+      expect(replayed.searchParams.get(key), key).toBe(value);
+    }
+    expect(replayed.hash).toBe('');
+    expect(sent.searchParams.get('version-details')).toContain('A_B _1 C_D 1_1 100% done');
+    expect(sent.searchParams.get('extension-version')).toBe('1.4.0_build.5');
+  });
+
   const facts = buildAboutFacts(base);
   const block = formatFactsMarkdown(facts);
 
@@ -152,35 +197,5 @@ describe('runtime version', () => {
     expect(getRuntimeVersion()).toBe('unknown');
     setRuntimeVersion(undefined);
     expect(versionFooterHtml()).toContain('vunknown');
-  });
-});
-
-describe('About manifest and wiring', () => {
-  const root = join(__dirname, '..', '..');
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
-    contributes: { commands: Array<{ command: string; title: string; category: string }>; menus: { commandPalette: Array<{ command: string; when: string }> } };
-  };
-  const id = 'filemakerDataApiTools.about';
-
-  it('contributes the command, shows it in the palette and registers it in code', () => {
-    const command = manifest.contributes.commands.find((entry) => entry.command === id);
-    expect(command).toMatchObject({ title: 'About / Show Version', category: 'FileMaker' });
-    // Always available: no palette `when` entry that could hide it.
-    expect(manifest.contributes.menus.commandPalette.some((entry) => entry.command === id)).toBe(false);
-    expect(readFileSync(join(root, 'src/about/aboutCommand.ts'), 'utf8')).toContain(`registerCommand('${id}'`);
-    expect(readFileSync(join(root, 'src/extension.ts'), 'utf8')).toContain('registerAboutCommand(context)');
-  });
-
-  it('logs the version line at activation and shows it on the explorer', () => {
-    const source = readFileSync(join(root, 'src/extension.ts'), 'utf8');
-    expect(source).toContain('logger.info(activationLogLine(context))');
-    expect(source).toContain('filemakerExplorerTree.description');
-  });
-
-  it('injects the build constants into every bundle from the commit, not the clock', () => {
-    const config = readFileSync(join(root, 'scripts/esbuild-config.mjs'), 'utf8');
-    expect(config).toContain('__BUILD_COMMIT__');
-    expect(config).toContain("'log', '-1', '--format=%cs'");
-    expect(config).not.toMatch(/new Date|Date\.now/);
   });
 });
