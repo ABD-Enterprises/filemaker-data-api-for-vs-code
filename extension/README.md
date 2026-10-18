@@ -118,6 +118,16 @@ What protects you, and what does not:
 - **Keep policy in user settings.** A workspace file can be edited by an agent that has file-editing tools. Put `filemaker.ai.hiddenFields` and enterprise settings such as `filemaker.features.ai.enabled` in your **user** settings (or in an enterprise-managed location), not only in `.vscode/settings.json` or `.vscode/filemaker.config.json`. The `filemaker.ai.*` settings that widen access already ignore workspace values.
 - **Tool names.** The tools are called `fm_list_layouts`, `fm_find_records` and so on. VS Code tool names share one namespace across extensions, so another extension that registers the same name would conflict; the prefix `fm_` makes that unlikely, and it was not changed because the names are part of ADR-0004.
 
+### Claude Code, Cursor and other MCP clients
+
+The same tools, with the same limits, approvals and dialogs, are available to MCP clients that run outside VS Code. This is off by default and works in local windows only (not Dev Containers, Codespaces, SSH or WSL windows).
+
+1. Turn on `filemaker.ai.enabled` and set up a connection as above, then run **FileMaker: Start/Stop AI Server for External Tools**. If `filemaker.ai.externalServer.enabled` is off, the command asks you before turning it on in your user settings. The status bar then shows "MCP".
+2. Run **FileMaker: Copy MCP Config for Claude Code / Cursor** and paste the result into Claude Code's `.mcp.json` (or run `claude mcp add-json filemaker '<the filemaker entry>'`) or into Cursor's `mcp.json`.
+3. The client starts a small program (`node .../dist/aiMcpShim.js`) that connects to this window. **Node.js 18 or newer must be on the PATH of the client**; without it the config cannot run.
+
+Notes: with several VS Code windows running the server, the config names the folder (`--workspace`), and the shim refuses to guess if it matches none or several. Only programs running as you can connect, and each needs the secret token that is kept in a file only you can read; a stale file from a closed window is never used. The name an MCP client gives itself is shown only in **Show AI Activity**, never in a dialog. **Everything the tools return is sent to the AI model provider behind your MCP client**, which is often a different provider from the one VS Code uses; the layout approvals and write dialogs still appear in VS Code.
+
 See `docs/DATA_HANDLING.md` and ADR-0004 for the full list.
 
 ## Common Commands

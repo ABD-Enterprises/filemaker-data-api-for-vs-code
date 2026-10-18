@@ -516,6 +516,16 @@
         "command": "filemakerDataApiTools.newAiSession",
         "title": "Start New AI Session",
         "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.toggleAiServer",
+        "title": "Start/Stop AI Server for External Tools",
+        "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.copyAiMcpConfig",
+        "title": "Copy MCP Config for Claude Code / Cursor",
+        "category": "FileMaker"
       }
     ],
     "menus": {
@@ -960,6 +970,14 @@
         {
           "command": "filemakerDataApiTools.newAiSession",
           "when": "filemaker.ai.active"
+        },
+        {
+          "command": "filemakerDataApiTools.toggleAiServer",
+          "when": "filemaker.hasProfiles"
+        },
+        {
+          "command": "filemakerDataApiTools.copyAiMcpConfig",
+          "when": "filemaker.hasProfiles"
         }
       ]
     },
@@ -1439,6 +1457,13 @@
             "default": true,
             "markdownDescription": "A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs `filemaker.ai.enabled` in your user settings.",
             "order": 9
+          },
+          "filemaker.ai.externalServer.enabled": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "Let MCP clients such as Claude Code and Cursor use the AI tools through a local server in this window. Off by default. Start it with **FileMaker: Start/Stop AI Server for External Tools**. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "order": 10
           }
         }
       }
@@ -1850,7 +1875,7 @@
     "bundle:schema-diff-worker": "esbuild src/services/schemaDiffWorker.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=inline --outfile=dist/schemaDiffWorker.js",
     "build:designer-ui": "node ./scripts/build-designer-ui-if-available.mjs",
     "copy:webviews": "shx mkdir -p dist/webviews/queryBuilder/ui dist/webviews/recordViewer/ui dist/webviews/scriptRunner/ui dist/webviews/schemaDiff/ui dist/webviews/recordEditor/ui dist/webviews/connectionWizard/ui dist/webviews/layoutMode/ui && shx cp -r src/webviews/queryBuilder/ui/* dist/webviews/queryBuilder/ui && shx cp -r src/webviews/recordViewer/ui/* dist/webviews/recordViewer/ui && shx cp -r src/webviews/scriptRunner/ui/* dist/webviews/scriptRunner/ui && shx cp -r src/webviews/schemaDiff/ui/* dist/webviews/schemaDiff/ui && shx cp -r src/webviews/recordEditor/ui/* dist/webviews/recordEditor/ui && shx cp -r src/webviews/connectionWizard/ui/* dist/webviews/connectionWizard/ui && shx cp -r src/webviews/layoutMode/ui/* dist/webviews/layoutMode/ui && sh -c 'if [ -d ../designer-ui/dist ]; then shx cp -r ../designer-ui/dist/* dist/webviews/layoutMode/ui; fi'",
-    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run copy:webviews",
+    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews",
     "watch": "tsc -w -p .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,js,json,md,css,html}\"",
@@ -1863,7 +1888,8 @@
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p tsconfig.vitest.json --noEmit",
     "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
-    "package:check": "npm run package:vsix"
+    "package:check": "npm run package:vsix",
+    "bundle:ai-mcp-shim": "esbuild src/ai/mcp/shim.ts --bundle --platform=node --format=cjs --target=node18 --outfile=dist/aiMcpShim.js"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -1871,6 +1897,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "^26.0.0",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",

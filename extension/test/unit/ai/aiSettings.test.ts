@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { isAiFeatureSwitchOn, readAiSettings } from '../../../src/ai/aiSettings';
+import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from '../../../src/ai/aiSettings';
 
 function configuration(values: Record<string, Record<string, unknown>>) {
   return {
@@ -130,9 +130,27 @@ describe('manifest', () => {
     expect(properties['filemaker.ai.scriptAllowlist']?.default).toEqual({});
   });
 
+  it('declares the external (MCP) server setting as application-scoped and off by default', () => {
+    expect(properties['filemaker.ai.externalServer.enabled']?.scope).toBe('application');
+    expect(properties['filemaker.ai.externalServer.enabled']?.default).toBe(false);
+  });
+
   it('lets a workspace add hidden fields (not application-scoped) and switch AI off', () => {
     expect(properties['filemaker.ai.hiddenFields']?.scope).toBeUndefined();
     expect(properties['filemaker.features.ai.enabled']?.default).toBe(true);
     expect(manifest.capabilities.untrustedWorkspaces.restrictedConfigurations).toContain('filemaker.features.ai.enabled');
+  });
+});
+
+describe('isExternalServerEnabled', () => {
+  it('reads the user value only: workspace, folder and dev-container values cannot start the server', () => {
+    expect(isExternalServerEnabled(configuration({ 'ai.externalServer.enabled': { globalValue: true } }))).toBe(true);
+    expect(
+      isExternalServerEnabled(
+        configuration({ 'ai.externalServer.enabled': { workspaceValue: true, workspaceFolderValue: true, globalRemoteValue: true, globalLocalValue: true, defaultValue: false } })
+      )
+    ).toBe(false);
+    expect(isExternalServerEnabled({ get: () => true } as never)).toBe(false);
+    expect(isExternalServerEnabled(configuration({ 'ai.externalServer.enabled': { globalValue: 'true' } }))).toBe(false);
   });
 });

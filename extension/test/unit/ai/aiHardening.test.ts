@@ -368,7 +368,7 @@ describe('connection comes only from the user setting', () => {
   it('no AI source file reads a project file or the active profile', async () => {
     const { readdirSync, readFileSync } = await import('fs');
     const folder = join(__dirname, '..', '..', '..', 'src', 'ai');
-    for (const file of readdirSync(folder)) {
+    for (const file of readdirSync(folder, { recursive: true }).map(String).filter((name) => name.endsWith('.ts'))) {
       const source = readFileSync(join(folder, file), 'utf8');
       expect(source, file).not.toMatch(/project\.json|activeProfileId|getActiveProfileId|FmWebProject/);
     }

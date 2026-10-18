@@ -116,6 +116,8 @@ export interface AiToolDeps {
 
 export interface AiCallContext {
   signal?: AbortSignal;
+  /** What the caller says it is (for example an MCP client name). Audit only; never shown as fact. */
+  client?: string;
 }
 
 export interface AiStatus {
@@ -223,11 +225,11 @@ export class AiToolService {
       validateInput(definition.inputSchema, input);
       context.signal?.throwIfAborted();
     } catch (error) {
-      await this.audit(definition, profile, {}, error instanceof AiToolError || error instanceof AiInputError ? 'refused' : 'error', null, errorNote(error));
+      await this.audit(definition, profile, { client: context.client }, error instanceof AiToolError || error instanceof AiInputError ? 'refused' : 'error', null, errorNote(error));
       throw toModelError(error, profile);
     }
 
-    const trace: Trace = { confirmed: null };
+    const trace: Trace = { confirmed: null, client: context.client };
     try {
       const result = await this.dispatch(definition, input as Obj, profile, context, trace);
       await this.audit(definition, profile, trace, trace.declined ? 'declined' : 'ok', trace.confirmed, trace.note);
@@ -970,12 +972,14 @@ export class AiToolService {
       recordIds: trace.recordIds,
       outcome,
       confirmed,
-      note: text
+      note: text,
+      client: trace.client
     });
   }
 }
 
 interface Trace {
+  client?: string;
   layout?: string;
   script?: string;
   recordIds?: string[];

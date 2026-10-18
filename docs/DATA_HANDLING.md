@@ -91,3 +91,16 @@ With `filemaker.ai.enabled` on (user settings only), language-model tools in VS 
 - **Write dialogs show everything that is sent:** at most 10 fields, each new value up to 200 characters, all in full. A long old value is cut with a count. The whole dialog text is also limited to 4,000 characters (escaped characters take extra room), because a native dialog can clip a longer one. A write that cannot be shown this way is refused. The extension escapes control, bidirectional and markdown-significant characters in dialog text; the VS Code API documents `detail` only as "human-readable detail message" and does not say whether a modal renders markdown, so a bare web address in a value may still be linkified.
 - The activity log is stored in the extension's storage folder, not the workspace, capped at 256 KB (reads and refusals are dropped before write entries). It records the tool, connection, layout, record ids, outcome and whether you confirmed. It does not record field values. Refused calls are logged at a limited rate.
 - Secrets: tools never put the server address, user name or credentials in results; secrets in values and error text are redacted. Redaction can rewrite text in a field that looks like a secret, so writes refuse values containing the redaction marker.
+
+## AI Server for External Tools (MCP)
+
+When you run **FileMaker: Start/Stop AI Server for External Tools** (and have `filemaker.ai.externalServer.enabled` on in your user settings), a local server in the VS Code window lets MCP clients such as Claude Code and Cursor call the AI tools described above.
+
+- **Same rules, one implementation.** The server only passes `tools/list` and `tools/call` to the tool core; consent, caps, dialogs, hidden fields and the kill switch apply exactly as for VS Code's own agent mode. `tools/list` shows what the core offers at that moment.
+- **Who can connect.** A Unix socket in a folder only you can use (mode 0700, socket 0600), or on Windows an unguessable named pipe. Windows gives a Node-created pipe no promise of a user-only access list, so every connection must also send a per-session 256-bit token in a first message; the token is kept in a discovery file (mode 0600) in the extension's storage folder and checked in constant time. The discovery file also names the VS Code process and its start time; the shim connects only if that process is alive and is the same run, so a stale file cannot send the token to another program. A program running as you can still read that file, as it can read anything else of yours.
+- **Limits.** 1 MiB per message, 8 connections, 120 requests a minute per connection, 8 calls in flight per connection, idle connections closed after 15 minutes, and a 5 second limit to authenticate.
+- **What the client name means.** The name an MCP client sends is its own claim and is only written to the activity log.
+- **Data leaves for a different provider.** The model provider behind the MCP client is chosen in that client, not in VS Code. What a tool returns goes there.
+- **Not supported:** remote windows (Dev Containers, Codespaces, SSH, WSL). The server will not start there.
+- **Needs Node.js 18 or newer** on the PATH of the MCP client for the shim.
+

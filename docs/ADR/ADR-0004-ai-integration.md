@@ -1,6 +1,6 @@
 # ADR-0004: AI integration (schema context, language-model tools, MCP)
 
-- Status: Accepted. Phase 1 shipped in #378; Phase 2 (tool core and language-model tools) is implemented, see "Phase 2 implementation notes". Phase 3 (MCP) is not started.
+- Status: Accepted. Phase 1 shipped in #378; Phase 2 (tool core and language-model tools) is implemented, see "Phase 2 implementation notes". Phase 3 (MCP) is implemented, see "Phase 3 implementation notes".
 - Date: 2026-10-18
 
 ## Context
@@ -108,3 +108,15 @@ Claude Code, Cursor and others need MCP. Secrets are in SecretStorage, which onl
 
 - Editor API floor. `vscode.lm.registerTool` and the MCP server-definition API arrived in different releases and the extension's engine is `^1.96.0`. Check the current docs before committing to a floor; keep Phase 1 and the shim route working without raising it. This decides whether the shim exists at all and must be settled before the Phase 3 design is reviewed. It does not block Phase 1.
 - Whether the audit log should be exportable for enterprise review (not a blocker).
+
+### Phase 3 implementation notes
+
+- **Shape.** `extension/src/ai/mcp/aiMcpServer.ts` is a hand-written MCP server (initialize, ping, tools/list, tools/call, cancellation, `notifications/tools/list_changed`) over newline-delimited JSON-RPC. It runs in the extension host and only calls `AiToolService.listTools()` and `invoke(name, input, { signal, client })`. The stdio shim (`dist/aiMcpShim.js`, a separate esbuild entry, about 9 KB, Node built-ins only) copies bytes between the client's stdin/stdout and the socket after authenticating. The MCP SDK is a pinned dev dependency (`@modelcontextprotocol/sdk` 1.32.1, MIT) used only as the client in the end-to-end tests, which is also the conformance check; nothing from it ships. Deviation from the ADR sketch: the shim does not speak MCP itself.
+- **Transport and auth.** Unix socket in a 0700 folder (owner and mode verified, not a link) with a socket chmod 0600 and a path under 100 bytes; Windows named pipe with a random name. Every connection must send `{"hello":{"protocol":1,"token":...}}` first; a wrong or missing hello is closed without a reply. The discovery file (global storage, mode 0600, per window) holds the socket path, pid, process start time and token. The shim refuses unsafe files and verifies pid and start time. Start time comes from `/proc` (Linux), `ps -o lstart=` (macOS and other Unix, one-second resolution) or PowerShell (Windows); if the start time cannot be read the server does not start.
+- **Windows.** The named-pipe access list is not verified (Node documents none); the token and the random name are the controls. The Windows path is covered by unit tests of the endpoint and discovery logic, not by an end-to-end run on Windows.
+- **Limits.** 1 MiB message, 8 connections, 120 requests a minute per connection, 8 in flight, 15 minute idle timeout, 5 second hello timeout. These sit on top of the core's own caps.
+- **Caller identity.** `clientInfo` from `initialize` is stored as the claimed client name and written to the audit log (`client`); it never appears in a dialog.
+- **Policy.** Because the core decides, `tools/call` for a tool that is not offered returns an `isError` result with the core's message; a name that is not a tool at all is a JSON-RPC error. `tools/list` is empty when the kill switch, trust, offline mode or the settings say so, and `list_changed` is sent when the offered set changes.
+- **Switches.** `filemaker.ai.externalServer.enabled` (application scope, user value only, off by default) permits the server; the command **Start/Stop AI Server for External Tools** starts and stops it and asks in a modal before turning the setting on. Remote windows are refused. The status bar adds "MCP" while it runs.
+- **Not done.** The MCP server-definition provider API is not used (the language-model tools already serve VS Code's own agent mode and both would duplicate tools). Streamable HTTP is not offered.
+

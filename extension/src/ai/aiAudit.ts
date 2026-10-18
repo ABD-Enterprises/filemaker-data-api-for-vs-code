@@ -18,6 +18,8 @@ export interface AuditEntry {
   confirmed: boolean | null;
   /** Short note; model-supplied text is escaped and cut. */
   note?: string;
+  /** The caller's own, unverified name for itself (for example from an MCP initialize). Logged, never trusted. */
+  client?: string;
 }
 
 /**
@@ -32,6 +34,7 @@ export function formatAuditLine(entry: AuditEntry, at: Date): string {
     at: at.toISOString(),
     tool: entry.tool,
     connection: safe(entry.connection, 80),
+    client: safe(entry.client, 64),
     layout: safe(entry.layout, 80),
     recordIds: entry.recordIds?.slice(0, 50).map((id) => displayText(id, 20)),
     outcome: entry.outcome,
