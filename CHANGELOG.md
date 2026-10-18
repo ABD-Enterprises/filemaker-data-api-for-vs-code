@@ -40,6 +40,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Add a mock FileMaker Data API (`npm run mock:server`) and an end-to-end client check against it (`npm run mock:check`); neither is shipped in the VSIX.
 - Release 1.3.0 under the SureForgeTech Marketplace publisher; the repository moved to the SureForgeTech GitHub org and in-repo links now point there.
 - Workflows install with `npm ci`; coverage thresholds gate CI; the orphaned `scripts/validate.sh` is removed; the root `package.json` declares Node >=22; `.vscodeignore` keeps local coverage reports out of the VSIX (#317, #318, #309, #301).
 - A test activates the extension and fails when a contributed command is not registered (#366).

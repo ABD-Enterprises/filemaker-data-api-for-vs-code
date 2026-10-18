@@ -13,3 +13,4 @@ build
 coverage
 .worktrees/
 docs/api/
+.mock-check
