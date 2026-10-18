@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FIX] A script that ran but returned a script error (for example error 3) no longer shows 'Script execution completed'. Script Runner shows 'Script ran, but it reported an error' with the error code and its meaning, in the error colour; Layout Mode reports the same as a failed script action; a timed-out script now says it may still be running on the server. Script errors 1, 3, 4 and 5 have plain-words meanings.
 - [FIX] Commands appear without a window reload. After the connection wizard saves your first profile, **Connect** and **Edit Connection** are available at once, and after **Initialize FM Web Project** the FM Web commands appear (the Command Palette conditions are re-read whenever profiles change or the project file is created, changed or deleted, including outside the extension).
 - [SECURITY] Write AI Context now honours `filemaker.ai.hiddenFields`. The generated context file used to list fields you had hidden from AI tools (for example SSN, Password, Token). They are now left out using the same name matching and the same user-scope reading as the AI tools, and the file and the confirmation say how many were left out (never which).
 - [INTERNAL] Docs: remove the known-issue notes that #390 fixed (certificate messages and trust dialog, pinned-proxy message, FileMaker Cloud wording, 956 text), say that the FM Web preview commands are hidden when the template is not installed, and describe the managed preview-file refresh and the new script-error warnings for find and upload.

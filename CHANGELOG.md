@@ -38,6 +38,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
 - Command Palette context keys refresh when profiles change and after Initialize FM Web.
 - Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.
 - Script errors on container upload and find are shown; Effective Settings notes and workspace-file watching; TLS agents are closed when replaced.
