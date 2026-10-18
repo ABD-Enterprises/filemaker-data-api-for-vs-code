@@ -4,6 +4,7 @@ import { FMClientError } from '../services/errors';
 import type { NormalizeErrorOptions, NormalizedError, NormalizedErrorKind } from '../types/errors';
 import { getFileMakerErrorInfo } from './fileMakerCodes';
 import { describeNetworkFailure, extractNetworkCode, extractNetworkMessage, targetOfUrl } from './networkErrors';
+import { plainTextPreview } from './plainText';
 import { redactHeaders, redactValue } from './redact';
 
 interface FileMakerMessage {
@@ -273,12 +274,7 @@ const MAX_DETAIL_TEXT = 300;
  */
 function safeDetails(payload: unknown): unknown {
   if (typeof payload === 'string') {
-    const plain = payload
-      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return redactValue(plain.length > MAX_DETAIL_TEXT ? `${plain.slice(0, MAX_DETAIL_TEXT)}…` : plain);
+    return redactValue(plainTextPreview(payload, MAX_DETAIL_TEXT));
   }
   return redactValue(payload);
 }

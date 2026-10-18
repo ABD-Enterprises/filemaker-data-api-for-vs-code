@@ -109,4 +109,29 @@ describe('session health shown by the status bar', () => {
     await expect(fm.findRecords(profile, 'Nope', { query: [{ a: 1 }] })).rejects.toThrow(/\[105\]/);
     expect(fm.getHealth('p1')?.state).toBe('connected');
   });
+
+  it.each([502, 503, 504, 500])('a gateway answer (HTTP %i, no FileMaker code) shows "unreachable", not "connected"', async (status) => {
+    const url = await plain((path, method) =>
+      path.endsWith('/sessions') && method === 'POST' ? { status: 200, body: body({ token: 't' }) } : { status, body: '<html>gateway</html>' }
+    );
+    const { fm, profile } = await client(url);
+    await fm.createSession(profile);
+    expect(fm.getHealth('p1')?.state).toBe('connected');
+    await expect(fm.findRecords(profile, 'L', { query: [{ a: 1 }] })).rejects.toThrow();
+    expect(fm.getHealth('p1')?.state).toBe('unreachable');
+  });
+
+  it('a cancelled request leaves the last known state alone', async () => {
+    const url = await plain((path, method) =>
+      path.endsWith('/sessions') && method === 'POST' ? { status: 200, body: body({ token: 't' }) } : { status: 200, body: body({ layouts: [] }) }
+    );
+    const { fm, profile } = await client(url);
+    await fm.createSession(profile);
+    const before = fm.getHealth('p1');
+    const controller = new AbortController();
+    controller.abort();
+    await expect(fm.listLayouts(profile, { signal: controller.signal })).rejects.toThrow();
+    expect(fm.getHealth('p1')).toEqual(before);
+    expect(fm.getHealth('p1')?.state).toBe('connected');
+  });
 });

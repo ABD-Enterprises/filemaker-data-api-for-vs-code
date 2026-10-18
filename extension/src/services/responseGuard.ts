@@ -1,6 +1,7 @@
 import type { DataApiEnvelope } from '../types/dataApi';
 import type { ScriptErrorReport } from '../types/fm';
 import { getFileMakerErrorInfo } from '../utils/fileMakerCodes';
+import { plainTextPreview } from '../utils/plainText';
 import { redactValue } from '../utils/redact';
 import { FMClientError } from './errors';
 
@@ -29,12 +30,7 @@ function contentTypeOf(headers: unknown): string | undefined {
 /** Plain text of the start of a body, for the error details: tags removed, cut short. */
 function preview(data: unknown): string {
   const text = typeof data === 'string' ? data : (JSON.stringify(data) ?? '');
-  const plain = text
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return plain.length > MAX_PREVIEW ? `${plain.slice(0, MAX_PREVIEW)}…` : plain;
+  return plainTextPreview(text, MAX_PREVIEW);
 }
 
 function notDataApi(raw: RawResponse, what: string): FMClientError {

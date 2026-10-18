@@ -1134,22 +1134,38 @@ export class FMClient {
     }
   }
 
-  /** What a failed request says about the connection; FileMaker business errors say it is fine. */
-  private healthAfterFailure(error: unknown): SessionHealth {
+  /**
+   * What a failed request says about the connection, or undefined when it says nothing and the last
+   * known state should stand. Only a FileMaker answer (an error code) proves the connection works;
+   * a gateway error or a cancelled request proves nothing.
+   */
+  private healthAfterFailure(error: unknown): SessionHealth | undefined {
     const at = this.now();
-    if (error instanceof FMClientError) {
-      if (error.kind === 'certificate') {
-        return { state: 'certificate', message: error.message, at };
-      }
-      if (error.fmCategory === 'credentials' || error.kind === 'auth' && error.fmCategory !== 'privilege') {
-        return { state: 'auth-failed', message: error.message, at };
-      }
-      if (error.networkCode || error.kind === 'network' || error.kind === 'timeout') {
+    if (!(error instanceof FMClientError)) {
+      return undefined;
+    }
+    if (error.kind === 'cancellation') {
+      return undefined;
+    }
+    if (error.kind === 'certificate') {
+      return { state: 'certificate', message: error.message, at };
+    }
+    if (error.fmCategory === 'credentials' || (error.kind === 'auth' && error.fmCategory !== 'privilege')) {
+      return { state: 'auth-failed', message: error.message, at };
+    }
+    if (error.networkCode || error.kind === 'network' || error.kind === 'timeout') {
+      return { state: 'unreachable', message: error.message, at };
+    }
+    if (error.code === 'NOT_DATA_API_RESPONSE') {
+      return { state: 'unreachable', message: error.message, at };
+    }
+    if (error.code === undefined) {
+      // No FileMaker answer: a gateway or proxy error (502, 503, 504 ...) or a bare 404 means the
+      // Data API did not answer. Other statuses without a code say nothing certain.
+      if (typeof error.status === 'number' && (error.status >= 500 || error.status === 404)) {
         return { state: 'unreachable', message: error.message, at };
       }
-      if (error.code === 'NOT_DATA_API_RESPONSE' || (error.status === 404 && error.code === undefined)) {
-        return { state: 'unreachable', message: error.message, at };
-      }
+      return undefined;
     }
     // An answer from FileMaker (a missing layout, a refused write) proves the connection works.
     return { state: 'connected', at };
@@ -1528,7 +1544,10 @@ export class FMClient {
       return result;
     } catch (error) {
       if (context.operation !== 'deleteSession') {
-        this.setHealth(context.profileId, this.healthAfterFailure(error));
+        const health = this.healthAfterFailure(error);
+        if (health) {
+          this.setHealth(context.profileId, health);
+        }
       }
       this.logger.warn('FileMaker request failed.', {
         requestId: trace.requestId,

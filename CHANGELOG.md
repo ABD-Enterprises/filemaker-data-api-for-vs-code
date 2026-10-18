@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Linear-time tag stripping on a 4 KB cut of server bodies; health: gateway 5xx/404 => unreachable, cancelled => unchanged.
 - Batch stops only on account-wide errors (9/205/207/credentials); 200 fails the record only.
 - System roots = Node default (incl. NODE_EXTRA_CA_CERTS) + system store; warmed in the background, 10 min TTL.
 - Wizard shows a test failure once with the trust button; plain-words message for FileMaker Server's default certificate; pinning tested with that certificate shape.
