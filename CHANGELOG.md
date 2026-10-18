@@ -34,6 +34,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Connect retries only transient failures (decided once where the error is built); no retry of 500/802 or certificate errors.
 - Validate the Data API envelope in one place (HTML/empty/array/truncated/redirect), maxRedirects 0 with a clear redirect message, messages[0].code on 2xx, scriptError reported with writes, no-records by code (404 or 500), bare 404 no longer cached as unsupported.
 - Map Node/OpenSSL error codes to actionable messages via one shared mapping (normalizeError); Retry only where it helps; no Edit Profile for 403/privilege; shared FileMaker error-code table with advice; Retry-After; HTML details truncated.
 - Wizard: http+self-signed message, custom CA extends system roots, TLS agent keyed by file stamp, database/API path change resets aiAccess; kill-switch message names the true cause.
@@ -79,6 +80,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
 - Make `filemaker.secrets.fallback` application-scoped and `filemaker.typegen.outputDir` restricted in untrusted workspaces.
 - Query Builder copy-as-table neutralizes formula-looking cells like the CSV export (shared behaviour, parity-tested).

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import { FMClientError } from '../services/errors';
+
 import type { RoleGuard } from '../enterprise/roleGuard';
 import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
@@ -51,31 +53,15 @@ interface RegisterCoreCommandDeps {
   getConnectionWizardTestPolicy?: () => 'off' | 'warn' | 'block';
 }
 
-function isRetryableConnectError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const err = error as { code?: string; status?: number; message?: string };
-  if (typeof err.code === 'string') {
-    if (
-      err.code === 'ECONNRESET' ||
-      err.code === 'ECONNREFUSED' ||
-      err.code === 'ETIMEDOUT' ||
-      err.code === 'ENOTFOUND' ||
-      err.code === 'EAI_AGAIN' ||
-      err.code === 'EPIPE' ||
-      err.code === 'ENETUNREACH'
-    ) {
-      return true;
-    }
-  }
-  if (typeof err.status === 'number' && err.status >= 500 && err.status < 600) {
-    return true;
-  }
-  if (typeof err.message === 'string') {
-    if (/timeout|network|socket|reset|refused/i.test(err.message)) {
-      return true;
-    }
-  }
-  return false;
+/**
+ * Whether a failed Connect is worth trying again. The decision is made once, where the error is
+ * built (`normalizeError`): transport trouble, timeouts, a gateway answer, a locked record or a
+ * full session pool can clear; a certificate problem, rejected credentials, a missing privilege
+ * or any other FileMaker answer cannot. (The old check read FileMaker's code as if it were a Node
+ * code, never retried a refused connection, and retried HTTP 500 with FileMaker error 802.)
+ */
+export function isRetryableConnectError(error: unknown): boolean {
+  return error instanceof FMClientError && error.isRetryable === true;
 }
 
 export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disposable[] {
@@ -184,7 +170,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
           const { retryWithBackoff } = await import('../utils/backoff');
           await retryWithBackoff(
-            () => fmClient.createSession(profile),
+            () => fmClient.createSession(profile, { userInitiated: true }),
             policy,
             {
               shouldRetry: (err) => isRetryableConnectError(err),

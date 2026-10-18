@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
 
@@ -28,6 +28,7 @@ import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
 import { normalizeError } from '../utils/normalizeError';
 import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
+import { isCredentialRejection } from '../utils/fileMakerCodes';
 import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
@@ -67,6 +68,12 @@ interface RequestTrace {
 
 interface ClientRequestControl {
   signal?: AbortSignal;
+  /**
+   * The user asked for this sign-in (Connect, Test Connection). It goes ahead even when automatic
+   * sign-ins are paused after the server rejected the stored credentials, and its result ends or
+   * renews that pause.
+   */
+  userInitiated?: boolean;
   /** For list, get and find calls: refuse a response body larger than this many bytes. */
   maxResponseBytes?: number;
 }
@@ -76,6 +83,16 @@ export interface FMClientContainerUploadOptions {
   fieldRepetition?: number;
   modId?: string;
   maxBytes?: number;
+}
+
+/** Longest wait between automatic sign-in attempts after FileMaker reports no free sessions (956). */
+const MAX_SESSION_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
+const FIRST_SESSION_LIMIT_BACKOFF_MS = 30 * 1000;
+
+interface AuthPause {
+  code: string;
+  /** Hash of the account, password and server the rejection was for; a change ends the pause. */
+  stamp: string;
 }
 
 const DEFAULT_LAYOUT_TTL_MS = 60_000;
@@ -105,6 +122,12 @@ function scriptErrorsOf(response: unknown): { scriptErrors?: ReturnType<typeof e
   return scriptErrors.length > 0 ? { scriptErrors } : {};
 }
 
+function credentialStamp(profile: ConnectionProfile, username: string, password: string): string {
+  return createHash('sha256')
+    .update([profile.serverUrl, profile.database, username, password].join('\u0000'))
+    .digest('hex');
+}
+
 function isNoRecordsFound(error: unknown): boolean {
   // Matched on FileMaker's own code, whatever the HTTP status: Claris documents business errors as
   // HTTP 500 and says nothing about 404 for this case, and servers differ.
@@ -119,6 +142,15 @@ export class FMClient {
   private readonly layoutMetadataEtags = new Map<string, string>();
   private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
+  /**
+   * Profiles whose stored credentials FileMaker rejected (210, 211, 212, 213, 214). Automatic
+   * sign-ins stop for them: trying again with the same password cannot work and repeated failures
+   * can lock the account. The pause ends when the account, password or server changes, or when the
+   * user runs Connect / Test Connection.
+   */
+  private readonly authPauses = new Map<string, AuthPause>();
+  /** Profiles told "no free sessions" (956): automatic sign-ins wait, with growing delays. */
+  private readonly sessionLimitBackoff = new Map<string, { until: number; attempts: number }>();
   private readonly timeoutMs: number;
   private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>;
   private readonly getSessionMaxAgeMs: () => number;
@@ -205,6 +237,11 @@ export class FMClient {
           );
         }
 
+        const stamp = credentialStamp(profile, username, password);
+        if (control?.userInitiated !== true) {
+          this.assertAutomaticSignInAllowed(profile, stamp);
+        }
+
         const basic = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
 
         try {
@@ -232,16 +269,20 @@ export class FMClient {
           await this.secretStore.setSessionToken(profile.id, token);
           this.sessionTracker.markIssued(profile.id, this.now());
           this.invalidateProfileCache(profile.id);
+          this.authPauses.delete(profile.id);
+          this.sessionLimitBackoff.delete(profile.id);
 
           return token;
         } catch (error) {
-          throw toFMClientError(
+          const failure = toFMClientError(
             normalizeError(error, {
               fallbackMessage: 'Failed to create FileMaker session.',
               requestId: trace.requestId,
               endpoint: 'POST /sessions'
             })
           );
+          this.recordSignInFailure(profile, stamp, failure);
+          throw failure;
         }
       }
     );
@@ -948,6 +989,60 @@ export class FMClient {
       if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutMetadataEtags.delete(key);
       }
+    }
+  }
+
+  /** Ends a pause on automatic sign-ins now (the credentials were just edited). */
+  public clearAuthPause(profileId: string): void {
+    this.authPauses.delete(profileId);
+    this.sessionLimitBackoff.delete(profileId);
+  }
+
+  /** True while automatic sign-ins are paused for this profile because FileMaker rejected its credentials. */
+  public isSignInPaused(profileId: string): boolean {
+    return this.authPauses.has(profileId);
+  }
+
+  private assertAutomaticSignInAllowed(profile: ConnectionProfile, stamp: string): void {
+    const pause = this.authPauses.get(profile.id);
+    if (pause) {
+      if (pause.stamp !== stamp) {
+        this.authPauses.delete(profile.id);
+      } else {
+        throw new FMClientError(
+          `Sign-in is paused: FileMaker rejected the saved credentials (error ${pause.code}) and the extension will not try again on its own, so repeated attempts cannot lock the account. Edit the connection to fix the account or password, or run "FileMaker: Connect".`,
+          {
+            code: pause.code,
+            kind: 'auth',
+            fmCategory: 'credentials',
+            isRetryable: false,
+            details: { signInPaused: true }
+          }
+        );
+      }
+    }
+
+    const wait = this.sessionLimitBackoff.get(profile.id);
+    if (wait && wait.until > this.now()) {
+      const seconds = Math.ceil((wait.until - this.now()) / 1000);
+      throw new FMClientError(
+        `FileMaker has no free Data API sessions. Waiting ${seconds} s before signing in again (run "FileMaker: Connect" to try now), or ask the administrator to disconnect idle clients.`,
+        { code: '956', kind: 'server', fmCategory: 'transient', isRetryable: true, details: { retryAfterMs: wait.until - this.now() } }
+      );
+    }
+  }
+
+  private recordSignInFailure(profile: ConnectionProfile, stamp: string, failure: FMClientError): void {
+    if (isCredentialRejection(failure.code)) {
+      this.authPauses.set(profile.id, { code: failure.code as string, stamp });
+      this.logger.warn('FileMaker rejected the stored credentials; automatic sign-ins are paused for this profile.', {
+        profileId: profile.id,
+        code: failure.code
+      });
+    } else if (failure.code === '956') {
+      const attempts = (this.sessionLimitBackoff.get(profile.id)?.attempts ?? 0) + 1;
+      const delay = Math.min(FIRST_SESSION_LIMIT_BACKOFF_MS * 2 ** (attempts - 1), MAX_SESSION_LIMIT_BACKOFF_MS);
+      this.sessionLimitBackoff.set(profile.id, { until: this.now() + delay, attempts });
     }
   }
 
