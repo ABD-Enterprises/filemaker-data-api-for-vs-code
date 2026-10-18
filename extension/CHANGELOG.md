@@ -8,6 +8,7 @@
 - [FIX] Refreshing a generated FM Web runtime file now keeps the file permissions of the file it replaces, and a write that fails part way (for example a full disk) no longer leaves a hidden `.tmp` file in the generated folder.
 - [FIX] The AI server for external tools now writes a line to the Output panel when it rejects a socket folder (for example an `XDG_RUNTIME_DIR` that is open to other users) before falling back to the temp folder, and the error names each folder variable that was tried instead of only the last one (a too-long socket path now names the variable actually in use).
 - [INTERNAL] Dependabot now also watches `tools/publish` (the pinned Marketplace publish tool), which has its own lockfile and was not covered before.
+- [FIX] After an untrusted-certificate failure the extension looks at the server certificate once per server and failure for a minute (the result is remembered, including a look that got no answer), instead of paying up to 1.5 s on every failed request.
 
 ## 1.4.0
 
