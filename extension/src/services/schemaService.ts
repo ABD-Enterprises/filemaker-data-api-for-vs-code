@@ -1,6 +1,7 @@
 import type { ConnectionProfile, FileMakerFieldMetadata, SchemaMetadataResult } from '../types/fm';
 import type { FMClient } from './fmClient';
 import { FMClientError } from './errors';
+import { NOT_DATA_API_CODE } from './responseGuard';
 import type { Logger } from './logger';
 import type { OfflineModeService } from '../offline/offlineModeService';
 import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
@@ -257,7 +258,13 @@ function isUnsupportedMetadataError(error: unknown): boolean {
     return false;
   }
 
-  return error.status === 404 || error.status === 405 || error.status === 501;
+  // 405 and 501 say the method is not implemented. A 404 means "metadata unsupported" only when it
+  // carries a FileMaker error code; a bare 404 is a wrong address or a disabled Data API, which is
+  // an error to report (and not to cache as "not supported").
+  if (error.status === 405 || error.status === 501) {
+    return true;
+  }
+  return error.status === 404 && error.code !== undefined && error.code !== NOT_DATA_API_CODE;
 }
 
 export function normalizeSchemaCacheTtlMs(seconds: number): number {

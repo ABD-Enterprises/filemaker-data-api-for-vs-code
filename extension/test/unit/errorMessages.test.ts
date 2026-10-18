@@ -66,4 +66,20 @@ describe('error messages and retry decisions', () => {
       expect(normalized.isRetryable).toBe(false);
     }
   });
+
+  it('names where a redirect pointed (scheme and host only) and refuses an https-to-http downgrade', () => {
+    const redirect = (from: string, location: string) => {
+      const config = { headers: new AxiosHeaders(), url: from };
+      return new AxiosError('x', 'ERR_BAD_RESPONSE', config as never, {}, {
+        status: 301, statusText: '', headers: { location }, config: config as never, data: ''
+      } as never);
+    };
+    const downgrade = normalizeError(redirect('https://fm.example.com/a', 'http://fm.example.com/a?token=SECRET'), { fallbackMessage: 'x' }).message;
+    expect(downgrade).toMatch(/https to plain http/);
+    expect(downgrade).not.toContain('SECRET');
+    const elsewhere = normalizeError(redirect('https://fm.example.com/a', 'https://evil.example.net/p?x=1'), { fallbackMessage: 'x' }).message;
+    expect(elsewhere).toContain('https://evil.example.net');
+    expect(elsewhere).not.toContain('x=1');
+    expect(normalizeError(redirect('http://fm.example.com/a', 'https://fm.example.com/a'), { fallbackMessage: 'x' }).message).toMatch(/different address|same server/);
+  });
 });

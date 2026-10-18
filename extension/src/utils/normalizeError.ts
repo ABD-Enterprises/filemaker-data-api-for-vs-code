@@ -153,7 +153,7 @@ function buildFallbackAxiosMessage(
   options: NormalizeErrorOptions | undefined,
   status: number | undefined
 ): string {
-  const hint = status ? statusHint(status) : undefined;
+  const hint = status ? (redirectHint(error, status) ?? statusHint(status)) : undefined;
   if (options?.fallbackMessage) {
     if (!status && error.message && isTlsCertificateMessage(error.message)) {
       return `${options.fallbackMessage} (${error.message})`;
@@ -168,6 +168,36 @@ function buildFallbackAxiosMessage(
   }
 
   return error.message || 'Network request failed.';
+}
+
+/**
+ * The Data API does not redirect, and the client does not follow redirects (a redirect could send
+ * a login to another server). Say where the server pointed: the scheme and host only, which are
+ * safe to show; the path and query (which can hold tokens) are left out.
+ */
+function redirectHint(error: AxiosError, status: number): string | undefined {
+  if (![301, 302, 303, 307, 308].includes(status)) {
+    return undefined;
+  }
+  const headers = error.response?.headers as Record<string, unknown> | undefined;
+  const raw = headers?.location ?? headers?.Location;
+  const location = typeof raw === 'string' ? raw : undefined;
+  if (!location) {
+    return undefined;
+  }
+  try {
+    const from = new URL(error.config?.url ?? '');
+    const to = new URL(location, from);
+    if (from.protocol === 'https:' && to.protocol === 'http:') {
+      return `The server redirected from https to plain http (${to.protocol}//${to.host}); that downgrade is refused. Check the Server URL and the server's HTTPS settings.`;
+    }
+    if (to.origin !== from.origin) {
+      return `The server redirected to a different address (${to.origin}). Credentials are not sent there. If that is the right server, use it as the Server URL.`;
+    }
+    return `The server redirected to another path on the same server (${to.origin}). The Data API should not redirect: check the API base path, and for a sign-in page in front of the server.`;
+  } catch {
+    return undefined;
+  }
 }
 
 /** What a status without a FileMaker error body most likely means. */

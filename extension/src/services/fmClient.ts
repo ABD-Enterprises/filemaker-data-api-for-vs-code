@@ -33,6 +33,7 @@ import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { createHttpsAgentForProfile } from './tlsAgent';
+import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
   expiresAt: number;
@@ -97,9 +98,17 @@ export interface EditRecordOptions {
   modId?: string;
 }
 
-/** FileMaker reports "no records match the request" as HTTP 404 with error code 401. */
+/** FileMaker reports "no records match the request" as error code 401 (seen as HTTP 404 or 500). */
+/** `{ scriptErrors }` to spread into a result, or nothing when no script reported an error. */
+function scriptErrorsOf(response: unknown): { scriptErrors?: ReturnType<typeof extractScriptErrors> } {
+  const scriptErrors = extractScriptErrors(response);
+  return scriptErrors.length > 0 ? { scriptErrors } : {};
+}
+
 function isNoRecordsFound(error: unknown): boolean {
-  return error instanceof FMClientError && error.status === 404 && error.code === '401';
+  // Matched on FileMaker's own code, whatever the HTTP status: Claris documents business errors as
+  // HTTP 500 and says nothing about 404 for this case, and servers differ.
+  return error instanceof FMClientError && error.code === '401';
 }
 
 export class FMClient {
@@ -395,6 +404,14 @@ export class FMClient {
           trace
         );
 
+        const getScriptErrors = extractScriptErrors(envelope.response);
+        if (getScriptErrors.length > 0) {
+          this.logger.warn('A script reported an error while reading a record.', {
+            layout,
+            scriptErrors: getScriptErrors
+          });
+        }
+
         const record = envelope.response.data?.[0];
         if (!record) {
           throw new FMClientError('Record not found in FileMaker response payload.', {
@@ -466,7 +483,8 @@ export class FMClient {
 
         return {
           data: envelope.response.data ?? [],
-          dataInfo: envelope.response.dataInfo
+          dataInfo: envelope.response.dataInfo,
+          ...scriptErrorsOf(envelope.response)
         };
       }
     );
@@ -587,7 +605,8 @@ export class FMClient {
                 ? String(modIdValue)
                 : undefined,
           messages: envelope.messages,
-          response: envelope.response
+          response: envelope.response,
+          ...scriptErrorsOf(envelope.response)
         };
       }
     );
@@ -649,7 +668,8 @@ export class FMClient {
                 ? String(modIdValue)
                 : undefined,
           messages: envelope.messages,
-          response: envelope.response
+          response: envelope.response,
+          ...scriptErrorsOf(envelope.response)
         };
       }
     );
@@ -694,7 +714,8 @@ export class FMClient {
                 ? String(modIdValue)
                 : undefined,
           messages: envelope.messages,
-          response: envelope.response
+          response: envelope.response,
+          ...scriptErrorsOf(envelope.response)
         };
       }
     );
@@ -796,7 +817,8 @@ export class FMClient {
         return {
           recordId: normalizedRecordId,
           messages: envelope.messages,
-          response: envelope.response
+          response: envelope.response,
+          ...scriptErrorsOf(envelope.response)
         };
       }
     );
@@ -1035,11 +1057,14 @@ export class FMClient {
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
         ...(request.maxResponseBytes ? { maxContentLength: request.maxResponseBytes } : {}),
+        // The Data API never redirects. Following one could send a login to another server or drop
+        // the request body; a redirect is reported as an error that says where it pointed.
+        maxRedirects: 0,
         httpsAgent: createHttpsAgentForProfile(profile)
       };
 
-      const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
-      return response.data;
+      const response = await this.httpClient.request<unknown>(config);
+      return parseDataApiEnvelope<TResponse>(response);
     } catch (error) {
       const axiosError = error as AxiosError;
       if (axiosError.response?.status === 401 && retryOn401) {
@@ -1096,11 +1121,12 @@ export class FMClient {
         signal: request.signal,
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
+        maxRedirects: 0,
         httpsAgent: createHttpsAgentForProfile(profile),
         validateStatus: (status) => (status >= 200 && status < 300) || status === 304
       };
 
-      const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
+      const response = await this.httpClient.request<unknown>(config);
       const headers = normalizeHeaders(response.headers as Record<string, unknown>);
       if (response.status === 304) {
         return {
@@ -1112,7 +1138,7 @@ export class FMClient {
       return {
         status: response.status,
         headers,
-        envelope: response.data
+        envelope: parseDataApiEnvelope<TResponse>(response)
       };
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -1155,11 +1181,12 @@ export class FMClient {
       params: request.params,
       signal: request.signal,
       timeout: this.timeoutMs,
+      maxRedirects: 0,
       httpsAgent: createHttpsAgentForProfile(profile)
     };
 
-    const response = await this.httpClient.request<DataApiEnvelope<TResponse>>(config);
-    return response.data;
+    const response = await this.httpClient.request<unknown>(config);
+    return parseDataApiEnvelope<TResponse>(response);
   }
 
   private buildProfileCacheKey(profile: ConnectionProfile): string {
@@ -1379,8 +1406,17 @@ function sanitizeMultipartHeaderValue(value: string): string {
 
 function isLikelyScriptUnsupportedError(error: unknown): boolean {
   const status = getErrorStatus(error);
-
-  return status === 404 || status === 405 || status === 501;
+  if (status === 405 || status === 501) {
+    return true;
+  }
+  // A bare 404 is a wrong address or a disabled Data API, not "scripts unsupported": only a 404
+  // that carries a FileMaker error code counts.
+  return (
+    status === 404 &&
+    error instanceof FMClientError &&
+    error.code !== undefined &&
+    error.code !== NOT_DATA_API_CODE
+  );
 }
 
 function getErrorStatus(error: unknown): number | undefined {

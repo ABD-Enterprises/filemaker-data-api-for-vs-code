@@ -57,11 +57,21 @@ export interface FindRecordsRequest {
 export interface FindRecordsResult {
   data: FileMakerRecord[];
   dataInfo?: Record<string, unknown>;
+  /** Script errors reported next to the data (the find itself worked). */
+  scriptErrors?: ScriptErrorReport[];
+}
+
+/** A script (or pre-request / pre-sort script) that ran with a request and reported a non-zero error. */
+export interface ScriptErrorReport {
+  phase: 'script' | 'prerequest' | 'presort';
+  code: string;
 }
 
 export interface EditRecordResult {
   recordId: string;
   modId?: string;
+  /** Script errors reported next to a write that otherwise succeeded. */
+  scriptErrors?: ScriptErrorReport[];
   messages: FileMakerMessage[];
   response: Record<string, unknown>;
 }

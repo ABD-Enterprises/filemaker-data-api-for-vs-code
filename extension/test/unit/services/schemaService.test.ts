@@ -81,10 +81,22 @@ describe('SchemaService.getLayoutSchema', () => {
     expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
   });
 
-  it('caches unsupported-metadata error responses (404/405/501) as a sentinel', async () => {
-    const getLayoutMetadata = vi.fn().mockRejectedValue(
-      new FMClientError('not found', { status: 404 })
-    );
+  it('does not call a bare 404 "metadata not supported", and does not cache it', async () => {
+    // A bare 404 is a wrong address, wrong path or a disabled Data API: report it every time.
+    const getLayoutMetadata = vi.fn().mockRejectedValue(new FMClientError('Nothing answered', { status: 404 }));
+    const svc = new SchemaService({ getLayoutMetadata } as unknown as FMClient, createLogger());
+
+    await expect(svc.getLayoutSchema(profile(), 'Contacts')).rejects.toThrow(/Nothing answered/);
+    await expect(svc.getLayoutSchema(profile(), 'Contacts')).rejects.toThrow(/Nothing answered/);
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['404 that carries a FileMaker code', { status: 404, code: '1630' }],
+    ['405', { status: 405 }],
+    ['501', { status: 501 }]
+  ])('caches unsupported-metadata error responses (%s) as a sentinel', async (_label, options) => {
+    const getLayoutMetadata = vi.fn().mockRejectedValue(new FMClientError('not found', options));
     const fmClient = { getLayoutMetadata } as unknown as FMClient;
     const svc = new SchemaService(fmClient, createLogger());
 
