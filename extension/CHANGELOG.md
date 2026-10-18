@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FIX] The notice and setting text for the secret-storage fallback no longer call it encryption: `workspace-state` keeps an obfuscated copy keyed from the machine id, which hides secrets from casual viewing but is not protection against anyone with local access.
 - [SECURITY] `filemaker.secrets.fallback` is now an application-scope setting (read from your user settings only), so a repository's `.vscode/settings.json` can no longer switch your secret storage to the workspace-state fallback or turn secret persistence off, and `filemaker.typegen.outputDir` is a restricted setting in untrusted workspaces. If you set `secrets.fallback` in workspace settings, move it to user settings.
 - [FIX] Marketplace listing and manifest: the homepage and author links point to `https://abdenterprises.com` (the `?ref=vscode` form returned 404); virtual workspaces are declared unsupported (files are written to the workspace folder on disk); the untrusted-workspace description now says the AI tools are not registered there; settings with a fixed set of values (`connectionWizard.requireTestBeforeSave`, `secrets.fallback`, `savedQueries.scope`, `performance.mode`, `schema.snapshots.storage`, `enterprise.role`, both log levels) now explain each choice; the README says Claris and FileMaker are trademarks of Claris International Inc. and that the extension is independent.
 - [INTERNAL] Stop tracking `artifacts/build.log`, `run.log` and `test.log` (local output) and ignore `artifacts/*.log`.

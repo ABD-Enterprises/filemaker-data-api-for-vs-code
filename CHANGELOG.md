@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Describe the workspace-state secret fallback as obfuscation, not encryption, in the warning toast, setting text and code comments.
 - Fix 404 homepage/author URL; declare virtualWorkspaces unsupported; mention AI tools in the untrusted-workspace description; add enumDescriptions to seven enum settings; add the Claris trademark statement to the README.
 - Allow `..` inside snapshot/offline-cache index file names (layout `Q1..Q2`) while still rejecting traversal; traversal corpus added.
 - AI kill-switch status item does nothing (with guidance) when AI is not enabled, instead of silently setting the switch.

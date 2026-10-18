@@ -151,7 +151,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     onFallbackEngaged: (mode, reason) => {
       const text =
         mode === 'workspace-state'
-          ? `FileMaker: SecretStorage unavailable (${reason}); falling back to encrypted workspace state.`
+          ? `FileMaker: SecretStorage unavailable (${reason}); falling back to obfuscated workspace state (not protection against local access).`
           : `FileMaker: SecretStorage unavailable (${reason}); secret persistence is disabled.`;
       void vscode.window.showWarningMessage(text);
     }
