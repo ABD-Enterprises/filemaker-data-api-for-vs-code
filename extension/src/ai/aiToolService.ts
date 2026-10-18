@@ -17,6 +17,7 @@ import { AiInputError, validateInput } from './aiSchema';
 import type { AiSettings } from './aiSettings';
 import {
   AI_TOOL_DEFINITIONS,
+  MAX_DIALOG_DETAIL_CHARS,
   MAX_FIELDS_PER_WRITE,
   MAX_RECORDS_PER_CALL,
   MAX_SCRIPT_PARAMETER_CHARS,
@@ -25,11 +26,13 @@ import {
   type AiToolDefinition
 } from './aiToolDefinitions';
 import {
-  HIDDEN_MARKER,
+  CONTAINER_MARKER,
   HiddenFields,
+  PLACEHOLDER_MARKERS,
+  SERVER_MARKER,
+  URL_OMITTED_MARKER,
   baseFieldName,
   scrubGenericText,
-  REDACTION_MARKER,
   displayText,
   exactFieldNameOrUndefined,
   safeNameOrUndefined
@@ -140,6 +143,8 @@ export class AiToolService {
   private killed = false;
   /** Records read this session, including records reserved by calls still in flight. */
   private recordsUsed = 0;
+  /** Bumped by `resetSession`; a settlement or approval from an older generation is ignored. */
+  private generation = 0;
   private writesUsed = 0;
   private consentPrompts = 0;
   private readonly consentInFlight = new Map<string, Promise<boolean>>();
@@ -166,6 +171,7 @@ export class AiToolService {
   }
 
   public resetSession(): void {
+    this.generation += 1;
     this.recordsUsed = 0;
     this.writesUsed = 0;
     this.callTimes.length = 0;
@@ -342,31 +348,38 @@ export class AiToolService {
    * parallel calls cannot each see the same remaining quota. Returns how many were reserved.
    * Settle with `settleRecords`.
    */
-  private reserveRecords(wanted: number): number {
+  private reserveRecords(wanted: number): { reserved: number; generation: number } {
     const remaining = SESSION_RECORD_QUOTA - this.recordsUsed;
     if (remaining <= 0) {
       throw new AiToolError(`The record quota for this session (${SESSION_RECORD_QUOTA}) is used up.`);
     }
     const reserved = Math.min(wanted, remaining);
     this.recordsUsed += reserved;
-    return reserved;
+    return { reserved, generation: this.generation };
   }
 
-  /** Gives back the part of a reservation that was not used (all of it if the request failed). */
-  private settleRecords(reserved: number, returned: number): void {
-    this.recordsUsed -= Math.max(0, reserved - returned);
+  /**
+   * Gives back the part of a reservation that was not used (all of it if the request failed).
+   * A reservation made before a session reset belongs to the old session: its refund is
+   * ignored, so the new session's counter cannot go negative.
+   */
+  private settleRecords(reservation: { reserved: number; generation: number }, returned: number): void {
+    if (reservation.generation !== this.generation) {
+      return;
+    }
+    this.recordsUsed -= Math.max(0, reservation.reserved - returned);
   }
 
   /** Runs `request` with `wanted` records reserved; refunds what it did not return. */
   private async withRecords<T>(wanted: number, request: (limit: number) => Promise<{ value: T; returned: number }>): Promise<T> {
-    const reserved = this.reserveRecords(wanted);
+    const reservation = this.reserveRecords(wanted);
     let returned = 0;
     try {
-      const result = await request(reserved);
+      const result = await request(reservation.reserved);
       returned = result.returned;
       return result.value;
     } finally {
-      this.settleRecords(reserved, returned);
+      this.settleRecords(reservation, returned);
     }
   }
 
@@ -719,6 +732,7 @@ export class AiToolService {
   private async runScript(env: Env, input: Obj): Promise<unknown> {
     const layout = input.layout as string;
     const script = input.script as string;
+    env.trace.script = script;
     const allowlist = this.deps.settings().scriptAllowlist[env.profile.id] ?? [];
     if (!allowlist.includes(script)) {
       throw new AiToolError('That script is not on the user\'s allowlist for this connection (filemaker.ai.scriptAllowlist), so it cannot be run.');
@@ -781,8 +795,8 @@ export class AiToolService {
       if (Array.from(value).length > MAX_WRITE_VALUE_CHARS) {
         throw new AiToolError(`A value may have at most ${MAX_WRITE_VALUE_CHARS} characters: the approval dialog shows each value in full.`);
       }
-      if (value.includes(REDACTION_MARKER) || value.includes(HIDDEN_MARKER)) {
-        throw new AiToolError(`A value may not contain ${REDACTION_MARKER} or ${HIDDEN_MARKER}; those mark text the tools hid or redacted.`);
+      if (PLACEHOLDER_MARKERS.some((marker) => value.includes(marker))) {
+        throw new AiToolError(`A value may not contain ${PLACEHOLDER_MARKERS.join(', ')}; those mark text the tools hid, redacted or replaced.`);
       }
       if (value.includes('\0')) {
         throw new AiToolError('A value may not contain a NUL character.');
@@ -799,8 +813,15 @@ export class AiToolService {
   private async recheck(env: Env): Promise<void> {
     try {
       const profile = await this.gate(env.definition);
-      if (profile?.id !== env.profile.id) {
+      if (profile === undefined || profileFingerprint(profile) !== profileFingerprint(env.profile)) {
         throw new AiToolError('The connection for AI use changed.');
+      }
+      const settings = this.deps.settings();
+      if (env.trace.layout !== undefined && !this.layoutAllowed(settings, env.profile.id, env.trace.layout)) {
+        throw new AiToolError('The layout is no longer approved for AI reads.');
+      }
+      if (env.trace.script !== undefined && !(settings.scriptAllowlist[env.profile.id] ?? []).includes(env.trace.script)) {
+        throw new AiToolError('The script is no longer on the allowlist.');
       }
     } catch (error) {
       if (error instanceof AiToolError) {
@@ -808,6 +829,11 @@ export class AiToolService {
       }
       throw error;
     }
+  }
+
+  /** A layout may be read if the user listed it for this connection or approved it this session. */
+  private layoutAllowed(settings: AiSettings, profileId: string, layout: string): boolean {
+    return (settings.readableLayouts[profileId] ?? []).includes(layout) || this.consented.has(`${profileId}\u0000${layout}`);
   }
 
   // ---------------------------------------------------------------------------------------
@@ -840,7 +866,7 @@ export class AiToolService {
         throw new AiToolError('Too many layout approval requests this session. The user can run "FileMaker: Start New AI Session".');
       }
       this.consentPrompts += 1;
-      const prompt = this.deps.ui
+      const prompt: Promise<boolean> = this.deps.ui
         .confirm({
           title: 'Allow an AI tool to read this layout?',
           message: `An AI tool asks to read layout ${displayText(layout, 64)} in connection ${displayText(env.profile.name, 64)}.`,
@@ -851,15 +877,23 @@ export class AiToolService {
           ].join('\n'),
           confirmLabel: 'Allow for This Session'
         })
-        .finally(() => this.consentInFlight.delete(key));
+        .finally(() => {
+          if (this.consentInFlight.get(key) === prompt) {
+            this.consentInFlight.delete(key);
+          }
+        });
       this.consentInFlight.set(key, prompt);
       pending = prompt;
     }
 
+    const generation = this.generation;
     if (!(await pending)) {
       this.declined.add(key);
       env.trace.declined = true;
       throw new AiToolError('The user did not allow reading this layout.');
+    }
+    if (generation !== this.generation) {
+      throw new AiToolError('The AI session was reset while a dialog was open. Try again.');
     }
     const refusal = this.baseRefusal();
     if (refusal) {
@@ -943,6 +977,7 @@ export class AiToolService {
 
 interface Trace {
   layout?: string;
+  script?: string;
   recordIds?: string[];
   confirmed: boolean | null;
   declined?: boolean;
@@ -955,6 +990,19 @@ interface Env {
   hidden: HiddenFields;
   trace: Trace;
   definition: AiToolDefinition;
+}
+
+/** What identifies the target of a write: a profile edited during a dialog is not the one approved. */
+function profileFingerprint(profile: ConnectionProfile): string {
+  return JSON.stringify([
+    profile.id,
+    profile.serverUrl,
+    profile.database,
+    profile.authMode,
+    profile.username ?? null,
+    profile.proxyEndpoint ?? null,
+    profile.aiAccess ?? null
+  ]);
 }
 
 function prune(times: number[], now: number): void {
@@ -1001,7 +1049,7 @@ const SERVER_URL_PATTERN = /\/Streaming(?:_SSL)?\/|[?&]RCType=|\/fmi\/data\//i;
  */
 function valueForModel(value: string, profile: ConnectionProfile): string {
   if (SERVER_URL_PATTERN.test(value)) {
-    return '[container or server URL omitted]';
+    return URL_OMITTED_MARKER;
   }
   return cut(scrub(redactString(value), profile));
 }
@@ -1016,7 +1064,7 @@ function shapeValues(data: Record<string, unknown>, env: Pick<Env, 'hidden' | 'p
       continue;
     }
     if (containers.has(baseFieldName(key))) {
-      out[name] = '[container field omitted]';
+      out[name] = CONTAINER_MARKER;
     } else if (typeof value === 'string') {
       out[name] = valueForModel(value, env.profile);
     } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
@@ -1050,13 +1098,28 @@ function modelNote(description: string | undefined): string[] {
     : [];
 }
 
+/** A dialog whose text is longer than the budget could be clipped, hiding later fields or the model's note. */
+function assertDialogFits(detail: string): void {
+  if (detail.length > MAX_DIALOG_DETAIL_CHARS) {
+    throw new AiToolError(
+      `This write would make an approval dialog longer than ${MAX_DIALOG_DETAIL_CHARS} characters (escaped characters take extra room), so it was refused. Send fewer or shorter values.`
+    );
+  }
+}
+
+/** Returns the text if it fits the dialog budget, else refuses. */
+function fitted(detail: string): string {
+  assertDialogFits(detail);
+  return detail;
+}
+
 function assertShownInFull(count: number, values: string[]): void {
   if (count > MAX_FIELDS_PER_WRITE || values.some((value) => Array.from(value).length > MAX_WRITE_VALUE_CHARS)) {
     throw new AiToolError('This write is too large for the approval dialog to show in full, so it was refused.');
   }
 }
 
-const OLD_VALUE_SHOWN = 200;
+const OLD_VALUE_SHOWN = 100;
 
 export function buildEditConfirmation(args: {
   profile: ConnectionProfile;
@@ -1081,7 +1144,7 @@ export function buildEditConfirmation(args: {
   return {
     title: 'An AI tool wants to change a record',
     message: 'An AI tool wants to change a FileMaker record. Approve only if you expected this change.',
-    detail: [...lines, ...modelNote(args.description)].join('\n'),
+    detail: fitted([...lines, ...modelNote(args.description)].join('\n')),
     confirmLabel: 'Change Record'
   };
 }
@@ -1102,7 +1165,7 @@ export function buildCreateConfirmation(args: {
   return {
     title: 'An AI tool wants to create a record',
     message: 'An AI tool wants to create a FileMaker record. Approve only if you expected this.',
-    detail: [...lines, ...modelNote(args.description)].join('\n'),
+    detail: fitted([...lines, ...modelNote(args.description)].join('\n')),
     confirmLabel: 'Create Record'
   };
 }
@@ -1115,18 +1178,26 @@ export function buildDeleteConfirmation(args: {
   description?: string;
 }): ConfirmSpec {
   const entries = Object.entries(args.snapshot);
-  const lines = [
-    ...hostFacts(args.profile, args.layout),
-    `Record id: ${displayText(args.recordId, 20)}`,
-    `The record as it is now (first ${Math.min(entries.length, MAX_FIELDS_PER_WRITE)} of ${entries.length} fields):`,
-    ...entries.slice(0, MAX_FIELDS_PER_WRITE).map(([name, value]) => `${displayText(name, 128)}: ${displayText(valueText(value), 60)}`)
-  ];
-  return {
-    title: 'An AI tool wants to DELETE a record',
-    message: 'An AI tool wants to permanently delete a FileMaker record. You will be asked to type its id next.',
-    detail: [...lines, ...modelNote(args.description)].join('\n'),
-    confirmLabel: 'Continue'
-  };
+  // The snapshot is only a reminder of what is deleted, so it shrinks to fit the budget
+  // (fewer fields, announced in the heading) rather than blocking a delete.
+  for (let shown = Math.min(entries.length, MAX_FIELDS_PER_WRITE); shown >= 0; shown -= 1) {
+    const lines = [
+      ...hostFacts(args.profile, args.layout),
+      `Record id: ${displayText(args.recordId, 20)}`,
+      `The record as it is now (first ${shown} of ${entries.length} fields):`,
+      ...entries.slice(0, shown).map(([name, value]) => `${displayText(name, 128)}: ${displayText(valueText(value), 60)}`)
+    ];
+    const detail = [...lines, ...modelNote(args.description)].join('\n');
+    if (detail.length <= MAX_DIALOG_DETAIL_CHARS || shown === 0) {
+      return {
+        title: 'An AI tool wants to DELETE a record',
+        message: 'An AI tool wants to permanently delete a FileMaker record. You will be asked to type its id next.',
+        detail: fitted(detail),
+        confirmLabel: 'Continue'
+      };
+    }
+  }
+  throw new AiToolError('The approval dialog could not be built.');
 }
 
 export function buildScriptConfirmation(args: {
@@ -1142,12 +1213,12 @@ export function buildScriptConfirmation(args: {
   return {
     title: 'An AI tool wants to run a script',
     message: 'An AI tool wants to run a FileMaker script. A script name does not say what the script does.',
-    detail: [
+    detail: fitted([
       ...hostFacts(args.profile, args.layout),
       `Script (runs as the account above): ${displayText(args.script, 64)}`,
       `Parameter: ${args.parameter === undefined ? '(none)' : displayText(args.parameter, MAX_SCRIPT_PARAMETER_CHARS)}`,
       ...modelNote(args.description)
-    ].join('\n'),
+    ].join('\n')),
     confirmLabel: 'Run Script'
   };
 }
@@ -1183,32 +1254,42 @@ export function toModelError(error: unknown, profile: ConnectionProfile | undefi
   return new AiToolError(scrubGenericText(scrub(redactString(text), profile)).slice(0, 500), 'error');
 }
 
-/** Removes the server address, host and user name of a profile from text. */
+/**
+ * Removes the server address of a profile from text: its URL, origin, `host:port`, and the
+ * host name as a whole token (so `fm` does not match inside "confirm"). The user name is NOT
+ * removed as a plain word ("contact the admin" stays); a name inside a URL or after `@` is
+ * covered by the host and by redaction of credentials in URLs.
+ */
 export function scrub(text: string, profile: ConnectionProfile | undefined): string {
   if (!profile) {
     return text;
   }
   let result = text;
-  const secrets = new Set<string>();
-  try {
-    const url = new URL(profile.serverUrl);
-    secrets.add(profile.serverUrl);
-    secrets.add(url.origin);
-    secrets.add(url.host);
-    secrets.add(url.hostname);
-  } catch {
-    secrets.add(profile.serverUrl);
-  }
-  if (profile.proxyEndpoint) {
-    secrets.add(profile.proxyEndpoint);
-  }
-  if (profile.username && profile.username.length >= 3) {
-    secrets.add(profile.username);
-  }
-  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
-    if (secret.length > 0) {
-      result = result.split(secret).join('[server]');
+  const literals = new Set<string>();
+  const hosts = new Set<string>();
+  const addUrl = (value: string | undefined): void => {
+    if (!value) return;
+    literals.add(value);
+    try {
+      const url = new URL(value);
+      literals.add(url.origin);
+      literals.add(url.host);
+      hosts.add(url.hostname);
+    } catch {
+      // Not a URL: only the literal text is scrubbed.
     }
+  };
+  addUrl(profile.serverUrl);
+  addUrl(profile.proxyEndpoint);
+
+  for (const literal of [...literals].sort((a, b) => b.length - a.length)) {
+    if (literal.length > 0) {
+      result = result.split(literal).join(SERVER_MARKER);
+    }
+  }
+  for (const host of hosts) {
+    const escaped = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(`(?<![\\w.-])${escaped}(?![\\w-])`, 'gi'), SERVER_MARKER);
   }
   return result;
 }

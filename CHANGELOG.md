@@ -31,6 +31,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- AI tools follow-ups (#380): 4,000-character dialog budget, placeholder markers refused in writes, host-only server scrub, session generation counter for the quota, wider post-dialog re-check.
 - Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.
 - Share one session renewal between parallel requests after a session expires, instead of opening one session per request and orphaning the rest.
 - Query Builder paging uses FileMaker's 1-based offsets, so the next page no longer repeats a record (#364).

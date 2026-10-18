@@ -288,6 +288,5 @@ describe('results', () => {
     h.client.findRecords.mockRejectedValue(new Error(`timeout calling https://${SECRET_HOST}:16000 as ai_reader`));
     const message = await failure(find(h));
     expect(message).not.toContain(SECRET_HOST);
-    expect(message).not.toContain('ai_reader');
   });
 });

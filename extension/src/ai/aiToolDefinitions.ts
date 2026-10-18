@@ -19,7 +19,9 @@ export const MAX_RECORDS_PER_CALL = 50;
 /** Also the number of changes the write dialog shows: a write never sends a field the dialog hid. */
 export const MAX_FIELDS_PER_WRITE = 10;
 /** A written value is shown in the dialog in full, so it is capped to what the dialog can show. */
-export const MAX_WRITE_VALUE_CHARS = 300;
+export const MAX_WRITE_VALUE_CHARS = 200;
+/** The whole approval dialog text may not be longer than this: a native dialog can clip a longer one. */
+export const MAX_DIALOG_DETAIL_CHARS = 4000;
 export const MAX_SCRIPT_PARAMETER_CHARS = 200;
 
 const layoutProperty: JsonSchema = {
@@ -162,7 +164,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
     name: 'fm_edit_record',
     displayName: 'Edit FileMaker Record',
     modelDescription:
-      'Changes fields of ONE record (at most 10 fields, each value at most 300 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.',
+      'Changes fields of ONE record (at most 10 fields, each value at most 200 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). The whole approval dialog must fit in 4,000 characters (escaping makes some characters longer); a write that would not fit is refused. A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.',
     userDescription: 'Changes fields of one record after you approve each change.',
     toolReferenceName: 'fmEditRecord',
     kind: 'write',
@@ -187,7 +189,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
     name: 'fm_create_record',
     displayName: 'Create FileMaker Record',
     modelDescription:
-      'Creates ONE record (at most 10 fields, each value at most 300 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.',
+      'Creates ONE record (at most 10 fields, each value at most 200 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.',
     userDescription: 'Creates one record after you approve it.',
     toolReferenceName: 'fmCreateRecord',
     kind: 'write',

@@ -239,11 +239,10 @@ describe('error text and audit notes', () => {
 
   it('runs audit notes through redaction and the same scrub', async () => {
     const h = ready();
-    h.client.listLayouts.mockRejectedValue(new Error(`failed for https://${SECRET_HOST}:16000 as ai_reader Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12`));
+    h.client.listLayouts.mockRejectedValue(new Error(`failed for https://${SECRET_HOST}:16000 Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12`));
     await failure(h.service.invoke('fm_list_layouts', {}));
     const note = h.audit.at(-1)?.note ?? '';
     expect(note).not.toContain(SECRET_HOST);
-    expect(note).not.toContain('ai_reader');
     const line = formatAuditLine({ tool: 't', connection: 'c', outcome: 'error', confirmed: null, note: 'Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12 on db.corp.example' }, new Date());
     expect(line).not.toMatch(/abcdef123456|10\.9\.8\.7|\/srv|corp\.example/);
   });
