@@ -33,6 +33,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Implement Create Record in the Record Editor (field list, validation, confirmation, new record ID) with unit tests and an end-to-end test against the mock FileMaker server.
 - Describe the workspace-state secret fallback as obfuscation, not encryption, in the warning toast, setting text and code comments.
 - Fix 404 homepage/author URL; declare virtualWorkspaces unsupported; mention AI tools in the untrusted-workspace description; add enumDescriptions to seven enum settings; add the Claris trademark statement to the README.
 - Allow `..` inside snapshot/offline-cache index file names (layout `Q1..Q2`) while still rejecting traversal; traversal corpus added.
