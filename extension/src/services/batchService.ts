@@ -116,8 +116,15 @@ export class BatchService {
         }
       }
 
-      if (exported >= maxRecords) {
-        truncated = true;
+      // Reached the cap: "truncated" only if the layout really has another record (a found set of
+      // exactly maxRecords rows is complete).
+      if (exported >= maxRecords && !job?.isCancellationRequested()) {
+        try {
+          const probe = await this.fmClient.findRecords(profile, layout, { ...request, limit: 1, offset });
+          truncated = (probe?.data?.length ?? 0) > 0;
+        } catch {
+          truncated = true; // could not tell; say the export may be incomplete
+        }
       }
 
       return {
@@ -157,6 +164,9 @@ export class BatchService {
     }
 
     const queue = [...entries];
+    // Set when the account itself cannot do this (no privilege, rejected credentials): every other
+    // record would fail the same way, so the job stops with one clear reason.
+    let stoppedReason: string | undefined;
     let completed = 0;
     let successCount = 0;
     const failures: BatchUpdateResult['failures'] = [];
@@ -201,6 +211,10 @@ export class BatchService {
               recordId: next.recordId,
               reason: error instanceof Error ? error.message : 'Unknown update failure'
             });
+            if (stoppedReason === undefined && stopsTheJob(error)) {
+              stoppedReason = error instanceof Error ? error.message : 'The account cannot make this change.';
+              queue.length = 0;
+            }
           })
           .finally(() => {
             completed += 1;
@@ -244,7 +258,10 @@ export class BatchService {
       attempted: completed,
       successCount,
       failureCount: failures.length,
-      failures
+      failures,
+      ...(stoppedReason !== undefined
+        ? { stoppedReason, notAttempted: Math.max(0, total - completed) }
+        : {})
     };
   }
 
@@ -266,19 +283,55 @@ export class BatchService {
         return;
       } catch (error) {
         const status = getStatusFromError(error);
-        adaptive.recordFailure(status);
-        breaker.recordFailure();
+        const retryable = isBatchRetryable(error);
+        // Only trouble with the connection or the server slows the job down or opens the
+        // breaker. A FileMaker answer about one record (locked, validation, no privilege) says
+        // nothing about server health.
+        if (isServerTrouble(error)) {
+          adaptive.recordFailure(status);
+          breaker.recordFailure();
+        }
 
-        const retryable = status === 429 || (typeof status === 'number' && status >= 500);
         if (!retryable || attempt >= 2) {
           throw error;
         }
 
-        await sleep(adaptive.getBackoffDelayMs(attempt, status));
+        const asked = error instanceof FMClientError ? (error.retryAfterMs ?? 0) : 0;
+        await sleep(Math.max(adaptive.getBackoffDelayMs(attempt, status), Math.min(asked, MAX_RETRY_AFTER_MS)));
         attempt += 1;
       }
     }
   }
+}
+
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/**
+ * Retry a failed update only when it can succeed later: a connection or gateway problem, HTTP 429
+ * or 503 (honouring Retry-After), or a FileMaker answer that clears (a record in use, 301). A
+ * FileMaker business error (HTTP 500 with a code) is an answer, not an outage, and is not retried.
+ */
+function isBatchRetryable(error: unknown): boolean {
+  if (!(error instanceof FMClientError)) {
+    return false;
+  }
+  if (error.code !== undefined) {
+    return error.isRetryable === true;
+  }
+  return error.isRetryable === true || error.status === 429 || (typeof error.status === 'number' && error.status >= 500);
+}
+
+/** Trouble that says something about the server or the connection, not about one record. */
+function isServerTrouble(error: unknown): boolean {
+  if (!(error instanceof FMClientError)) {
+    return true;
+  }
+  return error.code === undefined || error.code === '956' || error.code === '1701';
+}
+
+/** The account cannot do this at all: stop instead of failing every remaining record the same way. */
+function stopsTheJob(error: unknown): boolean {
+  return error instanceof FMClientError && (error.fmCategory === 'privilege' || error.fmCategory === 'credentials');
 }
 
 export function inferExportFormat(outputPath: string): BatchExportFormat {

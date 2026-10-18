@@ -5,6 +5,7 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BatchService, inferExportFormat, parseBatchUpdateInput } from '../../../src/services/batchService';
+import { FMClientError } from '../../../src/services/errors';
 import type { FMClient } from '../../../src/services/fmClient';
 import type {
   BatchUpdateEntry,
@@ -92,7 +93,8 @@ describe('BatchService.batchExportFind', () => {
     const findRecords = vi
       .fn()
       .mockResolvedValueOnce(findResult([record('1', { x: 1 }), record('2', { x: 2 })]))
-      .mockResolvedValueOnce(findResult([record('3', { x: 3 })]));
+      .mockResolvedValueOnce(findResult([record('3', { x: 3 })]))
+      .mockResolvedValueOnce(findResult([record('4', { x: 4 })])); // the probe: another record exists
     const fmClient = createFmClient({ findRecords } as never);
     const service = new BatchService(fmClient, { getPerformanceMode: () => 'standard' });
 
@@ -106,6 +108,24 @@ describe('BatchService.batchExportFind', () => {
 
     expect(result.exportedRecords).toBe(3);
     expect(result.truncated).toBe(true);
+  });
+
+  it('is not truncated when the found set has exactly maxRecords rows', async () => {
+    const findRecords = vi
+      .fn()
+      .mockResolvedValueOnce(findResult([record('1', { x: 1 }), record('2', { x: 2 })]))
+      .mockResolvedValueOnce(findResult([])); // nothing after the cap
+    const service = new BatchService(createFmClient({ findRecords } as never), { getPerformanceMode: () => 'standard' });
+
+    const result = await service.batchExportFind(
+      profile(),
+      'Contacts',
+      { query: [{}] },
+      { outputPath: join(dir, 'exact.csv'), format: 'csv', pageSize: 2, maxRecords: 2 }
+    );
+
+    expect(result.exportedRecords).toBe(2);
+    expect(result.truncated).toBe(false);
   });
 
   it('stops cleanly when a page returns an empty result', async () => {
@@ -333,5 +353,70 @@ describe('batch export then import round trip', () => {
     expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
       { recordId: '1', fieldData: { code: 12, flag: true, text: 'plain' } }
     ]);
+  });
+});
+
+describe('BatchService.batchUpdate failure handling', () => {
+  const run = async (editRecord: ReturnType<typeof vi.fn>, entries = 6, extra?: ConstructorParameters<typeof BatchService>[1]) => {
+    const service = new BatchService(createFmClient({ editRecord } as never), {
+      getDryRunDefault: () => false,
+      getConcurrency: () => 1,
+      getPerformanceMode: () => 'standard',
+      ...extra
+    });
+    const list: BatchUpdateEntry[] = Array.from({ length: entries }, (_, i) => ({ recordId: String(i + 1), fieldData: { a: i } }));
+    return service.batchUpdate(profile(), 'Contacts', list, { dryRun: false, concurrency: 1 });
+  };
+
+  const businessError = (code: string, extra: Record<string, unknown> = {}) =>
+    new FMClientError(`FileMaker API error (HTTP 500) [${code}]: x`, { status: 500, code, isRetryable: false, ...extra });
+
+  it('does not retry a FileMaker business error that arrives as HTTP 500, and does not open the breaker', async () => {
+    const editRecord = vi.fn().mockRejectedValue(businessError('509', { fmCategory: 'request' }));
+    const result = await run(editRecord, 8);
+    expect(editRecord).toHaveBeenCalledTimes(8); // one attempt per record, no retries
+    expect(result.failureCount).toBe(8);
+    expect(result.attempted).toBe(8); // the breaker never stopped the job
+  });
+
+  it('retries a transient failure with no FileMaker code, and a record-in-use answer (301)', async () => {
+    const editRecord = vi
+      .fn()
+      .mockRejectedValueOnce(new FMClientError('Bad gateway', { status: 502, isRetryable: true }))
+      .mockRejectedValueOnce(businessError('301', { isRetryable: true, fmCategory: 'conflict' }))
+      .mockResolvedValue({ recordId: '1', modId: '2' });
+    const result = await run(editRecord, 1);
+    expect(editRecord).toHaveBeenCalledTimes(3);
+    expect(result.successCount).toBe(1);
+  });
+
+  it('honours Retry-After on a 429', async () => {
+    vi.useFakeTimers();
+    try {
+      const editRecord = vi
+        .fn()
+        .mockRejectedValueOnce(new FMClientError('Too many requests', { status: 429, isRetryable: true, retryAfterMs: 5_000 }))
+        .mockResolvedValue({ recordId: '1', modId: '2' });
+      const pending = run(editRecord, 1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(editRecord).toHaveBeenCalledTimes(1); // still waiting for the 5 s the server asked for
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await pending;
+      expect(editRecord).toHaveBeenCalledTimes(2);
+      expect(result.successCount).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops the whole job once, with the reason, when the account lacks the privilege', async () => {
+    const editRecord = vi.fn().mockRejectedValue(
+      businessError('200', { fmCategory: 'privilege', message: undefined })
+    );
+    const result = await run(editRecord, 20);
+    expect(editRecord).toHaveBeenCalledTimes(1);
+    expect(result.stoppedReason).toMatch(/\[200\]/);
+    expect(result.notAttempted).toBe(19);
+    expect(result.failureCount).toBe(1);
   });
 });

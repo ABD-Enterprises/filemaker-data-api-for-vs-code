@@ -354,6 +354,10 @@ export interface BatchUpdateResult {
   successCount: number;
   failureCount: number;
   failures: BatchUpdateFailure[];
+  /** The job stopped early because the account cannot do this; the reason is FileMaker's message. */
+  stoppedReason?: string;
+  /** Records that were never attempted because the job stopped. */
+  notAttempted?: number;
 }
 
 export interface EnvironmentSet {
