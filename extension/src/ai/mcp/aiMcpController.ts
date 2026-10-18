@@ -179,7 +179,10 @@ export class AiMcpController implements vscode.Disposable {
     }
 
     const token = newToken();
-    const endpoint = await createEndpoint({ scope: storage });
+    const endpoint = await createEndpoint({
+      scope: storage,
+      onSkipped: ({ variable, reason }) => this.deps.log(`AI server socket folder from ${variable} not used: ${reason}`)
+    });
     const server = new AiMcpServer({
       core: this.deps.core,
       token,

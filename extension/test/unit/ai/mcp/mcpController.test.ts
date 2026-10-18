@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { spawn } from 'child_process';
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, utimes, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, realpath, readFile, rm, stat, symlink, utimes, writeFile } from 'fs/promises';
 import net from 'net';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -18,6 +18,7 @@ import { registerAiMcpCommands, watchExternalServerSetting } from '../../../../s
 import { RawClient } from './mcpClientHelper';
 
 const posix = process.platform !== 'win32';
+const realpathOf = (path: string): Promise<string> => realpath(path);
 
 /** A socket file with nothing listening on it: a child listens, then is killed without cleaning up. */
 async function leaveDeadSocket(path: string): Promise<void> {
@@ -352,6 +353,60 @@ describe('AiMcpController', () => {
       } finally {
         server.close();
       }
+    });
+
+    describe.skipIf(!posix)('a rejected socket folder is reported, not skipped silently', () => {
+      let xdg: string;
+      let temp: string;
+      const saved = { xdg: process.env.XDG_RUNTIME_DIR, tmp: process.env.TMPDIR };
+
+      beforeEach(async () => {
+        xdg = await mkdtemp(join(tmpdir(), 'fmx-'));
+        temp = await mkdtemp(join(tmpdir(), 'fmt-'));
+        process.env.XDG_RUNTIME_DIR = xdg;
+        process.env.TMPDIR = temp;
+        // The folder the server would use under XDG_RUNTIME_DIR already exists and is open to everyone.
+        const folder = join(xdg, socketFolderName(process.getuid?.() ?? 0, storage));
+        await mkdir(folder);
+        await chmod(folder, 0o755);
+      });
+
+      afterEach(async () => {
+        if (saved.xdg === undefined) delete process.env.XDG_RUNTIME_DIR;
+        else process.env.XDG_RUNTIME_DIR = saved.xdg;
+        if (saved.tmp === undefined) delete process.env.TMPDIR;
+        else process.env.TMPDIR = saved.tmp;
+        await rm(xdg, { recursive: true, force: true });
+        await rm(temp, { recursive: true, force: true });
+      });
+
+      it('createEndpoint tells the caller which variable was rejected and why, then uses the next folder', async () => {
+        const skipped: Array<{ variable: string; reason: string }> = [];
+        const endpoint = await createEndpoint({ scope: storage, onSkipped: (candidate) => skipped.push(candidate) });
+        expect(skipped).toHaveLength(1);
+        expect(skipped[0]?.variable).toBe('XDG_RUNTIME_DIR');
+        expect(skipped[0]?.reason).toMatch(/accessible by other users/);
+        expect(endpoint.path.startsWith(temp) || endpoint.path.startsWith(await realpathOf(temp))).toBe(true);
+      });
+
+      it('when every candidate is rejected the error names each variable, not just the last', async () => {
+        const folder = join(temp, socketFolderName(process.getuid?.() ?? 0, storage));
+        await mkdir(folder);
+        await chmod(folder, 0o755);
+        await expect(createEndpoint({ scope: storage })).rejects.toThrow(/XDG_RUNTIME_DIR: .*accessible by other users.*TMPDIR: .*accessible by other users/s);
+      });
+
+      it('the controller writes a log line for the rejected folder and still starts', async () => {
+        const log = vi.fn();
+        const logged = make({ log });
+        await logged.start();
+        try {
+          expect(log).toHaveBeenCalledWith(expect.stringMatching(/socket folder from XDG_RUNTIME_DIR not used: .*accessible by other users/));
+          expect(logged.isRunning()).toBe(true);
+        } finally {
+          await logged.stop();
+        }
+      });
     });
 
     it.skipIf(!posix)('probeSocket tells a dead socket, a missing one and a live one apart', async () => {

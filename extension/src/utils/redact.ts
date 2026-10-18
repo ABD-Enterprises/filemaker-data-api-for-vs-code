@@ -11,6 +11,13 @@ const QUERY_PARAM_PATTERN =
 const JSON_PAIR_PATTERN =
   /("[\w.-]{0,64}?(?:authorization|password|passwd|token|secret|api[_-]?key|session)[\w.-]{0,64}"\s*:\s*)(?:"((?:[^"\\]|\\.)+)"|(\d+))/gi;
 
+/** The same with single quotes, as a log of a JS object or Python dict prints it: `{'token': 'abc'}`. */
+const SINGLE_QUOTED_PAIR_PATTERN =
+  /('[\w.-]{0,64}?(?:authorization|password|passwd|token|secret|api[_-]?key|session)[\w.-]{0,64}'\s*:\s*)(?:'((?:[^'\\]|\\.)+)'|(\d+))/gi;
+
+/** A header line printed as plain text: `Cookie: a=b`, `Set-Cookie: ...`, `Authorization: ...`. The whole value is secret. */
+const HEADER_LINE_PATTERN = /\b((?:set-)?cookie|(?:proxy-)?authorization)([ \t]*:[ \t]*)(?![ \t])(?!(?:(?:Bearer|Basic)[ \t]+)?\*\*\*(?:[ \t]+(?:(?:Bearer|Basic)[ \t]+)?\*\*\*)*[ \t]*(?:[\r\n]|$))[^\r\n]+/gi;
+
 /** The FileMaker Data API puts the session token in the path: `DELETE /sessions/<token>`. A layout called "sessions" is left alone. */
 const SESSION_PATH_PATTERN = /(?<!\/layouts)(\/sessions\/)(?!\{token\})[^/\s?#"'`]+/gi;
 
@@ -23,7 +30,9 @@ export function redactString(input: string): string {
     .replace(QUERY_PARAM_PATTERN, '$1***')
     .replace(SESSION_PATH_PATTERN, '$1***')
     .replace(URL_USERINFO_PATTERN, '$1***@')
-    .replace(JSON_PAIR_PATTERN, (_match, key: string) => `${key}"***"`);
+    .replace(JSON_PAIR_PATTERN, (_match, key: string) => `${key}"***"`)
+    .replace(SINGLE_QUOTED_PAIR_PATTERN, (_match, key: string) => `${key}'***'`)
+    .replace(HEADER_LINE_PATTERN, '$1$2***');
 }
 
 export function redactValue(value: unknown): unknown {

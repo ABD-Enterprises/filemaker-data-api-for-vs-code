@@ -29,7 +29,15 @@ export function socketFolderName(uid: number, scope: string | undefined): string
  * `baseDirectory` is for tests; by default `$XDG_RUNTIME_DIR` (already 0700 on Linux) or
  * the temp folder.
  */
-export async function createEndpoint(options: { platform?: NodeJS.Platform; baseDirectory?: string; scope?: string } = {}): Promise<Endpoint> {
+export async function createEndpoint(
+  options: {
+    platform?: NodeJS.Platform;
+    baseDirectory?: string;
+    scope?: string;
+    /** Called for each candidate folder that was rejected (not owned by you, a link, not writable...), so the caller can log why. */
+    onSkipped?: (candidate: { variable: string; reason: string }) => void;
+  } = {}
+): Promise<Endpoint> {
   const platform = options.platform ?? process.platform;
   const id = randomBytes(16).toString('hex');
   if (platform === 'win32') {
@@ -42,29 +50,39 @@ export async function createEndpoint(options: { platform?: NodeJS.Platform; base
   // given; the environment's folders fall back to the next one if they cannot be used (for
   // example an XDG_RUNTIME_DIR that does not exist or is not ours).
   const explicit = options.baseDirectory !== undefined;
-  const candidates = (explicit ? [options.baseDirectory] : [process.env.XDG_RUNTIME_DIR, tmpdir()]).filter(
-    (candidate): candidate is string => typeof candidate === 'string' && isAbsolute(candidate)
-  );
+  const candidates = (
+    explicit
+      ? [{ base: options.baseDirectory, variable: 'the base folder' }]
+      : [
+          { base: process.env.XDG_RUNTIME_DIR, variable: 'XDG_RUNTIME_DIR' },
+          { base: tmpdir(), variable: 'TMPDIR' }
+        ]
+  ).filter((candidate): candidate is { base: string; variable: string } => typeof candidate.base === 'string' && isAbsolute(candidate.base));
   // VS Code, Cursor and Insiders share the temp folder but each has its own storage: the
   // folder carries a short hash of the storage path, so one product never sees another's sockets.
   const folder = socketFolderName(uid, options.scope);
   let directory: string | undefined;
-  let lastError: unknown = new Error('No usable folder for the socket.');
-  for (const base of candidates) {
+  let chosenVariable = 'TMPDIR';
+  const failures: string[] = [];
+  for (const { base, variable } of candidates) {
     try {
       await ensureOwnerOnlyDirectory(join(base, folder));
       directory = join(base, folder);
+      chosenVariable = variable;
       break;
     } catch (error) {
-      lastError = error;
+      // Not silent: a rejected folder is reported, and the final error names every one that was tried.
+      const reason = error instanceof Error ? error.message : String(error);
+      failures.push(`${variable}: ${reason}`);
+      options.onSkipped?.({ variable, reason });
     }
   }
   if (!directory) {
-    throw lastError;
+    throw new Error(`No usable folder for the AI server socket. ${failures.length > 0 ? failures.join(' ') : 'XDG_RUNTIME_DIR and TMPDIR are empty or not absolute paths.'}`);
   }
   const path = join(directory, `${id.slice(0, 12)}.sock`);
   if (Buffer.byteLength(path) > MAX_SOCKET_PATH_BYTES) {
-    throw new Error(`The socket path would be ${Buffer.byteLength(path)} bytes, over the ${MAX_SOCKET_PATH_BYTES} byte limit. Set TMPDIR to a shorter folder.`);
+    throw new Error(`The socket path would be ${Buffer.byteLength(path)} bytes, over the ${MAX_SOCKET_PATH_BYTES} byte limit. Set ${chosenVariable} to a shorter folder.`);
   }
   return { path, isPipe: false };
 }

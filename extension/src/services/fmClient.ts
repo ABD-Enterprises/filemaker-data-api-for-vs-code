@@ -151,6 +151,8 @@ function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
 }
 
+const CERTIFICATE_LOOK_TTL_MS = 60_000;
+
 export class FMClient {
   private readonly httpClient: AxiosInstance;
   private readonly proxyClient: ProxyClient;
@@ -160,6 +162,8 @@ export class FMClient {
   private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
   private readonly health = new Map<string, SessionHealth>();
+  /** The better certificate message (or none) per server and failure code, kept briefly so repeated failures do not each pay for a look. */
+  private readonly certificateLooks = new Map<string, { at: number; message: Promise<string | undefined> }>();
   private readonly invalidationListeners = new Set<(profileId: string) => void>();
   private readonly healthListeners = new Set<(profileId: string, health: SessionHealth | undefined) => void>();
   /**
@@ -1149,28 +1153,45 @@ export class FMClient {
     if (!url || environmentProxyFor(url)) {
       return failure;
     }
+    // One look per server and failure for a minute: every failed request would otherwise pay the
+    // handshake again (up to 1.5 s), and a server that does not answer would cost the full wait each time.
+    const key = `${url}|${failure.networkCode}`;
+    const now = this.now();
+    let look = this.certificateLooks.get(key);
+    if (!look || now - look.at > CERTIFICATE_LOOK_TTL_MS || now < look.at) {
+      if (this.certificateLooks.size >= 32) {
+        this.certificateLooks.delete(this.certificateLooks.keys().next().value as string);
+      }
+      look = { at: now, message: this.lookAtCertificate(url, failure.networkCode) };
+      this.certificateLooks.set(key, look);
+    }
+    const message = await look.message;
+    return message
+      ? new FMClientError(message, {
+          status: failure.status,
+          code: failure.code,
+          networkCode: failure.networkCode,
+          kind: failure.kind,
+          isRetryable: failure.isRetryable,
+          details: failure.details,
+          requestId: failure.requestId,
+          endpoint: failure.endpoint
+        })
+      : failure;
+  }
+
+  /** The message that names what the server presented, or undefined when the look fails or adds nothing. */
+  private async lookAtCertificate(url: string, networkCode: string): Promise<string | undefined> {
     try {
       const info = await inspectServerCertificate(url, 1500);
-      const isDefault = isFileMakerDefaultCertificate(info);
-      const better = describeNetworkFailure(failure.networkCode, {
+      const better = describeNetworkFailure(networkCode, {
         ...targetOfUrl(url),
-        fileMakerDefaultCertificate: isDefault,
+        fileMakerDefaultCertificate: isFileMakerDefaultCertificate(info),
         certificateListsHostNames: info.altNames.length > 0
       });
-      return better
-        ? new FMClientError(better.message, {
-            status: failure.status,
-            code: failure.code,
-            networkCode: failure.networkCode,
-            kind: failure.kind,
-            isRetryable: failure.isRetryable,
-            details: failure.details,
-            requestId: failure.requestId,
-            endpoint: failure.endpoint
-          })
-        : failure;
+      return better?.message;
     } catch {
-      return failure;
+      return undefined;
     }
   }
 
