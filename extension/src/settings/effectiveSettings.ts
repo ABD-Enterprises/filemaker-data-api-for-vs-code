@@ -254,8 +254,9 @@ export function renderEffectiveSettingsHtml(
         (row.workspaceMeaningful
           ? `<button data-open="workspace" data-key="${key}">Open Workspace Settings</button>`
           : '');
-      const text = row.reason ?? row.note;
-      const note = text ? `<div class="${row.ignored ? 'ignored' : 'muted'}">${escapeHtml(text)}</div>` : '';
+      const note =
+        (row.reason ? `<div class="${row.ignored ? 'ignored' : 'muted'}">${escapeHtml(row.reason)}</div>` : '') +
+        (row.note ? `<div class="muted">${escapeHtml(row.note)}</div>` : '');
       return (
         `<tr><td data-label="Setting"><code>${key}</code></td>` +
         `<td data-label="In effect"><code>${escapeHtml(show(row.effective))}</code></td>` +
@@ -388,6 +389,15 @@ export function registerEffectiveSettings(deps: Dependencies): vscode.Disposable
     timer.unref();
   };
   const watcher = vscode.workspace.createFileSystemWatcher('**/.vscode/settings.json');
+  // The .code-workspace file can hold User-only settings too and sits outside the folders the
+  // pattern above covers, so watch that one file as well.
+  const workspaceFile = vscode.workspace.workspaceFile;
+  const workspaceWatcher =
+    workspaceFile?.scheme === 'file' && workspaceFile.fsPath.endsWith('.code-workspace')
+      ? vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(path.dirname(workspaceFile.fsPath), path.basename(workspaceFile.fsPath))
+        )
+      : undefined;
   schedule();
   return [
     vscode.commands.registerCommand(SHOW_EFFECTIVE_SETTINGS, () => showPanel(deps)),
@@ -400,6 +410,9 @@ export function registerEffectiveSettings(deps: Dependencies): vscode.Disposable
     watcher,
     watcher.onDidChange(schedule),
     watcher.onDidCreate(schedule),
+    ...(workspaceWatcher
+      ? [workspaceWatcher, workspaceWatcher.onDidChange(schedule), workspaceWatcher.onDidCreate(schedule), workspaceWatcher.onDidDelete(schedule)]
+      : []),
     { dispose: () => clearTimeout(timer) }
   ];
 }

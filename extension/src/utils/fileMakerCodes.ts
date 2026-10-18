@@ -146,11 +146,11 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
   954: { meaning: 'Unsupported XML grammar.', category: 'config' },
   955: { meaning: 'No database name.', category: 'config', advice: 'Enter the database name in the connection.' },
   956: {
-    meaning: 'The maximum number of Data API sessions was exceeded.',
+    meaning: 'The maximum number of database or Admin API sessions was exceeded (FileMaker error 956).',
     category: 'transient',
     retryable: true,
     advice:
-      'The server has no free Data API sessions. Try again shortly, or ask the administrator to disconnect idle clients (Admin Console > Databases).'
+      'The server has no free Data API sessions. Try again shortly, or ask the administrator to disconnect idle clients (Admin Console > Databases, Clients list).'
   },
   957: { meaning: 'Conflicting commands.', category: 'request' },
   958: { meaning: 'A parameter is missing.', category: 'request' },
@@ -173,7 +173,7 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
     meaning: 'The server requires a different sign-in method (error 1703).',
     category: 'credentials',
     advice:
-      'On FileMaker Cloud the Data API uses a Claris ID token, which this extension does not support. On other servers the account may use external authentication.'
+      'FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support; an account name and password may not be accepted by your Cloud tenant (ask Claris or your administrator). On other servers the account may use external authentication.'
   },
   1704: { meaning: 'The server could not process the request (error 1704).', category: 'transient' },
   1705: { meaning: 'The server could not process the request (error 1705).', category: 'transient' },

@@ -92,7 +92,11 @@ describe('error messages and retry decisions', () => {
       at('https://myhost.account.filemaker-cloud.com/fmi/data/vLatest/databases/D/sessions', 401, fm('212', 'Invalid user account and/or password')),
       { fallbackMessage: 'x' }
     ).message;
-    expect(cloud).toMatch(/FileMaker Cloud.*Claris ID token.*does not support/s);
+    expect(cloud).toMatch(/FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support/);
+    // Not an overclaim: nobody has verified that a name and password never work on a tenant.
+    expect(cloud).toContain('may not be accepted by your Cloud tenant');
+    expect(cloud).toContain('Ask Claris or your administrator');
+    expect(cloud).not.toMatch(/cannot work|even if they are correct/);
     const onPremise = normalizeError(
       at('https://fm.example.com/fmi/data/vLatest/databases/D/sessions', 401, fm('212', 'Invalid user account and/or password')),
       { fallbackMessage: 'x' }

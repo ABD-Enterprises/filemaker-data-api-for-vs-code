@@ -53,6 +53,20 @@ describe('build identity (scripts/esbuild-config.mjs)', () => {
     expect(readBuildIdentity(path.join(repo, 'extension'), repo)).toEqual({ commit, date });
   });
 
+  it("is 'unknown' (not 1970-01-01) when the commit time is not a usable positive number", async () => {
+    const { readBuildIdentity } = (await import(/* @vite-ignore */ config)) as {
+      readBuildIdentity: (dir: string, root?: string) => { commit: string; date: string };
+    };
+    // A commit stamped at the Unix epoch gives 0 seconds: that is a missing date, not a real one.
+    const epoch = makeRepo('1970-01-01T00:00:00+0000');
+    expect(readBuildIdentity(path.join(epoch, 'extension'), epoch)).toEqual({ commit: 'unknown', date: 'unknown' });
+    // One second later is a real (if odd) date and is accepted, so the guard is exactly "greater than zero".
+    const oneSecond = makeRepo('1970-01-01T00:00:01+0000');
+    const { commit, date } = readBuildIdentity(path.join(oneSecond, 'extension'), oneSecond);
+    expect(commit).toMatch(/^[0-9a-f]{9}$/);
+    expect(date).toBe('1970-01-01');
+  });
+
   it('marks a tree with changes to tracked files as dirty and ignores untracked files', async () => {
     const { readBuildIdentity } = (await import(/* @vite-ignore */ config)) as {
       readBuildIdentity: (dir: string, root?: string) => { commit: string; date: string };

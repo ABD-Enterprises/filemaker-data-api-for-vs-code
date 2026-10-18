@@ -46,6 +46,17 @@ describe('about facts', () => {
     expect(text).toContain('**Enterprise mode:** on');
   });
 
+  it('reports the AI flag on and off, and enterprise mode off', () => {
+    expect(markdown({ aiEnabled: true })).toContain('**AI tools:** on');
+    expect(markdown({ aiEnabled: false })).toContain('**AI tools:** off');
+    expect(markdown({ enterpriseMode: false })).toContain('**Enterprise mode:** off');
+    expect(markdown({ enterpriseMode: true })).toContain('**Enterprise mode:** on');
+    // The two flags are independent of each other.
+    const both = markdown({ aiEnabled: true, enterpriseMode: false });
+    expect(both).toContain('**AI tools:** on');
+    expect(both).toContain('**Enterprise mode:** off');
+  });
+
   it('reports a remote window and restricted mode', () => {
     const text = markdown({ remoteName: 'ssh-remote', workspaceTrusted: false });
     expect(text).toContain('**Remote:** ssh-remote');

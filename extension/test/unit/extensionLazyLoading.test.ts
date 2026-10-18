@@ -205,6 +205,24 @@ describe('extension lazy FM runtime loading', () => {
     expect(lazyModules.batchServiceModuleLoaded).not.toHaveBeenCalled();
     expect(lazyModules.circuitBreakerModuleLoaded).not.toHaveBeenCalled();
   });
+
+  it('deactivate closes the sockets of every cached TLS agent (once the TLS module has been loaded), and is harmless before', async () => {
+    const { activate, deactivate } = await import('../../src/extension');
+    expect(() => deactivate()).not.toThrow(); // nothing loaded yet
+
+    const context = createActivationContext();
+    await activate(context);
+    await registeredCommand('filemakerDataApiTools.connect')({ profileId: 'p1' }); // loads the TLS module
+    const { createHttpsAgentForProfile } = await import('../../src/services/tlsAgent');
+    const agent = createHttpsAgentForProfile({ pinnedCertSha256: 'ef'.repeat(32) });
+    const destroy = vi.spyOn(agent, 'destroy');
+
+    deactivate();
+    disposeSubscriptions(context);
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(() => deactivate()).not.toThrow();
+  });
 });
 
 function installActivationVsCodeMocks(): void {

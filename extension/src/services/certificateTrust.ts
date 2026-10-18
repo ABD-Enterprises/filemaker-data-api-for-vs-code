@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { ConnectionProfile } from '../types/fm';
-import { describeNetworkFailure, targetOfUrl } from '../utils/networkErrors';
+import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { certificateTargetUrl, formatFingerprint, inspectServerCertificate, type ServerCertificateInfo } from './certificateInspect';
 import { environmentProxyFor, normalizeSha256 } from './tlsAgent';
 
@@ -45,7 +45,7 @@ export function describeCertificate(info: ServerCertificateInfo): string {
 /** This look at the certificate dials the server directly. Say so when a proxy is configured for it. */
 const PROXY_NOTE = (url: string): string =>
   environmentProxyFor(url)
-    ? ' Note: this check connects directly to the server and does not use the HTTP proxy configured on this computer, and a trusted (pinned) certificate cannot be used through a proxy.'
+    ? ' Note: this check connects directly to the server and does not use the HTTP proxy configured on this computer, and a trusted (pinned) certificate cannot be used through a proxy. To use it, add this server\'s host name to NO_PROXY so the connection goes direct.'
     : '';
 
 export interface TrustFlowDeps {
@@ -89,7 +89,14 @@ export async function reviewAndTrustCertificate(
 
   const previous = normalizeSha256(options.previousSha256);
   const changed = previous !== undefined && previous !== info.sha256;
-  const why = describeNetworkFailure(options.networkCode, targetOfUrl(url))?.message ?? (info.verifyError ? `This computer does not trust it (${info.verifyError}).` : undefined);
+  // The same wording as the error message: recognise FileMaker Server's default certificate, and drop
+  // the CA-file advice when the certificate lists no host names (a CA file could not make it pass).
+  const why =
+    describeNetworkFailure(options.networkCode, {
+      ...targetOfUrl(url),
+      fileMakerDefaultCertificate: isFileMakerDefaultCertificate(info),
+      certificateListsHostNames: info.altNames.length > 0
+    })?.message ?? (info.verifyError ? `This computer does not trust it (${info.verifyError}).` : undefined);
   const lines = [
     changed ? 'The server\'s certificate is different from the one you trusted before.' : undefined,
     why ? `Why it was refused: ${why}` : undefined,

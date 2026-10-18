@@ -916,7 +916,7 @@
         },
         {
           "command": "filemakerDataApiTools.generateFmWebNextApp",
-          "when": "filemaker.fmWebProjectInitialized"
+          "when": "filemaker.fmWebProjectInitialized && filemaker.fmWebPreviewAvailable"
         },
         {
           "command": "filemakerDataApiTools.generateFmWebLayoutPage",
@@ -924,7 +924,7 @@
         },
         {
           "command": "filemakerDataApiTools.startFmWebPreviewServer",
-          "when": "filemaker.fmWebProjectInitialized"
+          "when": "filemaker.fmWebProjectInitialized && filemaker.fmWebPreviewAvailable"
         },
         {
           "command": "filemakerDataApiTools.createEnvironmentSet",

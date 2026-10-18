@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { FMClientError } from '../../services/errors';
 import type { FMClient } from '../../services/fmClient';
 import { HistoryStore } from '../../services/historyStore';
+import { describeScriptErrors } from '../../services/responseGuard';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { SavedQueriesStore } from '../../services/savedQueriesStore';
@@ -365,6 +366,9 @@ export class QueryBuilderPanel {
     try {
       const request = this.toFindRequest(payload);
       const result = await this.fmClient.findRecords(profile, payload.layout, request);
+      if (result.scriptErrors && result.scriptErrors.length > 0) {
+        void vscode.window.showWarningMessage(`The find worked, but ${describeScriptErrors(result.scriptErrors)}.`);
+      }
 
       this.lastResult = {
         profileId: payload.profileId,

@@ -1,5 +1,5 @@
-import { createHash } from 'crypto';
-import { access, chmod, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import { createHash, randomBytes } from 'crypto';
+import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type * as vscode from 'vscode';
@@ -48,8 +48,49 @@ const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
   ]
 };
 
-function normalizedHash(content: Buffer): string {
+/**
+ * SHA-256 hashes (line endings normalised) of every version of each managed file that the
+ * extension shipped WITH a version marker, the current one included. A copy that carries an older
+ * marker is only refreshed when it matches one of these; otherwise the user edited it (the marker
+ * line survives an edit) and it is left alone and reported. When you change a managed file in
+ * runtime-next, bump RUNTIME_TEMPLATE_VERSION and ADD the new hash here without removing the old
+ * one; the runtime-template test fails until you do.
+ */
+export const SHIPPED_MARKED_HASHES: Record<string, string[]> = {
+  'lib/bridge-client.ts': ['4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07'],
+  'lib/runtime-data.ts': ['17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b'],
+  'lib/runtime-behavior.ts': ['84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609'],
+  'app/layouts/[id]/runtime-layout-client.tsx': ['12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5']
+};
+
+export function normalizedHash(content: Buffer): string {
   return createHash('sha256').update(content.toString('utf8').replace(/\r\n/g, '\n')).digest('hex');
+}
+
+/**
+ * Whether an existing copy of a managed file may be replaced by the shipped one.
+ * - older marker: refreshed only if it is byte-for-byte (line endings aside) a version we shipped
+ *   with a marker; an edited copy keeps its marker line, so the marker alone proves nothing;
+ * - current or newer marker: nothing to do;
+ * - no marker: refreshed only if it is a version we shipped before markers existed.
+ * Anything else is the user's and is left alone ('edited').
+ */
+export function decideManagedRefresh(
+  existing: Buffer,
+  legacyHashes: string[],
+  markedHashes: string[],
+  currentVersion: number = RUNTIME_TEMPLATE_VERSION
+): 'refresh' | 'current' | 'edited' {
+  const firstLine = existing.toString('utf8').split(/\r?\n/, 1)[0] ?? '';
+  const marker = MANAGED_MARKER.exec(firstLine);
+  const hash = normalizedHash(existing);
+  if (marker) {
+    if (Number(marker[1]) >= currentVersion) {
+      return 'current';
+    }
+    return markedHashes.includes(hash) ? 'refresh' : 'edited';
+  }
+  return legacyHashes.includes(hash) ? 'refresh' : 'edited';
 }
 
 /** Raised when the runtime template is not part of this installation of the extension. */
@@ -60,6 +101,44 @@ export class RuntimeTemplateUnavailableError extends Error {
     );
     this.name = 'RuntimeTemplateUnavailableError';
   }
+}
+
+/**
+ * Where the runtime template lives for an extension installed at `extensionRoot`, or undefined when
+ * this installation does not carry it (the Marketplace package leaves out runtime-next). The
+ * generator and the activation-time context key both use this, so a command is hidden exactly when
+ * invoking it would fail with RuntimeTemplateUnavailableError.
+ */
+export async function resolveRuntimeTemplateRoot(extensionRoot: string): Promise<string | undefined> {
+  const candidates = [
+    path.join(extensionRoot, '..', 'runtime-next'),
+    path.join(extensionRoot, 'runtime-next'),
+    path.join(extensionRoot, 'src', 'runtime-template')
+  ];
+
+  for (const candidate of candidates) {
+    if (await exists(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+/** The context key the preview commands' menu entries depend on. */
+export const PREVIEW_AVAILABLE_CONTEXT_KEY = 'filemaker.fmWebPreviewAvailable';
+
+/** Sets the context key from what this installation carries. Returns the value it set. */
+export async function publishPreviewAvailability(
+  extensionRoot: string,
+  setContext: (key: string, value: boolean) => Thenable<unknown> | void
+): Promise<boolean> {
+  const available = await resolveRuntimeTemplateRoot(extensionRoot).then(
+    (root) => root !== undefined,
+    () => false
+  );
+  await setContext(PREVIEW_AVAILABLE_CONTEXT_KEY, available);
+  return available;
 }
 
 export class FmWebRuntimeGenerator {
@@ -96,25 +175,43 @@ export class FmWebRuntimeGenerator {
       const managedKey = relativePath.split(path.sep).join('/');
       const content = await readFile(sourcePath);
 
-      if (await exists(outputPath)) {
+      // lstat, not access: a link (even a dangling one) is something the user or the repository put
+      // there, and a write would follow it to wherever it points. Leave it alone; for a managed
+      // file say so, because the preview may then run with a stale or foreign copy.
+      const present = await lstat(outputPath).catch(() => undefined);
+      if (present) {
         const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey];
+        if (present.isDirectory()) {
+          throw new Error(`${relativePath} in the generated runtime is a folder, not a file; remove it and try again.`);
+        }
+        if (present.isSymbolicLink()) {
+          skipped.push(relativePath);
+          if (legacyHashes) {
+            needsManualUpdate.push(relativePath);
+            this.logger.warn('A managed runtime file is a symbolic link; it was not refreshed.', { file: relativePath });
+          }
+          continue;
+        }
         const decision = legacyHashes
-          ? this.decideManagedRefresh(await readFile(outputPath), legacyHashes)
+          ? decideManagedRefresh(await readFile(outputPath), legacyHashes, SHIPPED_MARKED_HASHES[managedKey] ?? [])
           : 'skip';
         if (decision === 'refresh') {
-          await writeFile(outputPath, content);
+          await assertInsideRoot(outputRoot, path.dirname(outputPath));
+          await writeManagedFile(outputPath, content);
           updated.push(relativePath);
         } else {
           skipped.push(relativePath);
           if (decision === 'edited') {
             needsManualUpdate.push(relativePath);
+            this.logger.warn('A managed runtime file was edited and was not refreshed.', { file: relativePath });
           }
         }
         continue;
       }
 
       await mkdir(path.dirname(outputPath), { recursive: true });
-      await writeFile(outputPath, content);
+      await assertInsideRoot(outputRoot, path.dirname(outputPath));
+      await writeManagedFile(outputPath, content);
       created.push(relativePath);
     }
 
@@ -125,20 +222,6 @@ export class FmWebRuntimeGenerator {
       needsManualUpdate,
       outputRoot
     };
-  }
-
-  /**
-   * An existing copy of a managed file is refreshed when it carries an older version marker, or
-   * has no marker and is byte-for-byte (line endings aside) a version the extension shipped
-   * before markers existed. Anything else was edited by the user and is left alone.
-   */
-  private decideManagedRefresh(existing: Buffer, legacyHashes: string[]): 'refresh' | 'current' | 'edited' {
-    const firstLine = existing.toString('utf8').split(/\r?\n/, 1)[0] ?? '';
-    const marker = MANAGED_MARKER.exec(firstLine);
-    if (marker) {
-      return Number(marker[1]) < RUNTIME_TEMPLATE_VERSION ? 'refresh' : 'current';
-    }
-    return legacyHashes.includes(normalizedHash(existing)) ? 'refresh' : 'edited';
   }
 
   public async listLayoutDefinitions(): Promise<Array<{ id: string; name: string; filePath: string }>> {
@@ -265,21 +348,8 @@ export class FmWebRuntimeGenerator {
     return path.join(this.fmWebProjectService.getGeneratedDirPath(), 'layouts');
   }
 
-  private async resolveTemplateRoot(): Promise<string | undefined> {
-    const extensionRoot = this.context.extensionUri.fsPath;
-    const candidates = [
-      path.join(extensionRoot, '..', 'runtime-next'),
-      path.join(extensionRoot, 'runtime-next'),
-      path.join(extensionRoot, 'src', 'runtime-template')
-    ];
-
-    for (const candidate of candidates) {
-      if (await exists(path.join(candidate, 'package.json'))) {
-        return candidate;
-      }
-    }
-
-    return undefined;
+  private resolveTemplateRoot(): Promise<string | undefined> {
+    return resolveRuntimeTemplateRoot(this.context.extensionUri.fsPath);
   }
 
   private assertWorkspaceTrusted(): void {
@@ -332,6 +402,36 @@ async function refuseSymlink(target: string): Promise<void> {
   }
 }
 
+/**
+ * Writes a generated file so that a link planted at the target cannot redirect the write: the content
+ * goes to a new temporary file in the same folder and is renamed over the target. `rename` replaces
+ * the directory entry (a symbolic link is replaced, never followed), so there is no moment between a
+ * check and the write at which a link can take effect; the result is checked afterwards. A hard link
+ * is not written through either: the other name keeps the old content. A folder at the target is
+ * reported in plain words instead of as a raw EISDIR.
+ */
+export async function writeManagedFile(target: string, content: Buffer | string): Promise<void> {
+  const existing = await lstat(target).catch(() => undefined);
+  if (existing?.isDirectory()) {
+    throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`);
+  }
+  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
+  await writeFile(temporary, content, { flag: 'wx' });
+  try {
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    if ((error as NodeJS.ErrnoException).code === 'EISDIR' || (error as NodeJS.ErrnoException).code === 'ENOTEMPTY') {
+      throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`, { cause: error });
+    }
+    throw error;
+  }
+  const written = await lstat(target);
+  if (!written.isFile()) {
+    throw new Error(`${path.basename(target)} in the generated runtime could not be written as a regular file; remove it and try again.`);
+  }
+}
+
 /** Writes via a new owner-only temporary file and renames it over the target (never follows a link). */
 async function writeOwnerOnlyFile(target: string, content: string): Promise<void> {
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
@@ -342,6 +442,15 @@ async function writeOwnerOnlyFile(target: string, content: string): Promise<void
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
+  }
+}
+
+/** A folder inside the generated runtime that is really a link elsewhere must not receive writes. */
+async function assertInsideRoot(root: string, dir: string): Promise<void> {
+  const [realRoot, realDir] = await Promise.all([realpath(root), realpath(dir)]);
+  const relative = path.relative(realRoot, realDir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`${path.relative(root, dir) || '.'} in the generated runtime is a link to a folder outside it; remove it and try again.`);
   }
 }
 

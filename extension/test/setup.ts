@@ -18,10 +18,12 @@ vi.mock('vscode', () => {
         get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue)
       })),
       onDidGrantWorkspaceTrust: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
       openTextDocument: vi.fn(),
       createFileSystemWatcher: vi.fn(() => ({
         onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
         onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidDelete: vi.fn(() => ({ dispose: vi.fn() })),
         dispose: vi.fn()
       })),
       fs: {
@@ -119,6 +121,14 @@ vi.mock('vscode', () => {
       constructor(label: string, collapsibleState?: number) {
         this.label = label;
         this.collapsibleState = collapsibleState ?? 0;
+      }
+    },
+    RelativePattern: class {
+      base: string;
+      pattern: string;
+      constructor(base: string, pattern: string) {
+        this.base = base;
+        this.pattern = pattern;
       }
     },
     ThemeColor: class {

@@ -14,6 +14,7 @@ import {
   openSettingsTab,
   readSettingsFile,
   readWorkspaceFiles,
+  registerEffectiveSettings,
   renderEffectiveSettingsHtml,
   type Collected,
   type Dependencies
@@ -490,5 +491,167 @@ describe('every combination of trust, user, workspace and file layers (model of 
         }
       }
     }
+  });
+});
+
+
+describe('values the extension does not use as written are explained', () => {
+  it("an invalid enterprise.role in User settings is explained as 'treated as developer'", async () => {
+    const collected = await collectExplanations(setup({ layers: { 'enterprise.role': { user: 'bogus' } } }));
+    const row = find(collected, 'enterprise.role');
+    expect(row.effective).toBe('developer');
+    expect(row.note).toBe('Your User value "bogus" is not a role (viewer, developer or admin), so it is treated as developer.');
+    const html = renderEffectiveSettingsHtml(collected, "default-src 'none'", 'n');
+    expect(html).toContain('treated as developer');
+  });
+
+  it('a valid role, or no value, gets no such note', async () => {
+    for (const user of [undefined, 'viewer', 'admin']) {
+      const row = find(await collectExplanations(setup({ layers: { 'enterprise.role': { user } } })), 'enterprise.role');
+      expect(row.note, String(user)).toBeUndefined();
+    }
+  });
+
+  it('the invalid-role note and an ignored workspace value are both shown', async () => {
+    const collected = await collectExplanations(setup({ layers: { 'enterprise.role': { user: 'bogus', workspace: 'nonsense' } } }));
+    const row = find(collected, 'enterprise.role');
+    expect(row.reason).toContain('is not a role');
+    expect(row.note).toContain('treated as developer');
+    const html = renderEffectiveSettingsHtml(collected, "default-src 'none'", 'n');
+    expect(html).toContain('is not a role, so it is ignored');
+    expect(html).toContain('treated as developer');
+  });
+
+  it('a typegen.outputDir that sanitizes to the default says so, whichever scope holds it', async () => {
+    for (const layers of [{ workspace: '../escape' }, { user: '' }, { workspace: '   ' }, { folder: 'a/../b' }]) {
+      const row = find(await collectExplanations(setup({ layers: { 'typegen.outputDir': layers } })), 'typegen.outputDir');
+      expect(row.effective, JSON.stringify(layers)).toBe('filemaker-types');
+      expect(row.note, JSON.stringify(layers)).toMatch(/is not a folder inside the workspace .* so the default "filemaker-types" is used\./);
+    }
+  });
+
+  it('Restricted Mode is never given as the reason: an untrusted workspace with a VALID value gets no unusable-value note', async () => {
+    const row = find(
+      await collectExplanations(setup({ trusted: false, layers: { 'typegen.outputDir': { workspace: 'types' } } })),
+      'typegen.outputDir'
+    );
+    expect(row.effective).toBe('filemaker-types'); // the default stays in effect because of Restricted Mode
+    expect(row.note).not.toMatch(/not a folder inside the workspace/);
+    expect(row.reason ?? row.note).toMatch(/Restricted Mode/);
+  });
+
+  it('an untrusted workspace with an invalid value is not blamed for it either (the value is hidden); trusting it shows the note', async () => {
+    const layers = { 'typegen.outputDir': { workspace: '../escape' } };
+    expect(find(await collectExplanations(setup({ trusted: false, layers })), 'typegen.outputDir').note ?? '').not.toMatch(/not a folder inside the workspace/);
+    expect(find(await collectExplanations(setup({ trusted: true, layers })), 'typegen.outputDir').note).toMatch(/"\.\.\/escape" is not a folder inside the workspace/);
+  });
+
+  it('a User value that is invalid is explained in either trust state (it is the value in force)', async () => {
+    for (const trusted of [true, false]) {
+      const row = find(await collectExplanations(setup({ trusted, layers: { 'typegen.outputDir': { user: '/' } } })), 'typegen.outputDir');
+      expect(row.note, String(trusted)).toMatch(/is not a folder inside the workspace/);
+    }
+  });
+
+  it('trusted + a valid value: no such note', async () => {
+    const row = find(await collectExplanations(setup({ trusted: true, layers: { 'typegen.outputDir': { workspace: 'types' } } })), 'typegen.outputDir');
+    expect(row.effective).toBe('types');
+    expect(row.note).toBeUndefined();
+  });
+
+  it('a typegen.outputDir that is used (as written, or tidied) gets no such note', async () => {
+    for (const workspaceValue of ['types', 'out/types', 'out/types/', 'filemaker-types', '/etc/types']) {
+      const row = find(await collectExplanations(setup({ layers: { 'typegen.outputDir': { workspace: workspaceValue } } })), 'typegen.outputDir');
+      expect(row.note, workspaceValue).toBeUndefined();
+    }
+  });
+});
+
+describe('the view refreshes when the situation changes', () => {
+  type Listener = () => void;
+
+  function watcherStub() {
+    const listeners: Record<string, Listener[]> = { change: [], create: [], delete: [] };
+    return {
+      listeners,
+      onDidChange: vi.fn((fn: Listener) => (listeners['change'] as Listener[]).push(fn) && { dispose: vi.fn() }),
+      onDidCreate: vi.fn((fn: Listener) => (listeners['create'] as Listener[]).push(fn) && { dispose: vi.fn() }),
+      onDidDelete: vi.fn((fn: Listener) => (listeners['delete'] as Listener[]).push(fn) && { dispose: vi.fn() }),
+      dispose: vi.fn()
+    };
+  }
+
+  function arm(workspaceFile?: { scheme: string; fsPath: string }) {
+    vi.useFakeTimers();
+    workspace.workspaceFile = workspaceFile;
+    const deps = setup();
+    const reads = vi.fn();
+    const get = (deps.context.workspaceState as unknown as { get: (k: string, f: unknown) => unknown }).get;
+    (deps.context.workspaceState as unknown as { get: unknown }).get = (key: string, fallback: unknown) => {
+      reads();
+      return get(key, fallback);
+    };
+    const watchers: Array<ReturnType<typeof watcherStub>> = [];
+    vi.mocked(vscode.workspace.createFileSystemWatcher).mockImplementation((() => {
+      const stub = watcherStub();
+      watchers.push(stub);
+      return stub;
+    }) as never);
+    const disposables = registerEffectiveSettings(deps);
+    // The first schedule() from registration has run its course.
+    vi.advanceTimersByTime(1000);
+    reads.mockClear();
+    return { deps, reads, watchers, disposables };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('re-checks (after the short delay) when the workspace is trusted', async () => {
+    const { reads } = arm();
+    const grant = vi.mocked(vscode.workspace.onDidGrantWorkspaceTrust).mock.calls.at(-1)?.[0] as Listener;
+    expect(typeof grant).toBe('function');
+
+    grant();
+    expect(reads).not.toHaveBeenCalled(); // debounced
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(reads).toHaveBeenCalled(); // announceIgnored looked at the notice state, so the settings were read again
+  });
+
+  it('several trust and setting changes in a row cause one re-check', async () => {
+    const { reads } = arm();
+    const grant = vi.mocked(vscode.workspace.onDidGrantWorkspaceTrust).mock.calls.at(-1)?.[0] as Listener;
+    grant();
+    grant();
+    grant();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(reads).toHaveBeenCalledTimes(1);
+  });
+
+  it('watches the .code-workspace file, and re-checks when it changes, appears or goes', async () => {
+    const { reads, watchers } = arm({ scheme: 'file', fsPath: '/tmp/w/project.code-workspace' });
+
+    expect(vi.mocked(vscode.workspace.createFileSystemWatcher)).toHaveBeenCalledTimes(2);
+    const pattern = vi.mocked(vscode.workspace.createFileSystemWatcher).mock.calls[1]?.[0] as unknown as { base: string; pattern: string };
+    expect(pattern).toMatchObject({ base: '/tmp/w', pattern: 'project.code-workspace' });
+
+    for (const kind of ['change', 'create', 'delete']) {
+      reads.mockClear();
+      for (const fn of (watchers[1] as ReturnType<typeof watcherStub>).listeners[kind] as Listener[]) {
+        fn();
+      }
+      await vi.advanceTimersByTimeAsync(800);
+      expect(reads, kind).toHaveBeenCalled();
+    }
+  });
+
+  it('does not create a second watcher when there is no .code-workspace file (or it is not a local file)', () => {
+    arm();
+    expect(vi.mocked(vscode.workspace.createFileSystemWatcher)).toHaveBeenCalledTimes(1);
+    vi.mocked(vscode.workspace.createFileSystemWatcher).mockClear();
+    arm({ scheme: 'vscode-remote', fsPath: '/tmp/w/project.code-workspace' });
+    expect(vi.mocked(vscode.workspace.createFileSystemWatcher)).toHaveBeenCalledTimes(1);
   });
 });

@@ -35,7 +35,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
-import { environmentProxyFor, httpsTransportFor } from './tlsAgent';
+import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
@@ -195,6 +195,8 @@ export class FMClient {
   ) {
     this.logger = logger;
     this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    // A TLS agent that is replaced must outlive the longest request that may be running on it.
+    noteRequestTimeout(this.timeoutMs);
     this.httpClient = httpClient ?? axios.create({ timeout: this.timeoutMs });
     this.proxyClient =
       proxyClient ?? new ProxyClient(this.secretStore, this.logger, this.timeoutMs, this.httpClient);
@@ -1149,10 +1151,12 @@ export class FMClient {
     }
     try {
       const info = await inspectServerCertificate(url, 1500);
-      if (!isFileMakerDefaultCertificate(info)) {
-        return failure;
-      }
-      const better = describeNetworkFailure(failure.networkCode, { ...targetOfUrl(url), fileMakerDefaultCertificate: true });
+      const isDefault = isFileMakerDefaultCertificate(info);
+      const better = describeNetworkFailure(failure.networkCode, {
+        ...targetOfUrl(url),
+        fileMakerDefaultCertificate: isDefault,
+        certificateListsHostNames: info.altNames.length > 0
+      });
       return better
         ? new FMClientError(better.message, {
             status: failure.status,
@@ -1284,7 +1288,7 @@ export class FMClient {
     if (wait && wait.until > this.now()) {
       const seconds = Math.ceil((wait.until - this.now()) / 1000);
       throw new FMClientError(
-        `FileMaker has no free Data API sessions. Waiting ${seconds} s before signing in again (run "FileMaker: Connect" to try now), or ask the administrator to disconnect idle clients.`,
+        `FileMaker has reached its maximum number of database or Admin API sessions. Waiting ${seconds} s before signing in again (run "FileMaker: Connect" to try now), or ask the administrator to disconnect idle clients.`,
         { code: '956', kind: 'server', fmCategory: 'transient', isRetryable: true, retryAfterMs: wait.until - this.now() }
       );
     }

@@ -29,6 +29,12 @@ export interface NetworkFailureContext {
   nodeMessage?: string;
   /** The certificate is FileMaker Server's own default one (found by looking at what the server presents). */
   fileMakerDefaultCertificate?: boolean;
+  /**
+   * The certificate is known to list host names. A CA file is offered only then: without that knowledge
+   * (the look at the certificate was skipped or failed) it could be a certificate with no names, for which
+   * a CA file cannot make host-name verification pass.
+   */
+  certificateListsHostNames?: boolean;
 }
 
 /**
@@ -49,8 +55,15 @@ export function isFileMakerDefaultCertificate(certificate: { subject?: string; i
 }
 
 const CLOCK_HINT = "First check that your computer's date and time are correct.";
+/**
+ * The CA-file alternative. It only works for a certificate that lists the server's host names
+ * (a private CA's certificate), so it is never offered for FileMaker Server's default certificate,
+ * which has no host names and would still fail host-name verification with a CA file.
+ */
 const CA_HINT =
-  'Or ask your FileMaker administrator for the company\'s CA certificate (a .pem file) and set it as the connection\'s CA file.';
+  "Or, if the server's certificate lists its host names and was issued by your company's own authority, ask your FileMaker administrator for that CA certificate (a .pem file) and set it as the connection's CA file.";
+const caHint = (context: NetworkFailureContext): string =>
+  context.certificateListsHostNames === true && !context.fileMakerDefaultCertificate ? ` ${CA_HINT}` : '';
 
 /** Error codes that are certificate problems, with the certificate-specific wording. */
 const CERTIFICATE_CODES = new Set([
@@ -201,7 +214,7 @@ export function describeNetworkFailure(
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : `The certificate of ${target} is self-signed, and this computer does not trust it. You can trust this certificate, or install one from a public authority on the server.`} ${CA_HINT}`
+        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : `The certificate of ${target} is self-signed, and this computer does not trust it. You can trust this certificate, or install one from a public authority on the server.`}${caHint(context)}`
       };
     case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
     case 'UNABLE_TO_GET_ISSUER_CERT':
@@ -213,7 +226,7 @@ export function describeNetworkFailure(
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : UNTRUSTED_NEUTRAL} ${CA_HINT}`
+        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : UNTRUSTED_NEUTRAL}${caHint(context)}`
       };
     case 'ERR_TLS_CERT_ALTNAME_INVALID':
     case 'HOSTNAME_MISMATCH':

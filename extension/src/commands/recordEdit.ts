@@ -265,6 +265,9 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
           vscode.window.showInformationMessage(
             `Uploaded "${file.fileName}" to ${fieldName.trim()} on record ${result.recordId}.`
           );
+          if (result.scriptErrors && result.scriptErrors.length > 0) {
+            vscode.window.showWarningMessage(`The upload worked, but ${describeScriptErrors(result.scriptErrors)}.`);
+          }
           return true;
         } catch (error) {
           await showCommandError(error, {

@@ -44,7 +44,7 @@ import { SecretStore } from './services/secretStore';
 import { SettingsService } from './services/settingsService';
 import { TypeGenService } from './services/typeGenService';
 import { FmWebProjectService } from './services/fmWebProjectService';
-import { FmWebRuntimeGenerator } from './services/fmWebRuntimeGenerator';
+import { FmWebRuntimeGenerator, publishPreviewAvailability } from './services/fmWebRuntimeGenerator';
 import { FmBridgeServer } from './services/fmBridgeServer';
 import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
@@ -223,6 +223,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   let loadedFmClient: FMClient | undefined;
   let fmClientLoad: Promise<FMClient> | undefined;
+  tlsAgentModule = undefined;
   const healthListeners = new Set<HealthListener>();
   const invalidationListeners = new Set<(profileId: string) => void>();
   const loadFmClient = (): Promise<FMClient> => {
@@ -231,7 +232,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     fmClientLoad ??= Promise.all([import('./services/fmClient'), import('./services/tlsAgent')])
-      .then(([{ FMClient }, { setSystemCertificatePolicy, warmSystemCertificates }]) => {
+      .then(([{ FMClient }, tlsAgent]) => {
+        const { setSystemCertificatePolicy, warmSystemCertificates } = tlsAgent;
+        tlsAgentModule = tlsAgent;
         // Trust the operating system's certificates as VS Code does, unless http.systemCertificates is off.
         setSystemCertificatePolicy(() =>
           vscode.workspace.getConfiguration('http').get<boolean>('systemCertificates', true)
@@ -794,6 +797,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
   void refreshPaletteContexts();
+  // Hide the preview commands in an installation that has no runtime template (the Marketplace
+  // package); computed the same way the generator resolves it.
+  void publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>
+    vscode.commands.executeCommand('setContext', key, value)
+  );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
@@ -910,6 +918,14 @@ async function maybeOpenFirstRunWalkthrough(
   }
 }
 
+/** The TLS agent module once it has been loaded (it is loaded with the first request), so shutdown can close its sockets. */
+let tlsAgentModule: { disposeTlsAgents: () => void } | undefined;
+
 export function deactivate(): void {
-  // no-op
+  try {
+    tlsAgentModule?.disposeTlsAgents();
+  } catch {
+    // shutting down: nothing to report to
+  }
+  tlsAgentModule = undefined;
 }

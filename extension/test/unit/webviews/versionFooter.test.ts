@@ -131,7 +131,22 @@ describe('packaged stylesheets carry the footer rule', () => {
     });
     const css = result.outputFiles.find((file) => file.path.endsWith('.css'))?.text ?? '';
     expect(css).toContain('.fm-version');
-    expect(css).toMatch(/\.fm-version\{[^}]*position:fixed/);
+    const rule = /\.fm-version\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const declarations = Object.fromEntries(rule.split(';').filter(Boolean).map((part) => part.split(/:(.*)/s).slice(0, 2).map((text) => text.trim())));
+    // Pinned to a corner, over the content, never in the way of a click, and muted but readable.
+    expect(declarations['position']).toBe('fixed');
+    expect(declarations['right']).toBe('8px');
+    expect(declarations['bottom']).toBe('4px');
+    expect(declarations['font-size']).toBe('11px');
+    expect(declarations['color']).toBe('var(--ink)');
+    expect(declarations['opacity']).toMatch(/^0?\.7$/);
+    expect(declarations['pointer-events']).toBe('none');
+  });
+
+  it("the extension's own Layout Mode stylesheet (the fallback copied first) carries the footer too", () => {
+    const css = readFileSync(join(uiDir('layoutMode'), 'index.css'), 'utf8');
+    expect(css).toMatch(/\.fm-version\s*\{[^}]*position:\s*fixed/);
+    expect(css).toMatch(/\.fm-version\s*\{[^}]*pointer-events:\s*none/);
   });
 
   it('the packaged dist stylesheets match, when a build exists', () => {
