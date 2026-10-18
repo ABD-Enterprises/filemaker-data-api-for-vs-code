@@ -2,6 +2,7 @@ import type * as vscode from 'vscode';
 
 import type { ConnectionProfile, SavedQuery } from '../types/fm';
 import { FMClientError } from './errors';
+import { normalizeSha256 } from './tlsAgent';
 import { validateDatabaseName, validateProfileId, validateServerUrl } from '../utils/jsonValidate';
 
 const PROFILES_KEY = 'filemakerDataApiTools.profiles';
@@ -145,6 +146,12 @@ function validateConnectionProfile(
     proxyEndpoint: profile.proxyEndpoint?.trim() || undefined,
     allowSelfSigned: profile.allowSelfSigned === true ? true : undefined,
     caBundlePath: profile.caBundlePath?.trim() || undefined,
+    // Hydration is lenient: an unusable value is dropped, never an error.
+    pinnedCertSha256: normalizeSha256(profile.pinnedCertSha256),
+    pinnedCertAllowExpired:
+      normalizeSha256(profile.pinnedCertSha256) !== undefined && profile.pinnedCertAllowExpired === true
+        ? true
+        : undefined,
     // Anything but a known value is "none"; the stored default is no key at all.
     aiAccess: profile.aiAccess === 'read' || profile.aiAccess === 'write' ? profile.aiAccess : undefined
   };

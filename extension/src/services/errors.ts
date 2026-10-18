@@ -3,6 +3,10 @@ import type { NormalizedError, NormalizedErrorKind } from '../types/errors';
 export class FMClientError extends Error {
   public readonly status?: number;
   public readonly code?: string;
+  /** Node / OpenSSL code of a network or TLS failure. */
+  public readonly networkCode?: string;
+  public readonly fmCategory?: string;
+  public readonly retryAfterMs?: number;
   public readonly details?: unknown;
   public readonly requestId?: string;
   public readonly endpoint?: string;
@@ -15,6 +19,9 @@ export class FMClientError extends Error {
     options?: {
       status?: number;
       code?: string;
+      networkCode?: string;
+      fmCategory?: string;
+      retryAfterMs?: number;
       details?: unknown;
       requestId?: string;
       endpoint?: string;
@@ -27,6 +34,9 @@ export class FMClientError extends Error {
     this.name = 'FMClientError';
     this.status = options?.status;
     this.code = options?.code;
+    this.networkCode = options?.networkCode;
+    this.fmCategory = options?.fmCategory;
+    this.retryAfterMs = options?.retryAfterMs;
     this.details = options?.details;
     this.requestId = options?.requestId;
     this.endpoint = options?.endpoint;
@@ -41,6 +51,9 @@ export class FMClientError extends Error {
       message: this.message,
       status: this.status,
       code: this.code,
+      networkCode: this.networkCode,
+      fmCategory: this.fmCategory,
+      retryAfterMs: this.retryAfterMs,
       requestId: this.requestId,
       endpoint: this.endpoint,
       safeHeaders: this.safeHeaders,
@@ -71,6 +84,9 @@ export function toFMClientError(normalized: NormalizedError): FMClientError {
   return new FMClientError(normalized.message, {
     status: normalized.status,
     code: normalized.code,
+    networkCode: normalized.networkCode,
+    fmCategory: normalized.fmCategory,
+    retryAfterMs: normalized.retryAfterMs,
     details: normalized.details,
     requestId: normalized.requestId,
     endpoint: normalized.endpoint,

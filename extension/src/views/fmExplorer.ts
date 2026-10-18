@@ -361,7 +361,7 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
         kind: 'profile',
         label: profile.name,
         profileId: profile.id,
-        description: `${profile.database} (${profile.authMode})${profile.allowSelfSigned === true ? ' ⚠ insecure TLS' : ''}`,
+        description: `${profile.database} (${profile.authMode})${profile.allowSelfSigned === true && !profile.pinnedCertSha256 ? ' ⚠ no TLS checks' : ''}`,
         tooltip: [`${profile.serverUrl}\nDatabase: ${profile.database}`, describeTlsSettings(profile)]
           .filter(Boolean)
           .join('\n'),

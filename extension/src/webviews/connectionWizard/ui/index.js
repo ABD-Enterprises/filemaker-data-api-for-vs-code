@@ -171,12 +171,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'failure', message: message.message, hash };
         showStatus('error', message.message || 'Connection failed.');
+        if (message.trust) {
+          // The actionable message is shown once, here, with the way to act on it.
+          const trustBtn = document.createElement('button');
+          trustBtn.type = 'button';
+          trustBtn.id = 'trustCertFromErrorBtn';
+          trustBtn.className = 'secondary';
+          trustBtn.textContent = message.trust === 'retrust' ? 'Review and re-trust' : 'Trust this certificate…';
+          trustBtn.addEventListener('click', () => reviewCertificate('reviewCertificate'));
+          statusEl.appendChild(document.createElement('br'));
+          statusEl.appendChild(trustBtn);
+        }
         hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
         testBtn.textContent = 'Test Connection';
         break;
       }
+
+      case 'certificateState':
+        renderCertificateState(message.payload);
+        break;
 
       case 'loadProfile':
         clearTemplateState();
@@ -194,6 +209,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Certificate trust is kept by the extension host and changed only through its review dialog;
+  // the page just shows it and asks for a review. It is never part of the form data.
+  let certPin = undefined;
+  let legacyTls = false;
+  const certificateStatus = document.getElementById('certificateStatus');
+  const reviewCertBtn = document.getElementById('reviewCertBtn');
+  const forgetCertBtn = document.getElementById('forgetCertBtn');
+  const legacyTlsWarning = document.getElementById('legacyTlsWarning');
+  const convertCertBtn = document.getElementById('convertCertBtn');
+  const stopSkippingBtn = document.getElementById('stopSkippingBtn');
+
+  function renderCertificateState(state) {
+    certPin = state && state.pin ? state.pin : undefined;
+    legacyTls = Boolean(state && state.legacy);
+    if (certificateStatus) {
+      certificateStatus.textContent = certPin
+        ? 'Trusted by you: the certificate with SHA-256 ' + certPin.sha256.toUpperCase().replace(/(..)(?=.)/g, '$1:') +
+          (certPin.allowExpired ? ' (you accepted that it is expired or not yet valid).' : '.')
+        : 'No certificate has been trusted by hand. The server\'s certificate is checked the normal way.';
+    }
+    if (forgetCertBtn) forgetCertBtn.classList.toggle('hidden', !certPin);
+    if (legacyTlsWarning) legacyTlsWarning.classList.toggle('hidden', !legacyTls);
+    if (certPin || legacyTls) {
+      const certificates = document.getElementById('certificateOptions');
+      if (certificates) certificates.open = true;
+    }
+    onFormChanged();
+  }
+
+  function reviewCertificate(type) {
+    const data = collectFormData();
+    if (!data) {
+      return;
+    }
+    vscode.postMessage({ type, payload: data });
+  }
+
+  if (reviewCertBtn) reviewCertBtn.addEventListener('click', () => reviewCertificate('reviewCertificate'));
+  if (convertCertBtn) convertCertBtn.addEventListener('click', () => reviewCertificate('convertLegacyCertificate'));
+  if (forgetCertBtn) forgetCertBtn.addEventListener('click', () => vscode.postMessage({ type: 'forgetCertificate' }));
+  if (stopSkippingBtn) stopSkippingBtn.addEventListener('click', () => vscode.postMessage({ type: 'stopSkippingCertificateChecks' }));
+
   function collectFormData() {
     const name = getValue('profileName');
     const serverUrl = getValue('serverUrl');
@@ -206,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return null;
     }
 
-    const selfSignedBox = /** @type {HTMLInputElement|null} */ (document.getElementById('allowSelfSigned'));
     const data = {
       name,
       authMode,
@@ -214,8 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
       database,
       apiBasePath: apiBasePath || '/fmi/data',
       apiVersionPath: apiVersionPath || 'vLatest',
-      caBundlePath: getValue('caBundlePath'),
-      allowSelfSigned: Boolean(selfSignedBox && selfSignedBox.checked)
+      caBundlePath: getValue('caBundlePath')
     };
 
     if (authMode === 'direct') {
@@ -261,9 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Certificate options come from the saved profile only (never from the workspace template).
     // Open the section when either is set so a saved insecure choice is visible, not hidden.
     setFieldValue('caBundlePath', profile.caBundlePath || '');
-    const selfSigned = /** @type {HTMLInputElement|null} */ (document.getElementById('allowSelfSigned'));
-    if (selfSigned) selfSigned.checked = profile.allowSelfSigned === true;
-    if (profile.caBundlePath || profile.allowSelfSigned === true) {
+    if (profile.caBundlePath || profile.pinnedCertSha256 || profile.allowSelfSigned === true) {
       const certificates = /** @type {HTMLDetailsElement|null} */ (document.getElementById('certificateOptions'));
       if (certificates) certificates.open = true;
     }
@@ -459,7 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
         cls += ' success';
         break;
       case 'failure':
-        label = `🔴 Test failed${testState.message ? ': ' + testState.message : ''}`;
+        // The reason is shown once, in the message box below; the badge only says the result.
+        label = '🔴 Test failed';
         cls += ' failure';
         break;
       case 'stale':
@@ -511,7 +565,9 @@ document.addEventListener('DOMContentLoaded', () => {
       username: data.username,
       proxyEndpoint: data.proxyEndpoint,
       caBundlePath: data.caBundlePath,
-      allowSelfSigned: data.allowSelfSigned
+      // Trusting a different certificate means the earlier test no longer proves the connection.
+      pinnedCert: certPin ? certPin.sha256 : undefined,
+      legacyTls: legacyTls
     };
     return JSON.stringify(subset);
   }

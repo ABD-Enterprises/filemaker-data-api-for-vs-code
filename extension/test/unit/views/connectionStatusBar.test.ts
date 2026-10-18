@@ -15,22 +15,48 @@ describe('computeConnectionStatus', () => {
     expect(model.tooltip).toContain('Click for actions');
   });
 
-  it('renders the connected state with the profile name and database', () => {
-    const model = computeConnectionStatus({
-      name: 'Production',
-      database: 'Contacts'
-    });
-    expect(model.text).toBe('$(plug) FileMaker: Production');
-    expect(model.tooltip).toContain('Connected to Production');
-    expect(model.tooltip).toContain('Contacts');
+  it('says only "active" before any request, never "connected"', () => {
+    const model = computeConnectionStatus({ name: 'Production', database: 'Contacts' });
+    expect(model.text).toBe('$(circle-large-outline) FileMaker: Production');
+    expect(model.tooltip).toContain('has not been checked');
+    expect(model.tooltip).not.toContain('Connected to');
   });
 
-  it('uses different icons for connected vs disconnected so users can distinguish at a glance', () => {
+  it('shows the real session health from the last request', () => {
+    const profile = { name: 'Production', database: 'Contacts' };
+    const at = 1;
+    const connected = computeConnectionStatus(profile, { state: 'connected', at });
+    expect(connected.text).toBe('$(plug) FileMaker: Production');
+    expect(connected.tooltip).toContain('Connected to Production (Contacts)');
+    expect(computeConnectionStatus(profile, { state: 'connecting', at }).text).toContain('$(sync~spin)');
+    const auth = computeConnectionStatus(profile, { state: 'auth-failed', at, message: 'Invalid user account and/or password.' });
+    expect(auth.text).toContain('sign-in failed');
+    expect(auth.warning).toBe(true);
+    expect(auth.tooltip).toContain('Invalid user account');
+    const certificate = computeConnectionStatus(profile, { state: 'certificate', at, message: 'The certificate has expired.' });
+    expect(certificate.text).toContain('certificate problem');
+    expect(certificate.warning).toBe(true);
+    const unreachable = computeConnectionStatus(profile, { state: 'unreachable', at, message: 'Nothing is listening.' });
+    expect(unreachable.text).toContain('unreachable');
+    expect(new Set([connected.text, auth.text, certificate.text, unreachable.text]).size).toBe(4);
+  });
+
+  it('keeps a persistent warning on a profile that skips all certificate checks, and not on a pinned one', () => {
+    const legacy = computeConnectionStatus({ name: 'Old', database: 'D', allowSelfSigned: true }, { state: 'connected', at: 1 });
+    expect(legacy.text).toContain('$(warning)');
+    expect(legacy.tooltip).toContain('skips ALL certificate checks');
+    expect(legacy.warning).toBe(true);
+    const pinned = computeConnectionStatus({ name: 'New', database: 'D', allowSelfSigned: true, pinnedCertSha256: 'ab'.repeat(32) }, { state: 'connected', at: 1 });
+    expect(pinned.text).not.toContain('$(warning)');
+  });
+
+  it('uses different icons for disconnected, active and connected so users can distinguish at a glance', () => {
     const disc = computeConnectionStatus(undefined);
-    const conn = computeConnectionStatus({ name: 'Dev', database: 'D' });
+    const idle = computeConnectionStatus({ name: 'Dev', database: 'D' });
+    const conn = computeConnectionStatus({ name: 'Dev', database: 'D' }, { state: 'connected', at: 1 });
     expect(disc.text).toContain('$(circle-outline)');
     expect(conn.text).toContain('$(plug)');
-    expect(disc.text).not.toBe(conn.text);
+    expect(new Set([disc.text, idle.text, conn.text]).size).toBe(3);
   });
 
   it('puts the profile name in the visible label so reload/restart shows current state', () => {
@@ -92,7 +118,7 @@ describe('ConnectionStatusBar updates', () => {
     await Promise.resolve();
     finish('p1', 'Old');
     await Promise.resolve();
-    expect(item.text).toBe('$(plug) FileMaker: New');
+    expect(item.text).toBe('$(circle-large-outline) FileMaker: New');
     bar.dispose();
   });
 
@@ -115,5 +141,34 @@ describe('ConnectionStatusBar updates', () => {
       ?.value as vscode.StatusBarItem;
     expect(item.text).toBe(computeConnectionStatus(undefined).text);
     bar.dispose();
+  });
+});
+
+describe('ConnectionStatusBar follows session health', () => {
+  it('re-renders when the client reports a change, and stops listening when disposed', async () => {
+    let health: { state: string; at: number; message?: string } | undefined;
+    let listener: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const bar = new ConnectionStatusBar(
+      { getActiveProfileId: () => 'p1', getProfile: async () => ({ id: 'p1', name: 'Prod', database: 'D' }) } as never,
+      {
+        getHealth: () => health as never,
+        onHealthChange: (callback: (...args: never[]) => void) => {
+          listener = callback;
+          return unsubscribe;
+        }
+      }
+    );
+    const item = vi.mocked(vscode.window.createStatusBarItem).mock.results.at(-1)?.value as vscode.StatusBarItem;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(item.text).toContain('circle-large-outline');
+
+    health = { state: 'auth-failed', at: 1, message: 'Invalid account.' };
+    listener?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(item.text).toContain('sign-in failed');
+
+    bar.dispose();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 });

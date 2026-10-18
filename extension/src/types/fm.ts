@@ -21,6 +21,13 @@ export interface ConnectionProfile {
   proxyEndpoint?: string;
   allowSelfSigned?: boolean;
   caBundlePath?: string;
+  /**
+   * SHA-256 fingerprint (64 lower-case hex digits) of the one server certificate the user chose to
+   * trust for this connection. Set only through the trust dialog; never from a template or import.
+   */
+  pinnedCertSha256?: string;
+  /** The user accepted a pinned certificate that is expired or not yet valid. */
+  pinnedCertAllowExpired?: boolean;
   /** What AI tools may do through this profile (ADR-0004). Missing means "none". */
   aiAccess?: AiAccess;
 }
@@ -57,11 +64,21 @@ export interface FindRecordsRequest {
 export interface FindRecordsResult {
   data: FileMakerRecord[];
   dataInfo?: Record<string, unknown>;
+  /** Script errors reported next to the data (the find itself worked). */
+  scriptErrors?: ScriptErrorReport[];
+}
+
+/** A script (or pre-request / pre-sort script) that ran with a request and reported a non-zero error. */
+export interface ScriptErrorReport {
+  phase: 'script' | 'prerequest' | 'presort';
+  code: string;
 }
 
 export interface EditRecordResult {
   recordId: string;
   modId?: string;
+  /** Script errors reported next to a write that otherwise succeeded. */
+  scriptErrors?: ScriptErrorReport[];
   messages: FileMakerMessage[];
   response: Record<string, unknown>;
 }
@@ -344,6 +361,10 @@ export interface BatchUpdateResult {
   successCount: number;
   failureCount: number;
   failures: BatchUpdateFailure[];
+  /** The job stopped early because the account cannot do this; the reason is FileMaker's message. */
+  stoppedReason?: string;
+  /** Records that were never attempted because the job stopped. */
+  notAttempted?: number;
 }
 
 export interface EnvironmentSet {

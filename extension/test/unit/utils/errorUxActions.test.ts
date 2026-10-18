@@ -26,8 +26,32 @@ describe('selectErrorActions', () => {
       selectErrorActions({ kind: 'auth', status: 401 }, { profileId: 'p1' })
     ).toContain('Edit Profile');
     expect(
-      selectErrorActions({ kind: 'server', status: 403 }, { profileId: 'p1' })
+      selectErrorActions({ kind: 'validation', fmCategory: 'credentials' }, { profileId: 'p1' })
     ).toContain('Edit Profile');
+  });
+
+  it('does not send a privilege problem to Edit Profile: the administrator fixes it, not the profile', () => {
+    for (const error of [
+      { kind: 'auth', status: 403 },
+      { kind: 'server', status: 403 },
+      { kind: 'server', status: 500, fmCategory: 'privilege' }
+    ]) {
+      expect(selectErrorActions(error, { profileId: 'p1' })).not.toContain('Edit Profile');
+    }
+  });
+
+  it('offers Retry only where a retry can help, never for certificate problems', () => {
+    const retry = () => undefined;
+    expect(selectErrorActions({ kind: 'certificate', isRetryable: false, networkCode: 'CERT_HAS_EXPIRED' }, { retry })).toEqual([]);
+    expect(selectErrorActions({ kind: 'server', status: 500, isRetryable: false, fmCategory: 'config' }, { retry })).toEqual([]);
+    expect(selectErrorActions({ kind: 'network', isRetryable: true }, { retry })).toEqual(['Retry']);
+  });
+
+  it('offers to trust a certificate, or to re-trust a changed one, for certificate errors', () => {
+    const trustCertificate = () => undefined;
+    expect(selectErrorActions({ kind: 'certificate', networkCode: 'DEPTH_ZERO_SELF_SIGNED_CERT' }, { trustCertificate })).toEqual(['Trust this certificate…']);
+    expect(selectErrorActions({ kind: 'certificate', networkCode: 'FM_CERT_PIN_MISMATCH' }, { trustCertificate })).toEqual(['Review and re-trust']);
+    expect(selectErrorActions({ kind: 'network', networkCode: 'ECONNREFUSED' }, { trustCertificate })).toEqual([]);
   });
 
   it('does not offer Edit Profile on non-auth errors', () => {
