@@ -3,146 +3,40 @@
 //   npm run mock:server   start it (default http://127.0.0.1:18080, override with PORT)
 //   npm run mock:check    start it on a free port and run the real FMClient against it
 //
-// Point a connection profile at it with serverUrl http://127.0.0.1:18080, database "Sales",
-// username "tester", password "testpass1" (test values; the server accepts nothing else).
-// Layouts: Contacts (157 records) and Invoices (12). Fault injection and inspection:
-//   POST /__admin/expire  forget every session token (next request gets HTTP 401 / code 952)
-//   POST /__admin/reset   clear the request log and restore the fixture data
-//   GET  /__admin/log     last 1000 requests and the number of POST /sessions
-// Requests whose Host is not 127.0.0.1 or localhost are refused (403).
+// Point a connection profile at it with serverUrl http://127.0.0.1:18080, user "tester",
+// password "testpass1" (test values; the server accepts nothing else). Databases:
+//   Sales      baseline: Contacts (157 records) and Invoices (12)
+//   Quality    ~1,400 deliberately mixed-quality records (see test/mock-server/DATASET.md)
+//   Inventory  small clean database;   Locked  listed but refuses to open (error 802)
+// Other accounts: admin/adminpass1 (full access like tester), viewer/viewpass1 (reads; writes refused with
+// 200/205/9; field Email hidden), limited/limitpass1 (sees only layout Contacts), reader/readpass1 (read-only:
+// writes and scripts get error 9), nobody/nopass1 (no layouts), retired/retired1 (inactive: error 212).
 //
-// It mirrors the Claris Data API response shapes and error codes the extension relies on:
-// a find with no matches (or an offset past the last match) is HTTP 404 + code 401, a bad
-// token is HTTP 401 + code 952, a stale modId on an edit or a missing record is HTTP 500 + code 306 / 101, offsets are
-// 1-based. Find semantics are simplified (== exact or prefix with a trailing *, *"phrase",
-// < > <= >=, a...b, = empty, * not empty, plain value matches a word prefix, backslash escapes)
-// and are an approximation of FileMaker, not a specification. It listens on 127.0.0.1 only.
+// Environment (all optional)
+//   PORT            main port (default 18080; 0 picks a free one)
+//   ADMIN_PORT      serve /__admin on a separate plain-HTTP port; the main port then refuses /__admin
+//   TLS             off (default) | self-signed | ca | expired | notyet | wronghost | missing-intermediate | tls10-only
+//                   (needs the openssl command; see lib/tls.mjs)
+//   TTL_MS          session idle lifetime, default 900000 (15 minutes, as FileMaker)
+//   MAX_SESSIONS    concurrent session cap, default 500
+//   FILTER_DATABASES=1  GET /databases requires Basic auth     CLOUD=1  accept "Authorization: FMID ..."
+//   SCENARIO        JSON of scenario switches (see ENDPOINTS.md), e.g. '{"delayMs":500}'
+//   SEED            dataset seed (default fixed)
+//
+// Admin (same port, or ADMIN_PORT): GET /__admin/log | state | manifest, POST /__admin/reset | expire |
+// age | config | scenario | concurrent-edit | concurrent-delete. See ENDPOINTS.md.
+// Proxy mode: POST /__proxy with { action, profile, payload } and "Authorization: Bearer mock-proxy-key".
+// Requests whose Host is not 127.0.0.1 or localhost are refused (403). It listens on 127.0.0.1 only.
+import fs from 'node:fs';
 import http from 'node:http';
-import crypto from 'node:crypto';
+import https from 'node:https';
+import { fileURLToPath } from 'node:url';
 
-const USER = 'tester';
-const PASS = 'testpass1';
-const DB = 'Sales';
-const base = `/fmi/data/vLatest/databases/${DB}`;
+import { createEngine } from './lib/engine.mjs';
+import { handleProxy, PROXY_PATH } from './lib/proxy.mjs';
+import { makeCerts } from './lib/tls.mjs';
 
-const FIRST = ['Ada', 'Grace', 'Alan', 'Edsger', 'Barbara', 'Linus', 'Margaret', 'Dennis'];
-const LAST = ['Lovelace', 'Hopper', 'Turing', 'Dijkstra', 'Liskov', 'Torvalds', 'Hamilton', 'Ritchie'];
-const state = { tokens: new Set(), log: [], nextId: 1, tables: {}, sessionPosts: 0 };
-
-function seed() {
-  state.tables.Contacts = [];
-  for (let i = 1; i <= 157; i += 1) {
-    state.tables.Contacts.push({
-      recordId: String(1000 + i),
-      modId: '0',
-      fieldData: {
-        FirstName: FIRST[i % 8],
-        LastName: LAST[(i * 3) % 8],
-        Email: `user${i}@example.com`,
-        Status: i % 3 ? 'Open' : 'Closed',
-        Amount: (i * 37) % 500,
-        Region: ['West', 'East', 'North'][i % 3],
-        Notes: i % 10 === 0 ? '' : `Customer note ${i}: John Smith visited on site`,
-        Created: `10/${1 + (i % 28)}/2026`
-      }
-    });
-  }
-  state.tables.Invoices = [];
-  for (let i = 1; i <= 12; i += 1) {
-    state.tables.Invoices.push({
-      recordId: String(2000 + i),
-      modId: '0',
-      fieldData: { Invoice: `INV-${1040 + i}`, Customer: `Customer ${i}`, Balance: i * 125.5, Status: i % 2 ? 'Open' : 'Paid' }
-    });
-  }
-  state.nextId = 5000;
-}
-seed();
-
-const FIELD_TYPES = { Amount: 'number', Balance: 'number', Created: 'date' };
-const meta = (layout) =>
-  Object.keys(state.tables[layout][0].fieldData).map((name) => ({
-    name,
-    type: 'normal',
-    displayType: 'editText',
-    result: FIELD_TYPES[name] ?? 'text',
-    global: false,
-    autoEnter: false,
-    four2DigitYear: false,
-    maxRepeat: 1,
-    maxCharacters: 0,
-    notEmpty: false,
-    numeric: FIELD_TYPES[name] === 'number',
-    repetitions: 1,
-    timeOfDay: false
-  }));
-
-const msg = (code, message) => ({ messages: [{ code: String(code), message }] });
-const ok = (response) => ({ response, messages: [{ code: '0', message: 'OK' }] });
-
-function unescapeFind(v) { return String(v).replace(/\\(.)/g, '$1'); }
-function toNum(v) { const n = Number(v); return Number.isFinite(n) ? n : undefined; }
-function toDate(v) { const t = Date.parse(String(v)); return Number.isFinite(t) ? t : undefined; }
-function cmpVal(field, raw) {
-  const s = String(field ?? '');
-  const n = toNum(s); if (n !== undefined && s.trim() !== '') return n;
-  const d = toDate(s); if (d !== undefined && /\//.test(s)) return d;
-  return s.toLowerCase();
-}
-
-function fieldMatches(value, criterion) {
-  const c = String(criterion);
-  const text = String(value ?? '');
-  const lower = text.toLowerCase();
-  if (c === '=') return text === '';
-  if (c === '*') return text !== '';
-  const phrase = c.match(/^\*"((?:[^"\\]|\\.)*)"$/);
-  if (phrase) return lower.includes(unescapeFind(phrase[1]).toLowerCase());
-  if (c.startsWith('==')) {
-    const rest = c.slice(2);
-    if (rest.endsWith('*') && !rest.endsWith('\\*')) return lower.startsWith(unescapeFind(rest.slice(0, -1)).toLowerCase());
-    return lower === unescapeFind(rest).toLowerCase();
-  }
-  for (const [op, fn] of [['>=', (a, b) => a >= b], ['<=', (a, b) => a <= b], ['>', (a, b) => a > b], ['<', (a, b) => a < b]]) {
-    if (c.startsWith(op)) return text !== '' && fn(cmpVal(text), cmpVal(unescapeFind(c.slice(op.length))));
-  }
-  const range = c.match(/^((?:[^.\\]|\\.)+)\.\.\.((?:[^.\\]|\\.)+)$/);
-  if (range) { const v = cmpVal(text); return text !== '' && v >= cmpVal(unescapeFind(range[1])) && v <= cmpVal(unescapeFind(range[2])); }
-  // plain value: any word in the field begins with it (FileMaker's default find)
-  const needle = unescapeFind(c).toLowerCase();
-  return lower.split(/[\s,]+/).some((w) => w.startsWith(needle));
-}
-
-function runFind(rows, query) {
-  const matched = new Set();
-  const omitted = new Set();
-  for (const request of query) {
-    const { omit, ...criteria } = request;
-    const hits = rows.filter((r) => Object.entries(criteria).every(([f, c]) => fieldMatches(r.fieldData[f], c)));
-    for (const r of hits) (String(omit).toLowerCase() === 'true' ? omitted : matched).add(r);
-  }
-  return rows.filter((r) => matched.has(r) && !omitted.has(r));
-}
-
-function page(rows, offset, limit, layout, total) {
-  const start = Math.max(1, offset || 1);
-  const size = limit || 100;
-  const slice = rows.slice(start - 1, start - 1 + size);
-  return {
-    data: slice,
-    dataInfo: { database: DB, layout, table: layout, totalRecordCount: total, foundCount: rows.length, returnedCount: slice.length }
-  };
-}
-
-function send(res, status, body, headers = {}) {
-  const text = JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(text), ...headers });
-  res.end(text);
-}
-
-const MAX_BODY_BYTES = 5 * 1024 * 1024;
-const MAX_LOG_ENTRIES = 1000;
-const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const MAX_BODY_BYTES = 64 * 1024 * 1024;
 
 async function readBody(req) {
   const chunks = [];
@@ -152,114 +46,105 @@ async function readBody(req) {
     if (size > MAX_BODY_BYTES) { req.destroy(); throw new Error('request body too large'); }
     chunks.push(c);
   }
-  const t = Buffer.concat(chunks).toString('utf8');
-  try { const parsed = t ? JSON.parse(t) : {}; return isPlainObject(parsed) ? parsed : {}; } catch { return {}; }
+  return Buffer.concat(chunks);
 }
 
-async function handle(req, res) {
-  // Only answer requests addressed to this machine, so a web page that rebinds DNS to
-  // 127.0.0.1 cannot drive the server.
-  const hostName = (req.headers.host ?? '').replace(/:\d+$/, '');
-  if (!['127.0.0.1', 'localhost', '[::1]'].includes(hostName)) return send(res, 403, msg(0, 'Forbidden host'));
-
-  const url = new URL(req.url, 'http://x');
-  const path = url.pathname;
-  const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : {};
-  state.log.push({ method: req.method, path: path.replace(base, ''), query: url.search, body: Object.keys(body).length ? body : undefined });
-  if (state.log.length > MAX_LOG_ENTRIES) state.log.shift();
-
-  if (path.startsWith('/__admin/')) {
-    if (path === '/__admin/log') return send(res, 200, { log: state.log, sessionPosts: state.sessionPosts });
-    if (path === '/__admin/reset' || path === '/__admin/expire') {
-      if (req.method !== 'POST') return send(res, 405, msg(0, 'Use POST'));
-      if (path === '/__admin/reset') { state.log.length = 0; state.sessionPosts = 0; seed(); } else { state.tokens.clear(); }
-      return send(res, 200, {});
-    }
-    return send(res, 404, {});
+function writeOut(res, out) {
+  if (out.hang) return; // never answer (timeout tests)
+  if (out.dropMid) {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100000' });
+    res.write(out.partial);
+    setTimeout(() => res.socket?.destroy(), 50);
+    return;
   }
-  if (!path.startsWith(base)) return send(res, 404, msg(105, 'Database is missing'));
-  const rest = path.slice(base.length);
-
-  if (rest === '/sessions' && req.method === 'POST') {
-    state.sessionPosts += 1;
-    const [u, p] = Buffer.from((req.headers.authorization ?? '').replace(/^Basic /, ''), 'base64').toString().split(':');
-    if (u !== USER || p !== PASS) return send(res, 401, msg(212, 'Invalid user account and/or password; please try again'));
-    const token = crypto.randomBytes(32).toString('hex');
-    state.tokens.add(token);
-    return send(res, 200, ok({ token }));
+  if (out.drop) return res.socket?.destroy();
+  if (out.stream) {
+    res.writeHead(out.status, out.headers);
+    let left = out.stream.size;
+    const chunk = Buffer.alloc(64 * 1024);
+    const pump = () => {
+      while (left > 0) {
+        const n = Math.min(left, chunk.length);
+        left -= n;
+        if (!res.write(n === chunk.length ? chunk : chunk.subarray(0, n))) return res.once('drain', pump);
+      }
+      res.end();
+    };
+    return pump();
   }
-  const del = rest.match(/^\/sessions\/(.+)$/);
-  if (del && req.method === 'DELETE') { state.tokens.delete(del[1]); return send(res, 200, ok({})); }
-
-  const bearer = (req.headers.authorization ?? '').replace(/^Bearer /, '');
-  if (!state.tokens.has(bearer)) return send(res, 401, msg(952, 'Invalid FileMaker Data API token (*)'));
-
-  if (rest === '/layouts' && req.method === 'GET') return send(res, 200, ok({ layouts: Object.keys(state.tables).map((name) => ({ name })) }));
-  if (rest === '/scripts' && req.method === 'GET') return send(res, 200, ok({ scripts: [{ name: 'Rebuild Index', isFolder: false }, { name: 'Echo', isFolder: false }] }));
-
-  const m = rest.match(/^\/layouts\/([^/]+)(\/.*)?$/);
-  if (!m) return send(res, 404, msg(102, 'Field is missing'));
-  const layout = decodeURIComponent(m[1]);
-  const tail = m[2] ?? '';
-  const rows = state.tables[layout];
-  if (!rows) return send(res, 500, msg(105, 'Layout is missing'));
-
-  if (tail === '' && req.method === 'GET') return send(res, 200, ok({ fieldMetaData: meta(layout), portalMetaData: {}, valueLists: [] }));
-
-  if (tail === '/_find' && req.method === 'POST') {
-    if (!Array.isArray(body.query) || !body.query.every(isPlainObject)) return send(res, 500, msg(960, 'Find query is invalid'));
-    let found = runFind(rows, body.query);
-    for (const s of [...(body.sort ?? [])].reverse()) {
-      const dir = s.sortOrder === 'descend' ? -1 : 1;
-      found = [...found].sort((a, b) => {
-        const x = cmpVal(a.fieldData[s.fieldName]); const y = cmpVal(b.fieldData[s.fieldName]);
-        return (x < y ? -1 : x > y ? 1 : 0) * dir;
-      });
-    }
-    const offset = Number(body.offset) || 1;
-    if (found.length === 0 || offset > found.length) return send(res, 404, { ...msg(401, 'No records match the request'), response: {} });
-    return send(res, 200, ok(page(found, offset, Number(body.limit) || undefined, layout, rows.length)));
-  }
-
-  if (tail === '/records' && req.method === 'GET') {
-    const offset = Number(url.searchParams.get('_offset')) || 1;
-    if (offset > rows.length) return send(res, 404, { ...msg(401, 'No records match the request'), response: {} });
-    return send(res, 200, ok(page(rows, offset, Number(url.searchParams.get('_limit')) || undefined, layout, rows.length)));
-  }
-  if (tail === '/records' && req.method === 'POST') {
-    const row = { recordId: String(state.nextId++), modId: '0', fieldData: { ...rows[0].fieldData, ...Object.fromEntries(Object.keys(rows[0].fieldData).map((k) => [k, ''])), ...body.fieldData } };
-    rows.push(row);
-    return send(res, 200, ok({ recordId: row.recordId, modId: row.modId }));
-  }
-  const rec = tail.match(/^\/records\/([^/]+)$/);
-  if (rec) {
-    const row = rows.find((r) => r.recordId === rec[1]);
-    if (!row) return send(res, 500, msg(101, 'Record is missing'));
-    if (req.method === 'GET') return send(res, 200, ok({ data: [row], dataInfo: { database: DB, layout, table: layout, totalRecordCount: rows.length, foundCount: 1, returnedCount: 1 } }));
-    if (req.method === 'PATCH') {
-      if (body.modId !== undefined && String(body.modId) !== row.modId) return send(res, 500, msg(306, 'Record modification ID does not match'));
-      Object.assign(row.fieldData, body.fieldData);
-      row.modId = String(Number(row.modId) + 1);
-      return send(res, 200, ok({ modId: row.modId }));
-    }
-    if (req.method === 'DELETE') { rows.splice(rows.indexOf(row), 1); return send(res, 200, ok({})); }
-  }
-  const script = tail.match(/^\/script\/([^/]+)$/);
-  if (script && req.method === 'GET') {
-    return send(res, 200, ok({ scriptResult: `ran ${decodeURIComponent(script[1])} param=${url.searchParams.get('script.param') ?? ''}`, scriptError: '0' }));
-  }
-  return send(res, 404, msg(102, 'Not found in mock'));
+  let body; let type = 'application/json';
+  if (out.json !== undefined) body = JSON.stringify(out.json);
+  else if (out.text !== undefined) { body = out.text; type = out.headers?.['Content-Type'] ?? 'text/plain'; }
+  else { body = out.buffer ?? ''; type = out.headers?.['Content-Type'] ?? 'application/octet-stream'; }
+  res.writeHead(out.status, { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), ...(out.headers ?? {}) });
+  res.end(body);
 }
 
-const server = http.createServer(async (req, res) => {
-  try {
-    await handle(req, res);
-  } catch (error) {
-    // A malformed request must not take the mock down.
-    if (!res.headersSent) send(res, 500, msg(1, `Mock server error: ${error.message}`));
-    else res.end();
-  }
-});
+/** Start the mock. Resolves { baseUrl, adminUrl, port, adminPort, caPath, engine, close }. */
+export async function startMock(options = {}) {
+  const env = { ...process.env, ...options.env };
+  const engine = createEngine({ env });
+  const tlsMode = env.TLS && env.TLS !== 'off' ? env.TLS : 'off';
+  const protocol = tlsMode === 'off' ? 'http' : 'https';
+  const separateAdmin = env.ADMIN_PORT !== undefined && env.ADMIN_PORT !== '';
+  let certs;
+  if (tlsMode !== 'off') certs = makeCerts(tlsMode);
 
-const port = Number(process.env.PORT ?? 18080);
-server.listen(port, '127.0.0.1', () => console.log(`mock FileMaker Data API on http://127.0.0.1:${port} (user ${USER})`));
+  const adminHandler = async (req, res) => {
+    const url = new URL(req.url, 'http://x');
+    const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? safeJson(await readBody(req)) : {};
+    try {
+      const out = engine.admin(req.method, url.pathname, url.searchParams, body);
+      writeOut(res, { status: out.status ?? 200, headers: {}, json: out.json ?? {} });
+    } catch (e) { writeOut(res, { status: 400, headers: {}, json: { error: e.message } }); }
+  };
+  const mainHandler = async (req, res) => {
+    try {
+      const url = new URL(req.url, 'http://x');
+      if (url.pathname.startsWith('/__admin/')) {
+        if (separateAdmin) return writeOut(res, { status: 404, headers: {}, json: {} });
+        const host = (req.headers.host ?? '').replace(/:\d+$/, '');
+        if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return writeOut(res, { status: 403, headers: {}, json: {} });
+        return adminHandler(req, res);
+      }
+      const body = await readBody(req);
+      const input = { method: req.method, pathname: url.pathname, query: url.searchParams, headers: req.headers, body, protocol };
+      if (url.pathname === PROXY_PATH && req.method === 'POST') return writeOut(res, await handleProxy(engine, input));
+      writeOut(res, await engine.dispatch(input));
+    } catch (error) {
+      // A malformed request must not take the mock down.
+      if (!res.headersSent) writeOut(res, { status: 500, headers: {}, json: { messages: [{ code: '1', message: `Mock server error: ${error.message}` }] } });
+      else res.end();
+    }
+  };
+
+  const server = tlsMode === 'off' ? http.createServer(mainHandler) : https.createServer({ key: fs.readFileSync(certs.key), cert: fs.readFileSync(certs.cert), ...(certs.tlsVersions ?? {}) }, mainHandler);
+  const adminServer = separateAdmin ? http.createServer(adminHandler) : undefined;
+  const listen = (srv, port) => new Promise((resolve, reject) => { srv.once('error', reject); srv.listen(port, '127.0.0.1', () => resolve(srv.address().port)); });
+  const port = await listen(server, Number(env.PORT ?? 18080));
+  const adminPort = adminServer ? await listen(adminServer, Number(env.ADMIN_PORT)) : port;
+  const baseUrl = `${protocol}://127.0.0.1:${port}`;
+  return {
+    engine, port, adminPort, baseUrl, adminUrl: separateAdmin ? `http://127.0.0.1:${adminPort}` : baseUrl, caPath: certs?.caPath, intermediatePath: certs?.intermediatePath, certPath: certs?.cert, tlsMode,
+    close: async () => {
+      server.closeAllConnections?.(); adminServer?.closeAllConnections?.();
+      await Promise.all([new Promise((r) => server.close(r)), adminServer ? new Promise((r) => adminServer.close(r)) : undefined]);
+      if (certs) fs.rmSync(certs.dir, { recursive: true, force: true });
+    }
+  };
+}
+const safeJson = (buf) => { try { const v = buf.length ? JSON.parse(buf.toString('utf8')) : {}; return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; } };
+
+/** Start the mock, print the ready lines and stop cleanly on SIGTERM/SIGINT (what `npm run mock:server` does). */
+export async function main() {
+  const mock = await startMock();
+  console.log(`mock FileMaker Data API on ${mock.baseUrl} (user tester)`);
+  console.log(`MOCK_READY ${JSON.stringify({ baseUrl: mock.baseUrl, adminUrl: mock.adminUrl, port: mock.port, adminPort: mock.adminPort, tls: mock.tlsMode, caPath: mock.caPath ?? null, intermediatePath: mock.intermediatePath ?? null, proxyUrl: `${mock.baseUrl}${PROXY_PATH}` })}`);
+  const stop = async () => { await mock.close(); process.exit(0); };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(process.argv[1])) {
+  await main();
+}

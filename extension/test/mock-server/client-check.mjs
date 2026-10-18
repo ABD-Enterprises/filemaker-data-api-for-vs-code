@@ -170,11 +170,94 @@ async function runChecks() {
   check('logout works', true);
 }
 
+// Every implemented endpoint and error code, over raw HTTP (the FMClient does not use all of them).
+async function runEndpointChecks() {
+  const root = `${base}/fmi/data/vLatest`;
+  const basic = (u = 'tester', p = 'testpass1') => `Basic ${Buffer.from(`${u}:${p}`).toString('base64')}`;
+  const call = async (method, route, { token, body, headers = {} } = {}) => {
+    const res = await fetch(root + route, {
+      method,
+      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    });
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch { json = undefined; }
+    return { status: res.status, json, code: json?.messages?.[0]?.code };
+  };
+  const expectCall = (name, r, status, code) => check(`endpoint: ${name}`, r.status === status && (code === undefined || r.code === code), { status: r.status, code: r.code, want: [status, code] });
+  const login = async (db = 'Quality', u, p) => (await call('POST', `/databases/${db}/sessions`, { body: {}, headers: { Authorization: basic(u, p) } }));
+  const t = (await login()).json.response.token;
+  const L = (n) => `/databases/Quality/layouts/${encodeURIComponent(n)}`;
+
+  expectCall('GET productInfo', await call('GET', '/productInfo'), 200, '0');
+  expectCall('GET databases', await call('GET', '/databases'), 200, '0');
+  expectCall('GET validateSession', await call('GET', '/validateSession', { token: t }), 200, '0');
+  expectCall('POST sessions (Basic)', await login(), 200, '0');
+  expectCall('POST sessions (OAuth headers)', await call('POST', '/databases/Quality/sessions', { body: {}, headers: { 'X-FM-Data-OAuth-Request-Id': 'mock-oauth-request', 'X-FM-Data-OAuth-Identifier': 'mock-oauth-identifier' } }), 200, '0');
+  expectCall('GET layouts', await call('GET', '/databases/Quality/layouts', { token: t }), 200, '0');
+  expectCall('GET scripts', await call('GET', '/databases/Quality/scripts', { token: t }), 200, '0');
+  expectCall('GET layout metadata', await call('GET', L('Customers'), { token: t }), 200, '0');
+  expectCall('GET records', await call('GET', `${L('Customers')}/records?_limit=2&_offset=3`, { token: t }), 200, '0');
+  const created = await call('POST', `${L('Products')}/records`, { token: t, body: { fieldData: { SKU: 'CHK-1' } } });
+  expectCall('POST records', created, 200, '0');
+  const id = created.json.response.recordId;
+  expectCall('GET record', await call('GET', `${L('Products')}/records/${id}`, { token: t }), 200, '0');
+  expectCall('PATCH record', await call('PATCH', `${L('Products')}/records/${id}`, { token: t, body: { fieldData: { Name: 'x' }, modId: '0' } }), 200, '0');
+  const dup = await call('POST', `${L('Products')}/records/${id}`, { token: t });
+  expectCall('POST record (duplicate)', dup, 200, '0');
+  expectCall('POST _find', await call('POST', `${L('Products')}/_find`, { token: t, body: { query: [{ SKU: 'CHK-1' }] } }), 200, '0');
+  const form = new FormData();
+  form.append('upload', new Blob(['x']), 'x.txt');
+  const docs = (await call('GET', `${L('Documents')}/records?_limit=1`, { token: t })).json.response.data[0].recordId;
+  const up = await fetch(`${root}${L('Documents')}/records/${docs}/containers/File/1`, { method: 'POST', headers: { Authorization: `Bearer ${t}` }, body: form });
+  check('endpoint: POST container upload', up.status === 200, up.status);
+  expectCall('PATCH globals', await call('PATCH', '/databases/Quality/globals', { token: t, body: { globalFields: { 'Customers::gFilter': 'a' } } }), 200, '0');
+  expectCall('GET script endpoint', await call('GET', `${L('Customers')}/script/Echo?script.param=hi`, { token: t }), 200, '0');
+  for (const rid of [id, dup.json.response.recordId]) expectCall('DELETE record', await call('DELETE', `${L('Products')}/records/${rid}`, { token: t }), 200, '0');
+  expectCall('DELETE session', await call('DELETE', `/databases/Quality/sessions/${t}`), 200, '0');
+
+  const t2 = (await login()).json.response.token;
+  expectCall('error 952 bad token', await call('GET', L('Customers'), { token: 'bad' }), 401, '952');
+  expectCall('error 212 wrong password', await login('Quality', 'tester', 'x'), 401, '212');
+  expectCall('error 802 unopenable database', await login('Locked'), 500, '802');
+  expectCall('error 105 layout missing', await call('GET', L('Nope'), { token: t2 }), 500, '105');
+  expectCall('error 102 field missing', await call('POST', `${L('Customers')}/_find`, { token: t2, body: { query: [{ Nope: 'x' }] } }), 500, '102');
+  expectCall('error 101 record missing', await call('GET', `${L('Customers')}/records/1`, { token: t2 }), 500, '101');
+  expectCall('error 104 script missing', await call('GET', `${L('Customers')}/script/Nope`, { token: t2 }), 500, '104');
+  expectCall('error 401 no records (HTTP 404)', await call('POST', `${L('Customers')}/_find`, { token: t2, body: { query: [{ LastName: 'zzzzqq' }] } }), 404, '401');
+  expectCall('error 960 bad parameter', await call('GET', `${L('Customers')}/records?_limit=abc`, { token: t2 }), 400, '960');
+  expectCall('error 400 empty find', await call('POST', `${L('Customers')}/_find`, { token: t2, body: { query: [] } }), 500, '400');
+  const p = (await call('POST', `${L('Products')}/records`, { token: t2, body: { fieldData: { SKU: 'CHK-2' } } })).json.response.recordId;
+  await call('PATCH', `${L('Products')}/records/${p}`, { token: t2, body: { fieldData: { Name: 'a' } } });
+  expectCall('error 306 modId mismatch', await call('PATCH', `${L('Products')}/records/${p}`, { token: t2, body: { fieldData: { Name: 'b' }, modId: '0' } }), 500, '306');
+  expectCall('error 500 date validation', await call('PATCH', `${L('Customers')}/records/3001`, { token: t2, body: { fieldData: { Joined: 'x' } } }), 500, '500');
+  expectCall('error 502 number validation', await call('PATCH', `${L('Customers')}/records/3001`, { token: t2, body: { fieldData: { Balance: 'x' } } }), 500, '502');
+  expectCall('error 504 unique', await call('POST', `${L('Products')}/records`, { token: t2, body: { fieldData: { SKU: 'CHK-2' } } }), 500, '504');
+  expectCall('error 506 value list', await call('POST', `${L('Products')}/records`, { token: t2, body: { fieldData: { Category: 'Nope' } } }), 500, '506');
+  expectCall('error 509 required', await call('POST', `${L('Customers')}/records`, { token: t2, body: { fieldData: { LastName: '' } } }), 500, '509');
+  expectCall('error 201 calculation field', await call('PATCH', `${L('Customers')}/records/3001`, { token: t2, body: { fieldData: { FullName: 'x' } } }), 500, '201');
+  const reader = (await login('Quality', 'reader', 'readpass1')).json.response.token;
+  expectCall('error 9 insufficient privileges', await call('POST', `${L('Customers')}/records`, { token: reader, body: { fieldData: {} } }), 403, '9');
+  expectCall('error 405 wrong method', await call('PUT', `${L('Customers')}/records`, { token: t2, body: {} }), 405);
+  expectCall('error 415 wrong content type', await call('POST', `${L('Customers')}/_find`, { token: t2, headers: { 'Content-Type': 'text/plain' }, body: undefined }).then(async () => {
+    const res = await fetch(`${root}${L('Customers')}/_find`, { method: 'POST', headers: { Authorization: `Bearer ${t2}`, 'Content-Type': 'text/plain' }, body: '{"query":[{}]}' });
+    return { status: res.status, code: (await res.json()).messages[0].code };
+  }), 415);
+  // token expiry with a short TTL, then restore
+  await fetch(`${base}/__admin/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ttlMs: 300 }) });
+  const shortLived = (await login()).json.response.token;
+  await new Promise((r) => setTimeout(r, 500));
+  expectCall('token expires after the configured idle time', await call('GET', '/validateSession', { token: shortLived }), 401, '952');
+  await fetch(`${base}/__admin/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ttlMs: 900000 }) });
+}
+
 async function main() {
   const mock = await startMock();
   let exitCode = 0;
   try {
     await runChecks();
+    await runEndpointChecks();
   } catch (error) {
     console.error('check run failed:', error);
     exitCode = 2;
