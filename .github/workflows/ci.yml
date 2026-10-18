@@ -128,7 +128,6 @@ jobs:
 
       - name: Require a release tag on main that matches the version
         run: |
-          git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::$GITHUB_REF_NAME does not point at a commit on main; refusing to publish."
             exit 1
@@ -145,16 +144,21 @@ jobs:
           name: extension-vsix
           path: artifacts
 
-      # No `npm ci` here: project dependencies and their install scripts must not run in the job
-      # that holds the token. vsce is fetched at a pinned version and run from a clean directory.
+      # Project dependencies and their install scripts must not run in the job that holds the
+      # token. vsce comes from its own minimal lockfile (tools/publish), installed without
+      # lifecycle scripts, so its whole dependency tree is fixed.
+      - name: Install vsce from its lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix tools/publish
+
       - name: Publish to Marketplace
         run: |
           VSIX_PATH="$(realpath artifacts/*.vsix)"
-          cd "$RUNNER_TEMP"
-          npx --yes @vscode/vsce@4.0.0 publish --packagePath "$VSIX_PATH" --no-update-package-json
+          tools/publish/node_modules/.bin/vsce publish --packagePath "$VSIX_PATH" --no-update-package-json
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+  # Runs only after `publish` succeeded, which already required the tag to be on main and to match
+  # the version; it does not repeat those checks.
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: publish
