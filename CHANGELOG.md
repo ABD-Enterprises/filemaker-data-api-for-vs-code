@@ -39,7 +39,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
-- None.
+- Log and diagnostics redaction now also covers single-quoted keys (`{'token': '...'}`) and plain-text `Cookie:`, `Set-Cookie:`, `Authorization:` and `Proxy-Authorization:` lines.
 
 ## 1.4.0 - 2026-10-18
 
