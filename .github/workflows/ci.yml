@@ -256,10 +256,18 @@ jobs:
 
       - name: Create GitHub Release
         run: |
+          set -euo pipefail
           VSIX_PATH="$(echo artifacts/*.vsix)"
-          tools/release-notes.sh "$GITHUB_REF_NAME" \
-            | "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" artifacts/maps/*.tgz \
-                --title "$GITHUB_REF_NAME" \
-                --notes-file -
+          # Write the notes to a file first: if the script fails or finds no section, stop here
+          # instead of creating a release with empty notes.
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          tools/release-notes.sh "$GITHUB_REF_NAME" > "$NOTES_FILE"
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::error::No release notes found for $GITHUB_REF_NAME in extension/CHANGELOG.md."
+            exit 1
+          fi
+          "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" artifacts/maps/*.tgz \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$NOTES_FILE"
         env:
           GH_TOKEN: ${{ github.token }}
