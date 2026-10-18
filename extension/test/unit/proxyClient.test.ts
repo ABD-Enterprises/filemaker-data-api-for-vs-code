@@ -128,6 +128,28 @@ describe('ProxyClient', () => {
     });
   });
 
+  describe('editRecord', () => {
+    it('forwards modId to the proxy only when given', async () => {
+      const payloads: Array<Record<string, unknown>> = [];
+      const scope = nock(PROXY_URL)
+        .post(PROXY_PATH, (body: { action?: string; payload?: Record<string, unknown> }) => {
+          if (body.action !== 'editRecord') return false;
+          payloads.push(body.payload ?? {});
+          return true;
+        })
+        .times(2)
+        .reply(200, { ok: true, data: { result: { recordId: '7', modId: '4' } } });
+
+      const client = createClient();
+      await client.editRecord(createProfile(), 'Contacts', '7', { Status: 'Closed' }, undefined, '3');
+      await client.editRecord(createProfile(), 'Contacts', '7', { Status: 'Open' });
+
+      expect(payloads[0]).toEqual({ layout: 'Contacts', recordId: '7', fieldData: { Status: 'Closed' }, modId: '3' });
+      expect(payloads[1]).toEqual({ layout: 'Contacts', recordId: '7', fieldData: { Status: 'Open' } });
+      scope.done();
+    });
+  });
+
   describe('getRecord', () => {
     it('returns the record from proxy response', async () => {
       const record = { recordId: '42', fieldData: { Name: 'Alice' } };

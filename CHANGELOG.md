@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Record Editor edit-conflict protection: saving sends the record's loaded `modId`, FileMaker refuses the edit if it changed (error 306), and the editor shows the fields that changed, keeps the draft, and offers a reload. Batch update is unchanged.
 - Query Builder form-based find editor, actionable results (View/Edit, found-count summary, page sorting, copy as table), theme-aware styling, grouped settings with one-click migration, clearer command titles, two more walkthrough steps, and progress for code generation and environment compare (#364).
 
 ### [FIX]

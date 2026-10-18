@@ -79,3 +79,11 @@ export function toFMClientError(normalized: NormalizedError): FMClientError {
     isRetryable: normalized.isRetryable
   });
 }
+
+/**
+ * FileMaker error 306, "Record modification ID does not match": the record changed
+ * after it was loaded, and an edit that sent that modId was refused.
+ */
+export function isRecordModifiedConflict(error: unknown): boolean {
+  return error instanceof FMClientError && error.code === '306';
+}
