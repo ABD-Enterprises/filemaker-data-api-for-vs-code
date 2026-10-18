@@ -38,5 +38,26 @@ export default [
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
+  {
+    // Node scripts: the mock server and the real-VS-Code UI tests.
+    files: ["test/mock-server/**/*.mjs", "e2e-ui/**/*.mjs", "scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.es2022 },
+    },
+    rules: {
+      "no-unused-vars": ["error", { args: "none", caughtErrors: "none", varsIgnorePattern: "^_" }],
+      "no-irregular-whitespace": "off", // the tests send U+2028/2029 on purpose
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
+    },
+  },
+  {
+    // These functions are serialised and run inside a browser page.
+    files: ["e2e-ui/**/*.mjs"],
+    languageOptions: { globals: { ...globals.browser } },
+    rules: { "no-unused-vars": "off" }, // journeys keep exploratory values for the failure detail
+  },
   prettier,
 ];

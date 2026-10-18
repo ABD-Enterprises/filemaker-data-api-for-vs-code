@@ -105,6 +105,7 @@ Minor release: no data migration, and no command or setting was removed. User-fa
 - Docs: reconcile the user guide, upgrade notes, smoke test and failure-mode catalogue with certificate pinning, the settings view and About / Show Version.
 - Note: the self-signed checkbox was never released; legacy field is still read.
 - Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
+- Complete mock FileMaker Data API (documented endpoints, error codes, mixed-quality dataset, failure faults, TLS modes) and real-VS-Code UI end-to-end tests (`extension/e2e-ui`, run with `npm run test:e2e-ui -w extension`); not part of the default test or CI path.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.
 - Untrack artifacts/*.log and gitignore them.
 - Ship generated `THIRD_PARTY_NOTICES.txt` (checked in CI via `package:check` and a unit test); exclude lint config, build scripts, QA docs and ARCHITECTURE.md from the VSIX.

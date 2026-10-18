@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- [INTERNAL] The mock FileMaker Data API (`npm run mock:server`) now covers the documented Data API surface (sessions with Basic, OAuth headers and Claris ID, productInfo, databases, layouts and scripts with folders, layout metadata, records, find, duplicate, container upload, globals, script endpoint and script parameters), the FileMaker error codes with their HTTP statuses, a configurable 15-minute token lifetime, a session cap, TLS modes, a reference proxy endpoint, an admin control surface (separate port optional) with named failure faults, and a seeded dataset of about 1,400 records of deliberately mixed quality (`test/mock-server/DATASET.md` says which record ids exercise which condition). The endpoint inventory with its Claris sources is in `scripts/mock/ENDPOINTS.md`; `npm run mock:check` runs every implemented endpoint and error code, and `test/unit/mockServer` holds contract tests against the response shapes in the Claris Data API Guide.
+- [INTERNAL] Real VS Code UI end-to-end tests (`npm run test:e2e-ui`, not part of `npm test` or CI): Playwright drives the downloaded VS Code desktop app with the built VSIX through twelve user journeys plus failure-mode, AI and MCP server journeys, writing a step report with screenshots. A known-findings list (`e2e-ui/known-findings.json`) lets a run exit 0 when only known findings fail and exit 1 on a new failure; the real Claude Code CLI journey is opt-in (`E2E_CLAUDE=1`). See `extension/e2e-ui/README.md`.
+
 ## 1.4.0
 
 _Released 2026-10-18._

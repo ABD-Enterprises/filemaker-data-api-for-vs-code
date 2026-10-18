@@ -87,24 +87,24 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 
 ## Common commands
 
-| Command | Purpose |
-| --- | --- |
-| `FileMaker: Add Connection Profile` | Create a direct or proxy connection |
-| `FileMaker: Connect` | Start a session with a saved profile |
-| `FileMaker: Open Query Builder` | Build and run find requests |
-| `FileMaker: Open Record Editor` | Edit a record |
-| `FileMaker: Create Record` | Create a record on a layout |
-| `FileMaker: Delete Record` | Delete a record, with confirmation |
-| `FileMaker: Open Script Runner` | Run a script with a parameter |
-| `FileMaker: Capture Schema Snapshot` | Save layout metadata for later diffing |
-| `FileMaker: Diff Schema Snapshots` | Compare two snapshots |
-| `FileMaker: Generate Types for Layout` | Write a TypeScript interface for a layout |
-| `FileMaker: Batch Export (Find)` | Export JSONL or CSV from a find |
-| `FileMaker: Batch Update from CSV/JSON` | Update many records, dry run first |
-| `FileMaker: Write AI Context` | Write layout, field and script names for AI tools |
-| `FileMaker: About / Show Version` | Show the extension, build and VS Code versions; copy them for a bug report |
-| `FileMaker: Show Effective Settings` | See which User or Workspace value is in effect and why a workspace value is ignored |
-| `FileMaker: Show Diagnostics` | Open a redacted report for bug reports |
+| Command                                 | Purpose                                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
+| `FileMaker: Add Connection Profile`     | Create a direct or proxy connection                                                 |
+| `FileMaker: Connect`                    | Start a session with a saved profile                                                |
+| `FileMaker: Open Query Builder`         | Build and run find requests                                                         |
+| `FileMaker: Open Record Editor`         | Edit a record                                                                       |
+| `FileMaker: Create Record`              | Create a record on a layout                                                         |
+| `FileMaker: Delete Record`              | Delete a record, with confirmation                                                  |
+| `FileMaker: Open Script Runner`         | Run a script with a parameter                                                       |
+| `FileMaker: Capture Schema Snapshot`    | Save layout metadata for later diffing                                              |
+| `FileMaker: Diff Schema Snapshots`      | Compare two snapshots                                                               |
+| `FileMaker: Generate Types for Layout`  | Write a TypeScript interface for a layout                                           |
+| `FileMaker: Batch Export (Find)`        | Export JSONL or CSV from a find                                                     |
+| `FileMaker: Batch Update from CSV/JSON` | Update many records, dry run first                                                  |
+| `FileMaker: Write AI Context`           | Write layout, field and script names for AI tools                                   |
+| `FileMaker: About / Show Version`       | Show the extension, build and VS Code versions; copy them for a bug report          |
+| `FileMaker: Show Effective Settings`    | See which User or Workspace value is in effect and why a workspace value is ignored |
+| `FileMaker: Show Diagnostics`           | Open a redacted report for bug reports                                              |
 
 ## Security and privacy
 
@@ -129,13 +129,13 @@ This extension is free and MIT-licensed. The team behind it, [ABD Enterprises](h
 
 If you need a hand with the work behind the tool:
 
-| Engagement | Price | What you get |
-| --- | --- | --- |
-| **Discovery Sprint** | $3,000 / 1 week | Documented requirements + effort estimate |
-| **Integration Audit** | $4,500 / 1 week | Architecture review, gap analysis, prioritized remediation |
-| **Migration Assessment** | $9,000 / 2 weeks | Honest evaluation: modernize within FileMaker, or move on |
-| **Platform Modernization** | $25k – $150k | Execute the chosen path in measured phases |
-| **Retainer** | $5,000 / month | Ongoing maintenance, feature work, FM Server administration |
+| Engagement                 | Price            | What you get                                                |
+| -------------------------- | ---------------- | ----------------------------------------------------------- |
+| **Discovery Sprint**       | $3,000 / 1 week  | Documented requirements + effort estimate                   |
+| **Integration Audit**      | $4,500 / 1 week  | Architecture review, gap analysis, prioritized remediation  |
+| **Migration Assessment**   | $9,000 / 2 weeks | Honest evaluation: modernize within FileMaker, or move on   |
+| **Platform Modernization** | $25k – $150k     | Execute the chosen path in measured phases                  |
+| **Retainer**               | $5,000 / month   | Ongoing maintenance, feature work, FM Server administration |
 
 **Contact:** [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension) · [abdenterprises.com](https://abdenterprises.com)
 
