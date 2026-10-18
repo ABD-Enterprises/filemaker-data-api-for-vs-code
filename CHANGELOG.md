@@ -28,7 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
-- None.
+- Layout names are no longer trimmed; spacing/case variants stay distinct.
 
 ### [INTERNAL]
 
