@@ -103,6 +103,20 @@ Credentials stay in VS Code `SecretStorage`; they are never written to workspace
 - Workspace trust and role guards protect write workflows
 - Webviews use CSP nonces and do not call FileMaker endpoints directly
 
+## AI tools
+
+Off by default. Turn on `filemaker.ai.enabled` in your **user** settings (a workspace setting cannot), pick a connection with **FileMaker: Set AI Access for Connection**, and AI tools in VS Code (for example Copilot agent mode) can list layouts and scripts, describe a layout, find and read records, and explain error codes. With `filemaker.ai.allowWrites` they can also create, edit and delete one record at a time, and with `filemaker.ai.allowScripts` run scripts you put on `filemaker.ai.scriptAllowlist`.
+
+What protects you, and what does not:
+
+- **Read-only first.** Write and script tools are not offered until you switch them on. A connection has to be set to AI access "read" or "write" first.
+- **You approve.** The first read of each layout asks once per session. Every write asks in a dialog that VS Code cannot set to "always allow", showing the real old and new values; delete asks you to type the record id. A record you or someone else changed in the meantime is not overwritten.
+- **Limits.** 50 records per call, 500 records per session, 30 calls per minute, 10 write attempts per session and 3 per minute. The status bar item shows the state and is a one-click kill switch. **FileMaker: Show AI Activity** lists what was done (no field values).
+- **Use a restricted FileMaker account.** FileMaker privilege sets are the only control that does not depend on the AI model or on you. Connect with a dedicated account with a read-only privilege set.
+- **Data goes to the model provider.** Anything a tool returns is sent to the AI model you chose, and can leave through any shell, web or git tool the same agent has. Field values and names are text from your database; a hostile value or name can try to steer the agent. `filemaker.ai.hiddenFields` hides fields by name on a best-effort basis. It does not stop disclosure through a calculation, a summary field or a script.
+
+See `docs/DATA_HANDLING.md` and ADR-0004 for the full list.
+
 ## Common Commands
 
 | Command | Purpose |

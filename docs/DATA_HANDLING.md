@@ -79,3 +79,14 @@ server address, user name or credentials.
   you chose. The extension cannot control what that provider or the tool's other
   capabilities do with it.
 
+## AI Tools
+
+With `filemaker.ai.enabled` on (user settings only), language-model tools in VS Code can read the layouts, fields, scripts and records of the connection you chose, and with further switches change them (ADR-0004).
+
+- **Data returned by a tool goes to the model provider you use.** The extension cannot control what the provider, or any shell, fetch or git tool the same agent has, does with it. Layout approval, the 500-record session quota and the 200 KB result cap reduce exposure; they do not remove it.
+- **Field values and names are an uncontrolled text channel.** Values come back as JSON strings; layout and script names pass an allowlist (letters, digits, space and `_ - . : ( )`, 64 characters). Field names the model must send back unchanged are returned as they are (unless they contain control or separator characters), so a hostile field name can reach the model.
+- **The hidden-field filter is best effort.** `filemaker.ai.hiddenFields` matches by field name, case-insensitively, with or without a `Table::` prefix, on every layout. It cannot stop disclosure through a calculation or summary field on another layout, a script result, or a differently named field.
+- **A restricted FileMaker account is the real control.** A dedicated account with a read-only privilege set is the only protection that does not depend on the model or on you.
+- The activity log is stored in the extension's storage folder, not the workspace, capped at 256 KB. It records the tool, connection, layout, record ids, outcome and whether you confirmed. It does not record field values.
+- Secrets: tools never return the server address, user name or credentials; secrets in values and error text are redacted. Redaction can rewrite text in a field that looks like a secret, so writes refuse values containing the redaction marker.
+

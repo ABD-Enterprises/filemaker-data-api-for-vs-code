@@ -7,6 +7,8 @@ export type BatchExportFormat = 'jsonl' | 'csv';
 export type EnterpriseRole = 'viewer' | 'developer' | 'admin';
 export type PerformanceMode = 'standard' | 'high-scale';
 
+export type AiAccess = 'none' | 'read' | 'write';
+
 export interface ConnectionProfile {
   id: string;
   name: string;
@@ -19,6 +21,8 @@ export interface ConnectionProfile {
   proxyEndpoint?: string;
   allowSelfSigned?: boolean;
   caBundlePath?: string;
+  /** What AI tools may do through this profile (ADR-0004). Missing means "none". */
+  aiAccess?: AiAccess;
 }
 
 export interface FileMakerMessage {
