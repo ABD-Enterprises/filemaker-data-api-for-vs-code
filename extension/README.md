@@ -4,7 +4,7 @@
 
 FileMaker Data API Tools turns VS Code into a serious FileMaker workspace: connect to a FileMaker server, inspect layouts and metadata, run find requests, edit records, compare schema snapshots, export large result sets, and review diagnostics without leaving the editor.
 
-**Built by [ABD Enterprises](https://abdenterprises.com?ref=vscode).** A free, open-source tool for FileMaker developers — distilled from the workflows we use on every client engagement.
+**Built by [ABD Enterprises](https://abdenterprises.com).** A free, open-source tool for FileMaker developers — distilled from the workflows we use on every client engagement.
 
 Built for teams that already live in VS Code:
 
@@ -160,7 +160,7 @@ Additional project docs:
 
 ## Need help with FileMaker integration?
 
-This extension is free and MIT-licensed. The team behind it — [ABD Enterprises](https://abdenterprises.com?ref=vscode) — has been delivering FileMaker integration, migration, and modernization work since 2005.
+This extension is free and MIT-licensed. The team behind it — [ABD Enterprises](https://abdenterprises.com) — has been delivering FileMaker integration, migration, and modernization work since 2005.
 
 If you need a hand with the work behind the tool:
 
@@ -172,8 +172,14 @@ If you need a hand with the work behind the tool:
 | **Platform Modernization** | $25k – $150k | Execute the chosen path in measured phases |
 | **Retainer** | $5,000 / month | Ongoing maintenance, feature work, FM Server administration |
 
-**Contact:** [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension) · [abdenterprises.com](https://abdenterprises.com?ref=vscode)
+**Contact:** [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension) · [abdenterprises.com](https://abdenterprises.com)
 
 ## License
 
 MIT
+
+The licences of the third-party packages bundled into the extension are in [THIRD_PARTY_NOTICES.txt](./THIRD_PARTY_NOTICES.txt).
+
+## Trademarks
+
+Claris and FileMaker are trademarks of Claris International Inc., registered in the U.S. and other countries. This extension is independent and is not affiliated with or endorsed by Claris.

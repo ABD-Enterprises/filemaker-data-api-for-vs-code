@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Fix 404 homepage/author URL; declare virtualWorkspaces unsupported; mention AI tools in the untrusted-workspace description; add enumDescriptions to seven enum settings; add the Claris trademark statement to the README.
 - Allow `..` inside snapshot/offline-cache index file names (layout `Q1..Q2`) while still rejecting traversal; traversal corpus added.
 - AI kill-switch status item does nothing (with guidance) when AI is not enabled, instead of silently setting the switch.
 - Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on.
@@ -68,6 +69,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Make `filemaker.secrets.fallback` application-scoped and `filemaker.typegen.outputDir` restricted in untrusted workspaces.
 - Query Builder copy-as-table neutralizes formula-looking cells like the CSV export (shared behaviour, parity-tested).
 - Record edit, create and upload and the Script Runner require a trusted workspace (commands, panels and panel messages), matching the documented behaviour; the manifest's untrusted-workspace description lists them.
 - Escape database-supplied names in generated types, clients and snippets; give punctuation-only-different layouts distinct file names and safe Windows names.
