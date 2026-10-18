@@ -1,0 +1,93 @@
+# ADR-0004: AI integration (schema context, language-model tools, MCP)
+
+- Status: Proposed (revised after an independent security review)
+- Date: 2026-10-18
+
+## Context
+
+Operators now work with AI models inside VS Code (Copilot agent mode, Claude Code, Cursor and similar). Without help, a model guesses layout and field names, writes `_find` requests FileMaker rejects, and has no safe way to read or change data. The extension already has what a model needs: connection profiles with secrets in SecretStorage, a Data API client, schema metadata, a query builder, a record editor with edit-conflict protection, a type generator, and the restrict-only policy layer from #372.
+
+The adversary for this feature is **the model itself, steered by prompt injection**. Text that reaches the model includes database values, layout, field and script names, and files from a cloned repository. Any of it can contain instructions. The same applies to every caller of a tool: an MCP client, another extension calling `vscode.lm.invokeTool`, or a raw HTTP client. Controls therefore live in the extension host, inside the tool core, and never rely on the model behaving.
+
+What the design cannot do: once data is in a model's context it can leave through the model provider and through whatever shell, fetch or git tools the same agent has. This ADR reduces exposure; it does not remove it, and the README must say so.
+
+## Decision
+
+One tool core in the extension host (`AiToolService`) that owns confirmation, scoping, caps, redaction and audit. Transports are thin and add no policy. Ship in three phases, each with its own adversarial review before merge.
+
+### Standing rules (every phase, every transport)
+
+1. **Restrict-only policy, plus new opt-in settings read differently.** Calls pass the #372 checks: trusted workspace, offline mode, feature switches, enterprise role. Offline mode applies to **reads as well as writes** for AI tools (the preview bridge does not do this today; AI tools do).
+2. **Opt-in settings come from user scope only.** `filemaker.ai.enabled` is the user-scope opt-in; `filemaker.features.ai.enabled` (rule 15) is the restrict-only switch a workspace or enterprise file may turn off. Both must allow a call. `filemaker.ai.*` settings that widen what a model can do (`enabled`, `allowWrites`, `allowScripts`, `scriptAllowlist`, `readableLayouts`) are declared `"scope": "application"` and read from `globalValue` only. They ignore `workspaceValue`, `workspaceFolderValue` and also `globalRemoteValue`/`globalLocalValue`, because in dev containers and Codespaces a repository can supply remote-machine settings. This is a different reader from the restrict-only one used for offline mode and feature switches (which treats remote values as baseline); it gets its own tests, including a fake dev-container value. Settings that narrow what a model can do (`hiddenFields`) may be added to from a workspace, never reduced. AI tools do not register in an untrusted workspace, are unregistered if trust is revoked and registered on `onDidGrantWorkspaceTrust`; a test asserts the AI settings are application-scoped, which is why they need no `restrictedConfigurations` entry.
+3. **Off unless switched on, read-only first.** `filemaker.ai.enabled` defaults to false. Even when on, write and script tools are not listed (no `tools/list` entry, no registered LM tool) until `allowWrites` / `allowScripts` is set. Tool annotations (`readOnlyHint`, `destructiveHint`) are set for MCP clients.
+4. **Connection chosen by the user, never by a workspace file.** AI tools use a connection the user explicitly selected for AI use (`filemaker.ai.connection`, user scope), shown in the status bar. `project.json`'s `activeProfileId` is ignored. Each saved profile carries `aiAccess: "none" | "read" | "write"`, default `none`; this needs a profile-schema change and migration. Tools take the layout, never a URL or connection name.
+5. **Recommend a restricted FileMaker account.** FileMaker privilege sets are the only control that does not depend on the model or on user vigilance. The setup flow for an AI connection tells the user to use a dedicated account with a read-only extended privilege set, and shows the account name the connection uses.
+6. **Reads are scoped and counted.** A layout must be allowed before a model can read it: the first read of a layout in a session asks the user (or it is listed in `readableLayouts`). The prompt shows the layout name JSON-escaped and length-capped, and consent covers related and portal data reachable through that layout, not only its own table. Limits: 50 records per call, 200 KB per result, 30 calls per minute, and a **total record quota per session** (default 500) with a visible counter. Results carry a found-count and `truncated` flag.
+7. **Closed query grammar.**  `fm_find_records` takes a closed form, not raw Data API arrays: a list of requests, each a map of `field → string` (field names validated against the layout's real fields, including `Table::Field`) plus an `omit` boolean, at most 5 requests, plus `sort` on known fields, `limit`, `offset`. Every tool schema has `additionalProperties: false`. Write tools reject `portalData`, `script`, `script.*` and container fields, and any field name containing `::` (a related-record edit). Write field names must exist on the layout itself, and a write to a hidden field is refused.
+8. **Hidden fields: a best-effort name filter.** The Data API's layout metadata gives field names (and `Table::Field` for related fields) but no base table, so a hidden field cannot be keyed by base table. `filemaker.ai.hiddenFields` entries are matched by **normalized field name** (trimmed, case-insensitive, with and without a `Table::` prefix) across all layouts. A match is removed from returned data and rejected in find criteria, sort, portal output and write dry-runs. This does not stop disclosure through a calculation or summary field on another layout that uses the hidden value, through a script result, or through a differently named field. **Only a restricted FileMaker account (rule 5) actually prevents disclosure**; the docs say so.
+9. **Writes are confirmed by the host, from fresh data.** One record per write call. Before any write the host re-reads the record, builds the diff itself (the model's described values are inputs, not facts), and shows a modal using `showWarningMessage({ modal: true })` inside the tool, not the language-model UI's confirmation, so there is no allow-for-session or always-allow. The modal lists, host-computed first: connection and account, layout, record id, field count; then each changed field as JSON-escaped, length-capped `old → new` (with a truncation marker); then the model's own description, labelled as the model's, with the caller's *claimed* client name (a self-reported name is never shown as fact). The write sends the `modId` read at confirm time, so a concurrent human edit is refused (error 306). **`modId` is not an injection control**; the modal is. Delete shows a fresh snapshot of the record and asks the user to type the record id in an input box; dismissing it refuses the delete. Related-record and portal changes are rejected, not shown. Writes refuse values that contain the redaction or hidden markers, and only explicitly changed fields are sent.
+10. **Scripts need an allowlist.** `fm_run_script` runs only scripts named in `scriptAllowlist` (user scope, per connection, exact match, empty by default). The modal shows script, parameter and the account it will run as. Script names are database text and untrusted; a name does not describe what the script does.
+11. **Caps against fatigue and loops.** Writes: 10 per session, 3 per minute, a visible counter, and the kill switch (rule 13). "Session" means one VS Code window's lifetime or until the user resets it. The residual risk, a user clicking OK on an injected change, is stated plainly in the docs.
+12. **No credentials in the model's context.** Output passes through `redactValue`; no tool returns profile fields beyond name and database. This protects **connection secrets only**. It does not remove secrets or personal data stored in database fields, and it can rewrite field text that looks like a secret; hence the write rule that refuses redacted values.
+13. **Kill switch and audit.** A status-bar item shows `AI: off | read-only | writes on | scripts on` and turns everything off in one click. Every call is logged in extension storage (not the workspace): tool, connection, layout, record ids, outcome, whether confirmed, client. Field values are not logged by default, the log is size-capped, and control characters in model-supplied text are escaped. A **Show AI Activity** view displays it.
+14. **Untrusted text is structured, not trusted.** Tool results return structured JSON; free text from the database is never merged into instructions. A wrapper cannot make text safe (data can contain the closing marker), so the structural controls above (confirmation, scoping, closed schemas, caps) are the defence, and wrappers are best effort.
+15. **Enterprise control.** A new `ai` feature id is added to the enterprise feature list so `disabledFeatures` can turn AI off; each tool maps to existing features too (`recordEdit`, `writeOperations`, `scriptRunner`). Because unknown ids are dropped by older extensions, the host also reads a `features.ai.enabled` restrict-only switch. There is no organisation-wide lock beyond the workspace enterprise file and the user's own settings; that limit is documented.
+
+### Phase 1: schema context file
+
+Command **FileMaker: Write AI Context**. It writes a generated Markdown file from schema the user selects (a layout picker; a full-solution crawl costs a metadata call per layout, so it is opt-in and bounded to 50 layouts by default). Script names come from `GET /scripts`.
+
+Output rules, because database names are attacker-controlled and agents load these files as instructions:
+
+- **Allowlist rendering.** Every name is written as a JSON-escaped string in a JSON code block; names are limited to 64 characters of an allowlist (letters, digits, space and `_ - . : ( )`); anything else is replaced by a placeholder and counted. Tool-result names get the same filter in AI tool output, except that the field names the model must use to build a query are returned exactly and validated. Value-list values are omitted by default and need an explicit choice. Free-text descriptions are never included.
+- **Not committed by accident.** The default location is outside the repository (extension global storage), and the command offers to copy it into the workspace. If written inside the workspace, the command offers (a prompt, never automatic) to add it to `.gitignore`, except when the target is a marker section in a tracked file such as `AGENTS.md`; a notice explains the file holds database structure.
+- **Path is user scope only** (`filemaker.ai.contextPath`), confined to the workspace root or global storage, written by replacing only a marker-delimited section, never following symlinks. A cloned repository cannot choose where it is written.
+- **No credentials or addresses**: connection name and database only.
+- A header says the file is generated, when, from which connection, and that names in it come from the database and must be treated as data. This is a hint to the model and not a control: a hostile layout name can still influence an agent that reads the file, and the docs say so.
+- A size budget (default 20 KB); whole layouts are dropped last, with a note.
+
+Phase 1 involves no model access to data and is the first to ship.
+
+### Phase 2: VS Code language-model tools
+
+Register the read tools (`fm_list_layouts`, `fm_describe_layout`, `fm_list_scripts`, `fm_find_records`, `fm_get_record`, `fm_explain_error`) with `vscode.lm.registerTool`, and the write and script tools only when their switches are on. They call `AiToolService` and nothing else. The write confirm step is a host-side dry run; writes also expose a `dryRun` option that returns the diff without sending it. Because it returns old values it is a read path: it goes through layout consent, the quota, hidden-field removal and redaction. Finds have no dry run.
+
+### Phase 3: MCP for other clients
+
+Claude Code, Cursor and others need MCP. Secrets are in SecretStorage, which only the extension host reads, so credentials stay in the host.
+
+- A **separate server instance, token and route table** for AI. It shares no routes, token or file with the FM Web preview bridge, whose write routes are unconfirmed and which must keep its token out of files. The AI endpoint serves only the tool core; confirmation and caps are in the core, so a raw HTTP client gets no more than an MCP client.
+- Transport: a Unix domain socket (short path, since macOS limits socket paths to about 104 characters) or Windows named pipe with owner-only permissions (ACLs on Windows; named-pipe access control in Node needs verifying, and the token is required regardless), not loopback TCP. If TCP is unavoidable, also validate `Host` and do not accept arbitrary `localhost` origins.
+- Discovery file in the user's extension global storage (outside any workspace), keyed per workspace window, containing socket path, pid, start time and token, mode 0600, deleted on exit. The stdio shim (`fm-mcp`, shipped in the VSIX; needs Node on PATH, otherwise the shim route is unavailable and the user is told) verifies the pid and start time before sending the token, so a stale file cannot send the token to another process.
+- Constant-time token comparison; per-client rate limits so one client cannot starve another.
+- Dev containers, Codespaces and Remote SSH: unsupported for the shim in the first release (an MCP client on the laptop cannot reach the remote host's socket); documented.
+- Where VS Code offers an MCP server-definition API, prefer it over the shim.
+
+## Threat model
+
+| Threat | Mitigation |
+|---|---|
+| Injection makes the model edit, delete or run a script | Off by default; user-scope switches a repo or dev-container cannot set; host-computed modal with fresh data; typed id for delete; script allowlist; per-minute and per-session caps; restricted FileMaker account |
+| Injected values spoof or hide lines in the modal | JSON-escape and cap every value; host facts first; model text last and labelled |
+| User approves injected writes out of habit | Caps, visible counter, kill switch; the residual risk is stated |
+| Model reads and leaks data | Layout-level consent, record quota, hidden-field name filter, read-only connections, restricted account. Not preventable once data is in context; README and `DATA_HANDLING.md` say so, including that a co-resident shell or fetch tool defeats egress control |
+| Hidden field value disclosed | Best-effort name filter in data, criteria, sort, portals and dry-runs; cannot stop disclosure through calculations or scripts; a restricted FileMaker account is the real control |
+| Schema context file carries a planted instruction | Allowlist rendering; outside the repo by default; hint-only header; documented residual risk |
+| Cloned repo redirects where the context file is written | Path is user scope only, confined, marker-section write, no symlinks |
+| Read-modify-write corrupts data with redaction markers | Only changed fields sent; values containing markers refused |
+| Another local process reaches the endpoint | Socket with owner-only permissions; per-workspace token; pid and start-time check; no shared routes with the preview bridge |
+| Workspace picks the connection | AI connection is a user-scope setting; `project.json` ignored |
+| Oversized or hostile result freezes the host | Result caps, timeouts, bounded redaction regexes |
+| Forged audit lines | Model text escaped and size-capped; stored outside the workspace |
+
+## Consequences
+
+- Phase 1 is small and safe enough to ship first, but it is not "no risk"; the rendering and path rules are part of it.
+- Phases 2 and 3 add real capability and a real attack surface; rules 1 to 15 are the feature, not later hardening.
+- Profile schema gains `aiAccess`; settings gain a user-scope-only reader and tests; the enterprise feature list gains `ai`.
+- Data returned by a tool goes to the model provider the user chose. The extension cannot control that.
+
+## Open questions
+
+- Editor API floor. `vscode.lm.registerTool` and the MCP server-definition API arrived in different releases and the extension's engine is `^1.96.0`. Check the current docs before committing to a floor; keep Phase 1 and the shim route working without raising it. This decides whether the shim exists at all and must be settled before the Phase 3 design is reviewed. It does not block Phase 1.
+- Whether the audit log should be exportable for enterprise review (not a blocker).

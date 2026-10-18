@@ -40,6 +40,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
 - Release pipeline: separate publish (environment-gated, tag-on-main and version checks, no `npm ci` with the token) and release jobs; untrack the session lock file.
 - Add a mock FileMaker Data API (`npm run mock:server`) and an end-to-end client check against it (`npm run mock:check`); neither is shipped in the VSIX.
 - Release 1.3.0 under the SureForgeTech Marketplace publisher; the repository moved to the SureForgeTech GitHub org and in-repo links now point there.
