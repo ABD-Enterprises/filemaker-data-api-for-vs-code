@@ -28,7 +28,7 @@ npm run build
 npm run package:check
 ```
 
-`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.4.0.vsix` (about 1 MB, 41 files).
+`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.4.0.vsix` (1.03 MB, 41 files; about 1,080,000 bytes for the release commit).
 
 Verify it:
 
