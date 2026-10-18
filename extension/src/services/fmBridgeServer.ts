@@ -19,6 +19,12 @@ const DEFAULT_ROUTE_TIMEOUT_MS = 20_000;
 export interface FmBridgeServerOptions {
   /** Resolved at request time so settings updates flow live. */
   getRateLimitConfig?: () => BridgeRateLimitConfig;
+  /**
+   * Called before a route runs. Returns why the request must be refused (offline mode, a
+   * feature switched off, enterprise policy), or undefined to let it through. The preview
+   * app is code from the repository, so it gets the same limits as the user's own commands.
+   */
+  authorizeRoute?: (route: string) => Promise<string | undefined>;
 }
 
 export class FmBridgeServer {
@@ -214,7 +220,20 @@ export class FmBridgeServer {
     route: string,
     payload: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
-    const profile = await this.resolveProfile(readString(payload.profileId));
+    const refusal = await this.options.authorizeRoute?.(route);
+    if (refusal) {
+      throw new FMClientError(refusal, { status: 403 });
+    }
+
+    // The preview app is repository code. It may name a profile only if that is the one the
+    // bridge would use anyway, so it cannot reach for another saved connection.
+    const requestedProfileId = readString(payload.profileId);
+    const defaultProfileId = await this.resolveProfileId();
+    if (requestedProfileId && requestedProfileId !== defaultProfileId) {
+      throw new FMClientError('The bridge only serves the active connection.', { status: 403 });
+    }
+
+    const profile = await this.resolveProfile();
     if (!profile) {
       throw new Error('No active FileMaker profile is available for bridge requests.');
     }
@@ -308,13 +327,13 @@ export class FmBridgeServer {
     }
   }
 
-  private async resolveProfile(profileIdFromRequest?: string) {
+  private async resolveProfileId(): Promise<string | undefined> {
     const project = await this.fmWebProjectService.readProjectConfig();
-    const profileId =
-      profileIdFromRequest ??
-      project?.activeProfileId ??
-      this.profileStore.getActiveProfileId();
+    return project?.activeProfileId ?? this.profileStore.getActiveProfileId();
+  }
 
+  private async resolveProfile() {
+    const profileId = await this.resolveProfileId();
     if (!profileId) {
       return undefined;
     }

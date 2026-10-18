@@ -12,6 +12,7 @@ import {
   getStringField,
   toRecord
 } from '../common/messageValidation';
+import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
 
 interface ScriptRunnerOpenOptions {
   profileId?: string;
@@ -128,7 +129,7 @@ export class ScriptRunnerPanel {
   private async sendInit(): Promise<void> {
     const profiles = await this.profileStore.listProfiles();
     const configuration = vscode.workspace.getConfiguration('filemaker');
-    const scriptRunnerEnabled = configuration.get<boolean>('features.scriptRunner.enabled', true);
+    const scriptRunnerEnabled = isFeatureEnabled(configuration, 'features.scriptRunner.enabled');
     const includeAuthByDefault = configuration.get<boolean>('snippets.includeAuthByDefault', false);
     const parameterBuilderEnabled = configuration.get<boolean>('scripts.parameterBuilder.enabled', true);
 
@@ -175,10 +176,9 @@ export class ScriptRunnerPanel {
   }
 
   private async runScript(payload: RunScriptPayload): Promise<void> {
-    const scriptRunnerEnabled = vscode.workspace
-      .getConfiguration('filemaker')
-      .get<boolean>('features.scriptRunner.enabled', true);
-    const offlineMode = vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false);
+    const configuration = vscode.workspace.getConfiguration('filemaker');
+    const scriptRunnerEnabled = isFeatureEnabled(configuration, 'features.scriptRunner.enabled');
+    const offlineMode = isOfflineModeOn(configuration);
 
     if (!scriptRunnerEnabled) {
       await this.panel.webview.postMessage({

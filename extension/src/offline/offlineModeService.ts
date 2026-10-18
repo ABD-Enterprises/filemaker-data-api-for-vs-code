@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 
 import type { ConnectionProfile } from '../types/fm';
 import { hashObjectWithAlgorithm } from '../utils/hash';
+import { isOfflineModeOn } from '../utils/policySetting';
 
 const OFFLINE_CACHE_DIR = '.vscode/filemaker/offline-metadata';
 const OFFLINE_INDEX_FILE = 'index.json';
@@ -52,7 +53,7 @@ export class OfflineModeService {
   }
 
   public isOfflineModeEnabled(): boolean {
-    return this.getConfiguration().get<boolean>('offline.mode', false);
+    return isOfflineModeOn(this.getConfiguration());
   }
 
   public async toggleOfflineMode(enabled?: boolean): Promise<boolean> {

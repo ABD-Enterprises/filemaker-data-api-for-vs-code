@@ -36,6 +36,7 @@ import { FmBridgeServer } from './services/fmBridgeServer';
 import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
 import { RoleGuard } from './enterprise/roleGuard';
+import { bridgeRouteRefusal } from './utils/bridgePolicy';
 import { MetricsStore } from './diagnostics/metricsStore';
 import { OfflineModeService } from './offline/offlineModeService';
 import type { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
@@ -274,7 +275,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     isWorkspaceTrusted: () => vscode.workspace.isTrusted
   });
-  const pluginRegistry = new PluginRegistry(profileStore, fmClient, roleGuard, logger);
+  const pluginRegistry = new PluginRegistry(profileStore, fmClient, roleGuard, logger, {
+    approvalState: context.globalState
+  });
   const fmWebProjectService = new FmWebProjectService(
     profileStore,
     fmClient,
@@ -282,7 +285,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger
   );
   const fmBridgeServer = new FmBridgeServer(profileStore, fmClient, fmWebProjectService, logger, {
-    getRateLimitConfig: () => settingsService.getBridgeRateLimitConfig()
+    getRateLimitConfig: () => settingsService.getBridgeRateLimitConfig(),
+    authorizeRoute: async (route) =>
+      bridgeRouteRefusal(route, vscode.workspace.getConfiguration('filemaker'), roleGuard)
   });
   const fmWebRuntimeGenerator = new FmWebRuntimeGenerator(context, fmWebProjectService, logger);
 
@@ -467,6 +472,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     fmWebProjectService,
     fmWebRuntimeGenerator,
     fmBridgeServer,
+    roleGuard,
     logger,
     refreshExplorer
   });

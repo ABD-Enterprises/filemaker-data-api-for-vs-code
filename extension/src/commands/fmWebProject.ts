@@ -7,6 +7,7 @@ import type { FmWebRuntimeGenerator } from '../services/fmWebRuntimeGenerator';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SchemaService } from '../services/schemaService';
+import type { RoleGuard } from '../enterprise/roleGuard';
 import { LayoutModePanel } from '../webviews/layoutMode';
 import { resolveProfileFromArg, showCommandError } from './common';
 
@@ -18,6 +19,7 @@ interface RegisterFmWebProjectCommandDeps {
   fmWebProjectService: FmWebProjectService;
   fmWebRuntimeGenerator: FmWebRuntimeGenerator;
   fmBridgeServer: FmBridgeServer;
+  roleGuard: RoleGuard;
   logger: Logger;
   refreshExplorer: () => void;
 }
@@ -33,6 +35,7 @@ export function registerFmWebProjectCommands(
     fmWebProjectService,
     fmWebRuntimeGenerator,
     fmBridgeServer,
+    roleGuard,
     logger,
     refreshExplorer
   } = deps;
@@ -129,7 +132,8 @@ export function registerFmWebProjectCommands(
         const layoutId = typeof record?.layoutId === 'string' ? record.layoutId : undefined;
 
         LayoutModePanel.createOrShow(context, fmWebProjectService, profileStore, fmClient, logger, {
-          layoutId
+          layoutId,
+          assertScriptRunAllowed: () => roleGuard.assertFeature('scriptRunner', 'Run script from Layout Mode')
         });
       } catch (error) {
         await showCommandError(error, {
@@ -228,6 +232,17 @@ export function registerFmWebProjectCommands(
         await fmWebRuntimeGenerator.writeBridgeEnv(bridge.baseUrl);
 
         const runtimeRoot = fmWebRuntimeGenerator.getGeneratedRuntimeRoot();
+        // The folder can arrive with the repository, including its own package.json, and npm
+        // runs whatever scripts that file defines. Say so and ask before running anything.
+        const answer = await vscode.window.showWarningMessage(
+          `Start the FM Web preview?\n\nThis runs "npm install" and "npm run dev" in:\n${runtimeRoot}\n\nnpm runs the install and dev scripts defined in that folder's package.json, and that file can come from this repository. Only continue if you trust it.`,
+          { modal: true },
+          'Run'
+        );
+        if (answer !== 'Run') {
+          return;
+        }
+
         const terminal = vscode.window.createTerminal({
           name: 'FM Web Preview',
           cwd: runtimeRoot

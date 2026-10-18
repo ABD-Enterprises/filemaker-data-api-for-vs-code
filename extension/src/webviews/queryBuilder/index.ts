@@ -18,6 +18,7 @@ import {
   getStringField,
   toRecord
 } from '../common/messageValidation';
+import { isFeatureEnabled } from '../../utils/policySetting';
 
 interface QueryBuilderOpenOptions {
   profileId?: string;
@@ -267,7 +268,7 @@ export class QueryBuilderPanel {
 
     const filemakerConfig = vscode.workspace.getConfiguration('filemaker');
     const includeAuthByDefault = filemakerConfig.get<boolean>('snippets.includeAuthByDefault', false);
-    const recordEditEnabled = filemakerConfig.get<boolean>('features.recordEdit.enabled', true);
+    const recordEditEnabled = isFeatureEnabled(filemakerConfig, 'features.recordEdit.enabled');
 
     await this.panel.webview.postMessage({
       type: 'init',

@@ -123,4 +123,84 @@ describe('RoleGuard', () => {
     expect(guard.getFeatureGuard('writeOperations').allowed).toBe(false);
     expect(guard.getFeatureGuard('environmentExport').allowed).toBe(true);
   });
+
+  describe('workspace content can only make policy stricter', () => {
+    /** A configuration that reports where each value was set, as VS Code's inspect() does. */
+    function scopedConfiguration(user: Record<string, unknown>, workspace: Record<string, unknown> = {}) {
+      const defaults: Record<string, unknown> = {
+        'enterprise.mode': false,
+        'enterprise.role': 'developer',
+        'offline.mode': false
+      };
+      return {
+        get<T>(key: string, fallback?: T): T {
+          return (workspace[key] ?? user[key] ?? defaults[key] ?? fallback) as T;
+        },
+        inspect: (key: string) => ({
+          key,
+          defaultValue: defaults[key],
+          globalValue: user[key],
+          workspaceValue: workspace[key]
+        })
+      };
+    }
+
+    async function guardFor(
+      user: Record<string, unknown>,
+      workspace: Record<string, unknown>,
+      file?: Record<string, unknown>
+    ): Promise<RoleGuard> {
+      const guard = new RoleGuard(
+        { debug: vi.fn(), warn: vi.fn() },
+        {
+          getConfiguration: () => scopedConfiguration(user, workspace) as never,
+          isWorkspaceTrusted: () => true,
+          getWorkspaceRoot: () => '/workspace',
+          readConfigFile: async () => (file ? JSON.stringify(file) : undefined)
+        }
+      );
+      await guard.refresh();
+      return guard;
+    }
+
+    it('cannot switch enterprise mode off from workspace settings or the repo config file', async () => {
+      const guard = await guardFor(
+        { 'enterprise.mode': true, 'enterprise.role': 'developer' },
+        { 'enterprise.mode': false },
+        { enterpriseMode: false, role: 'admin' }
+      );
+
+      expect(guard.isEnterpriseModeEnabled()).toBe(true);
+      expect(guard.getRole()).toBe('developer');
+    });
+
+    it('keeps blocking plugin loading for a developer when the repo tries to unlock it', async () => {
+      const guard = await guardFor(
+        { 'enterprise.mode': true, 'enterprise.role': 'developer' },
+        { 'enterprise.mode': false, 'enterprise.role': 'admin' },
+        { enterpriseMode: false, role: 'admin' }
+      );
+
+      expect(guard.getFeatureGuard('pluginInstall').allowed).toBe(false);
+    });
+
+    it('cannot raise the role above the user\'s own', async () => {
+      expect((await guardFor({}, { 'enterprise.role': 'admin' }, { role: 'admin' })).getRole()).toBe('developer');
+      expect((await guardFor({ 'enterprise.role': 'viewer' }, {}, { role: 'admin' })).getRole()).toBe('viewer');
+    });
+
+    it('lets a repo turn enterprise mode on and lower the role for itself', async () => {
+      const guard = await guardFor({ 'enterprise.role': 'admin' }, { 'enterprise.mode': true }, { role: 'viewer' });
+
+      expect(guard.isEnterpriseModeEnabled()).toBe(true);
+      expect(guard.getRole()).toBe('viewer');
+      expect(guard.getFeatureGuard('recordEdit').allowed).toBe(false);
+    });
+
+    it('leaves everything off when nobody asked for enterprise mode', async () => {
+      const guard = await guardFor({}, {}, { enterpriseMode: false });
+      expect(guard.isEnterpriseModeEnabled()).toBe(false);
+      expect(guard.getFeatureGuard('pluginInstall').allowed).toBe(true);
+    });
+  });
 });

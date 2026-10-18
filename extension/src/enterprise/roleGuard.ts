@@ -4,8 +4,15 @@ import { join } from 'path';
 import * as vscode from 'vscode';
 
 import type { EnterpriseRole, PerformanceMode } from '../types/fm';
+import { isOfflineModeOn } from '../utils/policySetting';
 
 const ENTERPRISE_CONFIG_RELATIVE_PATH = '.vscode/filemaker.config.json';
+
+const ROLE_RANK: Record<EnterpriseRole, number> = { viewer: 0, developer: 1, admin: 2 };
+
+function isRole(value: unknown): value is EnterpriseRole {
+  return value === 'viewer' || value === 'developer' || value === 'admin';
+}
 
 export type EnterpriseFeatureId =
   | 'recordEdit'
@@ -89,30 +96,68 @@ export class RoleGuard {
     await vscode.commands.executeCommand('setContext', 'filemaker.offline.mode', this.isOfflineModeEnabled());
   }
 
-  public isEnterpriseModeEnabled(): boolean {
-    if (typeof this.enterpriseConfig?.enterpriseMode === 'boolean') {
-      return this.enterpriseConfig.enterpriseMode;
+  /**
+   * A setting split by where it was set. The user's own setting (or the default) is the
+   * baseline a workspace cannot loosen: a repository ships `.vscode/settings.json` and
+   * `.vscode/filemaker.config.json`, and neither may switch off a restriction the user
+   * or their administrator chose. `workspace` is what the repository asked for.
+   */
+  private readSetting<T>(key: string, fallback: T): { baseline: T; workspace: T | undefined } {
+    const configuration = this.getConfiguration();
+    if (typeof configuration.inspect !== 'function') {
+      return { baseline: configuration.get<T>(key, fallback), workspace: undefined };
     }
 
-    return this.getConfiguration().get<boolean>('enterprise.mode', false);
+    const inspected = configuration.inspect<T>(key) as
+      | (ReturnType<vscode.WorkspaceConfiguration['inspect']> & {
+          globalLocalValue?: T;
+          globalRemoteValue?: T;
+        })
+      | undefined;
+    if (!inspected) {
+      return { baseline: fallback, workspace: undefined };
+    }
+
+    return {
+      baseline:
+        (inspected.globalValue as T | undefined) ??
+        inspected.globalRemoteValue ??
+        inspected.globalLocalValue ??
+        (inspected.defaultValue as T | undefined) ??
+        fallback,
+      workspace: (inspected.workspaceFolderValue ?? inspected.workspaceValue) as T | undefined
+    };
   }
 
+  /** A workspace may turn enterprise mode on for itself; it can never turn it off. */
+  public isEnterpriseModeEnabled(): boolean {
+    const setting = this.readSetting<boolean>('enterprise.mode', false);
+    if (setting.workspace === false || this.enterpriseConfig?.enterpriseMode === false) {
+      if (setting.baseline === true) {
+        this.logger.warn('Ignored a workspace attempt to turn enterprise mode off.', {
+          source: ENTERPRISE_CONFIG_RELATIVE_PATH
+        });
+      }
+    }
+
+    return setting.baseline === true || setting.workspace === true || this.enterpriseConfig?.enterpriseMode === true;
+  }
+
+  /** A workspace may lower the role for itself; it can never raise it above the user's own. */
   public getRole(): EnterpriseRole {
-    const configRole = this.enterpriseConfig?.role;
-    if (configRole === 'viewer' || configRole === 'developer' || configRole === 'admin') {
-      return configRole;
+    const setting = this.readSetting<EnterpriseRole>('enterprise.role', 'developer');
+    const candidates: EnterpriseRole[] = [isRole(setting.baseline) ? setting.baseline : 'developer'];
+    for (const requested of [setting.workspace, this.enterpriseConfig?.role]) {
+      if (isRole(requested)) {
+        candidates.push(requested);
+      }
     }
 
-    const settingRole = this.getConfiguration().get<EnterpriseRole>('enterprise.role', 'developer');
-    if (settingRole === 'viewer' || settingRole === 'developer' || settingRole === 'admin') {
-      return settingRole;
-    }
-
-    return 'developer';
+    return candidates.reduce((lowest, role) => (ROLE_RANK[role] < ROLE_RANK[lowest] ? role : lowest));
   }
 
   public isOfflineModeEnabled(): boolean {
-    return this.getConfiguration().get<boolean>('offline.mode', false);
+    return isOfflineModeOn(this.getConfiguration());
   }
 
   public resolvePerformanceMode(): PerformanceMode {

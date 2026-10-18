@@ -7,6 +7,7 @@ import type { EnterpriseRole, PerformanceMode, SavedQueryScope, SchemaSnapshotSt
 import type { LogLevel } from './logger';
 import type { SecretFallbackMode } from './secretStore';
 import { DEFAULT_CONTAINER_UPLOAD_MAX_BYTES, normalizeContainerUploadMaxBytes } from '../utils/containerUpload';
+import { isFeatureEnabled, isOfflineModeOn } from '../utils/policySetting';
 
 /**
  * Lazily computed allow-list of crypto hash algorithms available on this Node
@@ -231,7 +232,7 @@ export class SettingsService {
   }
 
   public isScriptRunnerEnabled(): boolean {
-    return this.getConfiguration('filemaker').get<boolean>('features.scriptRunner.enabled', true);
+    return isFeatureEnabled(this.getConfiguration('filemaker'), 'features.scriptRunner.enabled');
   }
 
   public getSchemaSnapshotsStorage(): SchemaSnapshotStorage {
@@ -288,11 +289,11 @@ export class SettingsService {
   }
 
   public isRecordEditEnabled(): boolean {
-    return this.getConfiguration('filemaker').get<boolean>('features.recordEdit.enabled', true);
+    return isFeatureEnabled(this.getConfiguration('filemaker'), 'features.recordEdit.enabled');
   }
 
   public isBatchEnabled(): boolean {
-    return this.getConfiguration('filemaker').get<boolean>('features.batch.enabled', true);
+    return isFeatureEnabled(this.getConfiguration('filemaker'), 'features.batch.enabled');
   }
 
   public getContainerUploadMaxBytes(): number {
@@ -333,7 +334,7 @@ export class SettingsService {
   }
 
   public isOfflineModeEnabled(): boolean {
-    return this.getConfiguration('filemaker').get<boolean>('offline.mode', false);
+    return isOfflineModeOn(this.getConfiguration('filemaker'));
   }
 
   public getOfflineStaleCacheWarnHours(): number {

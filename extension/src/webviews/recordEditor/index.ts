@@ -9,6 +9,7 @@ import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
+import { isOfflineModeOn } from '../../utils/policySetting';
 
 interface RecordEditorOpenOptions {
   profileId?: string;
@@ -260,7 +261,7 @@ export class RecordEditorPanel {
   }
 
   private async saveRecord(payload: DraftPayload): Promise<void> {
-    if (vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false)) {
+    if (isOfflineModeOn(vscode.workspace.getConfiguration('filemaker'))) {
       await this.postError('Offline mode is enabled; record writes are disabled.');
       return;
     }
@@ -418,7 +419,7 @@ export class RecordEditorPanel {
     layout: string;
     fieldData: Record<string, unknown>;
   }): Promise<void> {
-    if (vscode.workspace.getConfiguration('filemaker').get<boolean>('offline.mode', false)) {
+    if (isOfflineModeOn(vscode.workspace.getConfiguration('filemaker'))) {
       await this.postError('Offline mode is enabled; record writes are disabled.');
       return;
     }
