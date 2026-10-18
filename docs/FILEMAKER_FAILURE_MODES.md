@@ -1,0 +1,378 @@
+# FileMaker failure modes: what goes wrong, what the extension does, what to change
+
+Maintainer-facing catalogue. First written 2026-10-18 against `main` at `10359e9`; re-baselined on `main` at `e2d4b28` (includes #383, which added the certificate fields to the connection wizard, and #382, the user guide rewrite).
+Scope: the Data API client (`extension/src/services/fmClient.ts`), its error pipeline
+(`normalizeError`, `errorUx`), the connection wizard, the Explorer, the record editor, the script
+runner, batch jobs, the AI tools, and proxy mode. Product code was not changed.
+
+## How to read this
+
+Every row says how sure we are:
+
+| Mark | Meaning |
+|---|---|
+| **Run** | Reproduced on 2026-10-18 by running the real `FMClient` (bundled from `extension/src`) against scratch HTTP/HTTPS servers with generated certificates (Node 22.23, axios 1.20.0). The Node error codes and the text the extension shows are exact. The scratch servers imitate FileMaker responses; they are not FileMaker. |
+| **Docs** | Stated on a current Claris or Node.js page (URL in [Sources](#sources)). |
+| **Code** | Read in the source only (file:line). |
+| **Unverified** | We could not check this against a real FileMaker Server or FileMaker Cloud. Treat as a hypothesis and test it on a real server before relying on it. Section 6 lists the real-server checks that would close the gaps. |
+
+Verdicts: **good** (right behaviour), **acceptable** (works, could be nicer), **gap** (wrong, misleading or unsafe).
+File references are relative to `extension/src/` unless they start with `docs/` or `test/`. Two documentation folders exist: `docs/` at the repository root (this file, `docs/security.md`) and `extension/docs/` (`extension/docs/USER_GUIDE.md`, `extension/docs/COMPATIBILITY.md`). Rows that name USER_GUIDE or COMPATIBILITY mean the `extension/docs/` copies.
+
+## 0. The error pipeline today (read this first)
+
+1. Every Data API call goes through `FMClient.requestWithAuth` (`services/fmClient.ts:1009`). Any
+   failure becomes `toFMClientError(normalizeError(error, { fallbackMessage }))`.
+2. `normalizeError` (`utils/normalizeError.ts:12`) builds the user message:
+   - FileMaker JSON error body present: `FileMaker API error (HTTP n) [code]: message` (`:99-101`).
+   - Timeout: `<fallback> (request timed out).` (`:70-82`).
+   - Anything else, **no HTTP status** (every TLS, DNS, refused, reset error): the **fallback text
+     only**, for example `Failed to create FileMaker session.` The Node error code
+     (`CERT_HAS_EXPIRED`, `ECONNREFUSED`, ...) is **dropped** (`:121-125`). The one exception is
+     `isTlsCertificateMessage` (`:134-138`), a regex over the *message* that matches only some
+     OpenSSL phrases.
+   - A non-axios error (for example a `TypeError`) keeps its own raw message (`:37-50`).
+3. The message reaches the user through `showErrorWithDetails` (`utils/errorUx.ts:73`): an error toast with
+   buttons chosen by `selectErrorActions` (`:40-69`): **Retry** for kind `network`, `timeout` or
+   status 5xx, **Edit Profile** for kind `auth` (401 or 403), **Open Settings** for timeouts, plus
+   **Details...** and **Copy as Bug Report**. The wizard shows the same message in its badge
+   (`webviews/connectionWizard/index.ts:715-725`). The Output channel gets the redacted error
+   (`services/logger.ts`). The Explorer shows a fixed placeholder and puts the error only in the
+   Output channel (`views/fmExplorer.ts:427-440`).
+4. The AI tools rewrite any error through `toModelError` (`ai/aiToolService.ts:1272-1291`): the server
+   address is scrubbed and the text is capped at 500 characters. Safe, but it inherits the same
+   uninformative base message.
+5. A 401 on a data call triggers one silent re-login and one retry (`fmClient.ts:1045-1056`).
+   Login itself (`createSession`, `:170`) has no retry; the **Connect** command wraps it in
+   `retryWithBackoff` (`commands/index.ts:185-205`, default 3 retries).
+
+Proxy mode skips steps 1 and 5: see section 5.
+
+---
+
+## 1. TLS and network
+
+Node reports certificate failures through `error.code` (OpenSSL names, [N1][N2]). Hostname
+checking is `tls.checkServerIdentity` [N3]. `rejectUnauthorized` defaults to `true` [N4]. axios passes
+the Node code and message through unchanged (**Run**).
+
+| # | Scenario | Reproduce on a real server | What Node / FileMaker returns | What the extension does today | Verdict | Recommended change |
+|---|---|---|---|---|---|---|
+| 1.1 | Expired certificate | Import a certificate whose end date has passed (Admin Console > Configuration > SSL Certificate [S25]), or run a test host with `openssl req -x509 -not_after <past>` (OpenSSL 3.4+) | `CERT_HAS_EXPIRED`, "certificate has expired" (**Run**) [N2] | Toast and wizard badge say only `Failed to create FileMaker session.` The regex at `normalizeError.ts:135` looks for `cert_has_expired` with underscores, so the human text never matches. Toast offers **Retry** (kind `network`) which cannot help. (**Run**) | **gap** | Map by `error.code`, not message text: "The server's certificate expired on <date>. Ask the FileMaker administrator to renew it." Drop **Retry** for certificate errors. Issue #261. |
+| 1.2 | Certificate not yet valid (or the laptop clock is wrong) | Set the client clock back, or import a certificate with a future start date | `CERT_NOT_YET_VALID`, "certificate is not yet valid" (**Run**) | Bare `Failed to create FileMaker session.` (**Run**) | **gap** | Same mapping. Say "check your computer's date and time first": a wrong client clock is the most common cause. |
+| 1.3 | Self-signed certificate (including FileMaker Server's default certificate) | Fresh FileMaker Server install, no certificate imported. Claris says a root certificate ships with FileMaker Pro and Go, so other client machines need it installed to use the default certificate [S26] (that the default certificate is *self-signed* is our inference; the page does not use the word) | `DEPTH_ZERO_SELF_SIGNED_CERT`, "self-signed certificate" (**Run**) | `Failed to create FileMaker session. (self-signed certificate)` (`normalizeError.ts:121-123`). No remedy is offered in the message. Since #383 the wizard has **Certificates (advanced)** with a *Custom CA certificate file* (`validateCaBundleFile`, `utils/tlsProfile.ts:21`) and *Allow self-signed certificate (insecure)* with a confirmation dialog (`webviews/connectionWizard/index.ts:558-615`); Save and Test Connection both carry the values (`resolveTlsSettings`) and `aiAccess` is preserved. A self-signed server's own certificate can be trusted by choosing it as the CA file. | acceptable (setup) / **gap** (message) | Make the error text point to the *Custom CA certificate file* field ("This server's certificate is not signed by a trusted authority. Add its CA certificate under Certificates (advanced)."). Issue #261. |
+| 1.4 | Private or company CA not in Node's trust list | Server certificate signed by an internal CA | `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, "unable to verify the first certificate" (**Run**) | `... (unable to verify the first certificate)`. Node's wording does not say "CA" or "chain". With the CA file set in the wizard the same server connects (**Run**). | **gap** (message) | Point the message to the *Custom CA certificate file* field: "This computer does not trust the authority that signed the server's certificate." |
+| 1.5 | Hostname mismatch (connecting by IP, or by a name that is not in the certificate) | Use `https://10.0.0.5` when the certificate names `fm.example.com`; or a certificate with no matching `subjectAltName` | `ERR_TLS_CERT_ALTNAME_INVALID`, "Hostname/IP does not match certificate's altnames: Host: localhost. is not in the cert's altnames: DNS:other.example.com" (**Run**). This only holds when the issuing CA is trusted: the chain check runs first, so with an untrusted CA the error is `UNABLE_TO_VERIFY_LEAF_SIGNATURE` (1.4) and the hostname problem stays hidden until the CA is trusted (Node documents that `checkServerIdentity` runs after the other checks pass [N3]). | Bare `Failed to create FileMaker session.` The regex at `:135` matches the *code* text `err_tls_cert_altname_invalid`, which is never in the *message*. (**Run**) | **gap** | Map the code: "The certificate is for <names>, but you connected to <host>. Use that name in the Server URL." Node's message lists the certificate's names; they are not secrets, but check before showing them in toasts shared on screen. |
+| 1.6 | Certificate with only a Common Name (no `subjectAltName`) | Old self-made certificate | Node falls back to the CN and **accepts** it (**Run**) | Connects | acceptable | Browsers reject these. Leave as is; mention in the admin notes. |
+| 1.7 | Incomplete chain (server sends the leaf without its intermediate) | Import a certificate without the intermediate file. Admin Console has a field for it; "a CA certificate bundle can serve this purpose" [S25] | `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, the same code and text as 1.4 (**Run**) | Same text as 1.4. | **gap** | Cannot be told apart from 1.4 by code alone. Say both possibilities and tell the admin to install the intermediate. The server should send the intermediate (Admin Console accepts one [S25]). As a client-side workaround the intermediate can be added to the *Custom CA certificate file*. |
+| 1.8 | Revoked certificate | CA revokes the certificate | Node lists `CERT_REVOKED` and CRL error codes [N1] but its TLS page does not say whether revocation is checked by default. From Node's known defaults (no CRL or OCSP fetch unless configured; **inference, not confirmed here**) a revoked certificate is accepted: the connection **succeeds**. | Connects | acceptable | Confirm with a revoked test certificate, then state the result in `docs/security.md` so nobody assumes revocation is checked. |
+| 1.9 | "Allow self-signed certificate (insecure)" turned on | Tick the box in the wizard (#383) or set `allowSelfSigned` in the stored profile | `rejectUnauthorized: false` disables **all** checks: expired, not-yet-valid, hostname and chain (**Run**: all five test certificates were accepted; unchanged after #383 because `services/tlsAgent.ts:34` still passes `!allowSelfSigned`) | Since #383 the checkbox needs a confirmation naming the address, applies only to `https://` addresses, and the Explorer tooltip shows "accepts any certificate (insecure)" (`utils/tlsProfile.ts:53-64`, `views/fmExplorer.ts`). The option is still all-or-nothing. | acceptable (warned) / **gap** (no pinning) | Still missing: fingerprint pinning (trust on first use, warning when the certificate changes) and a persistent status-bar warning while a skipping profile is connected (S15). **In progress** (certificate pinning and related fixes; PR to follow). |
+| 1.10 | Certificate changes between connections | Server certificate renewed or replaced; or a different host answers | No pinning or trust-on-first-use exists. With normal verification any valid certificate is accepted, as in a browser. With `allowSelfSigned` any certificate at all is accepted. | `tlsAgent.ts` only caches agents (`:9`) | acceptable (verified mode) / **gap** (skip mode) | See 1.9. |
+| 1.11 | Weak or old TLS (server offers only TLS 1.0 or 1.1, or no common cipher) | Old FileMaker Server or a tightly configured proxy | `EPROTO` with "tlsv1 alert protocol version" (alert 70) (**Run**). Node's default minimum is TLS 1.2. | Bare `Failed to create FileMaker session.` (**Run**) | **gap** | Map `EPROTO`/alert text: "The server only supports old TLS versions that this extension refuses. Ask the administrator to enable TLS 1.2 or newer." Do not offer to lower the minimum. |
+| 1.12 | Corporate TLS-inspection proxy | A proxy re-signs HTTPS with a company CA that is installed only in the operating system's trust store | `UNABLE_TO_VERIFY_LEAF_SIGNATURE` or `SELF_SIGNED_CERT_IN_CHAIN` | **The OS store is not used.** With a CA file set, `tlsAgent.ts` passes `ca: [...tls.rootCertificates, <file>]` (`:42`); `tls.rootCertificates` is Node's bundled Mozilla list, not the OS store. With no CA file Node's default is the same bundled list. So a company CA that exists only in the macOS keychain or Windows store is **not** trusted until the user exports it to a PEM file and sets it as the Custom CA certificate file. The wizard hint ("added to the system's trusted certificates", `webviews/connectionWizard/index.ts:839`) and the `extension/CHANGELOG.md` [FIX] line use the same wording, which is inaccurate: the file is added to Node's built-in list. Also, always passing a custom `https.Agent` probably bypasses VS Code's own proxy and certificate handling (`http.proxySupport`, `http.systemCertificates`; **Unverified** in a real VS Code host). Environment proxies (`HTTPS_PROXY`) do work: the proxy received a `CONNECT` (**Run**). | **gap** | Fix the hint and changelog wording now (S11). Then either read the OS store (for example `tls.getCACertificates('system')` where the host's Node has it, **Unverified**) or omit `httpsAgent` unless the profile needs one. Tell users: "export the company root certificate to a .pem file and choose it as the Custom CA certificate file". |
+| 1.13 | `http://` profile against an HTTPS-only server | Port 80 or an `http://` URL | Connection reset: `ECONNRESET`, "socket hang up" (**Run**). A server with an imported certificate redirects HTTP to HTTPS [S25] (status and method not verified). | Bare fallback text (**Run**). The wizard does warn before sending a password over remote `http://` (`webviews/connectionWizard/index.ts:536-545`). | **gap** (message) | Message: "The server did not answer plain http. Try https://". |
+| 1.14 | `https://` profile against a plain-HTTP port | Wrong port (for example 16000) | `EPROTO`, "wrong version number" (**Run**) | Bare fallback text (**Run**) | **gap** | Message: "That port does not speak https." |
+| 1.15 | Wrong port, host down | Typo, firewall, service stopped | `ECONNREFUSED` | Bare fallback text (**Run**, 23 ms) | **gap** | Message with the host and port (the user typed them): "Nothing is listening on host:port." |
+| 1.16 | DNS failure | Misspelt host, VPN not connected | `ENOTFOUND` (or `EAI_AGAIN`) | Bare fallback text (**Run**, 281 ms) | **gap** | "The name <host> could not be found. Check the spelling and your VPN." |
+| 1.17 | Timeout (server accepts, never replies; firewall drops packets) | Block the port with a drop rule | axios `ECONNABORTED` after `filemaker.requestTimeoutMs` (default 15 s) | `... (request timed out).` plus **Open Settings** (**Run**) | good | Name the setting in the text. The Connect command does **not** retry timeouts, although it was written to: see 1.20. |
+| 1.18 | Server drops the connection mid-response | Restart FileMaker Server during a request | `aborted` / `ECONNRESET` after a `200` status line | `Failed to create FileMaker session. (HTTP 200)` (**Run**): the "HTTP 200" is misleading | **gap** | Ignore the status when the body never arrived; say "The server closed the connection before answering." |
+| 1.19 | HTML (or empty, or truncated JSON) instead of the Data API envelope, status **200** | Captive portal, WAF block page, reverse-proxy login page, wrong base path on a server that answers 200 | Not a FileMaker response | **Raw JavaScript error**: `Cannot read properties of undefined (reading 'token')` (**Run**, five variants: HTML 200, empty 200, truncated JSON, array body, redirect to a login page). `fmClient.ts:213` reads `envelope.response.token` with no check; every other `envelope.response.x` access has the same shape (`:327`, `:363`, `:398`, ...). | **gap** (blocker) | One validator for every response: `typeof body === 'object' && body.response && Array.isArray(body.messages)`. Otherwise throw "The server answered with something that is not the FileMaker Data API (looks like a web page). A proxy, firewall or sign-in page may be in the way." Include `Content-Type` and the first 80 characters, redacted. |
+| 1.20 | Connect retry logic does not match its intent | Any network failure during **Connect** | n/a | `isRetryableConnectError` (`commands/index.ts:54-79`) tests `err.code` for `ECONNREFUSED`, `ENOTFOUND` and similar, but `FMClientError.code` holds the *FileMaker* code (a string like `"212"`), never the Node code. It also tests the message for `timeout`, but the text says "timed out". Result (**Run**): ECONNREFUSED, ENOTFOUND, timeouts and TLS errors are **not** retried; HTTP 5xx **is**, including `500` with FileMaker `802` ("unable to open file"), which is not transient. | **gap** | Keep the Node `cause.code` on `FMClientError` (new field), classify retries on it, and do not retry FileMaker business errors. |
+| 1.21 | Redirects (301/302 to a login page, http to https, to another host) | Reverse proxy with sign-in; HTTP-to-HTTPS redirect | A 3xx with `Location` | axios follows up to 5 redirects. 301/302 turn a POST into a GET and drop the body. (**Run**) A redirect to a login page ends in the raw error of 1.19. A redirect to another origin **completed a login** against a different server with no credentials sent (the target saw no `Authorization` header), and the downgrade from `https` to `http` was followed too. | **gap** (hygiene) | `maxRedirects: 0` for all Data API calls; on 3xx show "The server redirected to <origin>. Use that address as the Server URL." The Data API never legitimately redirects. |
+| 1.22 | HTTP 413, 429, 502, 503, 504 from a gateway | Reverse proxy limits; overloaded server | Status with an HTML body (**Run**) | `... (HTTP n)`. 5xx are kind `server`, retryable; 413 and 429 are kind `validation`, not retryable. `Retry-After` is ignored. The whole HTML body is kept in `details` and appears in "Copy as Bug Report" (`normalizeError.ts:110`). | acceptable | Handle 429 as retryable with `Retry-After`. Truncate and strip HTML in `details` (internal host names often appear in gateway pages). Cloud also has an annual Data API transfer limit that counts failed calls too [S27]; what happens at the limit is not documented. |
+| 1.23 | Data API turned off in Admin Console | Connectors > FileMaker Data API > Disabled [S24] | The web publishing engine answers, usually with a web-server `404` page; the exact response is **Unverified** | `... (HTTP 404)` for login. On other calls a 404 is reinterpreted: layout metadata becomes "Metadata is not supported on this server/profile" and is **cached for 5 minutes** (`services/schemaService.ts:129-143, 255-261`); the script runner reports "Script runner is not supported on this server/profile" (`fmClient.ts:853-898, 1380`). `extension/docs/USER_GUIDE.md` (after #382) still says "HTTP 404 on metadata: some servers or layouts do not return metadata" and does not mention a disabled Data API or a wrong path. | **gap** | Treat only `404` with a FileMaker `messages[0].code` as FileMaker's answer. A bare 404 means wrong path or Data API off. See the pre-flight ladder in S12. Claris also lists 959 "Custom Web Publishing technology is disabled", 1630 "URL format is incorrect" and 1700 "Resource doesn't exist" [S22], which are plausible answers here; the HTTP status for each is **Unverified**. |
+| 1.24 | Wrong API version in the path | `apiVersionPath` set to something other than `v1`, `v2` or `vLatest` [S2] | 404 or FileMaker error 1700-series (**Unverified**) | Version is used as typed (`fmClient.ts:1176`), not validated | acceptable | Validate against `v1`, `v2`, `vLatest` in the wizard. |
+| 1.25 | FileMaker Cloud URL forms | Cloud host with Claris ID sign-in | Cloud Data API login uses `Authorization: FMID <Claris ID token>`; the token lives one hour and has no refresh [S5]. The extension only sends `Basic`. | Not supported (`extension/docs/COMPATIBILITY.md` says "Untested"; OAuth and Claris ID are not implemented). Result on a Cloud host that requires Claris ID: 401 `[212]` or `[1703]`, shown like a wrong password (**Unverified**). | **gap** (documentation) | Say plainly in the wizard and docs that the extension has no Claris ID login. Whether the Data API on a given Cloud tenant also accepts a plain account name and password is **Unverified** (the Basic login page [S2] does not distinguish Cloud); ask Claris or the administrator. Ranked S14. |
+| 1.26 | Trailing slash, sub-path behind a reverse proxy | `https://host/` or `https://host/filemaker` | n/a | `buildEndpoint` strips trailing slashes and keeps a sub-path (`fmClient.ts:1173-1180`). The cache key ignores the path (`utils/profileCacheKey.ts:20-37`), which is fine because it includes the profile id. | good | None. |
+| 1.27 | CA bundle problems (Custom CA certificate file) | Wrong path; file is not PEM; file edited or replaced later | n/a | Save-time check (#383): `validateCaBundleFile` requires an absolute, readable PEM file under 1 MB with a certificate and no private key (`utils/tlsProfile.ts:21-48`). Run time: a file that has gone missing gives `Unable to read TLS CA bundle at <path>.` (good, local path only) (**Run**). A file that is no longer PEM at run time still ends in the misleading `(unable to verify the first certificate)` (**Run**). Edits are now picked up: the agent cache is keyed on path, size and modification time (`tlsAgent.ts:16-31`). | acceptable | Re-run the PEM check when the agent is built and say "not a certificate file" (N6). |
+
+### Messages that are safe
+
+No test run leaked an address, token, `Basic` header or password into a user-visible message
+(**Run**: scan of every result above). The AI error path additionally scrubs the server address
+(`ai/aiToolService.ts:1272`). The local CA path is shown on purpose (the user typed it).
+
+---
+
+## 2. Authentication
+
+Documented behaviour: login is `POST .../sessions` with `Authorization: Basic <base64 account:password>`
+and `{}` as the body [S2]; a **401 on login means wrong account or password**, a 401 elsewhere
+means a missing or invalid token [S1]; the token "expires 15 minutes after the last call that used it"
+and "each call that includes the token resets the session timeout counter to zero" [S3]; logging out is a
+`DELETE` on the token [S4]. FileMaker business errors arrive as HTTP **500** with a code in
+`messages[]` [S1], and the codes are listed in [S22].
+
+| # | Scenario | Reproduce on a real server | What FileMaker returns | What the extension does today | Verdict | Recommended change |
+|---|---|---|---|---|---|---|
+| 2.1 | Wrong account or password | Type a bad password | HTTP 401, code **212** "Invalid user account or password" (Claris wording varies slightly between pages) [S1][S22]. The account name is not case sensitive; the password is [S28]. | `FileMaker API error (HTTP 401) [212]: Invalid user account and/or password; please try again`, toast has **Edit Profile** (**Run**) | good | Add "Account names are not case sensitive; passwords are." |
+| 2.2 | Stored password becomes wrong (admin changed it) and the user keeps working | Change the password on the server, keep using the extension | Each data call: 401 `[952]` then re-login 401 `[212]` | Each user action does a re-login with the stored password: **5 actions made 5 failed logins** (**Run**). Nothing stops automatic logins after a 212. Whether FileMaker locks an account after repeated failures is **Unverified**: Claris documents error 214 "Too many login attempts" [S22] but we found no page describing the file-account lockout policy; external accounts follow the directory's own policy. | **gap** (security, blocker) | Per-profile latch: after 212, 210, 211 or 214 stop all automatic logins until the user edits the profile, re-enters the password or runs **Connect**. Show one clear message and a "Fix password" action. |
+| 2.3 | Account inactive / disabled | Untick "Account is active" in the account [S28] | **210** "User account is inactive" [S22] (HTTP status **Unverified**) | Shows the server text if the body parses (generic path, `normalizeError.ts:99`). No explanation, **Edit Profile** only if status is 401. | acceptable | Friendly text for 210 (reuse `ai/fileMakerErrors.ts`, section S7). |
+| 2.4 | Password expired / must change at next sign-in | "Require password change on next sign in" [S28] | **211** "Password expired" [S22]. The Data API has no password-change call, so the user must change it in FileMaker Pro. | Same as 2.3, and 2.2's repeated-login risk applies | **gap** | Text: "The password has expired. Change it in FileMaker Pro (or ask your administrator), then edit this profile." Latch as in 2.2. |
+| 2.5 | Account locked after failed attempts | Server/account policy | **214** "Too many login attempts" [S22] (**Unverified** in practice) | Same as 2.3 | acceptable | Friendly text; latch as in 2.2. |
+| 2.6 | Empty password | Leave the field blank | n/a | Wizard refuses ("Enter a password"); `createSession` throws "No password found for profile" (`fmClient.ts:192-197`) | good | None. |
+| 2.7 | Special characters and Unicode in the password; colon in the account name | Passwords such as `p@ss:wörd` | RFC 7617: the user-id cannot contain a colon; a colon in the password is fine. FileMaker's handling of non-ASCII Basic credentials is **Unverified**. | The header is built from UTF-8 bytes (`fmClient.ts:199`; **Run**: a password `pässörd€` arrives UTF-8 encoded; FileMaker's own handling stays Unverified). A colon in the account name is not rejected (the wizard does not check). | acceptable | Reject `:` in the account name in the wizard. Test one Unicode password on a real server. |
+| 2.8 | Account lacks the **fmrest** extended privilege ("Access via FileMaker Data API") | Privilege set without the box ticked in that file [S8][S23] | Claris says only that the Data API cannot reach the file [S8]. Community reports show **802** "Unable to open file"; the HTTP status is **Unverified**. | If it arrives as `500 [802]`: message `FileMaker API error (HTTP 500) [802]: Unable to open file`, and **Connect retries it 3 more times** because status is 5xx (**Run**, `commands/index.ts:54-79`) | **gap** | Explain 802 as "the file is closed, not hosted, or your account's privilege set does not have the *Access via FileMaker Data API* (fmrest) extended privilege". Do not retry. |
+| 2.9 | Database name wrong, wrong case, `.fmp12` suffix, not hosted, closed, no access | Type the wrong name | **Unverified.** Claris documents 100 "File is missing", 802 "Unable to open file", 955 "No database name", 960 "Parameter is invalid", 1700 "Resource doesn't exist" [S22]; which of them a wrong or closed database produces, and with which HTTP status, needs a live test. | Name is validated only for length and control characters (`utils/jsonValidate.ts:195-220`). `.fmp12` is sent as typed. A name with a space is sent as `DB%20x` (**Run**). | acceptable | Strip a trailing `.fmp12` with a note. Use `GET /databases` (S12) to offer the hosted names when the name is wrong. |
+| 2.10 | Maximum Data API sessions reached | Many clients logged in | **956** "Maximum number of database or Admin API sessions exceeded" [S22]. No limit is documented on the session pages [S3]. | Shows the server text. Connect retries it (5xx) with backoff, which is reasonable here. | acceptable | Friendly text: "The server has no free Data API sessions. Try again shortly or ask the administrator to disconnect idle clients (Admin Console, Connectors > FileMaker Data API tab)." [S27]. The pages read document no setting for raising a session limit. |
+| 2.11 | Token expires after 15 idle minutes, including mid-operation | Wait 15 minutes without calls | 401 `[952]` "Invalid FileMaker Data API token" [S1][S22] | One silent renewal and retry (`fmClient.ts:1045-1056`; parallel callers share one renewal, `:980-1007`). Run: a scratch server that forgets its tokens; one extra login, then success. | good | None. |
+| 2.12 | Proactive refresh does not match the idle rule | Use the extension continuously for about 14 minutes | Token lifetime is **idle-based** [S3] | `DEFAULT_SESSION_MAX_AGE_MS` is 14 minutes since *issue* with a 30-second refresh lead (`fmClient.ts:82-83`), so the refresh happens after about 13.5 minutes. After that much continuous use a **new** session is created and the old one is not closed: **2 live sessions** on the server (**Run**). The old one lingers until it idles out. | **gap** (minor) | Drop the timed refresh (the 401/952 path already recovers) or `DELETE` the old token after a successful refresh. |
+| 2.13 | Token revoked (admin disconnects the client, server restarts) | Admin Console, Connectors > FileMaker Data API tab: disconnect a client [S27] | 401 `[952]` | Same silent renewal as 2.11 (**Run**) | good | None. |
+| 2.14 | Two profiles, same account | Two saved profiles | Each login is its own session | Tokens are stored per profile id (`services/secretStore.ts`); no reuse across profiles | good | None. |
+| 2.15 | Logout fails or is skipped | Disconnect while the server is down; extension quits | n/a | `deleteSession` logs a warning and always deletes the local token (`fmClient.ts:275-284`). The server session idles out after 15 minutes. | acceptable | None. |
+| 2.16 | Status bar says "connected" when it is not | Revoke the token, stop the server, change the password | n/a | The item shows the profile name whenever `activeProfileId` is set (`views/connectionStatusBar.ts:24-35`); it never reflects session health. After a reload it still says connected although no login happened. | **gap** | Track last health (`ok`, `auth failed`, `unreachable`) and show it in the tooltip and icon. |
+| 2.17 | Proxy returns 401 with an HTML page (corporate sign-in) on a data call | Gateway in front of FileMaker | 401 with HTML | Treated as an expired token: **one extra login** is attempted, then `FileMaker request failed (GET /layouts). (HTTP 401)` with **Edit Profile** (**Run**) | acceptable | Only re-login when the body is the FileMaker envelope with code 952; otherwise report "the gateway rejected the request". |
+| 2.18 | External authentication (OAuth providers, Active Directory) | Server configured for it | OAuth login uses `X-FM-Data-OAuth-Request-Id` and `X-FM-Data-OAuth-Identifier` headers after a browser flow [S6] | Not implemented; `extension/docs/COMPATIBILITY.md` says so | acceptable | Keep the documentation. |
+| 2.19 | Clock-based failures | Client clock far off | Certificate validity checks (1.1, 1.2); no clock-dependent FileMaker token check is documented | See 1.2. `Date.now()` jumps are clamped (`services/session/sessionTokenTracker.ts:88`). | good | None. |
+
+---
+
+## 3. Authorization: what an account can see and do
+
+Documented: privilege sets control access per layout, record, field and script; scripts can be granted
+full access so that they do more than the caller [S13]; "if the calling account lacks a privilege for a step
+(for example, record deletion), that step does not run, but the script may continue" [S13]. The Claris pages
+for layouts, metadata and records do **not** say how restricted layouts, records or fields appear
+[S20][S21][S10]. Treat everything marked Unverified below as a to-do for a real-server test with two
+accounts (one full access, one read-only).
+
+| # | Scenario | Reproduce on a real server | What FileMaker returns | What the extension does today | Verdict | Recommended change |
+|---|---|---|---|---|---|---|
+| 3.1 | Layout not available to the account | Privilege set limits layouts | The layout list omits it (**Unverified**: [S21] says nothing about privileges). A direct request: error **105** (layout missing) or **9/200** (**Unverified**). | Explorer lists what comes back. Zero layouts shows "No layouts found - Check profile permissions or API endpoint" (`views/fmExplorer.ts:399-410`). Layouts are cached 60 s (`fmClient.ts:80`). | acceptable | None for the empty case; it is accurate. |
+| 3.2 | Layout visible but no records visible | Record-level access rule hides all records | A find with no match: the extension expects HTTP 404 with code **401** "No records match the request" (**Run** against a scratch server). **Unverified** (and `extension/docs/USER_GUIDE.md` troubleshooting states 404 with 401 as fact): [S1] says FileMaker business errors arrive as HTTP 500 and says nothing about 404 with 401; we found no Claris page stating the status for code 401. | The extension hard-codes `status === 404 && code === '401'` (`fmClient.ts:101-103, 458-465`) and turns it into an empty result. If a real server answers **500** with code 401, `findRecords` throws `FileMaker API error (HTTP 500) [401]: No records match the request` (**Run**). Consequence for exports: `batchExportFind` pages through `findRecords` (`services/batchService.ts:85`), so when the record count is an exact multiple of the page size the loop makes a final past-the-end request; if that answers 500/401 the export aborts at the very end instead of finishing. The user also cannot tell "no match" from "no access". | acceptable if 404/401 is right, **gap** if not | Match code `401` whatever the HTTP status (S13). Show `totalRecordCount` next to an empty result when available. Add this case to the real-server checks. |
+| 3.3 | Some records invisible; counts differ per account | Record-level rules | Counts and found sets are filtered for the account (**Unverified** for `totalRecordCount`) | Exports and finds report whatever comes back; the export result has no found-count (`services/batchService.ts:117-129`) | acceptable | Put `dataInfo.foundCount`/`totalRecordCount` and the account name in the export summary, so two people can see why their files differ. |
+| 3.4 | Field hidden (no view access) | Field access "no access" in the privilege set | **Unverified** whether the key is omitted, empty or an error. | The Record Editor edits whatever keys arrive; fields missing from the response simply do not appear. No error. | **gap** (**Unverified**) | Test on a real server. If the key is omitted, say in the editor and Layout Inspector that "fields you cannot see are not shown". |
+| 3.5 | Field read-only, calculation or summary field, auto-entered | Field options / privilege set | Write: HTTP 500 with **201** "Field cannot be modified" (`ai/fileMakerErrors.ts:12`) (**Unverified** status) | The editor lets the user type in the field, then fails late with `FileMaker API error (HTTP 500) [201]: ...`. Layout metadata (`fieldMetaData.type`, `autoEnter`) is available but unused for this. | **gap** (UX) | Disable calculation and summary fields in the editor from `fieldMetaData`. |
+| 3.6 | Account cannot create, edit or delete | Privilege set "Records: view only" | Codes **200** "Record access is denied", **205** "No privilege to create records", **9** "Insufficient privileges" [S22]. | Record Editor shows the server text (`webviews/recordEditor/index.ts:376-380`). The AI delete path asks the user to confirm, then fails (`ai/aiToolService.ts:738-743`). **No pre-check**: the extension never learns what the account may do. No code path was found that reports success for a refused write (Code); **Unverified** on a real server. | acceptable | Optional: cache the first refusal per layout and disable Save/Delete with the reason. Add 9, 200-series text to the friendly table (S7). |
+| 3.7 | Batch update with a read-only account | Run a batch update | Each edit: HTTP 500 plus a business code | `updateOneWithRetry` retries every status >= 500 twice, so **every FileMaker business error is retried** (`services/batchService.ts:272`), and four failures open the circuit breaker so the rest of the job stalls. Failures list a message per record. | **gap** | Retry only 429, 502, 503, 504 and FileMaker 301 (record locked) with a small limit. Stop the job on 9, 200, 201, 205, 509 with one clear reason. |
+| 3.8 | Value lists | Dynamic value lists | Layout metadata returns an empty list for a dynamic list unless `recordId` is passed [S20] | Metadata is fetched without `recordId` (`fmClient.ts:495-506`) | acceptable | Document the limitation in the Layout Inspector. |
+| 3.9 | Scripts: not in the list, visible but not runnable, "script missing" | Execute-only or no-access privilege | **104** "Script is missing" [S22]; others **Unverified** | Script list is passed through; run errors show the server text. The runner treats any 404/405/501 as "not supported" and falls back to a GET-with-script call (`fmClient.ts:853-898`). | **gap** (see 1.23) | Same rule as 1.23. |
+| 3.10 | Script runs with full-access privileges so a limited user can do more | Script option "Run script with full access privileges" [S13] | The Data API returns no privilege information | The AI tools gate scripts by an allow-list the *user* maintains (`ai/aiToolService.ts:754-756`), not by the account | acceptable | Document in the AI section: "an allow-listed script can do what the script's owner allowed, not what the account allows". |
+| 3.11 | Script result and error handling | Scripts return `scriptResult` and `scriptError` (and `.prerequest`, `.presort` variants) in the body; **script errors are not reported through the HTTP status** [S12] | `scriptError` is a string such as `"0"` | Script Runner shows the raw response. The AI tool returns `scriptError` as a string (`ai/aiToolService.ts:794`). **Edit, create, delete, find and get ignore `scriptError`** in the response, so a failing script that ran with a write is not reported (`fmClient.ts:563-590, 614-654`). | **gap** | Surface a non-zero `scriptError`, `scriptError.prerequest` or `scriptError.presort` as a warning: "The record was saved, but the script <name> reported error n." |
+| 3.12 | Script leaves records uncommitted, locking them for others | Script without Commit [S13] | Other sessions get **301** (record in use) on edit [S22][S13] | Record Editor shows the server text; 301 has friendly text only in the AI table (`ai/fileMakerErrors.ts:22`) | acceptable | Friendly text: "Someone (or a script) is editing this record. Try again." |
+| 3.13 | Global fields | Per-session values [S10] | A global set in one session is not visible in another | The extension keeps one session per profile, so it behaves consistently (`utils/globalFieldUtils.ts` handles find restrictions [S11]) | good | None. |
+| 3.14 | Container fields | Container data in a field | Container URLs in record data need the session (streaming URL, cookie) to download [**Unverified** here]; the upload topic says only same-table containers are supported [S16] | The extension **only uploads** containers (`utils/containerUpload.ts`, `fmClient.ts:775-795`, as documented). It never downloads: container URLs appear as text in records and are not fetched, so the cookie question does not arise. The AI tools hide container URLs (`ai/aiToolService.ts:1080`). | good | None. If a download feature is added, test the streaming URL with the session cookie. |
+| 3.15 | Privilege-sensitive caches | Account's privileges change, or the profile's account is edited | The visible layouts and fields change | The Explorer layout list is cleared on every new login (`fmClient.ts:183, 225, 283`). **The schema cache is not**: it lives 300 s (`services/schemaService.ts:27`) and is cleared only on explicit disconnect (`extension.ts:364-367`). Editing the account in the wizard and saving keeps the old account's fields for up to 5 minutes (**Code**). | **gap** (minor) | Call `schemaService.invalidateProfile` from the same place as `FMClient.invalidateProfileCache`, including on profile save. |
+
+---
+
+## 4. Data and server weirdness
+
+| # | Scenario | What FileMaker does | What the extension does today | Verdict | Recommended change |
+|---|---|---|---|---|---|
+| 4.1 | Layout changed while open (field renamed, removed) | Request with the old field name fails with **102** "Field is missing" [S22] | Schema is cached 300 s; a stale name fails late with the server text. Snapshot/diff work from fresh fetches. | acceptable | On 102/105 invalidate that layout's schema entry (`schemaService.invalidateLayout` exists, `:46`). |
+| 4.2 | Layout list contains folders, separators, duplicate names, leading/trailing spaces | Folders appear as `isFolder: true` with `folderLayoutNames` [S21] | `extractLayoutNames` flattens folders, **trims** each name and drops duplicates (`utils/layoutParser.ts:15-22, 52-59`). A layout named `" Sales"` is requested as `"Sales"` and fails with 105; duplicate names in different folders collapse to one. | acceptable (**Unverified** whether FileMaker allows such names) | Keep names exactly as returned; keep duplicates with the folder path as a label. |
+| 4.3 | Special characters in layout, database or record names | Path segments must be percent-encoded | `encodeURIComponent` on every segment (`fmClient.ts:390, 450, 499`). Whether an encoded `/` (`%2F`) reaches FileMaker is a web-server setting (**Unverified**). | acceptable | Test one layout named `A/B` through Apache and IIS. |
+| 4.4 | Large found sets, `_limit`, `_offset` | Default `_limit` 100, `_offset` 1-based, no documented maximum [S9]. `limit` and `offset` in `_find` apply to the table, not portals [S11]. A request that starts past the last record answers 404/401 on the mock; the real status is **Unverified** (see 3.2). | Export pages with `offset` starting at 1 and stops when a page is short (`batchService.ts:71-123`). `truncated` is set when `exported >= maxRecords` even if the layout has exactly that many records (`:119-120`). Normal reads, finds and exports set **no response-size cap**: `maxContentLength` is passed only for AI calls (`ai/aiToolService.ts:417` through `fmClient.ts:1037`), so a very large page (many records, long text, 100-row portals) is read fully into memory. Offset paging without a sort can skip or repeat rows when other users edit during the export. | acceptable | Report `truncated` only when more rows exist. Offer "sort by record id" for stable paging. |
+| 4.5 | Portals | Default 50 related rows per portal, all portals returned unless named; `_limit.portal` / `_offset.portal` [S9][S10]. v1 and v2 differ in portal structure [S10]. | The extension never sends portal parameters, so portals are silently cut at 50 rows and every portal is fetched. Default version `vLatest`. | **gap** (minor) | Show "portal limited to 50 rows" in the Record Viewer; add portal paging later. |
+| 4.6 | Date, time and timestamp formats | `dateformats` 0 = US (default), 1 = file locale, 2 = ISO 8601 [S9][S10] | The extension never sends `dateformats`, so dates come back as `MM/DD/YYYY` whatever the file's locale; writes must use the same format. | acceptable | Document; consider `dateformats=2` for read-only views. |
+| 4.7 | `modId` | Returned as a string such as `"3"` [S10][S14] | Kept as a string; compared as strings in the AI delete path (`ai/aiToolService.ts:742`); Record Editor sends the loaded value (`webviews/recordEditor/index.ts:361`) | good | None. |
+| 4.8 | Record changed or locked by someone else | **306** modification id mismatch; **301** record in use [S22] | 306 handled with a conflict dialog (`services/errors.ts:87`, `recordEditor/index.ts:376`). Batch update sends no modId. | good / acceptable | None for 306. |
+| 4.9 | Record deleted by someone else | **101** "Record is missing" [S22] | Server text shown | acceptable | Friendly text (S7). |
+| 4.10 | Server in backup, maintenance, file paused, Data API Engine restarting | Requests fail with 5xx or 1701 "host currently unable to receive requests" [S22]; "clients can lose unsaved work when the Data API Engine restarts" [S24] | Shown as the server text; Connect retries 5xx with backoff (**Run**) | acceptable | None. |
+| 4.11 | Script triggers on edit (OnRecordCommit) fail after the write | Data API commits immediately; trigger/script errors appear in `scriptError` [S12][S13] | Not shown (see 3.11) | **gap** | See 3.11. |
+| 4.12 | Script is slow or returns a huge result | No script timeout or numeric result limit is documented [S13]; "may cause a web service to run out of memory" | Client timeout is `filemaker.requestTimeoutMs` (15 s) for every call; the client gives up but the server keeps running the script. The AI tool caps results (`ai/aiToolService.ts:51`, 10,000 characters). | **gap** (minor) | Allow a longer timeout for **Run Script** and say "the script may still be running on the server" on timeout. |
+| 4.13 | Rate limiting / concurrency | Cloud has an annual transfer limit that counts failed calls [S27]; no per-second limit is documented | `filemaker.batch.concurrency` default 5; the batch breaker backs off on failure (`services/batchService.ts:171-180`) | acceptable | None. |
+| 4.14 | Empty database list | `GET /databases` needs Basic auth only when "Filter Databases in Client Applications" is on [S19] | The extension never calls `/databases` | n/a | See S12. |
+| 4.15 | Server version differences (19.x / 20 / 21+, Cloud) | `v1`/`v2`/`vLatest` differ in portal structure [S10]; Cloud adds Claris ID [S5] | Default `vLatest`; matrix in `extension/docs/COMPATIBILITY.md` | acceptable | Record the product version from `productInfo` in the Output channel at connect time to help bug reports. |
+| 4.16 | HTTP 200 with a non-zero `messages[0].code` | Claris: status 200 "doesn't indicate response errors, check the messages array" [S1] | Any 2xx is success. Verified: a 200 whose message code is `212` was treated as a successful login (**Run**). | **gap** (defensive) | After parsing, treat `messages[0].code !== "0"` as a failure. |
+| 4.17 | Very large response | A layout with long text or big portals; a wide `_limit` | No documented maximum for `_limit` [S9] | Only AI calls cap the response (`ai/aiToolService.ts:417`); everything else is unbounded in memory (see 4.4). | **gap** (minor) | Set a generous `maxContentLength` (for example 50 MB) for normal reads and say "response too large, lower the limit". |
+
+---
+
+## 5. Direct mode versus proxy mode
+
+| Topic | Direct | Proxy |
+|---|---|---|
+| Who talks to FileMaker | The extension (`fmClient.ts`) | A middleware the user runs; the extension posts `{action, profile, payload}` to `proxyEndpoint` (`services/proxyClient.ts:300-311`) |
+| TLS to FileMaker | `tlsAgent.ts` on the Data API URL | The proxy's concern. `tlsAgent.ts` applies to the **proxy endpoint** only (`proxyClient.ts:310`). Cases 1.1-1.12 apply to the proxy URL, not to FileMaker. |
+| Session handling | 401 -> one silent re-login; proactive refresh (`fmClient.ts:932-1007`) | **None.** Proxy methods never go through `requestWithAuth`; a stored token of `"proxy-session"` stands in when the proxy returns none (`fmClient.ts:180`). Session expiry is the proxy's job. |
+| FileMaker error codes | Parsed from the body: `code`, HTTP status | **Lost.** `ok: false` becomes `new FMClientError(error ?? message, { details })` with no code or status (`proxyClient.ts:316-320`). Consequences: 306 conflict detection (`services/errors.ts:87`), the "no records" rule (`fmClient.ts:101, 461`), 401 renewal and the AI `FileMaker error n` text cannot work through a proxy. |
+| Non-JSON replies | Raw `TypeError` (1.19) | Returned as-is: `return responseData as T` (`proxyClient.ts:329`), so the first property access fails later with a `TypeError` |
+| Unreachable FileMaker behind the proxy | n/a | Depends on the status the proxy returns; `Proxy request failed. (HTTP n)` |
+| Credentials | Basic login with the stored password | The proxy API key is sent as `Bearer`; FileMaker credentials stay on the proxy |
+| Who enforces privileges | FileMaker, per account | The proxy's FileMaker account; every extension user gets the same view unless the proxy maps users |
+
+Recommended proxy contract (small PR plus a doc): the proxy returns `{ ok: false, fmCode, status, message }`; the client
+rebuilds a `FMClientError` with `code`/`status` from it.
+
+---
+
+## 6. Gaps ranked (each is small enough for one PR)
+
+Open issues already covering parts of this: **#260** (wizard toggle and CA picker) and **#261** (map TLS errors to
+actionable messages). Link PRs to them rather than opening new issues.
+
+### BLOCKER for 1.4.0
+
+| ID | Failing behaviour | Where | Suggested fix |
+|---|---|---|---|
+| **B1** | Expired, not-yet-valid, hostname-mismatch, wrong-protocol and old-TLS failures all show only `Failed to create FileMaker session.` (and **Retry**, which cannot help). | `utils/normalizeError.ts:121-138` (regex on message text; code dropped) | Carry Node `error.code` through `FMClientError`; add a code-to-text table (`CERT_HAS_EXPIRED`, `CERT_NOT_YET_VALID`, `ERR_TLS_CERT_ALTNAME_INVALID`, `DEPTH_ZERO_SELF_SIGNED_CERT`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN`, `EPROTO`, `ECONNRESET`, `ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`); remove **Retry** for certificate kinds. Test with the codes in section 1. (#261) |
+| **B3** | A web page (captive portal, WAF, sign-in redirect) instead of Data API JSON gives the raw message `Cannot read properties of undefined (reading 'token')`. | `services/fmClient.ts:213` and every `envelope.response` access | Validate the envelope once in `requestWithAuth`/`requestNoAuth`; throw the "not the Data API" message from 1.19. |
+| **B4** | After the stored password goes bad, **every user action sends another failed login**: five user actions made five failed logins (**Run**, reproduced). That alone is why this is a blocker: automatic credential retries must not depend on a lockout policy we have not seen. The lockout policy itself is **Unverified**: Claris defines error 214 "Too many login attempts" [S22] but we found no page describing the file-account policy. | `services/fmClient.ts:932-1007` | Per-profile "authentication failed" latch cleared by profile edit, password re-entry or explicit **Connect**. |
+
+*B2 (TLS trust cannot be set up in the product) was retired after #383: the wizard now has the Custom CA certificate file and Allow self-signed certificate (insecure) fields, Save and Test carry them, `aiAccess` is preserved. What remains is S15.*
+
+### SHOULD-FIX
+
+| ID | Failing behaviour | Where | Suggested fix |
+|---|---|---|---|
+| **S1** | Batch update retries every FileMaker business error (HTTP 500) twice and trips the breaker; a read-only account multiplies load and hides the real reason. | `services/batchService.ts:272` | Classify by FileMaker code; stop on 9/200/201/205/509 with the reason. |
+| **S2** | Connect's retry classifier never fires for network errors and does fire for `500/802`. | `commands/index.ts:54-79` | Use the Node cause code; do not retry business errors. |
+| **S3** | A bare 404 (Data API off, wrong path, wrong database) is shown as "Metadata not supported" (cached 5 minutes) or "Script runner not supported". `extension/docs/USER_GUIDE.md` troubleshooting row "HTTP 404 on metadata" gives the same incomplete advice. | `services/schemaService.ts:129-143, 255-261`; `services/fmClient.ts:853-898, 1380`; `extension/docs/USER_GUIDE.md` troubleshooting table | Treat a 404 as "unsupported" only when it carries a FileMaker code; otherwise "Check Server URL, API base path and that the Data API is enabled". |
+| **S4** | Redirects are followed silently (POST becomes GET; a login minted a session from a different origin in the test). | `services/fmClient.ts:1023, 1085, 1146` | `maxRedirects: 0` and a "server redirected to <origin>" message. |
+| **S5** | `scriptError` and non-zero `messages[0].code` on a 2xx are ignored for create, edit, delete, find and get. | `services/fmClient.ts:563-590, 614-654, 676-698` | Return and show a warning with the script name and error. |
+| **S6** | Explorer placeholders hide the cause ("Failed to load layouts - Use FileMaker: Connect"). | `views/fmExplorer.ts:427-440, 625-637, 693-700` | Put the short error message (kind and code) in `description` and a link to the Output channel in the tooltip. |
+| **S7** | Friendly text for common codes exists only for AI tools; the UI shows raw server text, and 403 gets an **Edit Profile** button although a privilege problem is not fixed in the profile. | `ai/fileMakerErrors.ts:2-47`; `utils/errorUx.ts:49-51` | Reuse the table in `normalizeError`; add the codes missing from it: 9, 203, 208, 209, 400, 953, 959, 960, 1630, 1700-1710 [S22]. Show **Edit Profile** only for 401 / codes 210, 211, 212. |
+| **S8** | Status bar reads "connected" whatever the session health. | `views/connectionStatusBar.ts:24-35` | Add last-known health from the most recent request. |
+| **S9** | Schema cache survives an account change for up to 5 minutes. | `services/schemaService.ts:27`; `extension.ts:364-367`; wizard save | Invalidate with `FMClient.invalidateProfileCache` and on profile save. |
+| **S10** | Proxy mode loses FileMaker codes, so conflict handling and "no records" cannot work. | `services/proxyClient.ts:316-329` | Document and implement the proxy error envelope (section 5). |
+| **S11** | The OS certificate store is not used, and a custom `https.Agent` on every request probably bypasses VS Code's proxy and system-certificate support. `ca: [...tls.rootCertificates, file]` is Node's bundled Mozilla list; a company CA that is only in the OS store is still untrusted. The wizard hint, the CHANGELOG and `extension/docs/USER_GUIDE.md` ("added to your computer's trusted certificates") say the same, which is inaccurate. | `services/tlsAgent.ts:42`; `webviews/connectionWizard/index.ts:839`; `extension/CHANGELOG.md`; `extension/docs/USER_GUIDE.md` (Certificates section) | Correct the wording now; verify in a VS Code host behind an inspecting proxy; read the OS store or pass an agent only when the profile needs one. |
+| **S12** | Pre-flight diagnosis is missing, so most causes above look the same. | `webviews/connectionWizard/index.ts:619-725` (`handleTestConnection`) | **Test Connection** ladder: TCP/TLS, then `GET /fmi/data/vLatest/productInfo` (documented, no login [S18]), then `GET /databases` [S19], then login. Report the first step that fails. |
+| **S13** | `findRecords` treats only HTTP 404 plus code 401 as "no records"; a real server that answers 500 with 401 (Unverified, see 3.2) makes finds fail and aborts an export at its last, past-the-end page when the count is a multiple of the page size. | `services/fmClient.ts:101-103, 458-465`; `services/batchService.ts:85` | Match code `401` whatever the HTTP status. |
+| **S14** | FileMaker Cloud with Claris ID is unsupported: the Data API expects `Authorization: FMID <token>` valid for one hour, no refresh [S5]; the extension only sends Basic and shows the failure like a wrong password. Whether a Cloud tenant also accepts account name and password is Unverified. | `extension/docs/COMPATIBILITY.md`; `services/fmClient.ts:199` | Say in the wizard and docs that there is no Claris ID login; add a Cloud hint; decide whether to build FMID login. |
+| **S15** | Certificate handling after #383 still lacks: fingerprint pinning (trust on first use, warning on change), a persistent warning while a profile skips verification, and a run-time "not a certificate file" message. Pinning and related fixes are **in progress** (PR to follow). | `services/tlsAgent.ts` | As listed. |
+
+### NICE
+
+| ID | Behaviour | Where | Fix |
+|---|---|---|---|
+| N1 | Gateway HTML is kept whole in `details` and in "Copy as Bug Report" | `utils/normalizeError.ts:80, 110` | Truncate and strip tags. (Row 1.8 on revocation is an inference: the Node page lists `CERT_REVOKED` and CRL codes but does not say whether Node checks revocation by default; confirm.) |
+| N2 | 429 is not retried and `Retry-After` is ignored | `utils/normalizeError.ts:109`, `utils/errorUx.ts:52-57` | Treat as retryable. |
+| N3 | Proactive 14-minute refresh leaves a second live session | `services/fmClient.ts:82, 943` | Drop it or close the old token. |
+| N4 | `truncated` true when the layout has exactly `maxRecords` rows | `services/batchService.ts:119` | Check one more row. |
+| N5 | Layout names are trimmed and de-duplicated | `utils/layoutParser.ts:15-22, 52-59` | Keep exact names. |
+| N6 | A CA file that stops being PEM after saving gives the misleading "unable to verify the first certificate" at run time (the save-time check exists and edits are picked up since #383) | `services/tlsAgent.ts:42-52` | Re-check at agent build and say "not a certificate file". |
+| N7 | Portals cut at 50 rows silently; `dateformats` never sent | `services/fmClient.ts` | Show the limit; document the format. |
+| N8 | A colon in the account name is accepted (RFC 7617 forbids it) | `utils/jsonValidate.ts` | Reject in the wizard. |
+| N9 | Script timeout is the global 15 s; the script keeps running | `services/fmClient.ts:1035` | Per-operation timeout and wording. |
+| N10 | Normal reads, finds and exports have no response-size cap | `services/fmClient.ts:1037` | See 4.17. |
+
+### Real-server checks that would settle the Unverified rows
+
+Two accounts (full access, read-only), one file without *fmrest*, one expired and one wrong-host certificate on a test FileMaker Server: record the exact HTTP status and `messages[].code` for: wrong database name, database closed, missing fmrest, inactive account, expired password, 4+ wrong passwords in a row, blocked layout, hidden field, read-only field write, refused delete, script without permission, Data API disabled (`/fmi/data/vLatest/productInfo`), and a find with record-level restrictions; a find with no match and a past-the-end `_offset` (is the status 404 or 500 with code 401?); the status for codes 959, 960, 1630, 1700; and whether a Cloud tenant accepts account name and password on the Data API. Also run the extension from a real VS Code window behind a TLS-inspecting proxy (S11).
+
+---
+
+## 7. Mock-server scenarios for the end-to-end agent
+
+The mock lives in `extension/test/mock-server/server.mjs` (HTTP, loopback only). Suggested admin hook:
+`POST /__admin/fault` with `{ "name": "<scenario>", "count": <n or omitted for always>, "path": "<prefix>" }`,
+cleared by `POST /__admin/reset`. Add users `viewer` (read-only) and `limited` (one layout) next to `tester`.
+
+| Scenario name | How triggered | Expected extension behaviour |
+|---|---|---|
+| `login-bad-password` | The existing wrong password | One clear 212 message; **no second login** until the user acts (B4). Check `sessionPosts`. |
+| `login-bad-password-after-expire` | `expire` plus change the accepted password | Exactly one failed login in total across five Explorer refreshes (B4). |
+| `login-inactive` / `login-expired-password` / `login-locked` | Return 401 with code 210 / 211 / 214 | Friendly text per code; no retries; latch (S7, B4). |
+| `login-no-fmrest` | Return 500 with code 802 on login | Friendly "fmrest or file closed" text; **Connect does not retry** (S2). |
+| `find-no-match-500` | Answer a no-match find with 500 and code 401 (variant of the 404 form) | Empty result, not an error; an export ending on a page boundary finishes cleanly (S13). |
+| `login-session-limit` | 500 with code 956 for N logins, then success | Connect retries with visible countdown, then succeeds. |
+| `token-idle-expire` | Existing `/__admin/expire` plus `expire-after-ms` | One silent renewal; one new login (already in `mock:check`). |
+| `html-200` | Any path answers 200 `text/html` | "Not the Data API (looks like a web page)" - never `Cannot read properties` (B3). |
+| `empty-200`, `truncated-json`, `array-body` | As named | Same message as `html-200`. |
+| `redirect-login` | 302 to `/login` (HTML) | "Server redirected to ..." (S4). |
+| `redirect-other-origin` | 307 to `http://127.0.0.1:<other>/...` | No session minted; redirect message (S4). |
+| `status-413`, `status-429` (+ `Retry-After: 2`), `status-502`, `status-503`, `status-504` | Return that status with an HTML body | Gateway wording; 429/503 retried with the header's delay; no HTML body in "Copy as Bug Report" (N1). |
+| `slow` (`delay-ms`) | Hold the response longer than `filemaker.requestTimeoutMs` | Timed-out text naming the setting; **Open Settings** button. |
+| `drop-mid-response`, `reset-connection` | Destroy the socket mid-body / immediately | "Server closed the connection" - never "(HTTP 200)" (1.18). |
+| `data-api-disabled` | 404 `text/html` for every path under `/fmi/data` | "Check Server URL, base path, Data API enabled"; **no** "Metadata not supported" and no cached unsupported result (S3). |
+| `wrong-version-path` | Serve only `/vLatest`, `/v1`, `/v2` | 404 explained; wizard warns about an unknown version path. |
+| `db-not-hosted` | 500 with code 100 (and a variant 401/212) | Message mentions the database name; offers the hosted list when `/databases` works (S12). |
+| `readonly-account` | User `viewer`: reads OK; PATCH/POST/DELETE answer 500 with 200 / 205 / 9 | Record Editor shows a friendly refusal; batch update stops after the first refusals without retries (S1); AI delete shows the refusal. |
+| `limited-layouts` | User `limited` sees only `Contacts`; other layouts answer 500/105 | Explorer lists one layout; direct use of the other shows "not available to this account". |
+| `field-hidden` | `viewer` gets records and metadata without `Email` | Editor shows no `Email`; note "fields you cannot see are not shown" (3.4). |
+| `field-readonly` | PATCH of `Amount` answers 500/201 | Field disabled in the editor from metadata, or a clear 201 message (3.5). |
+| `record-locked`, `record-gone`, `validation-fail` | 500 with 301 / 101 / 509 | Friendly texts; 301 retried once, others not. |
+| `script-error` | Script endpoint returns `scriptError: "3"`; also an edit that returns `scriptError` after saving | Warning "saved, but script reported error 3" (S5). |
+| `script-huge-result`, `script-slow` | 2 MB `scriptResult`; delayed reply | Result truncated safely; timeout wording mentions the script may still run (N9). |
+| `layout-renamed` | Remove a field/layout after the first metadata fetch | 102/105 clears that layout's cached schema; Explorer refresh shows the change (4.1). |
+| `layouts-folders` | Layout list with folders, separators, a duplicate name, names with spaces, `A/B`, `?`, `%`, Unicode | All appear; each opens; encoded correctly (4.2, 4.3). |
+| `messages-nonzero-200` | 200 with `messages[0].code` = `212` | Reported as an error (4.16). |
+| `many-records` / `offset-past-end` | 100,000 records; offset beyond the last | Export ends cleanly; `truncated` false when exact (N4). |
+| `portal-50` | A record with 80 related rows, 50 returned | Viewer notes the 50-row cap (4.5). |
+| `second-session-alive` | After 14 minutes of simulated use (`now` injection) | At most one live token (N3). |
+| TLS (needs an HTTPS option, `MOCK_TLS=<mode>` with generated certificates) | `expired`, `notyet`, `selfsigned`, `wronghost`, `private-ca`, `missing-intermediate`, `tls10-only`, `http-to-tls`, `tls-to-http` | The exact messages recommended in section 1; with `caBundlePath` set to the mock CA the `private-ca` case connects; `selfsigned` with "skip checks" connects with a persistent warning. Generate with OpenSSL 3.4+: `openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -subj /CN=localhost -addext subjectAltName=DNS:localhost -not_before 20240101000000Z -not_after 20240102000000Z`. |
+
+---
+
+## 8. Troubleshooting by symptom (content for the user guide)
+
+Written for people who run the extension, not for developers. "Ask your FileMaker administrator" lines are
+what to put in the message to them. Messages are as the extension shows them today.
+
+| What you see | Most likely cause | What to do | What to ask the FileMaker administrator |
+|---|---|---|---|
+| `Failed to create FileMaker session.` and nothing else | The connection failed before FileMaker answered: certificate, port, name, firewall or VPN | Check the Server URL (https, correct name and port). Check your VPN. Check your computer's date and time. Open **View > Output > FileMaker Data API Tools** for the technical detail. | "Is the Data API reachable at https://<server>/fmi/data/vLatest/productInfo from my network? Is its certificate current and issued for this name?" |
+| `... (self-signed certificate)` or `... (unable to verify the first certificate)` | This computer does not trust the authority that signed the server's certificate. A fresh FileMaker Server uses a certificate that only FileMaker Pro trusts. | Ask for the company's root certificate file (`.pem`) and choose it as the *Custom CA certificate file* under **Certificates (advanced)** in the connection form. Do not turn off certificate checks on a network you do not control. | "Please send me the root/intermediate CA certificate as a `.pem` file, and install a CA-signed certificate on the server, including the intermediate certificate, then restart FileMaker Server." |
+| The certificate has expired, or is not yet valid (today the message is the bare line above) | Server certificate out of date, or your computer's clock is wrong | Fix your clock first. If the clock is right, the server's certificate needs renewing; nothing you can change in VS Code is safe. | "The server certificate has expired - please renew and import it (Admin Console > Configuration > SSL Certificate), then restart." |
+| The name or address in the certificate does not match (today the bare line above) | You connected by IP address, or by a name the certificate does not list | Use the exact host name from the certificate in the Server URL. | "Which host name is the certificate issued for?" |
+| `Cannot read properties of undefined (reading 'token')` | The server (or something in front of it) answered with a web page, not the Data API: sign-in page, firewall block page, proxy error | Open the Server URL in a browser. If you see a page that is not FileMaker, sign in or ask for the firewall rule. | "Is a gateway or firewall rewriting requests to /fmi/data? Please allow it for my address." |
+| `HTTP 404` on connect | Wrong path, wrong database, or the Data API is switched off | Check Server URL, API Base Path (`/fmi/data`) and API Version (`vLatest`). Do not trust "Metadata is not supported on this server" when this appears. | "Is the FileMaker Data API enabled (Admin Console > Connectors > FileMaker Data API)? Is the database hosted and spelt exactly as I entered?" |
+| `[212] Invalid user account and/or password` | Wrong account name or password (the name is not case sensitive, the password is) | Edit the profile and re-enter the password. Do not keep clicking Refresh: each try is a failed sign-in. | "Please confirm the account name and reset the password if needed." |
+| `[210]` inactive, `[211]` password expired, `[214]` too many login attempts | Account switched off, password expired, or locked | Stop trying. Change the password in FileMaker Pro (the Data API cannot do it). | "My account is inactive/expired/locked - please re-enable it or reset the password." |
+| `[802] Unable to open file` | The file is closed or not hosted, or your account's privilege set does not allow Data API access | Check the database name. | "Is the file open on the server? Does my privilege set have the extended privilege *Access via FileMaker Data API* (fmrest)?" |
+| `[956]` maximum sessions | The server has no free Data API sessions | Wait a minute and use **Connect** again. | "Please disconnect idle Data API clients (Admin Console, Connectors > FileMaker Data API tab)." |
+| `HTTP 429`, `503`, `504` | The server or gateway is busy or restarting | Wait and retry; avoid large exports during the day. | "Is the server restarting or rate limiting the Data API?" |
+| Request timed out | The server is slow, a script is long, or a firewall drops packets | Raise `filemaker.requestTimeoutMs` (default 15000). A long script may keep running on the server; check before running it again. | "Is the server under load? Is a firewall dropping traffic from my address?" |
+| `[9]` insufficient privileges, `[200]` record access denied, `[201]` field cannot be modified, `[205]` cannot create records | Your account may not do this | Ask for the access, or use an account that has it. The extension does not check beforehand. | "Please give my privilege set edit/create/delete access on layout <name> and field <name>." |
+| The layout list is shorter than expected, or "No layouts found" | Your privilege set only shows some layouts, or none | Check which account the profile uses. | "Which layouts does my privilege set show?" |
+| A find shows fewer records than a colleague sees, or "no records" on a layout that has data | Record-level access rules for your account | Compare with the same find in FileMaker Pro using your account. | "Do record-level access rules apply to my privilege set?" |
+| A field is missing in the editor, or it saves but nothing changes | You cannot see that field, or it is a calculation | Check the field type in the Layout Inspector. | "Is field <name> hidden or read-only for my privilege set?" |
+| `[104] Script is missing` or a script you can see will not run | The script is not in your account's privileges, or not on the database you selected | Reload the script list. | "Please grant me execute access to script <name>." |
+| `[306]` record modification ID does not match | Someone else changed the record | Use the editor's reload, review the changed fields, save again. | - |
+| `[301]` record in use | Another user (or an unfinished script) has the record open | Try again in a moment. | "Who has this record open? Does a script leave it uncommitted?" |
+| Status bar says connected but nothing loads | The session ended (idle 15 minutes, server restart, password change) or the server is down | Run **FileMaker: Connect** again. | - |
+| Works in a browser but not here | A TLS-inspecting company proxy, or a company CA the extension does not use | Ask IT for the company root CA file (a .pem) and choose it as the *Custom CA certificate file*. A company CA that exists only in the operating system's certificate store is not used by the extension. | "Does the network re-sign HTTPS? Please send the root CA." |
+| FileMaker Cloud: password rejected although it works elsewhere | The extension has no Claris ID login. Whether your Cloud tenant's Data API also accepts a plain account name and password is not confirmed. | Do not keep retrying. | "Does the Data API on our FileMaker Cloud tenant accept an account name and password, or only Claris ID? Please ask Claris if unsure." |
+
+---
+
+## Sources
+
+Claris Data API Guide (checked 2026-10-18):
+
+- [S1] Error responses - https://help.claris.com/en/data-api-guide/content/error-responses.html
+- [S2] Log in to a database session - https://help.claris.com/en/data-api-guide/content/log-in-database-session.html
+- [S3] Connect to or disconnect from a database (15 minutes after the last call) - https://help.claris.com/en/data-api-guide/content/connect-disconnect-database.html
+- [S4] Log out of a database session - https://help.claris.com/en/data-api-guide/content/log-out-database-session.html
+- [S5] Log in using a Claris ID account (FileMaker Cloud) - https://help.claris.com/en/data-api-guide/content/log-in-database-session-claris-id.html
+- [S6] Log in using an OAuth identity provider - https://help.claris.com/en/data-api-guide/content/log-in-database-session-oauth.html
+- [S7] Validate a database session - https://help.claris.com/en/data-api-guide/content/validate-database-session.html
+- [S8] Enable FileMaker Data API access (fmrest) - https://help.claris.com/en/data-api-guide/content/enable-access.html
+- [S9] Get a range of records - https://help.claris.com/en/data-api-guide/content/get-range-of-records.html
+- [S10] Get a single record - https://help.claris.com/en/data-api-guide/content/get-single-record.html
+- [S11] Perform a find request - https://help.claris.com/en/data-api-guide/content/perform-find-request.html
+- [S12] Run a script with another request - https://help.claris.com/en/data-api-guide/content/run-script-with-another-request.html
+- [S13] FileMaker scripts and the Data API - https://help.claris.com/en/data-api-guide/content/filemaker-scripts-data-api.html
+- [S14] Edit a record - https://help.claris.com/en/data-api-guide/content/edit-record.html
+- [S15] Create a record - https://help.claris.com/en/data-api-guide/content/create-record.html
+- [S16] Upload container data - https://help.claris.com/en/data-api-guide/content/upload-container-data.html
+- [S17] Delete a record - https://help.claris.com/en/data-api-guide/content/delete-record.html
+- [S18] Get product information (no login documented) - https://help.claris.com/en/data-api-guide/content/get-product-information.html
+- [S19] Get database names - https://help.claris.com/en/data-api-guide/content/get-database-names.html
+- [S20] Get layout metadata - https://help.claris.com/en/data-api-guide/content/get-layout-metadata.html
+- [S21] Get layout names - https://help.claris.com/en/data-api-guide/content/get-layout-names.html
+- [S27] Monitor Data API solutions - https://help.claris.com/en/data-api-guide/content/monitor-data-api-app.html
+
+The guide's landing page (https://help.claris.com/en/data-api-guide/) renders no text without JavaScript; the topic pages above were read directly.
+
+Claris Pro and Server help:
+
+- [S22] FileMaker error codes - https://help.claris.com/en/pro-help/content/error-codes.html
+- [S23] Extended privileges (`fmrest`, `fmodata`, ...) - https://help.claris.com/en/pro-help/content/extended-privileges.html
+- [S24] FileMaker Data API settings (Server) - https://help.claris.com/en/server-help/content/config-webpub-fmdapi.html
+- [S25] Importing a custom SSL certificate - https://help.claris.com/en/server-help/content/config-csr-import.html
+- [S26] Using the CLI certificate command (default certificate, restart) - https://help.claris.com/en/server-installation-configuration-guide/content/using-certificate-command.html
+- [S28] Editing FileMaker file accounts (name not case sensitive, password is; require password change) - https://help.claris.com/en/pro-help/content/editing-filemaker-file-accounts.html
+- [S29] FileMaker Data API settings (Cloud) - https://help.claris.com/en/cloud-help/content/changing-filemaker-data-api-settings.html
+
+Node.js:
+
+- [N1] TLS: X509 certificate error codes - https://nodejs.org/api/tls.html#x509-certificate-error-codes
+- [N2] Errors: OpenSSL error codes - https://nodejs.org/api/errors.html#openssl-error-codes
+- [N3] `tls.checkServerIdentity` - https://nodejs.org/api/tls.html#tlscheckserveridentityhostname-cert
+- [N4] `tls.connect` option `rejectUnauthorized` (default true) - https://nodejs.org/api/tls.html#tlsconnectoptions-callback
+
+Not found in Claris documentation, so marked Unverified above: the exact HTTP status and code for a missing *fmrest* privilege, a wrong or closed database, how restricted layouts, records and fields are represented, and the file-account lockout policy.
+The `802` for a missing *fmrest* privilege comes from community posts, not from Claris.

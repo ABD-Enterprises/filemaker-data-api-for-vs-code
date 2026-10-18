@@ -43,6 +43,7 @@ PR title prefix matches the highest-tier label added:
 - Connect retries only transient failures (decided once where the error is built); no retry of 500/802 or certificate errors.
 - Validate the Data API envelope in one place (HTML/empty/array/truncated/redirect), maxRedirects 0 with a clear redirect message, messages[0].code on 2xx, scriptError reported with writes, no-records by code (404 or 500), bare 404 no longer cached as unsupported.
 - Map Node/OpenSSL error codes to actionable messages via one shared mapping (normalizeError); Retry only where it helps; no Edit Profile for 403/privilege; shared FileMaker error-code table with advice; Retry-After; HTML details truncated.
+- Release workflow: the release job now downloads the source-map artifact (it previously failed after publish); packaging fails if no maps are produced.
 - Wizard: http+self-signed message, custom CA extends system roots, TLS agent keyed by file stamp, database/API path change resets aiAccess; kill-switch message names the true cause.
 - FM Web preview: clear 'unavailable in this installation' error instead of the old fallback app; version-marked managed runtime files refreshed in already generated apps; env file written without following symlinks.
 - Implement Create Record in the Record Editor (field list, validation, confirmation, new record ID) with unit tests and an end-to-end test against the mock FileMaker server.
@@ -65,12 +66,13 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.
 - Untrack artifacts/*.log and gitignore them.
 - Ship generated `THIRD_PARTY_NOTICES.txt` (checked in CI via `package:check` and a unit test); exclude lint config, build scripts, QA docs and ARCHITECTURE.md from the VSIX.
 - Production-minify the extension, worker and Layout Mode UI bundles; no inline or shipped source maps; clear designer-ui build failure message.
+- Add a catalogue of FileMaker failure modes (`docs/FILEMAKER_FAILURE_MODES.md`): TLS and network, authentication, privilege-set effects and server quirks, what the extension shows for each, a ranked gap list, mock-server scenarios to add, and a troubleshooting-by-symptom section for the user guide. Documentation only.
 - Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
-- Job aid for the Marketplace publishing token, with the 2026-12-01 PAT retirement noted.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
 - Release pipeline: separate publish (environment-gated, tag-on-main and version checks, no `npm ci` with the token) and release jobs; untrack the session lock file.
 - Add a mock FileMaker Data API (`npm run mock:server`) and an end-to-end client check against it (`npm run mock:check`); neither is shipped in the VSIX.
@@ -96,7 +98,7 @@ PR title prefix matches the highest-tier label added:
 - Validate the workspace snapshot index entries so a repository's index cannot make pruning delete other files; reject Windows drive-relative output folders.
 - Redact the session token in request paths, more query parameters and JSON keys, and credentials embedded in URLs.
 - Ask before running a workspace plugin, once per folder content (workspace + SHA-256 of every file), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.
-- Make offline mode and `features.*.enabled` restrict-only for workspace settings, and gate the FM Web preview bridge (writes, script runs) on offline mode, feature switches and enterprise policy.
+- Make offline mode and `features.*.enabled` restrict-only for workspace settings, and gate the FM Web preview bridge (writes on offline mode, the record-edit switch and the `writeOperations` and `recordEdit` role checks; script runs on offline mode, the script runner switch and the `scriptRunner` role check).
 - Make enterprise policy restrict-only: workspace settings and `.vscode/filemaker.config.json` may turn enterprise mode on or lower the role, never turn it off or raise the role above the user's own.
 - Layout Mode `runScript` behaviours get the Script Runner's checks plus an explicit confirmation naming the script, parameter and connection.
 - FM Web Preview confirms before running `npm install` / `npm run dev` in the generated runtime folder.

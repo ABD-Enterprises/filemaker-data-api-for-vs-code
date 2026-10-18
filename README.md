@@ -1,53 +1,49 @@
 # FileMaker Data API Tools for VS Code
 
-A free, open-source VS Code extension for the FileMaker Data API. Full CRUD, query building, schema management, batch operations, and more — all from within VS Code.
+A free, open-source VS Code extension for the FileMaker Data API: connect, query, edit records, compare schemas, export and update in batches, generate TypeScript types, and (optionally, off by default) give AI tools safe access. MIT licensed, no telemetry.
 
-**[Extension README](extension/README.md)** | **[API Reference](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/)** | **[Release Cadence](docs/RELEASE_CADENCE.md)** | **[Roadmap](docs/roadmap.md)** | **[Architecture](extension/ARCHITECTURE.md)** | **[Contributing](extension/CONTRIBUTING.md)**
+Install it from the Marketplace: search for **FileMaker Data API Tools** (publisher SureForgeTech), or run `code --install-extension SureForgeTech.filemaker-data-api-tools`.
 
-## Monorepo Structure
+## Documentation
 
-| Package | Description |
-|---------|------------|
-| `extension/` | VS Code extension — FileMaker Data API Tools |
-| `shared/` | Shared schema, types, and UI renderer utilities |
-| `designer-ui/` | React webview app for Layout Mode |
-| `runtime-next/` | Next.js runtime template for generated apps |
+| I want to... | Read |
+| --- | --- |
+| Use the extension | [User Guide](extension/docs/USER_GUIDE.md) |
+| Check which FileMaker versions work | [Compatibility](extension/docs/COMPATIBILITY.md) |
+| Upgrade between versions | [Upgrade notes](extension/UPGRADE.md) and the [Changelog](extension/CHANGELOG.md) |
+| Understand security and data handling | [Security overview](docs/security.md), [Data handling](docs/DATA_HANDLING.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
+| Contribute code or docs | [Contributing](extension/CONTRIBUTING.md), [Architecture](extension/ARCHITECTURE.md), [API reference](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/) |
+| Cut a release | [Release process](docs/RELEASE.md), [cadence](docs/RELEASE_CADENCE.md), [rollback](docs/ROLLBACK.md) |
+| Understand a design decision | [Architecture decision records](docs/ADR/README.md) |
 
-## Quick Start
+The Marketplace page is [extension/README.md](extension/README.md).
+
+## Repository layout
+
+| Folder | Contents |
+| --- | --- |
+| `extension/` | The VS Code extension (published as `SureForgeTech.filemaker-data-api-tools`) |
+| `shared/` | Shared schema, types and renderer utilities |
+| `designer-ui/` | React webview app for FM Web Layout Mode |
+| `runtime-next/` | Next.js runtime template for generated FM Web apps |
+| `docs/` | Maintainer, security and release documentation |
+| `tools/` | Release helpers (`release-notes.sh`, the pinned `vsce` install) |
+
+## Develop
+
+Node.js 22 or newer is required.
 
 ```bash
-npm install
+npm ci
 npm run build
 npm test
 ```
 
-Launch the extension:
-1. Open this repo in VS Code.
-2. Press `F5` to open the Extension Development Host.
-3. Run **FileMaker: Add Connection Profile** from Command Palette.
+Press `F5` in VS Code to open an Extension Development Host, then run **FileMaker: Add Connection Profile**. No FileMaker server? Run `npm run mock:server -w extension` and point a profile at the mock Data API described in [CONTRIBUTING.md](extension/CONTRIBUTING.md).
 
-## Commands
-
-| Command | Description |
-|---------|------------|
-| `npm run build` | Build all workspace packages |
-| `npm run dev` | Run workspace dev commands in parallel |
-| `npm run dev:extension` | Dev mode for extension only |
-| `npm test` | Run tests across all workspaces |
-| `npm run test:coverage` | Run tests with coverage reporting |
-| `npm run typecheck` | Type-check all workspaces |
-| `npm run lint` | Lint all workspaces |
-| `npm run docs:api` | Generate TypeDoc API reference into `docs/api` |
-| `npm run package:check` | Validate VSIX packaging |
-
-## Extension Packaging
-
-```bash
-npm run package:check
-```
-
-This runs `vsce package` validation from the `extension/` workspace.
+Useful root scripts: `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run docs:api` (TypeDoc into `docs/api`), `npm run package:check` (run `npm run build` first; builds a VSIX into `artifacts/` and validates it). See [Contributing](extension/CONTRIBUTING.md) for the full checklist.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

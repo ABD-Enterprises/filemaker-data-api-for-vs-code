@@ -26,5 +26,5 @@ Under the hood the extension is:
   timeouts are retried with exponential backoff so you don't have to.
 
 > **If Connect fails**, the error toast offers **Retry**, **Edit Profile**,
-> and **Show Details**. The Details document is redacted but includes the
+> and **Details…**. The Details document is redacted but includes the
 > retry chain and the failing endpoint — useful for filing bug reports.
