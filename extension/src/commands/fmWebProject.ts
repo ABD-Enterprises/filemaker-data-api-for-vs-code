@@ -19,7 +19,7 @@ interface RegisterFmWebProjectCommandDeps {
   fmWebProjectService: FmWebProjectService;
   fmWebRuntimeGenerator: FmWebRuntimeGenerator;
   fmBridgeServer: FmBridgeServer;
-  roleGuard?: RoleGuard;
+  roleGuard: RoleGuard;
   logger: Logger;
   refreshExplorer: () => void;
 }
@@ -133,9 +133,7 @@ export function registerFmWebProjectCommands(
 
         LayoutModePanel.createOrShow(context, fmWebProjectService, profileStore, fmClient, logger, {
           layoutId,
-          assertScriptRunAllowed: roleGuard
-            ? () => roleGuard.assertFeature('scriptRunner', 'Run script from Layout Mode')
-            : undefined
+          assertScriptRunAllowed: () => roleGuard.assertFeature('scriptRunner', 'Run script from Layout Mode')
         });
       } catch (error) {
         await showCommandError(error, {

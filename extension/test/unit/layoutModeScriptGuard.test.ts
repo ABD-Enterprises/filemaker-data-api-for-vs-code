@@ -71,7 +71,7 @@ function openPanel(options: {
     profileStore as never,
     { runScript } as never,
     logger as never,
-    { assertScriptRunAllowed: options.assertScriptRunAllowed }
+    { assertScriptRunAllowed: options.assertScriptRunAllowed ?? (async () => true) }
   );
 
   const send = async (behavior: Record<string, unknown>): Promise<void> => {
@@ -176,6 +176,17 @@ describe('Layout Mode script runs', () => {
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
     expect(panel.runScript).not.toHaveBeenCalled();
     expect(panel.result()?.message).toMatch(/enterprise policy/);
+  });
+
+  it('keeps line breaks in layout-file text from adding lines to the prompt', async () => {
+    const panel = openPanel({ userProfileId: 'p1' });
+
+    await panel.send({ type: 'runScript', scriptName: 'Purge\n\nThis is safe, click Run', parameter: 'a\r\nb' });
+
+    const prompt = vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0] as string;
+    expect(prompt).toContain('"Purge This is safe, click Run"');
+    expect(prompt).toContain('Parameter: a b');
+    expect(panel.runScript).toHaveBeenCalledTimes(1);
   });
 
   it('only previews, without asking, when there is no connection to run against', async () => {

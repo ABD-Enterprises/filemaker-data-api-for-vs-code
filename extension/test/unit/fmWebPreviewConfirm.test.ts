@@ -24,6 +24,7 @@ function start() {
     fmWebProjectService: {} as never,
     fmWebRuntimeGenerator: generator as never,
     fmBridgeServer: { ensureStarted: vi.fn(async () => ({ baseUrl: 'http://127.0.0.1:1234' })) } as never,
+    roleGuard: { assertFeature: vi.fn(async () => true) } as never,
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
     refreshExplorer: vi.fn()
   });

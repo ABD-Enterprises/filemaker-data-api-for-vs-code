@@ -5,12 +5,14 @@ const commandHandlers = new Map<string, (...args: unknown[]) => Promise<void> | 
 vi.mock('vscode', () => {
   return {
     commands: {
-      registerCommand: vi.fn((command: string, handler: (...args: unknown[]) => Promise<void> | void) => {
-        commandHandlers.set(command, handler);
-        return {
-          dispose: () => commandHandlers.delete(command)
-        };
-      }),
+      registerCommand: vi.fn(
+        (command: string, handler: (...args: unknown[]) => Promise<void> | void) => {
+          commandHandlers.set(command, handler);
+          return {
+            dispose: () => commandHandlers.delete(command)
+          };
+        }
+      ),
       executeCommand: vi.fn(async () => undefined)
     },
     window: {
@@ -179,24 +181,39 @@ describe('PluginRegistry', () => {
   });
 
   describe('workspace plugin consent', () => {
+    const dir = '/workspace/.vscode/filemaker-plugins';
+
     function makeRegistry(options: {
-      content: () => string;
-      askConsent: (request: { fileName: string; workspaceRoot: string }) => Promise<boolean>;
-      approvalState: { get: <T>(key: string, fallback?: T) => T; update: (key: string, value: unknown) => Promise<void> };
+      files: () => Record<string, string>;
+      askConsent: (request: { fileNames: string[]; workspaceRoot: string }) => Promise<boolean>;
+      approvalState: {
+        get: <T>(key: string, fallback?: T) => T;
+        update: (key: string, value: unknown) => Promise<void>;
+      };
       root?: string;
       importModule: ReturnType<typeof vi.fn>;
+      logger?: {
+        info: ReturnType<typeof vi.fn>;
+        warn: ReturnType<typeof vi.fn>;
+        error: ReturnType<typeof vi.fn>;
+      };
     }): PluginRegistry {
       return new PluginRegistry(
         { listProfiles: vi.fn(async () => []), getProfile: vi.fn(async () => undefined) } as never,
         { listLayouts: vi.fn(async () => []), getLayoutMetadata: vi.fn(async () => ({})) } as never,
-        { getFeatureGuard: vi.fn(() => ({ allowed: true })), assertFeature: vi.fn(async () => true) } as never,
-        { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        {
+          getFeatureGuard: vi.fn(() => ({ allowed: true })),
+          assertFeature: vi.fn(async () => true)
+        } as never,
+        (options.logger ?? { info: vi.fn(), warn: vi.fn(), error: vi.fn() }) as never,
         {
           internalPlugins: [],
           isWorkspaceTrusted: () => true,
           getWorkspaceRoot: () => options.root ?? '/workspace',
-          readDir: async () => ['demo.js', 'notes.txt'],
-          readFileBytes: async () => Buffer.from(options.content()),
+          readDir: async () => Object.keys(options.files()).filter((name) => !name.includes('/')),
+          listFiles: async () => Object.keys(options.files()).map((name) => `${dir}/${name}`),
+          readFileBytes: async (path) =>
+            Buffer.from(options.files()[path.replace(`${dir}/`, '')] ?? ''),
           importModule: options.importModule as never,
           approvalState: options.approvalState,
           askConsent: options.askConsent
@@ -207,7 +224,8 @@ describe('PluginRegistry', () => {
     function memento() {
       const values = new Map<string, unknown>();
       return {
-        get: <T>(key: string, fallback?: T): T => (values.has(key) ? (values.get(key) as T) : (fallback as T)),
+        get: <T>(key: string, fallback?: T): T =>
+          values.has(key) ? (values.get(key) as T) : (fallback as T),
         update: async (key: string, value: unknown) => {
           values.set(key, value);
         }
@@ -215,69 +233,158 @@ describe('PluginRegistry', () => {
     }
 
     const pluginModule = () =>
-      vi.fn(async () => ({ default: { id: 'workspace-plugin', name: 'Workspace Plugin', activate: async () => undefined } }));
+      vi.fn(async () => ({
+        default: {
+          id: 'workspace-plugin',
+          name: 'Workspace Plugin',
+          activate: async () => undefined
+        }
+      }));
 
     it('does not import a plugin the user declines', async () => {
       const importModule = pluginModule();
       const askConsent = vi.fn(async () => false);
-      const registry = makeRegistry({ content: () => 'v1', askConsent, approvalState: memento(), importModule });
+      const registry = makeRegistry({
+        files: () => ({ 'demo.js': 'v1' }),
+        askConsent,
+        approvalState: memento(),
+        importModule
+      });
 
       await registry.reload();
 
-      expect(askConsent).toHaveBeenCalledWith({ fileName: 'demo.js', workspaceRoot: '/workspace' });
+      expect(askConsent).toHaveBeenCalledWith({
+        fileNames: ['demo.js'],
+        workspaceRoot: '/workspace'
+      });
       expect(importModule).not.toHaveBeenCalled();
       expect(registry.listActivePlugins()).toHaveLength(0);
     });
 
-    it('imports an approved plugin and does not ask again for the same content', async () => {
+    it('imports approved plugins and does not ask again for the same folder content', async () => {
       const importModule = pluginModule();
-      const askConsent = vi.fn(async () => true);
-      const state = memento();
-      const registry = makeRegistry({ content: () => 'v1', askConsent, approvalState: state, importModule });
+      const askConsent = vi.fn<
+        (request: { fileNames: string[]; workspaceRoot: string }) => Promise<boolean>
+      >(async () => true);
+      const registry = makeRegistry({
+        files: () => ({ 'demo.js': 'v1', 'other.js': 'v1' }),
+        askConsent,
+        approvalState: memento(),
+        importModule
+      });
 
       await registry.reload();
       await registry.reload();
 
       expect(askConsent).toHaveBeenCalledTimes(1);
-      expect(importModule).toHaveBeenCalledTimes(2);
-      expect(registry.listActivePlugins().map((plugin) => plugin.id)).toEqual(['workspace-plugin']);
+      expect(askConsent.mock.calls[0]?.[0].fileNames.sort()).toEqual(['demo.js', 'other.js']);
+      expect(importModule).toHaveBeenCalledTimes(4);
     });
 
-    it('asks again when the plugin file has changed', async () => {
-      const importModule = pluginModule();
+    it('asks again when an approved plugin file changes', async () => {
       const askConsent = vi.fn(async () => true);
-      let content = 'v1';
-      const registry = makeRegistry({ content: () => content, askConsent, approvalState: memento(), importModule });
+      let version = 'v1';
+      const registry = makeRegistry({
+        files: () => ({ 'demo.js': version }),
+        askConsent,
+        approvalState: memento(),
+        importModule: pluginModule()
+      });
 
       await registry.reload();
-      content = 'v2 with something else in it';
+      version = 'v2 with something else in it';
       await registry.reload();
 
       expect(askConsent).toHaveBeenCalledTimes(2);
     });
 
-    it('asks again in a different workspace and when approval is withdrawn by declining the changed file', async () => {
+    it('asks again when a file the plugin loads from the same folder changes, appears or goes', async () => {
+      const askConsent = vi.fn(async () => true);
+      let files: Record<string, string> = {
+        'demo.js': "import './lib/payload.js'",
+        'lib/payload.js': 'safe()'
+      };
+      const registry = makeRegistry({
+        files: () => files,
+        askConsent,
+        approvalState: memento(),
+        importModule: pluginModule()
+      });
+
+      await registry.reload();
+      files = { ...files, 'lib/payload.js': 'steal()' };
+      await registry.reload();
+      files = { ...files, 'lib/extra.js': 'more()' };
+      await registry.reload();
+      files = Object.fromEntries(Object.entries(files).filter(([name]) => name !== 'lib/extra.js'));
+      await registry.reload();
+
+      expect(askConsent).toHaveBeenCalledTimes(4);
+    });
+
+    it('asks again in a different workspace', async () => {
       const state = memento();
-      const first = makeRegistry({ content: () => 'v1', askConsent: async () => true, approvalState: state, importModule: pluginModule() });
+      const first = makeRegistry({
+        files: () => ({ 'demo.js': 'v1' }),
+        askConsent: async () => true,
+        approvalState: state,
+        importModule: pluginModule()
+      });
       await first.reload();
 
       const askOther = vi.fn(async () => false);
       const importOther = pluginModule();
-      const other = makeRegistry({ content: () => 'v1', askConsent: askOther, approvalState: state, root: '/another/repo', importModule: importOther });
+      const other = makeRegistry({
+        files: () => ({ 'demo.js': 'v1' }),
+        askConsent: askOther,
+        approvalState: state,
+        root: '/another/repo',
+        importModule: importOther
+      });
       await other.reload();
 
-      expect(askOther).toHaveBeenCalledWith({ fileName: 'demo.js', workspaceRoot: '/another/repo' });
+      expect(askOther).toHaveBeenCalledWith({
+        fileNames: ['demo.js'],
+        workspaceRoot: '/another/repo'
+      });
       expect(importOther).not.toHaveBeenCalled();
     });
 
-    it('never asks about internal plugins or non-plugin files', async () => {
-      const importModule = pluginModule();
+    it('does not ask when the folder has no plugin files', async () => {
       const askConsent = vi.fn(async () => true);
-      const registry = makeRegistry({ content: () => 'v1', askConsent, approvalState: memento(), importModule });
+      const registry = makeRegistry({
+        files: () => ({ 'notes.txt': 'hello' }),
+        askConsent,
+        approvalState: memento(),
+        importModule: pluginModule()
+      });
 
       await registry.reload();
 
-      expect(askConsent).toHaveBeenCalledTimes(1); // demo.js only, not notes.txt
+      expect(askConsent).not.toHaveBeenCalled();
+    });
+
+    it('refuses a plugin folder that is too big to check', async () => {
+      const files: Record<string, string> = { 'demo.js': 'v1' };
+      for (let index = 0; index < 600; index += 1) {
+        files[`lib/f${index}.js`] = 'x';
+      }
+      const askConsent = vi.fn(async () => true);
+      const importModule = pluginModule();
+      const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const registry = makeRegistry({
+        files: () => files,
+        askConsent,
+        approvalState: memento(),
+        importModule,
+        logger
+      });
+
+      await registry.reload();
+
+      expect(askConsent).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalled();
     });
   });
 });

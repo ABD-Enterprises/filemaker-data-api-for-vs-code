@@ -49,6 +49,32 @@ describe('FmBridgeServer', () => {
     expect(body.response).toEqual({ scriptResult: 'ok' });
   });
 
+  it('refuses a route the policy hook refuses, before touching FileMaker', async () => {
+    const deleteRecord = vi.fn();
+    const findRecords = vi.fn(async () => ({ data: [], dataInfo: {} }) as unknown as FindRecordsResult);
+    const server = new FmBridgeServer(
+      createProfileStoreStub(),
+      createFmClientStub({ deleteRecord, findRecords }),
+      createFmWebProjectServiceStub(),
+      logger,
+      { authorizeRoute: async (route) => (route === '/deleteRecord' ? 'Offline mode is enabled.' : undefined) }
+    );
+
+    const refused = await invokeBridgeRequest(server, '/fm/deleteRecord', {
+      origin: 'http://localhost:3000',
+      payload: { layout: 'Contacts', recordId: '1' }
+    });
+    const allowed = await invokeBridgeRequest(server, '/fm/find', {
+      origin: 'http://localhost:3000',
+      payload: { layout: 'Contacts', query: [{}] }
+    });
+
+    expect(refused.status).toBe(403);
+    expect((refused.json as { error: string }).error).toContain('Offline mode');
+    expect(deleteRecord).not.toHaveBeenCalled();
+    expect(allowed.status).toBe(200);
+  });
+
   it('rejects disallowed origins', async () => {
     const server = new FmBridgeServer(
       createProfileStoreStub(),

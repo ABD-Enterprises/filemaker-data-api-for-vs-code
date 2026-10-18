@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { readdir, readFile } from 'fs/promises';
-import { basename, join } from 'path';
+import { join, relative } from 'path';
 import { pathToFileURL } from 'url';
 
 import * as vscode from 'vscode';
@@ -17,10 +17,12 @@ interface PluginRegistryOptions {
   readDir?: (path: string) => Promise<string[]>;
   importModule?: (absolutePath: string) => Promise<PluginModuleExports>;
   readFileBytes?: (absolutePath: string) => Promise<Uint8Array>;
+  /** Every file under the plugin folder, recursively, as absolute paths. */
+  listFiles?: (absoluteDir: string) => Promise<string[]>;
   /** Where approvals are remembered between sessions (the extension passes globalState). */
   approvalState?: Pick<vscode.Memento, 'get' | 'update'>;
   /** Asks the user whether a workspace plugin may run. Defaults to a modal dialog. */
-  askConsent?: (request: { fileName: string; workspaceRoot: string }) => Promise<boolean>;
+  askConsent?: (request: { fileNames: string[]; workspaceRoot: string }) => Promise<boolean>;
 }
 
 interface ActivePluginRecord {
@@ -33,6 +35,8 @@ interface ActivePluginRecord {
 
 const WORKSPACE_PLUGIN_RELATIVE_DIR = '.vscode/filemaker-plugins';
 const APPROVED_PLUGINS_KEY = 'filemakerDataApiTools.approvedWorkspacePlugins';
+const MAX_PLUGIN_FOLDER_FILES = 500;
+const MAX_PLUGIN_FOLDER_BYTES = 20 * 1024 * 1024;
 
 export class PluginRegistry implements vscode.Disposable {
   private readonly internalPlugins: FileMakerPlugin[];
@@ -42,7 +46,8 @@ export class PluginRegistry implements vscode.Disposable {
   private readonly importModule: (absolutePath: string) => Promise<PluginModuleExports>;
   private readonly readFileBytes: (absolutePath: string) => Promise<Uint8Array>;
   private readonly approvalState: Pick<vscode.Memento, 'get' | 'update'>;
-  private readonly askConsent: (request: { fileName: string; workspaceRoot: string }) => Promise<boolean>;
+  private readonly listFiles: (absoluteDir: string) => Promise<string[]>;
+  private readonly askConsent: (request: { fileNames: string[]; workspaceRoot: string }) => Promise<boolean>;
 
   private readonly disposables: vscode.Disposable[] = [];
   private activePlugins: ActivePluginRecord[] = [];
@@ -66,16 +71,17 @@ export class PluginRegistry implements vscode.Disposable {
     this.isWorkspaceTrusted = options?.isWorkspaceTrusted ?? (() => vscode.workspace.isTrusted);
     this.readDir = options?.readDir ?? ((path) => readdir(path));
     this.readFileBytes = options?.readFileBytes ?? ((path) => readFile(path));
+    this.listFiles = options?.listFiles ?? ((dir) => listFilesRecursively(dir));
     this.approvalState = options?.approvalState ?? createInMemoryApprovalState();
     this.askConsent =
       options?.askConsent ??
-      (async ({ fileName, workspaceRoot }) => {
+      (async ({ fileNames, workspaceRoot }) => {
         const answer = await vscode.window.showWarningMessage(
-          `Run the plugin "${fileName}" from this workspace?\n\n${workspaceRoot}\n\nA plugin runs with the same access as this extension: your saved FileMaker connections and sessions. Only run plugins you trust.`,
+          `Run the plugins in this workspace?\n\n${fileNames.join(', ')}\n\nin ${workspaceRoot}/${WORKSPACE_PLUGIN_RELATIVE_DIR}\n\nA plugin runs with the same access as this extension: your saved FileMaker connections and sessions. Every file in that folder is checked, but anything a plugin loads from outside it is not. Only run plugins you trust.`,
           { modal: true },
-          'Run plugin'
+          'Run plugins'
         );
-        return answer === 'Run plugin';
+        return answer === 'Run plugins';
       });
     this.importModule =
       options?.importModule ??
@@ -231,25 +237,53 @@ export class PluginRegistry implements vscode.Disposable {
   }
 
   /**
-   * A plugin file arrives with the repository, so it only runs once the user has said yes to
-   * this exact content in this workspace. Changing the file asks again.
+   * Plugin files arrive with the repository, so they only run once the user has said yes to
+   * this exact content in this workspace. The approval covers every file under the plugin
+   * folder (a plugin can import its siblings), so changing, adding or removing any of them
+   * asks again. It does not cover code a plugin loads from outside that folder.
    */
-  private async isApprovedToRun(workspaceRoot: string, absolutePath: string): Promise<boolean> {
-    const fileName = basename(absolutePath);
-    const hash = createHash('sha256').update(await this.readFileBytes(absolutePath)).digest('hex');
-    const key = `${workspaceRoot}|${fileName}`;
-    const approved = this.approvalState.get<Record<string, string>>(APPROVED_PLUGINS_KEY, {}) ?? {};
+  private async isApprovedToRun(workspaceRoot: string, pluginDir: string, entryFiles: string[]): Promise<boolean> {
+    const hash = await this.hashPluginFolder(pluginDir);
+    if (!hash) {
+      return false;
+    }
 
+    const key = `${workspaceRoot}|${WORKSPACE_PLUGIN_RELATIVE_DIR}`;
+    const approved = this.approvalState.get<Record<string, string>>(APPROVED_PLUGINS_KEY, {}) ?? {};
     if (approved[key] === hash) {
       return true;
     }
 
-    if (!(await this.askConsent({ fileName, workspaceRoot }))) {
+    const fileNames = entryFiles.map((file) => relative(pluginDir, file));
+    if (!(await this.askConsent({ fileNames, workspaceRoot }))) {
       return false;
     }
 
     await this.approvalState.update(APPROVED_PLUGINS_KEY, { ...approved, [key]: hash });
     return true;
+  }
+
+  /** One hash over every file's relative path and bytes, or undefined when the folder is too big to check. */
+  private async hashPluginFolder(pluginDir: string): Promise<string | undefined> {
+    const files = (await this.listFiles(pluginDir)).sort();
+    if (files.length > MAX_PLUGIN_FOLDER_FILES) {
+      this.logger.warn('Workspace plugin folder has too many files to check.', { pluginDir, files: files.length });
+      return undefined;
+    }
+
+    const hash = createHash('sha256');
+    let total = 0;
+    for (const file of files) {
+      const bytes = await this.readFileBytes(file);
+      total += bytes.length;
+      if (total > MAX_PLUGIN_FOLDER_BYTES) {
+        this.logger.warn('Workspace plugin folder is too large to check.', { pluginDir });
+        return undefined;
+      }
+      hash.update(relative(pluginDir, file)).update('\0').update(bytes).update('\0');
+    }
+
+    return hash.digest('hex');
   }
 
   private async loadWorkspacePlugins(): Promise<FileMakerPlugin[]> {
@@ -273,13 +307,17 @@ export class PluginRegistry implements vscode.Disposable {
 
     const loaded: FileMakerPlugin[] = [];
 
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    if (!(await this.isApprovedToRun(root, pluginDir, candidates))) {
+      this.logger.info('Workspace plugins skipped: not approved to run.', { pluginDir });
+      return [];
+    }
+
     for (const absolutePath of candidates) {
       try {
-        if (!(await this.isApprovedToRun(root, absolutePath))) {
-          this.logger.info('Workspace plugin skipped: not approved to run.', { absolutePath });
-          continue;
-        }
-
         const module = await this.importModule(absolutePath);
         const plugin = module.default ?? module.plugin;
         if (!plugin) {
@@ -312,4 +350,18 @@ function createInMemoryApprovalState(): Pick<vscode.Memento, 'get' | 'update'> {
       values.set(key, value);
     }
   };
+}
+
+async function listFilesRecursively(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listFilesRecursively(full)));
+    } else if (entry.isFile()) {
+      files.push(full);
+    }
+  }
+  return files;
 }

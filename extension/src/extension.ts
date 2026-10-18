@@ -36,6 +36,7 @@ import { FmBridgeServer } from './services/fmBridgeServer';
 import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
 import { RoleGuard } from './enterprise/roleGuard';
+import { isFeatureEnabled, isOfflineModeOn } from './utils/policySetting';
 import { MetricsStore } from './diagnostics/metricsStore';
 import { OfflineModeService } from './offline/offlineModeService';
 import type { CircuitBreakerRegistry } from './performance/circuitBreakerRegistry';
@@ -284,7 +285,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger
   );
   const fmBridgeServer = new FmBridgeServer(profileStore, fmClient, fmWebProjectService, logger, {
-    getRateLimitConfig: () => settingsService.getBridgeRateLimitConfig()
+    getRateLimitConfig: () => settingsService.getBridgeRateLimitConfig(),
+    authorizeRoute: async (route) => {
+      const configuration = vscode.workspace.getConfiguration('filemaker');
+      const isWrite = route === '/editRecord' || route === '/createRecord' || route === '/deleteRecord';
+      const isScript = route === '/runScript';
+      if ((isWrite || isScript) && isOfflineModeOn(configuration)) {
+        return 'Offline mode is enabled; the preview app cannot change data or run scripts.';
+      }
+      if (isScript && !isFeatureEnabled(configuration, 'features.scriptRunner.enabled')) {
+        return 'Script running is disabled by the setting filemaker.features.scriptRunner.enabled.';
+      }
+      const feature = isScript ? 'scriptRunner' : isWrite ? 'writeOperations' : undefined;
+      const guard = feature ? roleGuard.getFeatureGuard(feature) : undefined;
+      return guard && !guard.allowed ? guard.reason ?? 'Not allowed by enterprise policy.' : undefined;
+    }
   });
   const fmWebRuntimeGenerator = new FmWebRuntimeGenerator(context, fmWebProjectService, logger);
 

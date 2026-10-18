@@ -19,6 +19,12 @@ const DEFAULT_ROUTE_TIMEOUT_MS = 20_000;
 export interface FmBridgeServerOptions {
   /** Resolved at request time so settings updates flow live. */
   getRateLimitConfig?: () => BridgeRateLimitConfig;
+  /**
+   * Called before a route runs. Returns why the request must be refused (offline mode, a
+   * feature switched off, enterprise policy), or undefined to let it through. The preview
+   * app is code from the repository, so it gets the same limits as the user's own commands.
+   */
+  authorizeRoute?: (route: string) => Promise<string | undefined>;
 }
 
 export class FmBridgeServer {
@@ -214,6 +220,11 @@ export class FmBridgeServer {
     route: string,
     payload: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    const refusal = await this.options.authorizeRoute?.(route);
+    if (refusal) {
+      throw new FMClientError(refusal, { status: 403 });
+    }
+
     const profile = await this.resolveProfile(readString(payload.profileId));
     if (!profile) {
       throw new Error('No active FileMaker profile is available for bridge requests.');

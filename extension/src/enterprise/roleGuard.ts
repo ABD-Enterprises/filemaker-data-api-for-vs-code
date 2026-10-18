@@ -4,6 +4,7 @@ import { join } from 'path';
 import * as vscode from 'vscode';
 
 import type { EnterpriseRole, PerformanceMode } from '../types/fm';
+import { isOfflineModeOn } from '../utils/policySetting';
 
 const ENTERPRISE_CONFIG_RELATIVE_PATH = '.vscode/filemaker.config.json';
 
@@ -156,7 +157,7 @@ export class RoleGuard {
   }
 
   public isOfflineModeEnabled(): boolean {
-    return this.getConfiguration().get<boolean>('offline.mode', false);
+    return isOfflineModeOn(this.getConfiguration());
   }
 
   public resolvePerformanceMode(): PerformanceMode {

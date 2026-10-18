@@ -53,7 +53,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
-- Ask before running a workspace plugin, once per file version (workspace + SHA-256), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.
+- Ask before running a workspace plugin, once per folder content (workspace + SHA-256 of every file), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.
+- Make offline mode and `features.*.enabled` restrict-only for workspace settings, and gate the FM Web preview bridge (writes, script runs) on offline mode, feature switches and enterprise policy.
 - Make enterprise policy restrict-only: workspace settings and `.vscode/filemaker.config.json` may turn enterprise mode on or lower the role, never turn it off or raise the role above the user's own.
 - Layout Mode `runScript` behaviours get the Script Runner's checks plus an explicit confirmation naming the script, parameter and connection.
 - FM Web Preview confirms before running `npm install` / `npm run dev` in the generated runtime folder.
