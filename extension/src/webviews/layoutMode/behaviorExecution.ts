@@ -1,4 +1,5 @@
 import type { BehaviorBinding } from '../../fmweb/layoutSchema';
+import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
 
 export interface ExecuteBehaviorBindingArgs {
@@ -71,6 +72,16 @@ export async function executeBehaviorBinding(
 
     try {
       const result = await args.runScript(args.profile, request);
+      const scriptErrors = extractScriptErrors((result as { response?: unknown } | undefined)?.response);
+      if (scriptErrors.length > 0) {
+        return {
+          ok: false,
+          action,
+          stub: false,
+          message: `Ran script "${scriptName}" on "${layout}", but ${describeScriptErrors(scriptErrors)}.`,
+          detail: result
+        };
+      }
       return {
         ok: true,
         action,

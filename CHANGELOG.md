@@ -38,6 +38,9 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Restored webview tabs show a reopen page instead of staying dead (serializer for every panel type).
+- Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
+- Command Palette context keys refresh when profiles change and after Initialize FM Web.
 - Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.
 - Script errors on container upload and find are shown; Effective Settings notes and workspace-file watching; TLS agents are closed when replaced.
 - Managed runtime file refresh refuses symlinks and keeps user-edited files with an older marker.
@@ -105,6 +108,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Write AI Context leaves out fields hidden by filemaker.ai.hiddenFields and says how many.
 - Pinned certificates fail closed behind an HTTP proxy (refused with a clear message; agent no longer advertises rejectUnauthorized:false); CA-file/default/legacy behaviour through a proxy tested.
 - Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
