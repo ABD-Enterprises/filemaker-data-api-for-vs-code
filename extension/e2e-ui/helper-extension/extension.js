@@ -10,25 +10,57 @@ const dir = process.env.FM_E2E_HELPER_DIR;
 async function handle(req) {
   switch (req.action) {
     case 'ping':
-      return { ok: true, trusted: vscode.workspace.isTrusted, folders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath) };
+      return {
+        ok: true,
+        trusted: vscode.workspace.isTrusted,
+        folders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)
+      };
     case 'listTools':
-      return vscode.lm.tools.map((t) => ({ name: t.name, description: t.description, tags: t.tags }));
+      return vscode.lm.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        tags: t.tags
+      }));
     case 'invokeTool': {
-      const result = await vscode.lm.invokeTool(req.name, { input: req.input ?? {}, toolInvocationToken: undefined });
-      return { parts: result.content.map((p) => (p instanceof vscode.LanguageModelTextPart ? { type: 'text', value: p.value } : { type: 'other' })) };
+      const result = await vscode.lm.invokeTool(req.name, {
+        input: req.input ?? {},
+        toolInvocationToken: undefined
+      });
+      return {
+        parts: result.content.map((p) =>
+          p instanceof vscode.LanguageModelTextPart
+            ? { type: 'text', value: p.value }
+            : { type: 'other' }
+        )
+      };
     }
     case 'getConfig':
-      return { value: vscode.workspace.getConfiguration().get(req.key), inspect: vscode.workspace.getConfiguration().inspect(req.key) };
+      return {
+        value: vscode.workspace.getConfiguration().get(req.key),
+        inspect: vscode.workspace.getConfiguration().inspect(req.key)
+      };
     case 'extensions':
-      return vscode.extensions.all.filter((e) => !e.packageJSON.isBuiltin).map((e) => ({ id: e.id, version: e.packageJSON.version, active: e.isActive }));
+      return vscode.extensions.all
+        .filter((e) => !e.packageJSON.isBuiltin)
+        .map((e) => ({ id: e.id, version: e.packageJSON.version, active: e.isActive }));
     case 'executeCommand':
-      return { result: JSON.parse(JSON.stringify((await vscode.commands.executeCommand(req.command, ...(req.args ?? []))) ?? null)) };
+      return {
+        result: JSON.parse(
+          JSON.stringify(
+            (await vscode.commands.executeCommand(req.command, ...(req.args ?? []))) ?? null
+          )
+        )
+      };
     case 'commands': {
       const all = await vscode.commands.getCommands(true);
       return all.filter((c) => c.toLowerCase().includes((req.filter ?? '').toLowerCase()));
     }
     case 'textDocuments':
-      return vscode.workspace.textDocuments.map((d) => ({ uri: d.uri.toString(), languageId: d.languageId, length: d.getText().length }));
+      return vscode.workspace.textDocuments.map((d) => ({
+        uri: d.uri.toString(),
+        languageId: d.languageId,
+        length: d.getText().length
+      }));
     default:
       throw new Error(`unknown action ${req.action}`);
   }
@@ -52,7 +84,10 @@ function activate(context) {
         out = { ok: false, error: String(e && e.message ? e.message : e) };
       }
       fs.writeFileSync(path.join(dir, 'responses', `${id}.json.tmp`), JSON.stringify(out));
-      fs.renameSync(path.join(dir, 'responses', `${id}.json.tmp`), path.join(dir, 'responses', `${id}.json`));
+      fs.renameSync(
+        path.join(dir, 'responses', `${id}.json.tmp`),
+        path.join(dir, 'responses', `${id}.json`)
+      );
     }
   }, 150);
   context.subscriptions.push({ dispose: () => clearInterval(timer) });

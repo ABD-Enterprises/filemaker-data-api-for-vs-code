@@ -3,8 +3,14 @@
   "displayName": "FileMaker E2E helper (test only, never shipped)",
   "publisher": "e2e",
   "version": "0.0.1",
-  "engines": { "vscode": "^1.96.0" },
+  "engines": {
+    "vscode": "^1.96.0"
+  },
   "main": "./extension.js",
-  "activationEvents": ["onStartupFinished"],
-  "extensionKind": ["workspace"]
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "workspace"
+  ]
 }

@@ -2,19 +2,36 @@
 import { assert } from './session.mjs';
 
 /** Create a direct-auth profile through the wizard (test, then save). Returns when the wizard says "saved". */
-export async function createProfile(s, { name, url, database, username = 'tester', password = 'testpass1', allowSelfSigned = false, caBundlePath = '' }) {
+export async function createProfile(
+  s,
+  {
+    name,
+    url,
+    database,
+    username = 'tester',
+    password = 'testpass1',
+    allowSelfSigned = false,
+    caBundlePath = ''
+  }
+) {
   await s.closeAllEditors();
   await s.cmd('FileMaker: Add Connection Profile');
   const wv = await s.webview('#wizardForm');
-  for (const [id, v] of Object.entries({ profileName: name, serverUrl: url, database, username, password })) await wv.locator(`#${id}`).fill(v);
+  for (const [id, v] of Object.entries({
+    profileName: name,
+    serverUrl: url,
+    database,
+    username,
+    password
+  }))
+    await wv.locator(`#${id}`).fill(v);
   if (caBundlePath || allowSelfSigned) {
     await wv.locator('#certificateOptions summary').click();
     if (caBundlePath) await wv.locator('#caBundlePath').fill(caBundlePath);
-    if (allowSelfSigned) await wv.locator('#allowSelfSigned').check();
   }
-  await wv.locator('#testBtn').click();
-  if (allowSelfSigned) await s.modal('Allow insecure connection', { timeout: 15000 });
-  await wv.locator('#status:has-text("uccess"), #status:has-text("onnect")').first().waitFor({ timeout: 20000 });
+  const t = await wizardTest(s, wv, { answer: allowSelfSigned ? /trust/i : undefined });
+  if (!/uccess|onnect/i.test(t.status))
+    throw new Error(`Test Connection failed: ${describeTest(t)}`);
   await wv.locator('#saveBtn').click();
   await wv.locator('#status:has-text("aved")').first().waitFor({ timeout: 15000 });
   await s.closeAllEditors();
@@ -33,7 +50,10 @@ export async function connect(s, name) {
 export async function ensureProfileCommands(s) {
   if ((await s.waitCmdListed('FileMaker: Connect', 4000)) >= 0) return false;
   await s.reloadWindow();
-  assert((await s.waitCmdListed('FileMaker: Connect', 10000)) >= 0, 'Connect is not offered even after a window reload');
+  assert(
+    (await s.waitCmdListed('FileMaker: Connect', 10000)) >= 0,
+    'Connect is not offered even after a window reload'
+  );
   return true;
 }
 
@@ -53,7 +73,9 @@ export async function expandTreeRow(s, label) {
 export async function refreshExplorer(s) {
   const header = s.page.locator('.pane-header', { hasText: 'Connections' }).first();
   await header.hover();
-  const btn = header.locator('.actions .codicon-refresh, .actions a[aria-label*="Refresh"]').first();
+  const btn = header
+    .locator('.actions .codicon-refresh, .actions a[aria-label*="Refresh"]')
+    .first();
   if (await btn.count()) await btn.click({ timeout: 5000 });
   else await s.helper('executeCommand', { command: 'filemakerDataApiTools.refreshExplorer' });
   await s.page.waitForTimeout(1500);
@@ -104,5 +126,50 @@ export async function answerFileDialog(s, absPath, { timeout = 10000 } = {}) {
   await s.page.keyboard.press('Enter');
   await s.page.waitForTimeout(600);
   // overwrite confirmation, if any
-  if (await s.modalVisible()) { const b = await s.modalButtons(); await s.modal(b.find((x) => /replace|overwrite|yes/i.test(x)) ?? b[0]); }
+  if (await s.modalVisible()) {
+    const b = await s.modalButtons();
+    await s.modal(b.find((x) => /replace|overwrite|yes/i.test(x)) ?? b[0]);
+  }
 }
+
+const wtext = async (wv, sel) =>
+  (
+    await wv
+      .locator(sel)
+      .first()
+      .innerText()
+      .catch(() => '')
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Click Test Connection in the wizard. A build with certificate pinning answers some failures with a "Trust this certificate" modal. */
+export async function wizardTest(s, wv, { answer } = {}) {
+  await wv.locator('#testBtn').click();
+  let modal = null;
+  for (let i = 0; i < 70; i += 1) {
+    await s.page.waitForTimeout(500);
+    if (await s.modalVisible()) {
+      const mtext = await s.modalText();
+      const mb = await s.modalButtons();
+      modal = { text: mtext, buttons: mb };
+      await s.shot('wizard-modal');
+      if (answer) await s.modal(mb.find((b) => answer.test(b)) ?? mb[0]);
+      else await s.modal(mb.find((b) => /cancel|no\b/i.test(b)) ?? mb[mb.length - 1]);
+      await s.page.waitForTimeout(1500);
+      if ((await s.modalVisible()) && answer) {
+        const m2 = { text: await s.modalText(), buttons: await s.modalButtons() };
+        modal.second = m2;
+        await s.modal(m2.buttons.find((b) => answer.test(b)) ?? m2.buttons[0]);
+        await s.page.waitForTimeout(1500);
+      }
+      break;
+    }
+    const st = await wtext(wv, '#status');
+    if (st && !/Step \d of \d|Testing|Reaching/i.test(st)) break;
+  }
+  await s.page.waitForTimeout(1500);
+  return { status: await wtext(wv, '#status'), modal };
+}
+export const describeTest = (t) =>
+  `status: "${t.status}"${t.modal ? ` | modal: ${t.modal.text.replace(/\s+/g, ' ').slice(0, 700)} | buttons: ${t.modal.buttons.join(' / ')}${t.modal.second ? ` | second modal: ${t.modal.second.text.replace(/\s+/g, ' ').slice(0, 300)} / ${t.modal.second.buttons.join(' / ')}` : ''}` : ''}`;

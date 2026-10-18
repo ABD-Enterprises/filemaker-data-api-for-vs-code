@@ -27,10 +27,16 @@ function skip(reason) {
 
 const deps = loadDeps();
 if (deps.error) skip(deps.error);
-if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) skip('no display (set DISPLAY, or run under xvfb-run -a npm run test:e2e-ui)');
+if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY)
+  skip('no display (set DISPLAY, or run under xvfb-run -a npm run test:e2e-ui)');
 const version = JSON.parse(fs.readFileSync(path.join(extDir, 'package.json'), 'utf8')).version;
-const vsix = process.env.E2E_VSIX ?? path.join(repoRoot, 'artifacts', `filemaker-data-api-tools-${version}.vsix`);
-if (!fs.existsSync(vsix)) skip(`no VSIX at ${vsix}. Build it first: npm run build -w shared && npm run package:check (from the repo root / extension/)`);
+const vsix =
+  process.env.E2E_VSIX ??
+  path.join(repoRoot, 'artifacts', `filemaker-data-api-tools-${version}.vsix`);
+if (!fs.existsSync(vsix))
+  skip(
+    `no VSIX at ${vsix}. Build it first: npm run build -w shared && npm run package:check (from the repo root / extension/)`
+  );
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const artifacts = process.env.E2E_ARTIFACTS ?? path.join(repoRoot, 'artifacts', 'e2e-ui', stamp);
@@ -38,34 +44,85 @@ fs.mkdirSync(artifacts, { recursive: true });
 const report = new Report(artifacts);
 const t0 = Date.now();
 
-const only = (process.env.E2E_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-const journeyFiles = fs.readdirSync(path.join(here, 'journeys')).filter((f) => /^j\d+.*\.mjs$/.test(f)).sort();
+const only = (process.env.E2E_ONLY ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const journeyFiles = fs
+  .readdirSync(path.join(here, 'journeys'))
+  .filter((f) => /^j\d+.*\.mjs$/.test(f))
+  .sort();
 const selected = journeyFiles.filter((f) => !only.length || only.some((o) => f.startsWith(o)));
 
 let vscode;
-try { vscode = await getVSCode(); } catch (e) { skip(`could not obtain VS Code (${e.message})`); }
+try {
+  vscode = await getVSCode();
+} catch (e) {
+  skip(`could not obtain VS Code (${e.message})`);
+}
 
 const mock = await startMock();
 const s = new Session({ report, vscode, name: 'main' });
-const ctx = { s, mock, report, vsix, artifacts, extDir, repoRoot, vscode, helperDir: path.join(here, 'helper-extension'), version };
+const ctx = {
+  s,
+  mock,
+  report,
+  vsix,
+  artifacts,
+  extDir,
+  repoRoot,
+  vscode,
+  helperDir: path.join(here, 'helper-extension'),
+  version
+};
 let exitCode = 0;
 const cleanup = async () => {
-  try { await s.dispose({ keepLogsTo: path.join(artifacts, 'vscode-logs') }); } catch { /* best effort */ }
-  try { await mock.stop(); } catch { /* best effort */ }
-  for (const fn of ctx.cleanups ?? []) { try { await fn(); } catch { /* best effort */ } }
+  try {
+    await s.dispose({ keepLogsTo: path.join(artifacts, 'vscode-logs') });
+  } catch {
+    /* best effort */
+  }
+  try {
+    await mock.stop();
+  } catch {
+    /* best effort */
+  }
+  for (const fn of ctx.cleanups ?? []) {
+    try {
+      await fn();
+    } catch {
+      /* best effort */
+    }
+  }
   for (const dir of ctx.extraRoots ?? []) fs.rmSync(dir, { recursive: true, force: true });
 };
-process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
+process.on('SIGINT', async () => {
+  await cleanup();
+  process.exit(130);
+});
 try {
   s.installVsix(vsix);
-  console.log(`VS Code ${path.basename(path.dirname(path.dirname(path.dirname(path.dirname(vscode.exe)))))} | mock ${mock.baseUrl} | artifacts ${artifacts}`);
+  console.log(
+    `VS Code ${path.basename(path.dirname(path.dirname(path.dirname(path.dirname(vscode.exe)))))} | mock ${mock.baseUrl} | artifacts ${artifacts}`
+  );
   for (const file of selected) {
     const mod = await import(path.join(here, 'journeys', file));
     console.log(`\n=== ${file} ===`);
     if (s.app) for (const w of s.app.windows()) if (w !== s.page) await w.close().catch(() => {}); // a stray second window steals key events
-    try { if (!s.app && !mod.ownsLaunch) await s.launch(); else if (s.app && !s.helperOn && !mod.ownsLaunch) await s.restart(); await mod.run(ctx); } catch (e) {
+    try {
+      if (!s.app && !mod.ownsLaunch) await s.launch();
+      else if (s.app && !s.helperOn && !mod.ownsLaunch) await s.restart();
+      await mod.run(ctx);
+    } catch (e) {
       exitCode = 1;
-      report.add({ journey: file, step: 'journey crashed', expect: 'journey completes', result: 'FAIL', shot: await s.shot('crash', file), detail: e.stack ?? String(e) });
+      report.add({
+        journey: file,
+        step: 'journey crashed',
+        expect: 'journey completes',
+        result: 'FAIL',
+        shot: await s.shot('crash', file),
+        detail: e.stack ?? String(e)
+      });
     }
     report.write();
   }
@@ -74,5 +131,7 @@ try {
   await cleanup();
 }
 const failed = report.rows.filter((r) => r.result === 'FAIL').length;
-console.log(`\nDone in ${Math.round((Date.now() - t0) / 1000)}s: ${report.rows.length} steps, ${failed} failed. Report: ${path.join(artifacts, 'report.md')}`);
+console.log(
+  `\nDone in ${Math.round((Date.now() - t0) / 1000)}s: ${report.rows.length} steps, ${failed} failed. Report: ${path.join(artifacts, 'report.md')}`
+);
 process.exit(exitCode || (failed ? 1 : 0));
