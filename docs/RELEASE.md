@@ -19,7 +19,7 @@ Tags matching `v*` are protected by a repository ruleset (creation, update and d
 
 The Entra identity is not set up yet (the `marketplace` environment has no `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` variables), so the **publish** job stops at "Require the Azure identity settings" and **release** is skipped. Until the one-time setup in [JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md) is done, publish by hand: see [Manual publish](#manual-publish-fallback). Do the setup before 2026-12-01, when Microsoft stops accepting the personal access tokens that `vsce` used.
 
-Versions 1.2.0 and 1.3.0 were published by manual upload and were never tagged. Tags `v1.0.0` and `v1.1.0` exist.
+Versions 1.2.0 and 1.3.0 were published by manual upload and were never tagged. Tags `v1.0.0` and `v1.1.0` exist. Version 1.4.0 is also published by hand (see [JOB_AID_MANUAL_RELEASE.md](./JOB_AID_MANUAL_RELEASE.md)).
 
 ## Versioning
 
@@ -37,7 +37,7 @@ Copy this into the release pull request. Items marked **non-code** are the ones 
 
 ### 1. Decide the scope
 
-- [ ] Read the merged pull requests since the last release: `git log vPREVIOUS..origin/main --oneline` (for 1.4.0, use `git log 89c5109..origin/main`, because 1.2.0 and 1.3.0 have no tags).
+- [ ] Read the merged pull requests since the last release: `git log vPREVIOUS..origin/main --oneline` (1.2.0 and 1.3.0 have no tags; for the first release after 1.4.0 use the 1.4.0 release commit or tag).
 - [ ] Pick the version from the highest-tier change (see Versioning). Do not release only to meet a date.
 - [ ] Check open pull requests and issues for anything that must ship, or must not.
 
@@ -104,16 +104,11 @@ Do this against the release branch (the content that will be tagged), not after 
 
 ## Manual publish (fallback)
 
-Use this when Entra publishing is not set up or the publish job failed after the tag was pushed.
+Use this when Entra publishing is not set up (today) or the publish job failed. The step-by-step, copy-paste version, with the checks and the safest order for the GitHub release, is **[JOB_AID_MANUAL_RELEASE.md](./JOB_AID_MANUAL_RELEASE.md)**. In short:
 
-1. In the tag's CI run, download the `extension-vsix` and `extension-sourcemaps` artifacts from the **package** job (or build the VSIX: `npm ci && npm run package:vsix`, which writes `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`). Check that the file name carries the version you expect.
-2. Open <https://marketplace.visualstudio.com/manage> as an owner of the **SureForgeTech** publisher, select the extension, and upload the `.vsix` there (follow the screenshot in Microsoft's [publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)). Wait for verification.
-3. Create the GitHub release yourself, because the **release** job is skipped when publish does not succeed:
-   ```bash
-   tools/release-notes.sh vX.Y.Z \
-     | gh release create vX.Y.Z artifacts/filemaker-data-api-tools-X.Y.Z.vsix artifacts/maps/sourcemaps-vX.Y.Z.tgz \
-         --repo SureForgeTech/filemaker-data-api-for-vs-code --title vX.Y.Z --notes-file -
-   ```
+1. Build the VSIX from the merged release commit (`npm ci && npm run build && npm run package:check`), and verify its version, file list (no source maps) and sha256. Make `sourcemaps-vX.Y.Z.tgz` from `extension/dist/*.map`.
+2. Upload the `.vsix` at <https://marketplace.visualstudio.com/manage> and wait for verification.
+3. Create the tag at the recorded release commit (`git tag -a vX.Y.Z -m vX.Y.Z <sha> && git push origin vX.Y.Z`, as an admin), then create the GitHub release on it with `gh release create vX.Y.Z --verify-tag ...` and the same files. The tag starts the tag run in CI; **reject** its `marketplace` deployment (the publish job would only fail at the Azure check) instead of approving it.
 4. Continue with step 5 of the checklist. Say in the pull request that the release was published by hand, and why.
 
 ## Pre-releases
