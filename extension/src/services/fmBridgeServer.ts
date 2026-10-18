@@ -225,7 +225,15 @@ export class FmBridgeServer {
       throw new FMClientError(refusal, { status: 403 });
     }
 
-    const profile = await this.resolveProfile(readString(payload.profileId));
+    // The preview app is repository code. It may name a profile only if that is the one the
+    // bridge would use anyway, so it cannot reach for another saved connection.
+    const requestedProfileId = readString(payload.profileId);
+    const defaultProfileId = await this.resolveProfileId();
+    if (requestedProfileId && requestedProfileId !== defaultProfileId) {
+      throw new FMClientError('The bridge only serves the active connection.', { status: 403 });
+    }
+
+    const profile = await this.resolveProfile();
     if (!profile) {
       throw new Error('No active FileMaker profile is available for bridge requests.');
     }
@@ -319,13 +327,13 @@ export class FmBridgeServer {
     }
   }
 
-  private async resolveProfile(profileIdFromRequest?: string) {
+  private async resolveProfileId(): Promise<string | undefined> {
     const project = await this.fmWebProjectService.readProjectConfig();
-    const profileId =
-      profileIdFromRequest ??
-      project?.activeProfileId ??
-      this.profileStore.getActiveProfileId();
+    return project?.activeProfileId ?? this.profileStore.getActiveProfileId();
+  }
 
+  private async resolveProfile() {
+    const profileId = await this.resolveProfileId();
     if (!profileId) {
       return undefined;
     }

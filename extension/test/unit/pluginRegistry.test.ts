@@ -1,4 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import * as vscode from 'vscode';
 
 const commandHandlers = new Map<string, (...args: unknown[]) => Promise<void> | void>();
 
@@ -17,7 +21,8 @@ vi.mock('vscode', () => {
     },
     window: {
       registerTreeDataProvider: vi.fn(() => ({ dispose: () => undefined })),
-      showInformationMessage: vi.fn(async () => undefined)
+      showInformationMessage: vi.fn(async () => undefined),
+      showWarningMessage: vi.fn(async () => undefined)
     },
     workspace: {
       workspaceFolders: [{ uri: { fsPath: '/workspace' } }],
@@ -192,6 +197,7 @@ describe('PluginRegistry', () => {
       };
       root?: string;
       importModule: ReturnType<typeof vi.fn>;
+      listFiles?: () => Promise<string[]>;
       logger?: {
         info: ReturnType<typeof vi.fn>;
         warn: ReturnType<typeof vi.fn>;
@@ -211,7 +217,9 @@ describe('PluginRegistry', () => {
           isWorkspaceTrusted: () => true,
           getWorkspaceRoot: () => options.root ?? '/workspace',
           readDir: async () => Object.keys(options.files()).filter((name) => !name.includes('/')),
-          listFiles: async () => Object.keys(options.files()).map((name) => `${dir}/${name}`),
+          listFiles:
+            options.listFiles ??
+            (async () => Object.keys(options.files()).map((name) => `${dir}/${name}`)),
           readFileBytes: async (path) =>
             Buffer.from(options.files()[path.replace(`${dir}/`, '')] ?? ''),
           importModule: options.importModule as never,
@@ -362,6 +370,59 @@ describe('PluginRegistry', () => {
       await registry.reload();
 
       expect(askConsent).not.toHaveBeenCalled();
+    });
+
+    it('refuses a plugin folder that cannot be listed safely, such as one with a symbolic link', async () => {
+      const askConsent = vi.fn(async () => true);
+      const importModule = pluginModule();
+      const registry = makeRegistry({
+        files: () => ({ 'demo.js': 'v1' }),
+        askConsent,
+        approvalState: memento(),
+        importModule,
+        listFiles: async () => {
+          throw new Error('Symbolic link in plugin folder');
+        }
+      });
+
+      await registry.reload();
+
+      expect(askConsent).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).toHaveBeenCalled();
+    });
+
+    it('does not load a plugin folder holding a real symbolic link', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'fm-plugins-'));
+      try {
+        const pluginDir = join(root, '.vscode', 'filemaker-plugins');
+        mkdirSync(pluginDir, { recursive: true });
+        writeFileSync(join(root, 'payload.js'), 'export default {}');
+        symlinkSync(join(root, 'payload.js'), join(pluginDir, 'demo.js'));
+        const askConsent = vi.fn(async () => true);
+        const importModule = pluginModule();
+        const registry = new PluginRegistry(
+          { listProfiles: vi.fn(async () => []), getProfile: vi.fn(async () => undefined) } as never,
+          { listLayouts: vi.fn(async () => []), getLayoutMetadata: vi.fn(async () => ({})) } as never,
+          { getFeatureGuard: vi.fn(() => ({ allowed: true })), assertFeature: vi.fn(async () => true) } as never,
+          { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+          {
+            internalPlugins: [],
+            isWorkspaceTrusted: () => true,
+            getWorkspaceRoot: () => root,
+            importModule: importModule as never,
+            approvalState: memento(),
+            askConsent
+          }
+        );
+
+        await registry.reload();
+
+        expect(askConsent).not.toHaveBeenCalled();
+        expect(importModule).not.toHaveBeenCalled();
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     });
 
     it('refuses a plugin folder that is too big to check', async () => {

@@ -75,6 +75,24 @@ describe('FmBridgeServer', () => {
     expect(allowed.status).toBe(200);
   });
 
+  it('refuses a request that names a different profile than the active one', async () => {
+    const findRecords = vi.fn();
+    const server = new FmBridgeServer(
+      createProfileStoreStub(),
+      createFmClientStub({ findRecords }),
+      createFmWebProjectServiceStub(),
+      logger
+    );
+
+    const other = await invokeBridgeRequest(server, '/fm/find', {
+      origin: 'http://localhost:3000',
+      payload: { layout: 'Contacts', query: [{}], profileId: 'someone-elses-profile' }
+    });
+
+    expect(other.status).toBe(403);
+    expect(findRecords).not.toHaveBeenCalled();
+  });
+
   it('rejects disallowed origins', async () => {
     const server = new FmBridgeServer(
       createProfileStoreStub(),

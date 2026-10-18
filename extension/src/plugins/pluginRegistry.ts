@@ -263,11 +263,24 @@ export class PluginRegistry implements vscode.Disposable {
     return true;
   }
 
-  /** One hash over every file's relative path and bytes, or undefined when the folder is too big to check. */
+  private refuseFolder(reason: string, pluginDir: string, error?: unknown): void {
+    this.logger.warn('Workspace plugins were not loaded.', { pluginDir, reason, error });
+    void vscode.window.showWarningMessage(
+      `FileMaker Data API Tools did not load the workspace plugins in ${WORKSPACE_PLUGIN_RELATIVE_DIR}: ${reason}, so they cannot be checked.`
+    );
+  }
+
+  /** One hash over every file's relative path and bytes, or undefined when the folder cannot be checked. */
   private async hashPluginFolder(pluginDir: string): Promise<string | undefined> {
-    const files = (await this.listFiles(pluginDir)).sort();
+    let files: string[];
+    try {
+      files = (await this.listFiles(pluginDir)).sort();
+    } catch (error) {
+      this.refuseFolder('it contains a symbolic link or cannot be read', pluginDir, error);
+      return undefined;
+    }
     if (files.length > MAX_PLUGIN_FOLDER_FILES) {
-      this.logger.warn('Workspace plugin folder has too many files to check.', { pluginDir, files: files.length });
+      this.refuseFolder(`it has more than ${MAX_PLUGIN_FOLDER_FILES} files`, pluginDir);
       return undefined;
     }
 
@@ -277,7 +290,7 @@ export class PluginRegistry implements vscode.Disposable {
       const bytes = await this.readFileBytes(file);
       total += bytes.length;
       if (total > MAX_PLUGIN_FOLDER_BYTES) {
-        this.logger.warn('Workspace plugin folder is too large to check.', { pluginDir });
+        this.refuseFolder('it is larger than 20 MB', pluginDir);
         return undefined;
       }
       hash.update(relative(pluginDir, file)).update('\0').update(bytes).update('\0');
@@ -357,6 +370,10 @@ async function listFilesRecursively(dir: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of entries) {
     const full = join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      // A link could point at code outside the folder, or change without the folder changing.
+      throw new Error(`Symbolic link in plugin folder: ${full}`);
+    }
     if (entry.isDirectory()) {
       files.push(...(await listFilesRecursively(full)));
     } else if (entry.isFile()) {

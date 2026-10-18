@@ -1,5 +1,8 @@
 import type * as vscode from 'vscode';
 
+export type ConfigurationReader = Pick<vscode.WorkspaceConfiguration, 'get'> &
+  Partial<Pick<vscode.WorkspaceConfiguration, 'inspect'>>;
+
 /**
  * Reads an on/off setting that restricts what the extension may do (offline mode, or a
  * feature switch such as `features.scriptRunner.enabled`), where a repository's own
