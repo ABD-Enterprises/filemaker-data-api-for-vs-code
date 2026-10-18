@@ -38,6 +38,33 @@ requests. The trust boundary is the user's FileMaker credentials and
 the TLS connection to the server. There is no third party in the
 request path.
 
+### Server certificates
+
+The server certificate is verified the normal way against Node's trusted
+list, the operating system's store (where VS Code's Node can read it) and
+`NODE_EXTRA_CA_CERTS`, plus an optional per-profile CA file. A user can
+instead trust one specific certificate by its SHA-256 fingerprint
+("pinning"): the connection then accepts exactly that certificate (host name
+and issuer checks are skipped for it only), refuses it when it has expired
+unless the user accepted that, and fails hard with a re-trust prompt when
+the server presents a different one. For a verified or pinned profile nothing
+is sent to the server before its certificate is checked; a profile that still
+has the older allow-self-signed setting skips every check. A pinned connection is never made through an
+HTTP proxy (the request is refused before anything is sent when an
+environment proxy applies). The pin is stored in the profile
+(`pinnedCertSha256`), is never read from a workspace template or file, and
+is not a secret. Redirects are not followed.
+
+**What pinning does and does not give you.** A pin is trust on first use of
+one certificate fingerprint. It does not authenticate who presented the
+certificate when the user first trusted it (a man-in-the-middle present at
+that moment gets pinned), and it does not protect against anyone who holds that
+certificate's private key. For that certificate it skips the host-name,
+issuer and revocation checks. The user is told to compare the fingerprint
+with the administrator's before trusting. It is not known whether FileMaker
+Server's default certificate is the same on every installation; if it is,
+pinning it only detects change.
+
 ## Proxy mode
 
 When `authMode = 'proxy'`, the extension posts every action to a
@@ -209,6 +236,7 @@ model or on the user. See also the [AI section of DATA_HANDLING.md](./DATA_HANDL
   the extension host's memory. This is outside the OS-level threat
   model; rely on the OS / EDR.
 - **A compromised proxy host**. See "Proxy mode" above.
+- **A man-in-the-middle at the moment a certificate is first trusted**, or a leaked private key of a trusted certificate. A pin detects a later change only. Profiles that still use the older allow-self-signed setting have no certificate checks at all.
 - **FileMaker server-side ACLs**. The extension talks the Data API
   and inherits whatever rights the authenticated user has on the
   server. Server admins remain the authority on what data is

@@ -9,7 +9,7 @@ This extension talks to FileMaker through the FileMaker Data API. A server is co
 | FileMaker Server 19.x | `/fmi/data` | Supported, not continuously tested | Expected to work for core Data API workflows. Validate against your exact patch level before production use. |
 | FileMaker Server 20.x | `/fmi/data` | Supported, not continuously tested | Expected to work for core Data API workflows. Validate scripts, container downloads, and value lists in your environment. |
 | FileMaker Server 21.x | `/fmi/data` | Supported | Primary target for current extension behavior and release smoke testing. |
-| FileMaker Cloud | `/fmi/data` | Untested | Expected to work when the Data API endpoint is reachable over HTTPS and credentials are accepted by FileMaker Cloud. Validate authentication and network policy before relying on it. |
+| FileMaker Cloud | `/fmi/data` | Untested | Unverified. The extension has no Claris ID login; whether a Cloud tenant accepts an account name and password on the Data API is not confirmed (ask Claris or your administrator). Validate authentication and network policy before relying on it. |
 | Custom proxy in front of FileMaker Server | Proxy-defined, upstream usually `/fmi/data` | Supported when compatible | Proxy mode expects the proxy to preserve FileMaker Data API request/response semantics and redact credentials from logs. |
 
 No supported version is currently documented as known-broken. If you find a version-specific failure, open a bug report with the FileMaker Server version, operating system, deployment type, and Output panel logs.
@@ -23,7 +23,7 @@ No supported version is currently documented as known-broken. If you find a vers
 | Value lists | Value list discovery depends on FileMaker layout metadata returned by the Data API. Layout-specific or privilege-filtered value lists may differ by account. |
 | Scripts | Script listing and execution depend on the account's privileges and the script being available to the selected layout/database context. |
 | OAuth / SSO | Direct mode currently uses FileMaker username/password credentials stored in VS Code SecretStorage. OAuth or SSO-specific flows are not implemented; use a compatible proxy if your organization requires custom identity handling. |
-| Self-signed or private-CA certificates | Use **Certificates (advanced)** in the connection wizard: a custom CA certificate file (preferred, added to the system certificates) or, insecurely, **Allow self-signed certificate**. Both are per profile, `https://` only, and never come from a template or workspace file. See the [User Guide](./USER_GUIDE.md#certificates-private-authority-or-self-signed). |
+| FileMaker Server's default certificate, self-signed or private-CA certificates | In the connection wizard, trust the one certificate by its fingerprint (**Trust this certificate**, shown by Test Connection), or set a custom CA certificate file under **Certificates (advanced)** for a company authority whose certificate names the server. A CA file alone does not work for FileMaker's default certificate (it has no host names). Both are per profile, `https://` only, and never come from a template or workspace file. A pinned certificate is not used through an HTTP proxy. See the [User Guide](./USER_GUIDE.md#certificates). |
 | Linux-hosted FileMaker Server | Expected to work when the standard Data API endpoint is enabled and reachable. Validate SSL certificates, firewall rules, and container URL reachability. |
 
 ## Version Selection Guidance
