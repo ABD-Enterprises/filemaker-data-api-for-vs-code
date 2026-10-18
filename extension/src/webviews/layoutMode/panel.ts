@@ -19,6 +19,7 @@ import {
 } from '../common/messageValidation';
 import { executeBehaviorBinding, type BehaviorExecutionResult } from './behaviorExecution';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface LayoutModeOpenOptions {
   layoutId?: string;
@@ -392,6 +393,7 @@ export class LayoutModePanel {
   </head>
   <body>
     <div id="root"></div>
+    ${versionFooterHtml()}
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`;

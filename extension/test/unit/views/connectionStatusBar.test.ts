@@ -117,3 +117,13 @@ describe('ConnectionStatusBar updates', () => {
     bar.dispose();
   });
 });
+
+describe('computeConnectionStatus version', () => {
+  it('adds the extension version to the tooltip only', () => {
+    const connected = computeConnectionStatus({ name: 'Dev', database: 'D' }, '1.4.0');
+    expect(connected.tooltip).toContain('FileMaker Data API Tools v1.4.0');
+    expect(connected.text).not.toContain('1.4.0');
+    expect(computeConnectionStatus(undefined, '1.4.0').tooltip).toContain('v1.4.0');
+    expect(computeConnectionStatus(undefined).tooltip).not.toContain('FileMaker Data API Tools');
+  });
+});

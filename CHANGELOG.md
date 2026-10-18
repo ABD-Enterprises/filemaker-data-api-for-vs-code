@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Add `FileMaker: About / Show Version` and show the extension version in the status bar tooltip, Explorer title, webview footers, Output channel and diagnostics report; bug report template asks for the copied block.
 - Add user-scope `filemaker.export.neutralizeFormulas` to opt out of CSV/Copy-as-table formula apostrophes (workspace cannot turn it off).
 - Connection wizard: custom CA certificate file (validated PEM) and per-profile, confirmed 'allow self-signed (insecure)' option; neither can come from a workspace template; flagged in the profile list and picker; editing keeps `aiAccess`.
 - AI tools for MCP clients (ADR-0004 phase 3): `AiMcpServer` over a local socket with per-session token, discovery file with pid and start time, the bundled `aiMcpShim.js` stdio program, `list_changed` on policy changes, commands to start/stop the server and copy the client config; off by default (`filemaker.ai.externalServer.enabled`, user scope), no local policy of its own.

@@ -27,10 +27,18 @@ body:
     id: extension-version
     attributes:
       label: Extension version
-      description: Find this in the Extensions view for FileMaker Data API Tools.
+      description: Run "FileMaker: About / Show Version" from the Command Palette (it is also in the status bar tooltip and the sidebar title).
       placeholder: "1.4.0"
     validations:
       required: true
+
+  - type: textarea
+    id: version-details
+    attributes:
+      label: Version details
+      description: In VS Code run "FileMaker: About / Show Version", choose "Copy for bug report", and paste the result here. It holds no server address, profile name, user name or path.
+    validations:
+      required: false
 
   - type: input
     id: operating-system

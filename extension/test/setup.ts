@@ -52,7 +52,12 @@ vi.mock('vscode', () => {
       executeCommand: vi.fn(),
       registerCommand: vi.fn(() => ({ dispose: vi.fn() }))
     },
+    version: '1.96.0',
+    ExtensionMode: { Production: 1, Development: 2, Test: 3 },
     env: {
+      appName: 'Visual Studio Code',
+      language: 'en',
+      remoteName: undefined,
       clipboard: {
         writeText: vi.fn()
       },

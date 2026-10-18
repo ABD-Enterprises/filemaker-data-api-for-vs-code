@@ -4,6 +4,7 @@ import type { HistoryStore } from '../services/historyStore';
 import type { MetricsStore } from './metricsStore';
 import { buildWebviewCsp, createNonce } from '../webviews/common/csp';
 import { hasMessageType } from '../webviews/common/messageValidation';
+import { versionFooterHtml } from '../about/runtimeVersion';
 
 export class DiagnosticsDashboardPanel {
   private static current: DiagnosticsDashboardPanel | undefined;
@@ -101,6 +102,7 @@ export class DiagnosticsDashboardPanel {
     button { border: none; border-radius: 6px; background: #0f766e; color: #fff; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #115e59; }
     .muted { color: #64748b; }
+    .fm-version { color: #64748b; font-size: 11px; padding: 0 16px 12px; }
   </style>
 </head>
 <body>
@@ -133,6 +135,7 @@ export class DiagnosticsDashboardPanel {
       </table>
     </div>
   </div>
+  ${versionFooterHtml()}
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();

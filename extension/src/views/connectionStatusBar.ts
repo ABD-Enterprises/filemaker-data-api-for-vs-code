@@ -16,17 +16,19 @@ export interface ConnectionStatusModel {
  * Code APIs (mirrors the pattern in offlineStatusBar.ts).
  */
 export function computeConnectionStatus(
-  activeProfile: Pick<ConnectionProfile, 'name' | 'database'> | undefined
+  activeProfile: Pick<ConnectionProfile, 'name' | 'database'> | undefined,
+  version?: string
 ): ConnectionStatusModel {
+  const versionLine = version ? `\nFileMaker Data API Tools v${version}` : '';
   if (!activeProfile) {
     return {
       text: '$(circle-outline) FileMaker: Not connected',
-      tooltip: 'No active FileMaker profile. Click for actions.'
+      tooltip: `No active FileMaker profile. Click for actions.${versionLine}`
     };
   }
   return {
     text: `$(plug) FileMaker: ${activeProfile.name}`,
-    tooltip: `Connected to ${activeProfile.name} (${activeProfile.database}). Click for actions.`
+    tooltip: `Connected to ${activeProfile.name} (${activeProfile.database}). Click for actions.${versionLine}`
   };
 }
 
@@ -49,7 +51,10 @@ export class ConnectionStatusBar implements vscode.Disposable {
   private revision = 0;
   private disposed = false;
 
-  public constructor(private readonly profileStore: ProfileStore) {
+  public constructor(
+    private readonly profileStore: ProfileStore,
+    private readonly version?: string
+  ) {
     this.item = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       STATUS_BAR_PRIORITY
@@ -70,7 +75,7 @@ export class ConnectionStatusBar implements vscode.Disposable {
     const activeProfileId = this.profileStore.getActiveProfileId();
 
     if (!activeProfileId) {
-      this.applyModel(computeConnectionStatus(undefined));
+      this.applyModel(computeConnectionStatus(undefined, this.version));
       return;
     }
 
@@ -86,11 +91,11 @@ export class ConnectionStatusBar implements vscode.Disposable {
     try {
       const profile = await this.profileStore.getProfile(profileId);
       if (!this.disposed && revision === this.revision) {
-        this.applyModel(computeConnectionStatus(profile));
+        this.applyModel(computeConnectionStatus(profile, this.version));
       }
     } catch {
       if (!this.disposed && revision === this.revision) {
-        this.applyModel(computeConnectionStatus(undefined));
+        this.applyModel(computeConnectionStatus(undefined, this.version));
       }
     }
   }

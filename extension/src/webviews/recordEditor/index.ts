@@ -10,6 +10,7 @@ import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileM
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface RecordEditorOpenOptions {
   profileId?: string;
@@ -646,6 +647,7 @@ export class RecordEditorPanel {
     </section>
   </div>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

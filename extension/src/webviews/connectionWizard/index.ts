@@ -14,6 +14,7 @@ import {
 } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
 import { validateCaBundleFile } from '../../utils/tlsProfile';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 import {
   loadConnectionProfileTemplate,
   PROFILE_TEMPLATE_LOCKED_FIELDS,
@@ -891,6 +892,7 @@ export class ConnectionWizardPanel {
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </form>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
