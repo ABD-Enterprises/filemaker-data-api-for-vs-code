@@ -87,7 +87,8 @@ npm run lint            # zero warnings enforced
 npm run typecheck       # tsc --noEmit for source and tests
 npm test                # vitest
 npm run test:coverage   # with coverage reporting
-npm run package:check   # build and validate the VSIX
+npm run build           # needed first on a clean checkout (the package check requires built packages)
+npm run package:check   # validate the VSIX
 ```
 
 CI (`build-test`) runs the same steps plus a dependency audit and a VSIX size check. See [docs/CI.md](../docs/CI.md).

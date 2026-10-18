@@ -33,16 +33,19 @@ assignees: []
 - [ ] **10** Batch export and batch update dry run
 - [ ] **11** Schema snapshot and diff
 - [ ] **12** Disconnect, reconnect, session expiry
+- [ ] **13** Create Record
+- [ ] **14** Certificates (custom CA, self-signed confirmation)
+- [ ] **15** MCP server start, stop and config
 
 ## Further checks
 
-- [ ] **13** Generated files
-- [ ] **14** Reload window
-- [ ] **15** Untrusted workspace
-- [ ] **16** New prompts (plugins, FM Web preview)
-- [ ] **17** AI is off by default; Write AI Context
-- [ ] **18** User guide opens
-- [ ] **19** Uninstall
+- [ ] **16** Generated files
+- [ ] **17** Reload window
+- [ ] **18** Untrusted workspace
+- [ ] **19** New prompts (plugins, FM Web preview)
+- [ ] **20** AI is off by default; Write AI Context
+- [ ] **21** User guide opens
+- [ ] **22** Uninstall
 
 ## Result
 

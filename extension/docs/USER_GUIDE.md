@@ -306,7 +306,7 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
 
 **Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** and **Copy results as table** in the Query Builder.
 
-**Editing and re-importing a CSV export.** A CSV export has `recordId` and `modId` columns followed by your fields. Batch update skips the `recordId` and `modId` columns as fields (using `recordId` to find each record), so you can edit an export and import it back. Empty cells are skipped. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true`, `null` or a number) is sent as JSON, not as text. A JSONL export cannot be imported: batch update accepts `.csv` and `.json` only.
+**Editing and re-importing a CSV export.** A CSV export has `recordId` and `modId` columns followed by every field the layout returns. Batch update skips the `recordId` and `modId` columns as fields (using `recordId` to find each record), so a layout with plain fields can be edited and imported back. But the export also writes related (`Table::Field`), calculation, summary and container columns, and import sends every column back as a field. Before importing, delete the columns for related, calculation, summary and container fields and keep only the fields you want to change. Empty cells are skipped. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true`, `null` or a number) is sent as JSON, not as text. A JSONL export cannot be imported: batch update accepts `.csv` and `.json` only.
 
 **Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 
@@ -318,7 +318,7 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
    - **JSON**: an array of `{ "recordId": "123", "fieldData": { "Field": "value" } }` entries (`recordId` is a string).
 3. Choose **Dry-run only (recommended)** or **Execute updates now**. A dry run shows a sample of what would be sent and sends nothing. Executing asks for a final confirmation first.
 
-Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. Keep an export from before the update: a CSV export can be edited and imported back to restore old values (see above).
+Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. Keep an export from before the update. It can restore old values only for layouts without related, calculation, summary or container fields, and only after you delete those columns (see above).
 
 Batch update is blocked in offline mode, for the `viewer` role, and when `filemaker.features.batch.enabled` is off or the workspace is untrusted.
 
@@ -407,7 +407,7 @@ Offline mode keeps you working with what the extension has already learned about
 
 Offline mode does not block finds or opening records: those still call the server, and fail if it is unreachable.
 
-**Turning it off.** Run **FileMaker: Toggle Offline Mode** again. The command changes your **user** setting and tells you the mode that is really in effect. If a workspace setting (for example `offline.mode: true` written into `.vscode/settings.json` by an older version of this extension) keeps offline mode on, the message says so ("still on because of ...") and the command cannot clear it: edit the workspace setting yourself. A workspace can turn offline mode on but never off.
+**Turning it off.** Run **FileMaker: Toggle Offline Mode** again. The command changes your **user** setting and tells you the mode that is really in effect. If a workspace setting (for example `offline.mode: true` written into `.vscode/settings.json` by an older version of this extension) keeps offline mode on, the message says so ("still on because of ...") and the command cannot clear it: edit the workspace setting yourself. A workspace can turn offline mode on but never off. Offline mode set in your user settings applies to every workspace you open.
 
 ---
 
@@ -538,13 +538,13 @@ Three commands exist for this. They appear in the Command Palette only while AI 
 The same tools, with the same limits, approvals and dialogs, are available to MCP clients that run outside VS Code. This is off by default and works only in local VS Code windows, not in Dev Containers, Codespaces, SSH or WSL windows (the server will not start there).
 
 1. Set up AI access as above (turn on `filemaker.ai.enabled`, set a connection).
-2. In the window you want to use, run **FileMaker: Start/Stop AI Server for External Tools**. The command always asks in a dialog first; the dialog says the server will start automatically each time you open this workspace. If `filemaker.ai.externalServer.enabled` is off, the same dialog turns it on in your user settings. Nothing can start the server, or make it start automatically, without that dialog. The status bar then shows `MCP`.
+2. In the window you want to use, run **FileMaker: Start/Stop AI Server for External Tools**. The command always asks in a dialog first; the dialog says the server will start automatically each time you open this workspace. If `filemaker.ai.externalServer.enabled` is off, the same dialog turns it on in your user settings. Nothing can start the server, or make it start automatically, without that dialog. The status bar item then reads `AI: ... · MCP`, and its tooltip shows the number of connections. Running the command again to stop the server asks nothing.
 3. Run **FileMaker: Copy MCP Config for Claude Code / Cursor** and paste the result into Claude Code's `.mcp.json` (or use `claude mcp add-json filemaker '<the filemaker entry>'`) or into Cursor's `mcp.json`. The config points at a copy of the client program (`aiMcpShim.js`) kept in the extension's storage, in a folder only you can use, so it keeps working after extension updates. If the copy could not be made, the message says so and you copy the config again after an update.
 4. The client starts that small program with `node`, and it connects to your VS Code window. **Node.js 18 or newer must be on the PATH of the client**; without it the config cannot run.
 
 **The setting is a permission, not a switch.** `filemaker.ai.externalServer.enabled` (user settings only) only allows the server; it never starts it. A window runs the server only after you ran **Start/Stop AI Server for External Tools** in that window and confirmed. VS Code remembers that for that workspace and starts the server again each time you open it, while the setting is on, until you run the same command there to stop it. Stopping persists, also after a restart. Turning the setting off stops the server in every window where it runs and ends the automatic start for every workspace, including closed ones; turning the setting on again does not bring them back, and you start the server there again by running the command. A window you never started it in never runs it.
 
-How it is protected: a socket in a folder only you can use (on Windows an unguessable named pipe), the folder name includes a hash of the product's storage path so VS Code, Insiders and Cursor do not share one; a secret per-session token in a file only you can read; the program checks that the window that wrote the file is still the same process before it sends the token. With several windows running the server, the config names the folder and the program refuses to guess. You get a notification when a program connects (at most one every 30 seconds), and the status bar shows the number of connections. The name an MCP client gives itself appears only in **Show AI Activity**, never in a dialog. Layout approvals and write dialogs still appear in VS Code, and if the client cancels or disconnects while a dialog is open, nothing is sent whatever you answer. Everything the tools return is sent to the provider behind your MCP client, which is often a different provider from the one VS Code uses.
+How it is protected: a socket in a folder only you can use (on Windows an unguessable named pipe), the folder name includes a hash of the product's storage path so VS Code, Insiders and Cursor do not share one; a secret per-session token in a file only you can read; the program checks that the window that wrote the file is still the same process before it sends the token. With several windows running the server, the config names the folder and the program refuses to guess. You get a notification when a program connects (at most one every 30 seconds), and the connection count is in the status bar tooltip. The name an MCP client gives itself appears only in **Show AI Activity**, never in a dialog. Layout approvals and write dialogs still appear in VS Code, and if the client cancels or disconnects while a dialog is open, nothing is sent whatever you answer. Everything the tools return is sent to the provider behind your MCP client, which is often a different provider from the one VS Code uses.
 
 ---
 
@@ -715,8 +715,6 @@ The most common first-run failure is a **certificate error** (the first row of t
 | A generated file has an unexpected name | See [file names](#generate-types-a-client-and-snippets). |
 | CSV cells start with an apostrophe | See [apostrophes in CSV files](#batch-export-and-batch-update). |
 | `AI: off` in the status bar | AI tools are off by default. See [Using AI with FileMaker](#using-ai-with-filemaker). |
-
-<!-- TODO: link docs/FILEMAKER_FAILURE_MODES.md from this section once it merges (separate PR). -->
 
 ### Reporting a problem
 

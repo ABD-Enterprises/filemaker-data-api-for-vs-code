@@ -26,7 +26,7 @@ Design constraints: webviews never reach FileMaker directly; credentials never l
 | --- | --- |
 | `.fmweb/layouts` | Authored layout definitions |
 | `.fmweb/metadata` | Synced FileMaker metadata cache |
-| `.fmweb/generated/runtime-next` | Generated runtime app (its `.env.local` holds only the bridge URL) |
+| `.fmweb/generated/runtime-next` | Generated runtime app (its private `.env.local` holds the bridge URL and the session token) |
 | `.fmweb/generated/layouts` | Generated runtime layout artifacts |
 
 ## Layout schema

@@ -66,7 +66,7 @@ Branch from green `main`: `git switch -c release/vX.Y.Z origin/main`.
 Do this against the release branch (the content that will be tagged), not after the merge. Merging puts the version bump on `main`; the tag follows quickly, and a problem found afterwards costs a patch release.
 
 - [ ] `build-test` is green on the release pull request.
-- [ ] On a clean machine or profile, from the release branch, `npm ci && npm run package:check` and install `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`.
+- [ ] On a clean machine or profile, from the release branch, `npm ci && npm run build && npm run package:check` (the package check fails on a clean checkout until the build has run) and install `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`.
 - [ ] Run the [smoke test](../extension/docs/QA/SMOKE_TEST.md) against a real server, or against the mock server (`npm run mock:server -w extension`) if no server is available. Note which you used.
 - [ ] Run the checks that matter for this release's changes. For a release with a security change, try the failure path too (for example open a repository with a hostile settings file).
 

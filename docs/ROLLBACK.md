@@ -24,6 +24,7 @@ The Marketplace has no "yank one version" that `vsce` can do: `vsce unpublish` r
 4. Validate locally:
    ```bash
    npm ci
+   npm run build
    npm run lint
    npm run typecheck
    npm test

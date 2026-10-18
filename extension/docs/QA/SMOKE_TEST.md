@@ -16,7 +16,7 @@ A short manual pass to run on the build you are about to release (and again on t
 
 ## Checks
 
-Tick each one. A failure in checks 1 to 12 blocks the release.
+Tick each one. A failure in checks 1 to 15 blocks the release.
 
 | # | Check | Expected |
 | --- | --- | --- |
@@ -32,13 +32,16 @@ Tick each one. A failure in checks 1 to 12 blocks the release.
 | 10 | Batch | **Batch Export (Find)** to a `.csv` file works. **Batch Update from CSV/JSON** with **Dry-run only** shows a preview and changes nothing. |
 | 11 | Schema | **Capture Schema Snapshot** twice, then **Diff Schema Snapshots** opens the diff. |
 | 12 | Session | **Disconnect** changes the status bar and **Connect** works again. After the session is dropped (mock: `curl -X POST http://127.0.0.1:18080/__admin/expire`) the next find still succeeds. |
-| 13 | Generated files | **Generate Types for Layout** writes a file under `filemaker-types/layouts/`. |
-| 14 | Reload | **Developer: Reload Window**: the status bar item and the Connections view come back. |
-| 15 | Untrusted workspace | In Restricted Mode, finds work; **Delete Record** and type generation are refused with a clear message. |
-| 16 | Prompts | A file in `.vscode/filemaker-plugins/` asks before it runs. **Start FM Web Preview Server** (after **Initialize FM Web Project**) asks before running `npm` when run from the repository; in a Marketplace build it reports that the preview is not available in this installation. |
-| 17 | AI default | The status bar shows `AI: off`. **Write AI Context** writes a file and offers to open it. With `filemaker.ai.enabled` off, no `fm_` tools are offered to the agent. |
-| 18 | User guide | **FileMaker: Open User Guide** opens the guide. |
-| 19 | Uninstall | Uninstalling removes the activity bar icon and the status bar items. |
+| 13 | Create Record | **Create Record** opens the editor in create mode with the layout's fields. Fill one field, select **Create Record**, confirm: the new record ID is shown and the record appears in a find. |
+| 14 | Certificates | In the wizard's **Certificates (advanced)**, a bad **Custom CA certificate file** path is rejected with a message. Against a server with a self-signed certificate, the connection fails without the options, and works with the CA file. **Allow self-signed certificate (insecure)** asks for confirmation the first time. |
+| 15 | MCP server | With `filemaker.ai.enabled` and a connection set to Read, run **Start/Stop AI Server for External Tools**: the confirmation dialog appears, the status bar item reads `AI: ... · MCP`, **Copy MCP Config for Claude Code / Cursor** copies a config, and a connected MCP client lists the tools. Run the command again to stop (no dialog); `· MCP` disappears from the status bar item. |
+| 16 | Generated files | **Generate Types for Layout** writes a file under `filemaker-types/layouts/`. |
+| 17 | Reload | **Developer: Reload Window**: the status bar item and the Connections view come back. |
+| 18 | Untrusted workspace | In Restricted Mode, finds work; **Open Record Editor**, **Create Record**, **Edit Record by ID**, **Delete Record**, **Open Script Runner** and type generation are refused with a clear message. |
+| 19 | Prompts | A file in `.vscode/filemaker-plugins/` asks before it runs. **Start FM Web Preview Server** (after **Initialize FM Web Project**) asks before running `npm` when run from the repository; in a Marketplace build it reports that the preview is not available in this installation. |
+| 20 | AI default | The status bar shows `AI: off`. **Write AI Context** writes a file and offers to open it. With `filemaker.ai.enabled` off, no `fm_` tools are offered to the agent. |
+| 21 | User guide | **FileMaker: Open User Guide** opens the guide. |
+| 22 | Uninstall | Uninstalling removes the activity bar icon and the status bar items. |
 
 ## Result
 

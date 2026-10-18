@@ -27,7 +27,7 @@ A layout whose name has anything besides letters, digits, `_`, `.` and `-` now g
 
 ### 3. CSV and Copy as table apostrophes
 
-CSV exports (batch export and Query Builder) and **Copy results as table** put a leading apostrophe in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, for example `'=SUM(A1)`. Plain numbers and phone numbers are not changed. Action: if another program reads these files, strip a leading apostrophe there, or set `filemaker.export.neutralizeFormulas` to `false` in your user settings (JSON Lines exports never had it). Batch update skips the `recordId` and `modId` columns, so an exported CSV can be edited and imported back.
+CSV exports (batch export and Query Builder) and **Copy results as table** put a leading apostrophe in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, for example `'=SUM(A1)`. Plain numbers and phone numbers are not changed. Action: if another program reads these files, strip a leading apostrophe there, or set `filemaker.export.neutralizeFormulas` to `false` in your user settings (JSON Lines exports never had it). Batch update skips the `recordId` and `modId` columns, so a CSV export of a layout with plain fields can be edited and imported back. Exports also contain related (`Table::Field`), calculation, summary and container columns, and import sends every column back: delete those columns before importing, and do not expect an export to restore old values for layouts that have them.
 
 ### 4. New prompts
 
@@ -51,6 +51,15 @@ The Record Editor's create mode lists the layout's fields, has a **Create Record
 ### 7. The FM Web live preview is not in the Marketplace build
 
 The Marketplace package does not include the preview app template, so **Start FM Web Preview Server** and **Generate FM Web Next.js App** say "not available in this installation" and need the repository. Layout Mode and metadata sync are unchanged. For repository users the preview now sends its bridge token, and previously generated apps get their managed files refreshed (an edited copy is left alone with a warning).
+
+### 8. Other behavior to know about
+
+- A server address with a user name or password in it (`https://user:pass@host`) is rejected. A saved profile that has one stays in the list so you can fix it.
+- `.filemaker/profile-template.json` is ignored in an untrusted workspace and no longer locks the server address (only the database and API paths).
+- `filemaker.typegen.outputDir` is ignored in untrusted workspaces and rejects drive-relative paths such as `D:folder`.
+- For repository users of the FM Web preview, the bridge enforces your limits: record changes and script runs follow offline mode, the record-edit and script-runner switches, and the enterprise role.
+- A Layout Mode `runScript` behavior needs a trusted workspace, the script runner on, offline mode off and a policy that allows scripts, and it asks for confirmation naming the script, parameter and connection.
+- Enterprise `disabledFeatures` and role handling are restrict-only (see section 1).
 
 ### Smaller changes
 
