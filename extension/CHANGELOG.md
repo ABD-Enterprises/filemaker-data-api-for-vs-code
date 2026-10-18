@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [SECURITY] **Delete Record** now follows the same rules as saving a record: it is refused when `filemaker.features.recordEdit.enabled` is off or enterprise policy disables or restricts record editing (`disabledFeatures: ["recordEdit"]`, viewer role). Before it checked only the general write permission and workspace trust.
 - [FIX] **Create Record** works. It opened the Record Editor in create mode, but the page had no way to create anything and the host rejected the message it would have sent. Create mode now lists the layout's fields (no record ID), has a **Create Record** button, checks the names against the layout and the field hints, asks in a modal naming the connection, layout and fields, sends only the fields you filled in, and shows the new record ID. It needs a trusted workspace, record editing switched on and offline mode off, like Save.
 - [FIX] The notice and setting text for the secret-storage fallback no longer call it encryption: `workspace-state` keeps an obfuscated copy keyed from the machine id, which hides secrets from casual viewing but is not protection against anyone with local access.
 - [SECURITY] `filemaker.secrets.fallback` is now an application-scope setting (read from your user settings only), so a repository's `.vscode/settings.json` can no longer switch your secret storage to the workspace-state fallback or turn secret persistence off, and `filemaker.typegen.outputDir` is a restricted setting in untrusted workspaces. If you set `secrets.fallback` in workspace settings, move it to user settings.

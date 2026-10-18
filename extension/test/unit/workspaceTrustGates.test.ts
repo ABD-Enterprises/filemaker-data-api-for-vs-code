@@ -185,3 +185,63 @@ describe('webview panels in an untrusted workspace', () => {
     expect(JSON.stringify(fake.postMessage.mock.calls.at(-1)?.[0])).toContain('untrusted workspaces');
   });
 });
+
+describe('Delete Record policy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    workspace.isTrusted = true;
+  });
+
+  function guardWith(options: { role?: string; disabled?: string[]; mode?: boolean }): RoleGuard {
+    const guard = new RoleGuard(
+      { debug: vi.fn(), warn: vi.fn() },
+      {
+        getConfiguration: () =>
+          ({
+            get: (key: string, fallback?: unknown) =>
+              ({ 'enterprise.mode': options.mode ?? false, 'enterprise.role': options.role ?? 'developer' })[key] ?? fallback
+          }) as never,
+        isWorkspaceTrusted: () => true,
+        getWorkspaceRoot: () => '/ws',
+        readConfigFile: async () => (options.disabled ? JSON.stringify({ disabledFeatures: options.disabled }) : undefined)
+      }
+    );
+    return guard;
+  }
+
+  async function runDelete(guard: RoleGuard, recordEditEnabled: boolean) {
+    await guard.refresh();
+    const { deps, fmClient } = recordDeps(true);
+    deps.roleGuard = guard;
+    (deps.settingsService as unknown as { isRecordEditEnabled: ReturnType<typeof vi.fn> }).isRecordEditEnabled.mockReturnValue(
+      recordEditEnabled
+    );
+    registerRecordEditCommands(deps);
+    vi.mocked(vscode.window.showInputBox).mockResolvedValue('5');
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Delete' as never);
+    await commandHandler('filemakerDataApiTools.deleteRecord')({ profileId: 'p1', layout: 'L' });
+    return fmClient;
+  }
+
+  it('is refused when record editing is switched off by setting', async () => {
+    const fmClient = await runDelete(guardWith({}), false);
+    expect(fmClient.deleteRecord).not.toHaveBeenCalled();
+    expect(vscode.window.showInputBox).not.toHaveBeenCalled();
+  });
+
+  it("is refused when enterprise disabledFeatures lists 'recordEdit'", async () => {
+    const fmClient = await runDelete(guardWith({ disabled: ['recordEdit'] }), true);
+    expect(fmClient.deleteRecord).not.toHaveBeenCalled();
+    expect(vscode.window.showInputBox).not.toHaveBeenCalled();
+  });
+
+  it('is refused for the enterprise viewer role', async () => {
+    const fmClient = await runDelete(guardWith({ mode: true, role: 'viewer' }), true);
+    expect(fmClient.deleteRecord).not.toHaveBeenCalled();
+  });
+
+  it('still works for a developer with record editing on', async () => {
+    const fmClient = await runDelete(guardWith({}), true);
+    expect(fmClient.deleteRecord).toHaveBeenCalledWith(expect.anything(), 'L', '5');
+  });
+});

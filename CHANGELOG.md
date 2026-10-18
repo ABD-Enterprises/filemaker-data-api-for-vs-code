@@ -73,6 +73,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
 - Make `filemaker.secrets.fallback` application-scoped and `filemaker.typegen.outputDir` restricted in untrusted workspaces.
 - Query Builder copy-as-table neutralizes formula-looking cells like the CSV export (shared behaviour, parity-tested).
 - Record edit, create and upload and the Script Runner require a trusted workspace (commands, panels and panel messages), matching the documented behaviour; the manifest's untrusted-workspace description lists them.
