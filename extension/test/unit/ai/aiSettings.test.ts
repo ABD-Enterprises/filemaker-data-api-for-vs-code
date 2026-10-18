@@ -100,6 +100,42 @@ describe('readAiSettings', () => {
     const replaced = readAiSettings(configuration({ 'ai.hiddenFields': { globalValue: ['Salary'], workspaceValue: [] } }));
     expect(replaced.hiddenFields).toEqual(['Salary']);
   });
+
+  it('hiddenFields fails closed: a non-text entry is ignored and reported, the valid names in the list still hide', () => {
+    const problems: unknown[] = [];
+    const settings = readAiSettings(
+      configuration({
+        'ai.hiddenFields': {
+          globalValue: ['Salary', 42, 'SSN', null, { name: 'x' }],
+          workspaceValue: ['Phone']
+        }
+      }),
+      (problem) => problems.push(problem)
+    );
+    expect(settings.hiddenFields.sort()).toEqual(['Phone', 'SSN', 'Salary']);
+    expect(problems).toEqual([{ scope: 'globalValue', kind: 'entries-ignored', count: 3 }]);
+  });
+
+  it('hiddenFields: a bare string is read as one name and a non-list, non-text value is ignored, both reported', () => {
+    const problems: unknown[] = [];
+    const settings = readAiSettings(
+      configuration({
+        'ai.hiddenFields': { globalValue: 'Salary', workspaceValue: { a: 1 }, workspaceFolderValue: ['SSN'] }
+      }),
+      (problem) => problems.push(problem)
+    );
+    expect(settings.hiddenFields.sort()).toEqual(['SSN', 'Salary']);
+    expect(problems).toEqual([
+      { scope: 'globalValue', kind: 'single-name', count: 1 },
+      { scope: 'workspaceValue', kind: 'value-ignored', count: 1 }
+    ]);
+  });
+
+  it('hiddenFields reports nothing for a clean list', () => {
+    const problems: unknown[] = [];
+    readAiSettings(configuration({ 'ai.hiddenFields': { globalValue: ['A'], workspaceValue: [] } }), (p) => problems.push(p));
+    expect(problems).toEqual([]);
+  });
 });
 
 describe('isAiFeatureSwitchOn (restrict-only)', () => {
