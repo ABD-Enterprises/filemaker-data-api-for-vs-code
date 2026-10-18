@@ -1,7 +1,9 @@
 name: Entra identity id
 
-# Manual, one-time helper for docs/JOB_AID_ENTRA_PUBLISHING.md. It logs in as the managed identity
-# (through the `marketplace` environment, so it waits for your approval) and prints the identity's
+# Manual, one-time helper for docs/JOB_AID_ENTRA_PUBLISHING.md. The `marketplace` environment only
+# accepts v* tags, so the maintainer adds a temporary `main` branch rule to it before running this
+# and removes it afterwards (see the job aid). It logs in as the managed identity (through the
+# environment, so it waits for approval) and prints the identity's
 # Azure DevOps id, which you then add to the Marketplace publisher as a Contributor. The id is an
 # identifier, not a secret.
 

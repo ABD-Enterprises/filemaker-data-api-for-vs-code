@@ -37,7 +37,6 @@ reminder + a GitHub Issue with a due date.
 
 | Secret | Last rotated | Expires | Next rotation due |
 |---|---|---|---|
-| `VSCE_PAT` | _(maintainer fills in on each rotation)_ | _(date)_ | _(date)_ |
 | `OVSX_PAT` | (not yet created) | — | — |
 | `ANTHROPIC_API_KEY` | (only set if used) | none | 9 months after creation |
 | `CLAUDE_CODE_OAUTH_TOKEN` | _(date)_ | _(date)_ | _(date)_ |
@@ -62,32 +61,9 @@ reminder is the trustworthy mechanism.
 If the workflow fails or the reminder doesn't fire, the underlying
 calendar reminder kicks in 30 days before expiration regardless.
 
-## How to rotate `VSCE_PAT`
+## Marketplace publishing credentials
 
-The most-rotated secret. Steps:
-
-1. Go to https://dev.azure.com/abdenterprises/_usersSettings/tokens
-   (sign in as the primary owner).
-2. Find the existing `vsce-publish-filemaker` token (or whichever
-   name).
-3. Click **Regenerate** OR create a new token with:
-   - **Name**: `vsce-publish-filemaker-YYYY-MM` (year-month so old
-     names don't collide)
-   - **Organization**: **All accessible organizations** (required)
-   - **Expiration**: 1 year
-   - **Scopes**: Click **Show all scopes** → **Marketplace** → **Manage**
-4. Copy the token (shown once).
-5. Update the GitHub secret:
-   ```bash
-   gh secret set VSCE_PAT --repo SureForgeTech/filemaker-data-api-for-vs-code
-   # paste at the prompt
-   ```
-6. Test by running the publish job on a pre-release tag:
-   ```bash
-   git tag -a v1.1.1-pre.1 -m "test PAT" && git push origin v1.1.1-pre.1
-   # watch the run; on success, delete the tag/release
-   ```
-7. Update the **Tracked rotation calendar** table above in a PR.
+No secret to rotate. Publishing signs in with Microsoft Entra ID (a managed identity trusted for the `marketplace` environment); the only settings are the environment variables `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`. To replace the identity, repeat Parts 1 to 5 of [JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md) and update the two variables. The old `VSCE_PAT` token type stops working on 2026-12-01 in any case.
 
 ## How to rotate `CLAUDE_CODE_OAUTH_TOKEN`
 

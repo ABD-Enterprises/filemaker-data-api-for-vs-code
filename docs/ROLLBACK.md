@@ -24,12 +24,14 @@ Current `vsce` help documents unpublishing the extension as a whole, not safely 
 4. If the release is severe enough to hide, unpublish the extension:
    ```bash
    cd extension
+   # sign in first with a short-lived token: `vsce login SureForgeTech`, or use the
+   # Marketplace management page (https://marketplace.visualstudio.com/manage)
    npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools
    ```
 5. For non-interactive emergency use by a trusted local maintainer only:
    ```bash
    cd extension
-   VSCE_PAT=... npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools --force
+   npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools --force
    ```
 
 Unpublishing removes the extension from normal Marketplace download flow. It is heavier than publishing a fixed patch and should be reserved for severe defects.
@@ -93,7 +95,7 @@ cd extension
 npx @vscode/vsce publish --pre-release
 ```
 
-The current CI stable publish path uses tags and `VSCE_PAT`. Do not publish production releases from an untrusted environment.
+The current CI stable publish path uses tags and Microsoft Entra ID sign-in (environment `marketplace`). Do not publish production releases from an untrusted environment.
 
 ## Verification After Recovery
 

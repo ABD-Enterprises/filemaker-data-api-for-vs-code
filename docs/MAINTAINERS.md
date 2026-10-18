@@ -28,7 +28,7 @@ this extension regularly and would like to help keep it healthy, see the
 - First responder to security reports (see [SECURITY.md](../extension/SECURITY.md))
 - Approves PRs from the cloud agent (Codex / Claude Code) per the
   separation-of-duties rule in `CLAUDE.md`
-- Owns the [`VSCE_PAT`](./SECRETS.md once issue #142 lands) rotation cycle
+- Owns the Marketplace publisher and its Entra identity (see [SECRETS.md](./SECRETS.md))
 
 ### Secondary maintainer
 
@@ -36,8 +36,8 @@ this extension regularly and would like to help keep it healthy, see the
 - Can sign off on PRs from cloud agents in the primary's absence
 - Reviews + triages incoming bug reports / feature requests during the
   primary's vacation / outages
-- Holds a backup PAT for `VSCE_PAT` (separate token, separate Microsoft
-  account) so a single account compromise doesn't lose publish rights
+- Is a second owner of the Marketplace publisher, so a single account compromise
+  doesn't lose publish rights
 
 ## Succession path
 
@@ -52,7 +52,7 @@ If the primary maintainer needs to step back permanently:
    migration in CHANGELOG).
 3. **Update CODEOWNERS, FUNDING.yml, repo About, and this doc** with
    the new primary.
-4. **Hand off the `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` / `VSCE_PAT`
+4. **Hand off the `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
    / `PRS_PAT`** repo secrets — primary regenerates them under their
    accounts; old ones revoked.
 5. **Old primary remains in CONTRIBUTORS** but no longer holds publish
