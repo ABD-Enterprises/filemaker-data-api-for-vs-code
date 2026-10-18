@@ -60,7 +60,7 @@ export async function createCsvStreamWriter(
 
   const writeHeader = async (): Promise<void> => {
     if (headerWritten || !columns) return;
-    await writeLine(columns.map(escapeCsvValue).join(','));
+    await writeLine(columns.map((column) => escapeCsvValue(column)).join(','));
     headerWritten = true;
   };
 
