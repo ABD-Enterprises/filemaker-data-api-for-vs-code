@@ -416,10 +416,16 @@ export async function writeManagedFile(target: string, content: Buffer | string)
     throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`);
   }
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
-  await writeFile(temporary, content, { flag: 'wx' });
   try {
+    await writeFile(temporary, content, { flag: 'wx' });
+    // The replacement keeps the permission bits of the file it replaces (an executable stays one, a
+    // file the user made owner-only stays owner-only); a new file gets the usual default.
+    if (existing?.isFile()) {
+      await chmod(temporary, existing.mode & 0o7777).catch(() => undefined);
+    }
     await rename(temporary, target);
   } catch (error) {
+    // Also reached when the write itself failed part way (disk full): never leave the .tmp behind.
     await rm(temporary, { force: true }).catch(() => undefined);
     if ((error as NodeJS.ErrnoException).code === 'EISDIR' || (error as NodeJS.ErrnoException).code === 'ENOTEMPTY') {
       throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`, { cause: error });
