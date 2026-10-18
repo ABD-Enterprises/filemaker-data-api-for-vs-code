@@ -206,13 +206,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return null;
     }
 
+    const selfSignedBox = /** @type {HTMLInputElement|null} */ (document.getElementById('allowSelfSigned'));
     const data = {
       name,
       authMode,
       serverUrl,
       database,
       apiBasePath: apiBasePath || '/fmi/data',
-      apiVersionPath: apiVersionPath || 'vLatest'
+      apiVersionPath: apiVersionPath || 'vLatest',
+      caBundlePath: getValue('caBundlePath'),
+      allowSelfSigned: Boolean(selfSignedBox && selfSignedBox.checked)
     };
 
     if (authMode === 'direct') {
@@ -253,6 +256,16 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelector('.advanced-toggle')
       );
       if (advanced) advanced.open = true;
+    }
+
+    // Certificate options come from the saved profile only (never from the workspace template).
+    // Open the section when either is set so a saved insecure choice is visible, not hidden.
+    setFieldValue('caBundlePath', profile.caBundlePath || '');
+    const selfSigned = /** @type {HTMLInputElement|null} */ (document.getElementById('allowSelfSigned'));
+    if (selfSigned) selfSigned.checked = profile.allowSelfSigned === true;
+    if (profile.caBundlePath || profile.allowSelfSigned === true) {
+      const certificates = /** @type {HTMLDetailsElement|null} */ (document.getElementById('certificateOptions'));
+      if (certificates) certificates.open = true;
     }
 
     if (profile.authMode === 'proxy') {
@@ -496,7 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
       apiBasePath: data.apiBasePath,
       apiVersionPath: data.apiVersionPath,
       username: data.username,
-      proxyEndpoint: data.proxyEndpoint
+      proxyEndpoint: data.proxyEndpoint,
+      caBundlePath: data.caBundlePath,
+      allowSelfSigned: data.allowSelfSigned
     };
     return JSON.stringify(subset);
   }

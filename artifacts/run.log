@@ -1,7 +1,0 @@
-2026-04-13T06:10:25Z
-
-Validation summary:
-- code --user-data-dir <tmp> --extensions-dir <tmp> --install-extension artifacts/filemaker-data-api-tools-1.0.0.vsix --force
-- code --user-data-dir <tmp> --extensions-dir <tmp> --list-extensions --show-versions
-- Result: PASS
-- Installed extension: deffenda.filemaker-data-api-tools@1.0.0

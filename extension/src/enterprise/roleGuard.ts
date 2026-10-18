@@ -187,10 +187,10 @@ export class RoleGuard {
       };
     }
 
-    if (!this.isWorkspaceTrusted() && feature === 'pluginInstall') {
+    if (!this.isWorkspaceTrusted() && TRUST_REQUIRED_FEATURES[feature]) {
       return {
         allowed: false,
-        reason: 'Plugin loading is disabled in untrusted workspaces.'
+        reason: `${TRUST_REQUIRED_FEATURES[feature]} is disabled in untrusted workspaces.`
       };
     }
 
@@ -273,6 +273,19 @@ export class RoleGuard {
     }
   }
 }
+
+/**
+ * Features that need a trusted workspace, with the capability named in the refusal. A
+ * repository controls `.vscode/settings.json` and the generated files these act on, so
+ * an untrusted one must not be able to edit or create records or run scripts through the
+ * user's saved connections. `writeOperations` is deliberately not here: it also gates
+ * adding a profile and creating an environment set, which are the user's own settings.
+ */
+const TRUST_REQUIRED_FEATURES: Partial<Record<EnterpriseFeatureId, string>> = {
+  pluginInstall: 'Plugin loading',
+  recordEdit: 'Record editing',
+  scriptRunner: 'Running scripts'
+};
 
 const WRITE_FEATURES = new Set<EnterpriseFeatureId>([
   'recordEdit',

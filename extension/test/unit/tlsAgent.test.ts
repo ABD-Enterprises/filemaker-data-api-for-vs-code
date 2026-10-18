@@ -1,6 +1,7 @@
 import { mkdtemp, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { rootCertificates } from 'tls';
 import { describe, expect, it } from 'vitest';
 
 import { FMClientError } from '../../src/services/errors';
@@ -22,7 +23,24 @@ describe('createHttpsAgentForProfile', () => {
     const agent = createHttpsAgentForProfile({ caBundlePath: caPath });
 
     expect(agent.options.rejectUnauthorized).toBe(true);
-    expect(agent.options.ca).toBe(pem);
+    // The file's certificates are added to the default public roots, not substituted for them.
+    const ca = agent.options.ca as string[];
+    expect(ca[ca.length - 1]).toBe(pem);
+    expect(ca.length).toBeGreaterThan(50);
+    expect(ca).toEqual(expect.arrayContaining([...rootCertificates.slice(0, 3)]));
+  });
+
+  it('notices an edited CA file instead of reusing the agent cached for its path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fm-ca-'));
+    const caPath = join(root, 'ca.pem');
+    await writeFile(caPath, '-----BEGIN CERTIFICATE-----\nONE\n-----END CERTIFICATE-----\n', 'utf8');
+    const first = createHttpsAgentForProfile({ caBundlePath: caPath });
+    expect(createHttpsAgentForProfile({ caBundlePath: caPath })).toBe(first);
+
+    await writeFile(caPath, '-----BEGIN CERTIFICATE-----\nTWO-IS-LONGER\n-----END CERTIFICATE-----\n', 'utf8');
+    const second = createHttpsAgentForProfile({ caBundlePath: caPath });
+    expect(second).not.toBe(first);
+    expect((second.options.ca as string[]).at(-1)).toContain('TWO-IS-LONGER');
   });
 
   it('loads a CA bundle while disabling verification when both TLS overrides are set', async () => {
@@ -34,7 +52,7 @@ describe('createHttpsAgentForProfile', () => {
     const agent = createHttpsAgentForProfile({ allowSelfSigned: true, caBundlePath: caPath });
 
     expect(agent.options.rejectUnauthorized).toBe(false);
-    expect(agent.options.ca).toBe(pem);
+    expect((agent.options.ca as string[]).at(-1)).toBe(pem);
   });
 
   it('fails closed when the PEM file is missing', () => {

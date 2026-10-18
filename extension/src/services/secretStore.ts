@@ -30,15 +30,19 @@ export interface SecretStoreOptions {
   /**
    * Fallback strategy when vscode.SecretStorage throws or is unavailable.
    * - 'vscode-only' (default): rethrow; no fallback (preserves prior behavior)
-   * - 'workspace-state': encrypt and persist to Memento; for headless CI / remote agents
+   * - 'workspace-state': obfuscate and persist to Memento; for headless CI / remote agents.
+   *   The key comes from the machine id, which anyone who can read the Memento on this machine
+   *   can also read, so this hides secrets from casual viewing only. It is not protection
+   *   against local access.
    * - 'disabled': do not persist any secrets; reads return undefined; writes are no-ops
    */
   fallbackMode?: SecretFallbackMode;
   /** Memento used as the workspace-state fallback. Required when fallbackMode === 'workspace-state'. */
   workspaceState?: vscode.Memento;
   /**
-   * Stable identifier mixed into the encryption key. Defaults to empty string.
-   * Pass vscode.env.machineId at the call site so secrets cannot be decrypted on a different machine.
+   * Stable identifier mixed into the obfuscation key. Defaults to empty string.
+   * Pass vscode.env.machineId at the call site so a copied Memento does not open on a different
+   * machine. The machine id is not secret, so this does not protect against local access.
    */
   machineId?: string;
   /** Logger for fallback warnings. */
@@ -225,6 +229,8 @@ export class SecretStore {
     return this.workspaceState?.get<FallbackMap>(FALLBACK_KEY) ?? {};
   }
 
+  // AES-GCM under a key derived from the machine id (not a secret). This is obfuscation: it
+  // keeps secrets out of plain sight in the Memento but does not stop a local reader (ADR-0002).
   private encrypt(plaintext: string): FallbackEnvelope {
     const salt = crypto.randomBytes(16);
     const iv = crypto.randomBytes(12);

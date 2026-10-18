@@ -26,6 +26,8 @@ interface BatchServiceOptions {
   getConcurrency?: () => number;
   getDryRunDefault?: () => boolean;
   getPerformanceMode?: () => PerformanceMode;
+  /** CSV formula protection; on unless the user turned it off. */
+  getNeutralizeFormulas?: () => boolean;
   circuitBreakerRegistry?: CircuitBreakerRegistry;
 }
 
@@ -34,6 +36,7 @@ export class BatchService {
   private readonly getConcurrency: () => number;
   private readonly getDryRunDefault: () => boolean;
   private readonly getPerformanceMode: () => PerformanceMode;
+  private readonly getNeutralizeFormulas: () => boolean;
   private readonly circuitBreakerRegistry?: CircuitBreakerRegistry;
 
   public constructor(private readonly fmClient: FMClient, options?: BatchServiceOptions) {
@@ -41,6 +44,7 @@ export class BatchService {
     this.getConcurrency = options?.getConcurrency ?? (() => 4);
     this.getDryRunDefault = options?.getDryRunDefault ?? (() => true);
     this.getPerformanceMode = options?.getPerformanceMode ?? (() => 'standard');
+    this.getNeutralizeFormulas = options?.getNeutralizeFormulas ?? (() => true);
     this.circuitBreakerRegistry = options?.circuitBreakerRegistry;
   }
 
@@ -67,7 +71,7 @@ export class BatchService {
     let offset = typeof request.offset === 'number' ? request.offset : 1;
     let truncated = false;
     const jsonlWriter = format === 'jsonl' ? await createJsonlWriter(options.outputPath) : undefined;
-    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath) : undefined;
+    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath, { neutralizeFormulas: this.getNeutralizeFormulas() }) : undefined;
 
     try {
       while (exported < maxRecords) {
@@ -300,6 +304,27 @@ export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): 
   return parseCsvBatchUpdates(content);
 }
 
+/**
+ * Columns the export writes before the fields: exactly `recordId` and `modId`. They are record
+ * metadata, not fields: `recordId` names the record to edit, and `modId` is ignored on import
+ * because the update path sends no modification-id guard (FileMaker would reject it as an
+ * unknown field). Only surrounding whitespace and a byte-order mark are ignored. The match is
+ * case-sensitive on purpose: a layout field called `RecordID` or `ModId` is a field, and must
+ * never be mistaken for FileMaker's internal record id.
+ */
+function metaColumn(header: string): 'recordId' | 'modId' | undefined {
+  const normalized = header.replace(/^\uFEFF/, '').trim();
+  return normalized === 'recordId' || normalized === 'modId' ? normalized : undefined;
+}
+
+/**
+ * Reads a CSV written by the batch export (or any file with a `recordId` column) into
+ * updates. Every other column is a field name. Empty cells are skipped (they cannot be
+ * told apart from "leave unchanged"), and a cell that looks like JSON (an object, array,
+ * `true`, `false`, `null` or a plain number) is parsed as that JSON value, so a text field
+ * holding `12` is sent as the number 12. Text that merely starts like a formula was given a
+ * leading apostrophe by the export; it is taken off again here.
+ */
 function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   const rows = parseCsv(content);
   if (rows.length === 0) {
@@ -310,7 +335,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   if (!headers) {
     return [];
   }
-  const recordIdIndex = headers.findIndex((header) => header === 'recordId');
+  const recordIdIndex = headers.findIndex((header) => metaColumn(header) === 'recordId');
   if (recordIdIndex < 0) {
     throw new Error('CSV must include a "recordId" column.');
   }
@@ -325,7 +350,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
 
     const fieldData: Record<string, unknown> = {};
     headers.forEach((header, index) => {
-      if (header === 'recordId') {
+      if (metaColumn(header)) {
         return;
       }
 

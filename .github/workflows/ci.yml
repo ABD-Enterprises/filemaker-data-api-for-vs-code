@@ -102,6 +102,26 @@ jobs:
           name: extension-vsix
           path: artifacts/*.vsix
 
+      # The shipped bundles are minified and carry no source map; the external maps from this very
+      # build are kept as a release asset so a user-reported stack trace can be symbolicated.
+      - name: Collect source maps
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/maps
+          shopt -s nullglob
+          maps=(extension/dist/*.map)
+          if [ "${#maps[@]}" -eq 0 ]; then
+            echo "::error::No source maps were produced by the build; the release would have no symbolication asset."
+            exit 1
+          fi
+          (cd extension/dist && tar -czf "../../artifacts/maps/sourcemaps-${GITHUB_REF_NAME}.tgz" ./*.map)
+
+      - name: Upload source maps Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: extension-sourcemaps
+          path: artifacts/maps/*.tgz
+
   # Marketplace publishing is its own job so that nothing from the project's dependency tree runs
   # where the Azure login exists, and so that the repository write scope is not present. It runs
   # only for a tag that points at a commit on main whose version matches the tag, and it waits for
@@ -199,6 +219,12 @@ jobs:
           name: extension-vsix
           path: artifacts
 
+      - name: Download source maps Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: extension-sourcemaps
+          path: artifacts/maps
+
       # The self-hosted Linux runners do not ship the GitHub CLI. Place a gh
       # binary at a fixed job-scoped path: reuse one already on PATH, or
       # download the pinned release for the runner's architecture (no root
@@ -232,7 +258,7 @@ jobs:
         run: |
           VSIX_PATH="$(echo artifacts/*.vsix)"
           tools/release-notes.sh "$GITHUB_REF_NAME" \
-            | "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" \
+            | "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" artifacts/maps/*.tgz \
                 --title "$GITHUB_REF_NAME" \
                 --notes-file -
         env:

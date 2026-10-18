@@ -17,3 +17,6 @@ docs/api/
 
 # Claude Code session lock, never commit
 .claude/scheduled_tasks.lock
+
+# Local build, run and test logs
+artifacts/*.log

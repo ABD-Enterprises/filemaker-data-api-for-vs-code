@@ -86,7 +86,7 @@ describe('SecretStore', () => {
       );
     });
 
-    it('uses encrypted Memento when SecretStorage.store fails', async () => {
+    it('uses the obfuscated Memento fallback when SecretStorage.store fails', async () => {
       const failing = new FailingSecretStorage();
       const store = new SecretStore(failing as never, {
         fallbackMode: 'workspace-state',
@@ -99,7 +99,7 @@ describe('SecretStore', () => {
       await store.setPassword('p1', 'super-secret');
       await expect(store.getPassword('p1')).resolves.toBe('super-secret');
 
-      // Persisted as encrypted envelope, not plaintext
+      // Persisted as an obfuscated envelope, not plaintext
       const map = memento.get<Record<string, unknown>>('filemakerDataApiTools.fallbackSecrets.v1') ?? {};
       const keys = Object.keys(map);
       expect(keys).toHaveLength(1);
