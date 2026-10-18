@@ -21,7 +21,9 @@ function capturePanel(): { html: () => string } {
     asWebviewUri: vi.fn((uri: { fsPath: string }) => ({ toString: () => `https://cdn${uri.fsPath}` })),
     cspSource: 'https://cdn.test'
   };
-  Object.defineProperty(webview, 'html', { get: () => html, set: (value: string) => (html = value), configurable: true });
+  Object.defineProperty(webview, 'html', { get: () => html, set: (value: string) => {
+      html = value;
+    }, configurable: true });
   vi.mocked(vscode.window.createWebviewPanel).mockReturnValue({
     webview,
     reveal: vi.fn(),
