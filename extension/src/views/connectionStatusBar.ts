@@ -25,6 +25,15 @@ type TlsFields = Pick<ConnectionProfile, 'allowSelfSigned' | 'pinnedCertSha256'>
  */
 export function computeConnectionStatus(
   activeProfile: (Pick<ConnectionProfile, 'name' | 'database'> & Partial<TlsFields>) | undefined,
+  health?: SessionHealth,
+  version?: string
+): ConnectionStatusModel {
+  const model = renderStatus(activeProfile, health);
+  return version ? { ...model, tooltip: `${model.tooltip}\nFileMaker Data API Tools v${version}` } : model;
+}
+
+function renderStatus(
+  activeProfile: (Pick<ConnectionProfile, 'name' | 'database'> & Partial<TlsFields>) | undefined,
   health?: SessionHealth
 ): ConnectionStatusModel {
   if (!activeProfile) {
@@ -99,7 +108,8 @@ export class ConnectionStatusBar implements vscode.Disposable {
     private readonly health?: {
       getHealth(profileId: string): SessionHealth | undefined;
       onHealthChange(listener: (profileId: string, health: SessionHealth | undefined) => void): () => void;
-    }
+    },
+    private readonly version?: string
   ) {
     this.unsubscribe = health?.onHealthChange(() => this.refresh());
     this.item = vscode.window.createStatusBarItem(
@@ -122,7 +132,7 @@ export class ConnectionStatusBar implements vscode.Disposable {
     const activeProfileId = this.profileStore.getActiveProfileId();
 
     if (!activeProfileId) {
-      this.applyModel(computeConnectionStatus(undefined));
+      this.applyModel(computeConnectionStatus(undefined, undefined, this.version));
       return;
     }
 
@@ -138,11 +148,11 @@ export class ConnectionStatusBar implements vscode.Disposable {
     try {
       const profile = await this.profileStore.getProfile(profileId);
       if (!this.disposed && revision === this.revision) {
-        this.applyModel(computeConnectionStatus(profile, profile ? this.health?.getHealth(profile.id) : undefined));
+        this.applyModel(computeConnectionStatus(profile, profile ? this.health?.getHealth(profile.id) : undefined, this.version));
       }
     } catch {
       if (!this.disposed && revision === this.revision) {
-        this.applyModel(computeConnectionStatus(undefined));
+        this.applyModel(computeConnectionStatus(undefined, undefined, this.version));
       }
     }
   }

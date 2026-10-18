@@ -17,6 +17,7 @@ import { FMClientError } from '../../services/errors';
 import { validateCaBundleFile } from '../../utils/tlsProfile';
 import { reviewAndTrustCertificate } from '../../services/certificateTrust';
 import { describeNetworkFailure } from '../../utils/networkErrors';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 import {
   loadConnectionProfileTemplate,
   PROFILE_TEMPLATE_LOCKED_FIELDS,
@@ -1027,6 +1028,7 @@ export class ConnectionWizardPanel {
     <div id="status" class="status" role="status" aria-live="polite"></div>
   </form>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

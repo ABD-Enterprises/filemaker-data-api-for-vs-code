@@ -2,6 +2,8 @@ import * as os from 'node:os';
 
 import * as vscode from 'vscode';
 
+import { aboutFactsMarkdown } from '../about/aboutCommand';
+
 /**
  * Build a diagnostic dump as a markdown string. Designed to be pasted into
  * a bug report — credentials, tokens, server URLs, and other potentially
@@ -40,6 +42,16 @@ export async function buildDiagnosticReport(
   push(`| OS | ${os.platform()} ${os.release()} (${os.arch()}) |`);
   push(`| Node | ${process.version} |`);
   push(`| Workspace trusted | ${vscode.workspace.isTrusted} |`);
+  push('');
+
+  // Version facts (same block as FileMaker: About / Show Version) ---------
+  push('## Version details');
+  push('');
+  try {
+    push(aboutFactsMarkdown(context).markdown);
+  } catch {
+    push('_Version details are unavailable._');
+  }
   push('');
 
   // Active profile (redacted) -------------------------------------------

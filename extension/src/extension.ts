@@ -26,6 +26,8 @@ import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/ai
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
+import { activationLogLine, registerAboutCommand } from './about/aboutCommand';
+import { getRuntimeVersion, setRuntimeVersion } from './about/runtimeVersion';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
 import { registerEffectiveSettings } from './settings/effectiveSettings';
@@ -150,6 +152,12 @@ function createLazyCircuitBreakerRegistry(
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const settingsService = new SettingsService();
   const logger = new Logger('FileMaker Data API Tools', settingsService);
+  setRuntimeVersion((context.extension.packageJSON as { version?: string }).version);
+  try {
+    logger.info(activationLogLine(context));
+  } catch {
+    // The version line is a courtesy; it must never stop activation.
+  }
   const roleGuard = new RoleGuard(logger);
   await roleGuard.applyContexts();
 
@@ -376,6 +384,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const filemakerExplorerTree = vscode.window.createTreeView('filemakerExplorer', {
     treeDataProvider: fmExplorerProvider
   });
+  filemakerExplorerTree.description = `v${getRuntimeVersion()}`;
   const layoutInspectorTree = vscode.window.createTreeView('filemakerLayoutInspector', {
     treeDataProvider: layoutInspectorProvider
   });
@@ -405,7 +414,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Persistent connection-state status bar — sits at priority 105 (above the
   // offline badge, below the transient connect-progress item). Created first
   // so we can hand its refresh callback to the commands registry.
-  const connectionStatusBar = new ConnectionStatusBar(profileStore, fmClient);
+  const connectionStatusBar = new ConnectionStatusBar(profileStore, fmClient, getRuntimeVersion());
 
   const coreCommandDisposables = registerCoreCommands({
     context,
@@ -872,7 +881,8 @@ function registerWalkthroughCommands(
         logger.warn('Failed to open user guide.', { error });
       }
     }),
-    registerShowDiagnosticsCommand(context)
+    registerShowDiagnosticsCommand(context),
+    registerAboutCommand(context)
   );
 }
 

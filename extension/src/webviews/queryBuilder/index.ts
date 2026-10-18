@@ -20,6 +20,7 @@ import {
   toRecord
 } from '../common/messageValidation';
 import { isFeatureEnabled } from '../../utils/policySetting';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface QueryBuilderOpenOptions {
   profileId?: string;
@@ -1053,6 +1054,7 @@ export class QueryBuilderPanel {
     </details>
   </div>
 
+  ${versionFooterHtml()}
   <script nonce="${nonce}" src="${findFormUri}"></script>
   <script nonce="${nonce}" src="${cellTextUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>

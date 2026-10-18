@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Add `FileMaker: About / Show Version` and show the extension version in the status bar tooltip, Explorer title, webview footers, Output channel and diagnostics report; bug report template asks for the copied block.
 - Add `FileMaker: Show Effective Settings` and a once-per-setting notice when a workspace value is ignored; label every setting `User settings only.`, `Workspace can only make this stricter.` or `Per workspace.`; explain savedQueries.scope, snapshots storage and typegen output dir; docs section on User vs Workspace settings. Notices use fixed text only; Restricted Mode and multi-root are explained. Explanation only: no enforcement change.
 - Test Connection ladder (productInfo, databases, sign-in) naming the failed step; status bar shows real session health.
 - Pin one server certificate by SHA-256 (trust dialog from Test Connection/Connect/errors), refuse changed or expired pinned certificates, no checks disabled except the legacy flag, legacy profiles warned and convertible; system certificates included when Node can read them.

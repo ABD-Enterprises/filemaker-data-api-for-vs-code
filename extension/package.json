@@ -200,6 +200,11 @@
         "category": "FileMaker"
       },
       {
+        "command": "filemakerDataApiTools.about",
+        "title": "About / Show Version",
+        "category": "FileMaker"
+      },
+      {
         "command": "filemakerDataApiTools.addConnectionProfile",
         "title": "Add Connection Profile",
         "category": "FileMaker"

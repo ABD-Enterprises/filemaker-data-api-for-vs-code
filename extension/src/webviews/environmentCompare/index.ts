@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import type { EnvironmentCompareResult, LayoutEnvironmentDiffResult } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
+import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface EnvironmentComparePanelPayload {
   compare?: EnvironmentCompareResult;
@@ -69,6 +70,7 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
     .warn { background: #fef3c7; color: #7c2d12; }
     .bad { background: #fee2e2; color: #7f1d1d; }
     details { margin-bottom: 6px; }
+    .fm-version { color: #64748b; font-size: 11px; padding: 0 16px 12px; }
     summary { cursor: pointer; font-weight: 600; }
   </style>
 </head>
@@ -77,6 +79,7 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
     ${payload.compare ? renderCompare(payload.compare) : ''}
     ${payload.layoutDiff ? renderLayoutDiff(payload.layoutDiff) : ''}
   </div>
+  ${versionFooterHtml()}
 </body>
 </html>`;
 }

@@ -741,9 +741,15 @@ The most common first-run failure is a **certificate error** (the first row of t
 | CSV cells start with an apostrophe | See [apostrophes in CSV files](#batch-export-and-batch-update). |
 | `AI: off` in the status bar | AI tools are off by default. See [Using AI with FileMaker](#using-ai-with-filemaker). |
 
+### Which version am I running?
+
+Run **FileMaker: About / Show Version** from the Command Palette. It shows the extension version, the build (commit and date), your VS Code version, operating system, remote window, workspace trust and language. The same version appears without running anything: in the tooltip of the **FileMaker** status bar item, next to the **FileMaker Explorer** title (for example `v1.4.0`), at the bottom of each panel, and in the first line the extension writes to the Output panel when it starts.
+
+The About message has three buttons: **Copy for bug report** (a short block of exactly those facts, plus whether AI tools and enterprise mode are on; it never holds a server address, profile name, user name, token or folder path), **Open Changelog**, and **Report an Issue** (opens the bug form with the version fields filled in). **Show Diagnostics** includes the same block.
+
 ### Reporting a problem
 
-Open an issue at <https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues> and include: the extension and VS Code versions, your operating system, the server type and version, direct or proxy mode, the steps, and the redacted log or the **Show Diagnostics** report. Do not open a public issue for a security problem: see [SECURITY.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md).
+Open an issue at <https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues> and include: the extension and VS Code versions (run **About / Show Version** and choose **Copy for bug report**), your operating system, the server type and version, direct or proxy mode, the steps, and the redacted log or the **Show Diagnostics** report. Do not open a public issue for a security problem: see [SECURITY.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md).
 
 ---
 
