@@ -1,6 +1,6 @@
 # ADR-0004: AI integration (schema context, language-model tools, MCP)
 
-- Status: Proposed (revised after an independent security review)
+- Status: Accepted. Phase 1 shipped in #378; Phase 2 (tool core and language-model tools) is implemented, see "Phase 2 implementation notes". Phase 3 (MCP) is not started.
 - Date: 2026-10-18
 
 ## Context
@@ -51,6 +51,23 @@ Phase 1 involves no model access to data and is the first to ship.
 ### Phase 2: VS Code language-model tools
 
 Register the read tools (`fm_list_layouts`, `fm_describe_layout`, `fm_list_scripts`, `fm_find_records`, `fm_get_record`, `fm_explain_error`) with `vscode.lm.registerTool`, and the write and script tools only when their switches are on. They call `AiToolService` and nothing else. The write confirm step is a host-side dry run; writes also expose a `dryRun` option that returns the diff without sending it. Because it returns old values it is a read path: it goes through layout consent, the quota, hidden-field removal and redaction. Finds have no dry run.
+
+#### Phase 2 implementation notes
+
+Decisions where this ADR was silent, and the one place the tool results differ from rule 6:
+
+- Code: `extension/src/ai/aiToolService.ts` is the transport-free core (policy, consent, caps, redaction, audit). `aiRegistration.ts` is the only VS Code language-model transport and adds no policy. An MCP transport in phase 3 calls `AiToolService.invoke(name, input, { signal })` and nothing else.
+- VS Code cannot tell a tool who called it, so dialogs say "an AI tool" and the ADR's "claimed client" is omitted.
+- VS Code's own tool confirmation can be set to always allow, so no tool uses `prepareInvocation` confirmation as a control. Every write asks in `invoke` with `showWarningMessage({ modal: true })`.
+- Names in results: layout and script names go through the phase 1 allowlist (a name that fails is shown as `[name omitted]` and cannot be used); field names the model must send back are returned exactly unless they are over 128 characters or contain control, format or separator characters. A layout such as `Orders/Archive` is therefore listed but not usable.
+- Redaction applies to record values, script results and error text, never to names, using the phase 1 decision (it would rewrite names such as "Basic Info").
+- `scriptAllowlist` and `readableLayouts` are maps keyed by connection profile id. `hiddenFields` is the union of every scope, so a workspace can add names but not remove the user's.
+- The write cap counts write attempts that reach a dialog (declined ones too), which also limits dialog fatigue. The kill switch only switches; switching back on asks in a modal and does not reset anything. Counters and layout approvals reset only with **Start New AI Session**, which also asks.
+- A write is limited to 10 fields and 300 characters per value so that the dialog shows all of it; a larger write is refused. Policy is checked again after every dialog before anything is sent. The record quota is reserved before a request and refunded afterwards, so parallel calls cannot exceed it.
+- Repeating-field keys such as `Salary(2)` are matched to the hidden entry `Salary` (I could not confirm the exact key format on the Claris Data API Guide pages, so both forms are hidden). Fields named `omit` or `__proto__` are not usable.
+- A declined layout is not asked about again in the same session.
+- Write values are strings; a value containing `***` or `[hidden]` is refused. `fm_run_script` needs a layout because the Data API runs scripts in the context of a layout.
+- `fm_explain_error` is answered from a short built-in table and makes no request.
 
 ### Phase 3: MCP for other clients
 

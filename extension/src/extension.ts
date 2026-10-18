@@ -14,6 +14,11 @@ import { registerPluginCommands } from './commands/plugins';
 import { registerRecordEditCommands } from './commands/recordEdit';
 import { registerSavedQueriesCommands } from './commands/savedQueries';
 import { registerSchemaCommands } from './commands/schema';
+import { AuditLog } from './ai/aiAudit';
+import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
+import { isAiFeatureSwitchOn, readAiSettings } from './ai/aiSettings';
+import { AiToolService } from './ai/aiToolService';
+import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/aiTools';
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
@@ -423,6 +428,61 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger
   });
 
+  // AI tools (ADR-0004 phase 2). The core owns all policy; the controller only registers
+  // language-model tools for what the core offers right now.
+  const aiAudit = new AuditLog(() => auditLogPath(context.globalStorageUri.fsPath));
+  const aiService = new AiToolService({
+    settings: () => readAiSettings(vscode.workspace.getConfiguration('filemaker')),
+    featureSwitchOn: () => isAiFeatureSwitchOn(vscode.workspace.getConfiguration('filemaker')),
+    featureGuard: (feature) => roleGuard.getFeatureGuard(feature),
+    isTrusted: () => vscode.workspace.isTrusted,
+    isOffline: () => roleGuard.isOfflineModeEnabled(),
+    getProfile: (id) => profileStore.getProfile(id),
+    client: fmClient,
+    schema: schemaService,
+    ui: {
+      confirm: async (spec) =>
+        (await vscode.window.showWarningMessage(spec.message, { modal: true, detail: spec.detail }, spec.confirmLabel)) ===
+        spec.confirmLabel,
+      input: async (spec) =>
+        vscode.window.showInputBox({ title: spec.title, prompt: spec.prompt, ignoreFocusOut: true })
+    },
+    audit: aiAudit,
+    now: () => Date.now()
+  });
+  const aiController = new AiToolsController(aiService, {
+    lm: getLanguageModelApi(),
+    setContext: (key, value) => vscode.commands.executeCommand('setContext', key, value)
+  });
+  const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore });
+  const refreshAi = (): void => {
+    aiController.refresh();
+    void aiStatusBar.refresh();
+  };
+  const aiDisposables = [
+    aiController,
+    aiStatusBar,
+    ...registerAiToolCommands({
+      service: aiService,
+      controller: aiController,
+      audit: aiAudit,
+      profileStore,
+      roleGuard,
+      statusBar: aiStatusBar
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(refreshAi),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event.affectsConfiguration('filemaker.ai') ||
+        event.affectsConfiguration('filemaker.features.ai') ||
+        event.affectsConfiguration('filemaker.offline')
+      ) {
+        refreshAi();
+      }
+    })
+  ];
+  refreshAi();
+
   const typeGenDisposables = registerTypeGenCommands({
     profileStore,
     fmClient,
@@ -525,6 +585,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ...recordEditDisposables,
     ...typeGenDisposables,
     ...aiContextDisposables,
+    ...aiDisposables,
     ...batchDisposables,
     ...jobsDisposables,
     ...historyDisposables,

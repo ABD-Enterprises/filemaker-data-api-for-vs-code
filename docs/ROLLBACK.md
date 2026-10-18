@@ -24,9 +24,13 @@ Current `vsce` help documents unpublishing the extension as a whole, not safely 
 4. If the release is severe enough to hide, unpublish the extension:
    ```bash
    cd extension
-   # sign in first with a short-lived token: `vsce login SureForgeTech`, or use the
-   # Marketplace management page (https://marketplace.visualstudio.com/manage)
-   npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools
+   # Preferred: sign in with Microsoft Entra ID, then let vsce use that identity (no stored token):
+   #   az login
+   #   npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools --azure-credential
+   # Or use the Marketplace management page: https://marketplace.visualstudio.com/manage
+   # Note: `vsce login SureForgeTech` stores a personal access token (PAT) on this machine
+   # until you run `vsce logout`; it is not short-lived. Avoid it, and remove it afterwards.
+   npx @vscode/vsce unpublish SureForgeTech.filemaker-data-api-tools --azure-credential
    ```
 5. For non-interactive emergency use by a trusted local maintainer only:
    ```bash

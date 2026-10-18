@@ -68,6 +68,12 @@ vi.mock('vscode', () => {
       file: vi.fn((value: string) => createUri(value)),
       joinPath: vi.fn((_base: { fsPath: string }, ...segments: string[]) => createUri(segments.join('/')))
     },
+    LanguageModelTextPart: class {
+      constructor(public value: string) {}
+    },
+    LanguageModelToolResult: class {
+      constructor(public content: unknown[]) {}
+    },
     languages: {
       createDiagnosticCollection: vi.fn(() => ({
         set: vi.fn(),

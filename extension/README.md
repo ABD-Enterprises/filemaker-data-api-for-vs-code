@@ -103,6 +103,23 @@ Credentials stay in VS Code `SecretStorage`; they are never written to workspace
 - Workspace trust and role guards protect write workflows
 - Webviews use CSP nonces and do not call FileMaker endpoints directly
 
+## AI tools
+
+Off by default. Turn on `filemaker.ai.enabled` in your **user** settings (a workspace setting cannot), pick a connection with **FileMaker: Set AI Access for Connection**, and AI tools in VS Code (for example Copilot agent mode) can list layouts and scripts, describe a layout, find and read records, and explain error codes. With `filemaker.ai.allowWrites` they can also create, edit and delete one record at a time, and with `filemaker.ai.allowScripts` run scripts you put on `filemaker.ai.scriptAllowlist`.
+
+What protects you, and what does not:
+
+- **Read-only first.** Write and script tools are not offered until you switch them on. A connection has to be set to AI access "read" or "write" first. The status bar shows the effective state for the chosen connection.
+- **You approve.** The first read of each layout asks once per session (at most 20 layouts a session). Every write asks in a dialog that VS Code cannot set to "always allow". A write is limited to 10 fields and 300 characters per value so the dialog can show every field name and every new value in full; anything larger is refused. A long old value is shown cut, with the number of characters left out. Delete asks you to type the record id. A record changed in the meantime is not overwritten, and if you switch AI off while a dialog is open, nothing is sent. A call whose values already match the record writes nothing and asks nothing; it still counts one record against the read quota.
+- **Limits.** 50 records per call and 500 per session (reserved before the request is sent, so parallel calls cannot exceed it), 30 calls per minute, 10 write attempts per session and 3 per minute (a declined attempt counts). Switching the kill switch off and on does not reset these; **FileMaker: Start New AI Session** does, after asking you. The status bar item shows the state; one click switches everything off, and switching back on asks you. **FileMaker: Show AI Activity** lists what was done (no field values).
+- **Use a restricted FileMaker account.** FileMaker privilege sets are the only control that does not depend on the AI model or on you. Connect with a dedicated account with a read-only privilege set.
+- **Data goes to the model provider.** Anything a tool returns is sent to the AI model you chose, and can leave through any shell, web or git tool the same agent has. Field values and field names are text from your database; a hostile value or name can try to steer the agent. Container fields, container streaming URLs and the server address are left out of results; other text in a value is passed on.
+- **Hidden fields are best effort.** `filemaker.ai.hiddenFields` hides fields by name (repetitions such as `Salary(2)` included). It does not stop disclosure through a calculation, a summary field or a script.
+- **Keep policy in user settings.** A workspace file can be edited by an agent that has file-editing tools. Put `filemaker.ai.hiddenFields` and enterprise settings such as `filemaker.features.ai.enabled` in your **user** settings (or in an enterprise-managed location), not only in `.vscode/settings.json` or `.vscode/filemaker.config.json`. The `filemaker.ai.*` settings that widen access already ignore workspace values.
+- **Tool names.** The tools are called `fm_list_layouts`, `fm_find_records` and so on. VS Code tool names share one namespace across extensions, so another extension that registers the same name would conflict; the prefix `fm_` makes that unlikely, and it was not changed because the names are part of ADR-0004.
+
+See `docs/DATA_HANDLING.md` and ADR-0004 for the full list.
+
 ## Common Commands
 
 | Command | Purpose |

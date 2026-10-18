@@ -46,6 +46,8 @@ interface RequestOptions {
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean>;
   signal?: AbortSignal;
+  /** Refuse a response body larger than this (axios maxContentLength). */
+  maxResponseBytes?: number;
 }
 
 interface HistoryContext {
@@ -64,6 +66,8 @@ interface RequestTrace {
 
 interface ClientRequestControl {
   signal?: AbortSignal;
+  /** For list, get and find calls: refuse a response body larger than this many bytes. */
+  maxResponseBytes?: number;
 }
 
 export interface FMClientContainerUploadOptions {
@@ -313,7 +317,8 @@ export class FMClient {
           {
             method: 'GET',
             path: '/layouts',
-            signal: control?.signal
+            signal: control?.signal,
+            maxResponseBytes: control?.maxResponseBytes
           },
           true,
           trace
@@ -348,7 +353,8 @@ export class FMClient {
           {
             method: 'GET',
             path: '/scripts',
-            signal: control?.signal
+            signal: control?.signal,
+            maxResponseBytes: control?.maxResponseBytes
           },
           true,
           trace
@@ -382,7 +388,8 @@ export class FMClient {
           {
             method: 'GET',
             path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
-            signal: control?.signal
+            signal: control?.signal,
+            maxResponseBytes: control?.maxResponseBytes
           },
           true,
           trace
@@ -442,7 +449,8 @@ export class FMClient {
               method: 'POST',
               path: `/layouts/${encodeURIComponent(layout)}/_find`,
               data: payload,
-              signal: control?.signal
+              signal: control?.signal,
+              maxResponseBytes: control?.maxResponseBytes
             },
             true,
             trace
@@ -1026,6 +1034,7 @@ export class FMClient {
         signal: request.signal,
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
+        ...(request.maxResponseBytes ? { maxContentLength: request.maxResponseBytes } : {}),
         httpsAgent: createHttpsAgentForProfile(profile)
       };
 

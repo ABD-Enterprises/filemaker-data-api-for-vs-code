@@ -144,6 +144,8 @@ function validateConnectionProfile(
     apiVersionPath: profile.apiVersionPath?.trim() || undefined,
     proxyEndpoint: profile.proxyEndpoint?.trim() || undefined,
     allowSelfSigned: profile.allowSelfSigned === true ? true : undefined,
-    caBundlePath: profile.caBundlePath?.trim() || undefined
+    caBundlePath: profile.caBundlePath?.trim() || undefined,
+    // Anything but a known value is "none"; the stored default is no key at all.
+    aiAccess: profile.aiAccess === 'read' || profile.aiAccess === 'write' ? profile.aiAccess : undefined
   };
 }

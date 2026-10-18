@@ -20,7 +20,8 @@ export type EnterpriseFeatureId =
   | 'environmentExport'
   | 'pluginInstall'
   | 'scriptRunner'
-  | 'writeOperations';
+  | 'writeOperations'
+  | 'ai';
 
 export interface EnvironmentSetSeed {
   name: string;
@@ -311,7 +312,8 @@ function normalizeConfig(parsed: Record<string, unknown>): EnterpriseConfigFile 
             value === 'environmentExport' ||
             value === 'pluginInstall' ||
             value === 'scriptRunner' ||
-            value === 'writeOperations'
+            value === 'writeOperations' ||
+            value === 'ai'
         )
         .filter((value, index, self) => self.indexOf(value) === index)
     : undefined;

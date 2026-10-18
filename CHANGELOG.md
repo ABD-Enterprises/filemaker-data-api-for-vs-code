@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- AI tools for VS Code language-model clients (ADR-0004 phase 2): `AiToolService` tool core (policy, layout consent, record and write caps, hidden-field filter, host-built write dialogs with fresh modId, delete by typed id, script allowlist, redaction, audit log), registered as language-model tools only when the user-scope switches allow; profile `aiAccess`, `ai` enterprise feature id, kill-switch status bar item, **Set AI Access for Connection** and **Show AI Activity** commands.
 - **FileMaker: Write AI Context** (ADR-0004 phase 1): writes a size-limited, allowlist-rendered Markdown summary of selected layouts, fields and script names for AI tools, outside the repository by default, with a user-scope-only `filemaker.ai.contextPath`, confined paths and marker-section updates.
 - Record Editor edit-conflict protection: saving sends the record's loaded `modId`, FileMaker refuses the edit if it changed (error 306), and the editor shows the fields that changed, keeps the draft, and offers a reload. Batch update is unchanged.
 - Query Builder form-based find editor, actionable results (View/Edit, found-count summary, page sorting, copy as table), theme-aware styling, grouped settings with one-click migration, clearer command titles, two more walkthrough steps, and progress for code generation and environment compare (#364).
