@@ -229,7 +229,7 @@ export function registerFmWebProjectCommands(
         }
 
         const bridge = await fmBridgeServer.ensureStarted();
-        await fmWebRuntimeGenerator.writeBridgeEnv(bridge.baseUrl);
+        await fmWebRuntimeGenerator.writeBridgeEnv(bridge.baseUrl, fmBridgeServer.getSessionToken());
 
         const runtimeRoot = fmWebRuntimeGenerator.getGeneratedRuntimeRoot();
         // The folder can arrive with the repository, including its own package.json, and npm

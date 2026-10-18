@@ -72,6 +72,7 @@ export function RuntimeLayoutClient({
         layoutName: layout.name,
         fmLayoutName: layout.fmLayoutName,
         bridgeBaseUrl: process.env.NEXT_PUBLIC_FMWEB_BRIDGE_URL,
+        bridgeToken: process.env.NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN,
         currentRecordId: runtime.currentRecord?.recordId,
         currentRecordIndex: runtime.currentIndex,
         currentFoundSetRecordIds: runtime.foundSet.map((record) => record.recordId),

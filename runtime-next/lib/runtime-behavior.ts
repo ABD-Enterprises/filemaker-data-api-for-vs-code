@@ -8,6 +8,7 @@ export interface RuntimeBehaviorContext {
   layoutName: string;
   fmLayoutName?: string;
   bridgeBaseUrl?: string;
+  bridgeToken?: string;
   currentRecordId?: string;
   currentRecordIndex?: number;
   currentFoundSetRecordIds?: string[];
@@ -62,7 +63,7 @@ export async function executeRuntimeBehaviorAction(
       };
     }
 
-    const bridgeClient = new RuntimeBridgeClient(context.bridgeBaseUrl, context.fetchFn);
+    const bridgeClient = new RuntimeBridgeClient(context.bridgeBaseUrl, context.fetchFn, context.bridgeToken);
     if (!bridgeClient.isConfigured()) {
       return {
         ok: true,

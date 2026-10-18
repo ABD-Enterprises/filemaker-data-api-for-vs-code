@@ -36,7 +36,11 @@ export function useRuntimeDataController(
   options?: RuntimeDataControllerOptions
 ): RuntimeDataState & RuntimeDataActions {
   const bridgeClient = React.useMemo(
-    () => new RuntimeBridgeClient(process.env.NEXT_PUBLIC_FMWEB_BRIDGE_URL),
+    () => new RuntimeBridgeClient(
+        process.env.NEXT_PUBLIC_FMWEB_BRIDGE_URL,
+        undefined,
+        process.env.NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN
+      ),
     []
   );
 

@@ -29,8 +29,20 @@ export interface RuntimeRunScriptResponse {
   messages: Array<{ code: string; message: string }>;
 }
 
+export const BRIDGE_TOKEN_HEADER = 'X-FM-Bridge-Token';
+
 export class RuntimeBridgeClient {
-  public constructor(private readonly baseUrl?: string, private readonly fetchFn: typeof fetch = fetch) {}
+  /**
+   * `bridgeToken` is the per-session token the extension's bridge server requires in the
+   * `X-FM-Bridge-Token` header; without it every request is refused with 403. The default
+   * `fetchFn` wraps the global `fetch` so it is not called detached from `window` (browsers
+   * reject that with "Illegal invocation").
+   */
+  public constructor(
+    private readonly baseUrl?: string,
+    private readonly fetchFn: typeof fetch = (input, init) => fetch(input, init),
+    private readonly bridgeToken?: string
+  ) {}
 
   public isConfigured(): boolean {
     return Boolean(normalizeBridgeBaseUrl(this.baseUrl));
@@ -78,7 +90,8 @@ export class RuntimeBridgeClient {
     const response = await this.fetchFn(`${normalizedBaseUrl}/${route}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(this.bridgeToken ? { [BRIDGE_TOKEN_HEADER]: this.bridgeToken } : {})
       },
       body: JSON.stringify(payload)
     });

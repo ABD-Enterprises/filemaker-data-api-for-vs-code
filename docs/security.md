@@ -103,8 +103,13 @@ request with:
 
 The trust boundary is **the bridge token + localhost binding**. Any
 local process that obtains the token can call the bridge as if it
-were the trusted runtime. The token is held only in the extension
-host's memory and is not written to disk; rate limiting bounds the
+were the trusted runtime. The token lives in the extension host's
+memory and, so the preview app can send it, in the generated runtime's
+`.env.local` (`.fmweb/generated/runtime-next/.env.local`, owner-only,
+with a `.gitignore` beside it) as `NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN`. That
+name means Next.js also puts it in the preview app's browser bundle, so
+treat the preview page like any other local client of the bridge. A new
+token is generated each time the bridge starts; rate limiting bounds the
 blast radius if it is exfiltrated.
 
 ## What the extension does *not* protect against

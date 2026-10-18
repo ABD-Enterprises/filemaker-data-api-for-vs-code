@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, readFile, writeFile } from 'fs/promises';
+import { access, chmod, mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type * as vscode from 'vscode';
@@ -19,6 +19,9 @@ interface GeneratedLayoutSummary {
   sourcePath: string;
   outputPath: string;
 }
+
+/** Values that are safe to write to a `.env` line: no whitespace, quotes or line breaks. */
+const SAFE_ENV_VALUE = /^[A-Za-z0-9:/._~%+=@-]+$/;
 
 export class FmWebRuntimeGenerator {
   public constructor(
@@ -127,37 +130,56 @@ export class FmWebRuntimeGenerator {
     };
   }
 
-  public async writeBridgeEnv(baseUrl: string): Promise<string> {
+  /**
+   * Writes the bridge address and its per-session token into the generated runtime's
+   * `.env.local` so the preview app can reach the bridge (it refuses requests without the
+   * token). The file holds a secret: it is created owner-only and a `.gitignore` next to it
+   * keeps it out of git. Nothing here logs the token.
+   */
+  public async writeBridgeEnv(baseUrl: string, token?: string): Promise<string> {
     this.assertWorkspaceTrusted();
+    if (!SAFE_ENV_VALUE.test(baseUrl) || (token !== undefined && !SAFE_ENV_VALUE.test(token))) {
+      throw new Error('The bridge address or token contains characters that cannot be written to an env file.');
+    }
+
     const runtimeRoot = this.getGeneratedRuntimeRoot();
     await mkdir(runtimeRoot, { recursive: true });
+    await this.ensureRuntimeGitignore(runtimeRoot);
     const envPath = path.join(runtimeRoot, '.env.local');
 
-    const nextLine = `NEXT_PUBLIC_FMWEB_BRIDGE_URL=${baseUrl}`;
-    if (!(await exists(envPath))) {
-      await writeFile(envPath, `${nextLine}\n`, 'utf8');
-      return envPath;
-    }
+    const managed: Record<string, string | undefined> = {
+      NEXT_PUBLIC_FMWEB_BRIDGE_URL: baseUrl,
+      NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN: token
+    };
 
-    const existing = await readFile(envPath, 'utf8');
-    const lines = existing.split(/\r?\n/);
-    let replaced = false;
-    const nextLines = lines.map((line) => {
-      if (!line.startsWith('NEXT_PUBLIC_FMWEB_BRIDGE_URL=')) {
-        return line;
-      }
+    const existing = (await exists(envPath)) ? await readFile(envPath, 'utf8') : '';
+    const kept = existing
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0 && !Object.keys(managed).some((key) => line.startsWith(`${key}=`)));
+    const lines = [
+      ...kept,
+      ...Object.entries(managed)
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+        .map(([key, value]) => `${key}=${value}`)
+    ];
 
-      replaced = true;
-      return nextLine;
-    });
-
-    if (!replaced) {
-      nextLines.push(nextLine);
-    }
-
-    const normalized = `${nextLines.filter((line) => line.length > 0).join('\n')}\n`;
-    await writeFile(envPath, normalized, 'utf8');
+    await writeFile(envPath, `${lines.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
+    await chmod(envPath, 0o600).catch(() => undefined);
     return envPath;
+  }
+
+  private async ensureRuntimeGitignore(runtimeRoot: string): Promise<void> {
+    const gitignorePath = path.join(runtimeRoot, '.gitignore');
+    const required = ['.env.local', '.env*.local', 'node_modules', '.next'];
+    const current = (await exists(gitignorePath)) ? await readFile(gitignorePath, 'utf8') : '';
+    const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+    const missing = required.filter((line) => !present.has(line));
+    if (missing.length === 0) {
+      return;
+    }
+
+    const prefix = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
+    await writeFile(gitignorePath, `${current}${prefix}${missing.join('\n')}\n`, 'utf8');
   }
 
   public getGeneratedRuntimeRoot(): string {
