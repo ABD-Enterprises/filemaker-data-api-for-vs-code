@@ -123,9 +123,12 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
   const info = getFileMakerErrorInfo(code);
   // A FileMaker credentials problem is an authentication failure whatever the HTTP status was.
   const kind: NormalizedErrorKind = info?.category === 'credentials' ? 'auth' : inferKind(status);
-  const resolvedMessage = fmMessage
-    ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}${info?.advice ? ` ${info.advice}` : ''}`
-    : buildFallbackAxiosMessage(error, options, status);
+  const rejectedLogin = info?.category === 'credentials' || status === 401;
+  const resolvedMessage =
+    (fmMessage
+      ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}${info?.advice ? ` ${info.advice}` : ''}`
+      : buildFallbackAxiosMessage(error, options, status)) +
+    (rejectedLogin ? cloudSignInNote(error.config?.url) : '');
 
   // Retry only what can change: a transport problem, or a server error that is not a FileMaker
   // answer. FileMaker's own errors (HTTP 500 with a code) are answers, not outages, unless the
@@ -224,6 +227,23 @@ function statusHint(status: number): string | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * FileMaker Cloud signs the Data API in with a Claris ID token (an `FMID` header), which this
+ * extension does not implement; a Claris ID account name and password are rejected there like a wrong
+ * password. Say so when the host looks like FileMaker Cloud (`*.filemaker-cloud.com`, which covers
+ * `*.account.filemaker-cloud.com`; the pattern is from Claris examples, not a documented rule).
+ */
+function cloudSignInNote(url: string | undefined): string {
+  try {
+    if (url && /\.filemaker-cloud\.com$/i.test(new URL(url).hostname)) {
+      return ' This looks like a FileMaker Cloud server. Cloud signs in with a Claris ID token, which this extension does not support yet, so the account and password you entered cannot work there even if they are correct.';
+    }
+  } catch {
+    // not a URL: no note
+  }
+  return '';
 }
 
 /** `Retry-After` as milliseconds: delay-seconds or an HTTP date; capped at five minutes. */

@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Claris ID / FileMaker Cloud hint on rejected sign-in; user guide 404 and setting-name fixes.
 - Proxy error envelope with fmCode/status (documented), HTML replies reported, no redirects.
 - Invalidate the schema cache on new sign-in/sign-out/profile save.
 - Batch: retry only transient failures (honour Retry-After), no breaker trips on business errors, stop on privilege/credential errors with a reason; truncated only when more rows exist.

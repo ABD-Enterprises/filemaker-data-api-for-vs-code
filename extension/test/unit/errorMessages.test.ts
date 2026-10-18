@@ -82,4 +82,27 @@ describe('error messages and retry decisions', () => {
     expect(elsewhere).not.toContain('x=1');
     expect(normalizeError(redirect('http://fm.example.com/a', 'https://fm.example.com/a'), { fallbackMessage: 'x' }).message).toMatch(/different address|same server/);
   });
+
+  it('says Claris ID sign-in is not supported when a rejected login is against a FileMaker Cloud host', () => {
+    const at = (url: string, status: number, data: unknown) => {
+      const config = { headers: new AxiosHeaders(), url };
+      return new AxiosError('x', 'ERR_BAD_REQUEST', config as never, {}, { status, statusText: '', headers: {}, config: config as never, data } as never);
+    };
+    const cloud = normalizeError(
+      at('https://myhost.account.filemaker-cloud.com/fmi/data/vLatest/databases/D/sessions', 401, fm('212', 'Invalid user account and/or password')),
+      { fallbackMessage: 'x' }
+    ).message;
+    expect(cloud).toMatch(/FileMaker Cloud.*Claris ID token.*does not support/s);
+    const onPremise = normalizeError(
+      at('https://fm.example.com/fmi/data/vLatest/databases/D/sessions', 401, fm('212', 'Invalid user account and/or password')),
+      { fallbackMessage: 'x' }
+    ).message;
+    expect(onPremise).not.toMatch(/Cloud/);
+    // Only for a rejected login, not for, say, a missing layout.
+    const other = normalizeError(
+      at('https://myhost.account.filemaker-cloud.com/fmi/data/vLatest/databases/D/layouts/X', 500, fm('105', 'Layout is missing')),
+      { fallbackMessage: 'x' }
+    ).message;
+    expect(other).not.toMatch(/Claris ID/);
+  });
 });

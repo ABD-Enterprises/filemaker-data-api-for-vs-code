@@ -318,7 +318,7 @@ All commands are available from the Command Palette. Type `FileMaker` to see the
 | "Connection refused" or timeout | Verify the server URL is correct and reachable. Check your firewall/VPN. |
 | HTTP 401 | Reconnect and re-enter your password. Verify the account has `fmrest` privilege. |
 | HTTP 403 | Check that the account has access to the specific layouts and scripts. |
-| HTTP 404 on metadata | Some servers don't expose metadata endpoints. Use the manual field entry flow. |
+| HTTP 404 (a plain 404, no FileMaker error code) | Nothing answered at that address. Check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled in the Admin Console (Connectors). A 404 that carries a FileMaker error code, or HTTP 405/501, means the server does not offer metadata for that layout: use the manual field entry flow. |
 | Layouts not showing | Click refresh in the Explorer, or run **FileMaker: Refresh Schema Cache**. |
 | Features disabled | You may be in an untrusted workspace. Trust the workspace via VS Code's trust dialog. |
 | Extension not visible | Check that the VSIX installed correctly. Look for "FileMaker Data API Tools" in the Extensions panel. |
@@ -331,7 +331,7 @@ Open VS Code Settings (`Cmd+,` / `Ctrl+,`) and search for "filemaker" to see all
 
 | Setting | Default | Description |
 |---------|---------|------------|
-| `filemakerDataApiTools.requestTimeoutMs` | 15000 | HTTP request timeout in milliseconds |
+| `filemaker.requestTimeoutMs` | 15000 | HTTP request timeout in milliseconds |
 | `filemaker.logging.level` | info | Log level: debug, info, warn, error |
 | `filemaker.savedQueries.scope` | workspace | Where saved queries are stored |
 | `filemaker.schema.cacheTtlSeconds` | 300 | How long to cache layout metadata |

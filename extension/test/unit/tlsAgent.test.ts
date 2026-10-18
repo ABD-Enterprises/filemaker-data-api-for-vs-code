@@ -98,4 +98,24 @@ describe('createHttpsAgentForProfile', () => {
       expect(caught?.message).toMatch(/does not contain a certificate/);
     }
   });
+
+  it('adds the operating system\'s certificates to the defaults only when the policy says so and Node can read them', async () => {
+    const { setSystemCertificatePolicy } = await import('../../src/services/tlsAgent');
+    const canRead = typeof (await import('tls')).getCACertificates === 'function';
+    try {
+      setSystemCertificatePolicy(() => false);
+      expect(createHttpsAgentForProfile({}).options.ca).toBeUndefined();
+
+      setSystemCertificatePolicy(() => true);
+      const agent = createHttpsAgentForProfile({});
+      if (canRead) {
+        expect((agent.options.ca as string[]).length).toBeGreaterThanOrEqual(rootCertificates.length);
+        expect(agent.options.rejectUnauthorized).toBe(true);
+      } else {
+        expect(agent.options.ca).toBeUndefined(); // older Node: defaults unchanged
+      }
+    } finally {
+      setSystemCertificatePolicy(() => false);
+    }
+  });
 });
