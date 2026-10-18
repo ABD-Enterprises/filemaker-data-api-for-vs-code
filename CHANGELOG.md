@@ -53,5 +53,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Ignore `.filemaker/profile-template.json` in an untrusted workspace, never lock the server address from it, name the address on the wizard banner, and confirm before saving or testing credentials against a template-supplied address.
+- Connection wizard: no credential reuse after the server, proxy or user changes; Test Connection uses throwaway credentials and full address validation; confirm before sending credentials over remote `http://`; reject URLs with embedded credentials; validate proxy endpoint and form data.
 - Generate webview CSP nonces with `crypto.randomInt` instead of `Math.random()` (#292).
 - Harden the GitHub Actions workflows flagged by zizmor: `api-docs.yml` grants `pages: write` and `id-token: write` only to the deploy job; every `actions/checkout` sets `persist-credentials: false`; the CI `setup-node` steps set `package-manager-cache: false` so a future action bump cannot start restoring a package-manager cache in the job that publishes the extension.
