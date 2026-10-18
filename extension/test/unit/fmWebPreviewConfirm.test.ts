@@ -79,6 +79,17 @@ describe('FM Web preview', () => {
     expect(generator.writeBridgeEnv).toHaveBeenCalledWith('http://127.0.0.1:1234', 'session-token');
   });
 
+  it('warns when an edited generated file could not be updated, so a silent failure is not left to the user', async () => {
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(undefined as never);
+    const { run, generator } = start();
+    generator.generateRuntimeAppTemplate.mockResolvedValue({ needsManualUpdate: ['lib/bridge-client.ts'] } as never);
+
+    await run();
+
+    const messages = vi.mocked(vscode.window.showWarningMessage).mock.calls.map((call) => String(call[0]));
+    expect(messages.some((message) => message.includes('lib/bridge-client.ts') && message.includes('not updated'))).toBe(true);
+  });
+
   it('refuses in an untrusted workspace without asking', async () => {
     (vscode.workspace as unknown as { isTrusted: boolean }).isTrusted = false;
     const { run, terminal } = start();

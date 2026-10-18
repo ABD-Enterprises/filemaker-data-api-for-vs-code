@@ -1,3 +1,4 @@
+// fmweb-managed: runtime template v2. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 import * as React from 'react';
 
 import type { LayoutDefinition, LayoutObject, RuntimeLayoutData } from '@fmweb/shared';

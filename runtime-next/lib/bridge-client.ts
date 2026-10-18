@@ -1,3 +1,4 @@
+// fmweb-managed: runtime template v2. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 export interface RuntimeRecord {
   recordId: string;
   modId?: string;
