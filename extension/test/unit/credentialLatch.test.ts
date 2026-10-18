@@ -171,7 +171,7 @@ describe('failed sign-ins do not repeat on their own', () => {
     expect(r.loginPosts()).toBe(1);
 
     const waiting = await settle(r.fm.listLayouts(r.profile));
-    expect(waiting?.message).toMatch(/no free Data API sessions.*Waiting \d+ s/s);
+    expect(waiting?.message).toMatch(/maximum number of database or Admin API sessions.*Waiting \d+ s/s);
     expect(r.loginPosts()).toBe(1);
 
     r.setClock(1_000_000 + 31_000);

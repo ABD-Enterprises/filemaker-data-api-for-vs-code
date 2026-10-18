@@ -530,6 +530,35 @@ describe('values the extension does not use as written are explained', () => {
     }
   });
 
+  it('Restricted Mode is never given as the reason: an untrusted workspace with a VALID value gets no unusable-value note', async () => {
+    const row = find(
+      await collectExplanations(setup({ trusted: false, layers: { 'typegen.outputDir': { workspace: 'types' } } })),
+      'typegen.outputDir'
+    );
+    expect(row.effective).toBe('filemaker-types'); // the default stays in effect because of Restricted Mode
+    expect(row.note).not.toMatch(/not a folder inside the workspace/);
+    expect(row.reason ?? row.note).toMatch(/Restricted Mode/);
+  });
+
+  it('an untrusted workspace with an invalid value is not blamed for it either (the value is hidden); trusting it shows the note', async () => {
+    const layers = { 'typegen.outputDir': { workspace: '../escape' } };
+    expect(find(await collectExplanations(setup({ trusted: false, layers })), 'typegen.outputDir').note ?? '').not.toMatch(/not a folder inside the workspace/);
+    expect(find(await collectExplanations(setup({ trusted: true, layers })), 'typegen.outputDir').note).toMatch(/"\.\.\/escape" is not a folder inside the workspace/);
+  });
+
+  it('a User value that is invalid is explained in either trust state (it is the value in force)', async () => {
+    for (const trusted of [true, false]) {
+      const row = find(await collectExplanations(setup({ trusted, layers: { 'typegen.outputDir': { user: '/' } } })), 'typegen.outputDir');
+      expect(row.note, String(trusted)).toMatch(/is not a folder inside the workspace/);
+    }
+  });
+
+  it('trusted + a valid value: no such note', async () => {
+    const row = find(await collectExplanations(setup({ trusted: true, layers: { 'typegen.outputDir': { workspace: 'types' } } })), 'typegen.outputDir');
+    expect(row.effective).toBe('types');
+    expect(row.note).toBeUndefined();
+  });
+
   it('a typegen.outputDir that is used (as written, or tidied) gets no such note', async () => {
     for (const workspaceValue of ['types', 'out/types', 'out/types/', 'filemaker-types', '/etc/types']) {
       const row = find(await collectExplanations(setup({ layers: { 'typegen.outputDir': { workspace: workspaceValue } } })), 'typegen.outputDir');

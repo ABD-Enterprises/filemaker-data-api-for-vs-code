@@ -42,7 +42,7 @@ describe("FileMaker Server's default certificate: the message never offers a CA 
 describe('other certificates: the CA file is offered only where it can work', () => {
   for (const code of UNTRUSTED_CODES) {
     it(`${code}: trusting the certificate comes first; the CA file is the second option and names its condition`, () => {
-      const message = describeNetworkFailure(code, { host: 'fm.example.com' })?.message ?? '';
+      const message = describeNetworkFailure(code, { host: 'fm.example.com', certificateListsHostNames: true })?.message ?? '';
       const trust = message.indexOf('trust this certificate');
       const caFile = message.indexOf("CA file");
       expect(trust).toBeGreaterThanOrEqual(0);
@@ -186,12 +186,61 @@ describe('error 956', () => {
   });
 });
 
-describe('describeNetworkFailure with a certificate that lists no host names', () => {
-  it('drops the CA-file advice for untrusted-chain codes, whichever certificate it is', () => {
+describe('describeNetworkFailure without knowing whether the certificate lists host names (the look was skipped or failed)', () => {
+  it('offers no CA file (it could be the Claris default or another certificate with no names), but still offers trusting it', () => {
     for (const code of UNTRUSTED_CODES) {
-      const message = describeNetworkFailure(code, { host: 'h', certificateListsNoHostNames: true })?.message ?? '';
+      for (const context of [{ host: 'h' }, { host: 'h', certificateListsHostNames: false }]) {
+        const message = describeNetworkFailure(code, context)?.message ?? '';
+        expect(message, code).toMatch(/trust this certificate/);
+        expect(message, code).not.toMatch(/CA file|CA certificate/);
+      }
+    }
+  });
+
+  it('never offers one for the Claris default, even if host names were somehow reported', () => {
+    for (const code of UNTRUSTED_CODES) {
+      const message = describeNetworkFailure(code, { host: 'h', fileMakerDefaultCertificate: true, certificateListsHostNames: true })?.message ?? '';
+      expect(message, code).not.toMatch(/CA file|CA certificate/);
+    }
+  });
+
+  it('through FMClient with a proxy configured (the look at the certificate is skipped), the Claris default gets no CA-file advice', async () => {
+    const { FMClient } = await import('../../src/services/fmClient');
+    const { SecretStore } = await import('../../src/services/secretStore');
+    const { InMemorySecretStorage } = await import('./mocks');
+    const saved = { ...process.env };
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:1';
+    try {
+      const secrets = new SecretStore(new InMemorySecretStorage() as never);
+      const fm = new FMClient(secrets, { debug: () => undefined, info: () => undefined, warn: () => undefined, error: () => undefined } as never, 500) as unknown as {
+        refineCertificateError: (profile: unknown, failure: unknown) => Promise<{ message: string }>;
+      };
+      const { FMClientError } = await import('../../src/services/errors');
+      const failure = new FMClientError('x', { kind: 'certificate', networkCode: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' } as never);
+      const same = await fm.refineCertificateError({ id: 'p', name: 'p', authMode: 'direct', serverUrl: 'https://fm.example.com', database: 'D' }, failure);
+      expect(same).toBe(failure); // skipped: nothing is changed, and the unrefined text (built without the flag) offers no CA file
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in saved)) delete process.env[key];
+      }
+      Object.assign(process.env, saved);
+    }
+  });
+
+  it('drops the CA-file advice for untrusted-chain codes whatever the context says about names', () => {
+    for (const code of UNTRUSTED_CODES) {
+      const message = describeNetworkFailure(code, { host: 'h' })?.message ?? '';
       expect(message, code).toMatch(/trust this certificate/);
       expect(message, code).not.toMatch(/CA file|CA certificate/);
     }
+  });
+});
+
+describe('the other messages use the softened wording', () => {
+  it('error 1703 does not claim Cloud "uses a Claris ID token" or that a password cannot work', () => {
+    const advice = getFileMakerErrorInfo('1703')?.advice ?? '';
+    expect(advice).toContain('FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support');
+    expect(advice).toContain('may not be accepted by your Cloud tenant');
+    expect(advice).not.toMatch(/uses a Claris ID token/);
   });
 });

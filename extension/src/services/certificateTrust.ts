@@ -95,7 +95,7 @@ export async function reviewAndTrustCertificate(
     describeNetworkFailure(options.networkCode, {
       ...targetOfUrl(url),
       fileMakerDefaultCertificate: isFileMakerDefaultCertificate(info),
-      certificateListsNoHostNames: info.altNames.length === 0
+      certificateListsHostNames: info.altNames.length > 0
     })?.message ?? (info.verifyError ? `This computer does not trust it (${info.verifyError}).` : undefined);
   const lines = [
     changed ? 'The server\'s certificate is different from the one you trusted before.' : undefined,

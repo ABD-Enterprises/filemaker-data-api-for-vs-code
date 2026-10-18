@@ -38,6 +38,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.
 - Script errors on container upload and find are shown; Effective Settings notes and workspace-file watching; TLS agents are closed when replaced.
 - Managed runtime file refresh refuses symlinks and keeps user-edited files with an older marker.
 - FM Web preview commands that need the runtime template are hidden when it is not installed.

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
+import { link, lstat, mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -14,7 +14,8 @@ import {
   RuntimeTemplateUnavailableError,
   SHIPPED_MARKED_HASHES,
   decideManagedRefresh,
-  normalizedHash
+  normalizedHash,
+  writeManagedFile
 } from '../../src/services/fmWebRuntimeGenerator';
 
 const extensionDir = path.resolve(__dirname, '../..');
@@ -155,6 +156,60 @@ describe('FM Web runtime template', () => {
     expect(summary.skipped).toContain(plain);
     expect(summary.needsManualUpdate).toEqual([]);
     expect(await readFile(outside, 'utf8')).toBe('untouched');
+  });
+
+  it('writeManagedFile replaces a link planted at the target instead of following it, and leaves the link target alone', async () => {
+    const outside = path.join(dir, 'victim.txt');
+    await writeFile(outside, 'untouched');
+    const target = path.join(dir, 'managed.ts');
+    await symlink(outside, target);
+
+    await writeManagedFile(target, 'fresh');
+
+    expect(await readFile(outside, 'utf8')).toBe('untouched');
+    expect(await readFile(target, 'utf8')).toBe('fresh');
+    expect((await lstat(target)).isSymbolicLink()).toBe(false);
+    // No temporary files are left behind.
+    expect((await readdir(dir)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('writeManagedFile does not write through a hard link: the other name keeps its content', async () => {
+    const original = path.join(dir, 'original.ts');
+    await writeFile(original, 'original');
+    const target = path.join(dir, 'managed.ts');
+    await link(original, target);
+
+    await writeManagedFile(target, 'fresh');
+
+    expect(await readFile(original, 'utf8')).toBe('original');
+    expect(await readFile(target, 'utf8')).toBe('fresh');
+  });
+
+  it('a folder where a file belongs gets a plain message, not EISDIR (writeManagedFile and the generator)', async () => {
+    const target = path.join(dir, 'managed.ts');
+    await mkdir(target);
+    await expect(writeManagedFile(target, 'x')).rejects.toThrow(/is a folder, not a file/);
+    expect((await readdir(dir)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+
+    await mkdir(path.join(dir, 'runtime-next', 'lib', 'bridge-client.ts'), { recursive: true });
+    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/lib.bridge-client\.ts in the generated runtime is a folder, not a file/);
+  });
+
+  it('refreshing through a folder that links outside is refused, and the file there is left as it was', async () => {
+    const elsewhere = path.join(dir, 'elsewhere-dir');
+    await mkdir(elsewhere);
+    const legacy = await readFile(path.join(extensionDir, 'test/fixtures/legacy-bridge-client.ts.txt'), 'utf8');
+    // Every other template file of that folder is already there, so the refresh is the only write that could happen.
+    const templateLib = path.resolve(extensionDir, '..', 'runtime-next', 'lib');
+    for (const name of await readdir(templateLib)) {
+      await writeFile(path.join(elsewhere, name), await readFile(path.join(templateLib, name)));
+    }
+    await writeFile(path.join(elsewhere, 'bridge-client.ts'), legacy); // a shipped old copy: would be refreshed
+    await mkdir(path.join(dir, 'runtime-next'), { recursive: true });
+    await symlink(elsewhere, path.join(dir, 'runtime-next', 'lib'));
+
+    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/link to a folder outside/);
+    expect(await readFile(path.join(elsewhere, 'bridge-client.ts'), 'utf8')).toBe(legacy);
   });
 
   it('refuses to create files through a folder that is a link to somewhere else', async () => {

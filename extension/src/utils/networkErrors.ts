@@ -29,8 +29,12 @@ export interface NetworkFailureContext {
   nodeMessage?: string;
   /** The certificate is FileMaker Server's own default one (found by looking at what the server presents). */
   fileMakerDefaultCertificate?: boolean;
-  /** The certificate lists no host names, so a CA file could not make host-name verification pass. */
-  certificateListsNoHostNames?: boolean;
+  /**
+   * The certificate is known to list host names. A CA file is offered only then: without that knowledge
+   * (the look at the certificate was skipped or failed) it could be a certificate with no names, for which
+   * a CA file cannot make host-name verification pass.
+   */
+  certificateListsHostNames?: boolean;
 }
 
 /**
@@ -59,7 +63,7 @@ const CLOCK_HINT = "First check that your computer's date and time are correct."
 const CA_HINT =
   "Or, if the server's certificate lists its host names and was issued by your company's own authority, ask your FileMaker administrator for that CA certificate (a .pem file) and set it as the connection's CA file.";
 const caHint = (context: NetworkFailureContext): string =>
-  context.fileMakerDefaultCertificate || context.certificateListsNoHostNames ? '' : ` ${CA_HINT}`;
+  context.certificateListsHostNames === true && !context.fileMakerDefaultCertificate ? ` ${CA_HINT}` : '';
 
 /** Error codes that are certificate problems, with the certificate-specific wording. */
 const CERTIFICATE_CODES = new Set([

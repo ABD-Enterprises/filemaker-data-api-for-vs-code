@@ -249,6 +249,26 @@ describe('registerCoreCommands', () => {
     expect(prompts[3]?.validateInput?.('1.5')).toContain('non-negative integer');
   });
 
+  it('warns when a script reported an error next to a find that worked, and stays quiet otherwise', async () => {
+    const deps = createSelectionDeps();
+    registerCoreCommands(deps);
+    const findRecords = (deps.fmClient as { findRecords: ReturnType<typeof vi.fn> }).findRecords;
+    const answers = () => ['[{"Name":"Alice"}]', '', '', ''].forEach((value) => vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(value));
+
+    findRecords.mockResolvedValueOnce({ data: [], scriptErrors: [{ phase: 'presort', code: '102' }] });
+    answers();
+    await command('runFindJson')({ profileId: profile.id, layout: 'Contacts' });
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls.map((call) => String(call[0])).join('\n')).toMatch(
+      /The find worked, but the pre-sort script reported error 102/
+    );
+
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    findRecords.mockResolvedValueOnce({ data: [] });
+    answers();
+    await command('runFindJson')({ profileId: profile.id, layout: 'Contacts' });
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
   const panels = [
     { name: 'openRecordViewer', register: registerCoreCommands, panel: RecordViewerPanel },
     { name: 'openRecordEditor', register: registerRecordEditCommands, panel: RecordEditorPanel },

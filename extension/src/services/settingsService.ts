@@ -1,5 +1,4 @@
 import { getHashes } from 'crypto';
-import * as path from 'path';
 
 import * as vscode from 'vscode';
 
@@ -7,6 +6,7 @@ import type { EnterpriseRole, PerformanceMode, SavedQueryScope, SchemaSnapshotSt
 import type { LogLevel } from './logger';
 import type { SecretFallbackMode } from './secretStore';
 import { DEFAULT_CONTAINER_UPLOAD_MAX_BYTES, normalizeContainerUploadMaxBytes } from '../utils/containerUpload';
+import { usableRelativeDir } from '../utils/relativeDir';
 import { isFeatureEnabled, isOfflineModeOn } from '../utils/policySetting';
 import { isFormulaNeutralizationOn } from '../utils/userScopeSetting';
 
@@ -460,18 +460,5 @@ function normalizeApiPath(value: string, fallback: string): string {
 }
 
 function sanitizeRelativeDir(value: string, fallback: string): string {
-  const normalized = value.trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
-  if (!normalized) {
-    return fallback;
-  }
-
-  if (normalized.includes('..')) {
-    return fallback;
-  }
-
-  if (path.isAbsolute(normalized)) {
-    return fallback;
-  }
-
-  return normalized;
+  return usableRelativeDir(value) ?? fallback;
 }

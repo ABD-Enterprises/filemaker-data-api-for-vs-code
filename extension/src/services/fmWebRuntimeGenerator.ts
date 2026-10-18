@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from 'fs/promises';
 import path from 'path';
 
@@ -181,6 +181,9 @@ export class FmWebRuntimeGenerator {
       const present = await lstat(outputPath).catch(() => undefined);
       if (present) {
         const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey];
+        if (present.isDirectory()) {
+          throw new Error(`${relativePath} in the generated runtime is a folder, not a file; remove it and try again.`);
+        }
         if (present.isSymbolicLink()) {
           skipped.push(relativePath);
           if (legacyHashes) {
@@ -194,8 +197,7 @@ export class FmWebRuntimeGenerator {
           : 'skip';
         if (decision === 'refresh') {
           await assertInsideRoot(outputRoot, path.dirname(outputPath));
-          await refuseSymlink(outputPath);
-          await writeFile(outputPath, content);
+          await writeManagedFile(outputPath, content);
           updated.push(relativePath);
         } else {
           skipped.push(relativePath);
@@ -209,7 +211,7 @@ export class FmWebRuntimeGenerator {
 
       await mkdir(path.dirname(outputPath), { recursive: true });
       await assertInsideRoot(outputRoot, path.dirname(outputPath));
-      await writeFile(outputPath, content);
+      await writeManagedFile(outputPath, content);
       created.push(relativePath);
     }
 
@@ -397,6 +399,36 @@ async function refuseSymlink(target: string): Promise<void> {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error;
     }
+  }
+}
+
+/**
+ * Writes a generated file so that a link planted at the target cannot redirect the write: the content
+ * goes to a new temporary file in the same folder and is renamed over the target. `rename` replaces
+ * the directory entry (a symbolic link is replaced, never followed), so there is no moment between a
+ * check and the write at which a link can take effect; the result is checked afterwards. A hard link
+ * is not written through either: the other name keeps the old content. A folder at the target is
+ * reported in plain words instead of as a raw EISDIR.
+ */
+export async function writeManagedFile(target: string, content: Buffer | string): Promise<void> {
+  const existing = await lstat(target).catch(() => undefined);
+  if (existing?.isDirectory()) {
+    throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`);
+  }
+  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
+  await writeFile(temporary, content, { flag: 'wx' });
+  try {
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    if ((error as NodeJS.ErrnoException).code === 'EISDIR' || (error as NodeJS.ErrnoException).code === 'ENOTEMPTY') {
+      throw new Error(`${path.basename(target)} in the generated runtime is a folder, not a file; remove it and try again.`, { cause: error });
+    }
+    throw error;
+  }
+  const written = await lstat(target);
+  if (!written.isFile()) {
+    throw new Error(`${path.basename(target)} in the generated runtime could not be written as a regular file; remove it and try again.`);
   }
 }
 

@@ -7,12 +7,16 @@ import { join } from 'path';
 import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from 'https';
+
 import {
   PinnedCertificateAgent,
   RETIRED_AGENT_GRACE_MS,
   createHttpsAgentForProfile,
   disposeTlsAgents,
-  normalizeSha256
+  noteRequestTimeout,
+  normalizeSha256,
+  retiredAgentGrace
 } from '../../src/services/tlsAgent';
 import { DAY, keyToPem, makeCertificate, newKeyPair } from '../helpers/x509';
 
@@ -40,7 +44,9 @@ describe('agents that are replaced or evicted are closed', () => {
 
     expect(second).not.toBe(first);
     expect(destroyFirst).not.toHaveBeenCalled(); // a request already running on it is not cut off
-    vi.advanceTimersByTime(RETIRED_AGENT_GRACE_MS - 1);
+    // The grace is a real thirty seconds (written out, so shortening the constant is caught).
+    expect(RETIRED_AGENT_GRACE_MS).toBe(30_000);
+    vi.advanceTimersByTime(29_999);
     expect(destroyFirst).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(destroyFirst).toHaveBeenCalledTimes(1);
@@ -63,6 +69,51 @@ describe('agents that are replaced or evicted are closed', () => {
     // A retired setting simply gets a fresh agent when it is used again.
     expect(createHttpsAgentForProfile({ pinnedCertSha256: pins[0] })).not.toBe(agents[0]);
     expect(createHttpsAgentForProfile({ pinnedCertSha256: pins[39] })).toBe(agents[39]);
+  });
+
+  it('a retiring agent does not keep the process alive (its timer is unref\'d)', () => {
+    vi.useFakeTimers();
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    const first = createHttpsAgentForProfile({ pinnedCertSha256: 'a1'.repeat(32) });
+    expect(first).toBeTruthy();
+    for (let i = 0; i < 33; i += 1) {
+      createHttpsAgentForProfile({ pinnedCertSha256: (i + 16).toString(16).padStart(2, '0').repeat(32) });
+    }
+    const retireTimer = timers.mock.results.map((result) => result.value as { hasRef?: () => boolean }).find((timer) => typeof timer?.hasRef === 'function');
+    expect(retireTimer).toBeDefined();
+    expect(retireTimer?.hasRef?.()).toBe(false);
+    timers.mockRestore();
+  });
+
+  it('evicts the LEAST recently used agent, not the oldest one made', () => {
+    vi.useFakeTimers();
+    const pins = Array.from({ length: 33 }, (_, i) => normalizeSha256((i + 64).toString(16).padStart(2, '0').repeat(32)) as string);
+    const agents = pins.slice(0, 32).map((pin) => createHttpsAgentForProfile({ pinnedCertSha256: pin }));
+    const spies = agents.map((agent) => vi.spyOn(agent, 'destroy'));
+    // Use the first one again, so the second is now the one nobody has touched the longest.
+    expect(createHttpsAgentForProfile({ pinnedCertSha256: pins[0] })).toBe(agents[0]);
+    createHttpsAgentForProfile({ pinnedCertSha256: pins[32] }); // the 33rd pushes one out
+
+    vi.advanceTimersByTime(30_000);
+
+    expect(spies[0]?.mock.calls.length).toBe(0); // kept: recently used
+    expect(spies[1]?.mock.calls.length).toBe(1); // evicted
+    expect(spies.slice(2).every((spy) => spy.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('disposeTlsAgents also closes agents that are waiting out their grace, and cancels their timers', () => {
+    vi.useFakeTimers();
+    const pins = Array.from({ length: 33 }, (_, i) => normalizeSha256((i + 100).toString(16).padStart(2, '0').repeat(32)) as string);
+    const agents = pins.map((pin) => createHttpsAgentForProfile({ pinnedCertSha256: pin }));
+    const retired = vi.spyOn(agents[0] as Agent, 'destroy'); // evicted by the 33rd, waiting for its timer
+    expect(vi.getTimerCount()).toBe(1);
+
+    disposeTlsAgents();
+
+    expect(retired).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(60_000);
+    expect(retired).toHaveBeenCalledTimes(1); // not closed a second time by a leftover timer
   });
 
   it('disposeTlsAgents closes everything at once and forgets it', () => {
@@ -132,5 +183,56 @@ describe('a pinned agent and kept-alive sockets', () => {
     expect(JSON.stringify(options)).toBe(before);
     expect(Object.keys(options)).toEqual(['host', 'port', 'servername']);
     agent.destroy();
+  });
+
+  it('forces its own checking options even when the caller passes others (they cannot switch the check back on or replace the identity check)', async () => {
+    const { Agent: HttpsAgent } = await import('https');
+    const fakeSocket = { cork: vi.fn(), uncork: vi.fn(), once: vi.fn(), destroy: vi.fn(), isSessionReused: () => false };
+    const spy = vi.spyOn(HttpsAgent.prototype as unknown as { createConnection: (...a: unknown[]) => unknown }, 'createConnection').mockReturnValue(fakeSocket);
+    try {
+      const agent = new PinnedCertificateAgent({}, { sha256: 'ab'.repeat(32), allowExpired: false });
+      const mine = { host: 'h', port: 1, rejectUnauthorized: true, checkServerIdentity: () => new Error('x') };
+      agent.createConnection(mine);
+      const passed = spy.mock.calls[0]?.[0] as { rejectUnauthorized: boolean; checkServerIdentity: () => unknown };
+      expect(passed.rejectUnauthorized).toBe(false);
+      expect(passed.checkServerIdentity()).toBeUndefined();
+      expect(mine.rejectUnauthorized).toBe(true); // and the caller's own object is untouched
+      expect(fakeSocket.cork).toHaveBeenCalled();
+      agent.destroy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('the grace for a replaced agent outlives a long request', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    disposeTlsAgents();
+  });
+
+  it('is at least the request timeout plus ten seconds (and never less than thirty)', () => {
+    expect(retiredAgentGrace()).toBe(30_000);
+    noteRequestTimeout(5_000);
+    expect(retiredAgentGrace()).toBe(30_000);
+    noteRequestTimeout(120_000);
+    expect(retiredAgentGrace()).toBe(130_000);
+    noteRequestTimeout(60_000); // only ever raised
+    expect(retiredAgentGrace()).toBe(130_000);
+    noteRequestTimeout(Number.NaN);
+    noteRequestTimeout(-1);
+    expect(retiredAgentGrace()).toBe(130_000);
+  });
+
+  it('an agent replaced while a long request runs is not closed until that request could have finished', () => {
+    vi.useFakeTimers();
+    noteRequestTimeout(120_000);
+    const pins = Array.from({ length: 33 }, (_, i) => normalizeSha256((i + 140).toString(16).padStart(2, '0').repeat(32)) as string);
+    const agents = pins.map((pin) => createHttpsAgentForProfile({ pinnedCertSha256: pin }));
+    const evicted = vi.spyOn(agents[0] as Agent, 'destroy');
+    vi.advanceTimersByTime(129_999);
+    expect(evicted).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(evicted).toHaveBeenCalledTimes(1);
   });
 });

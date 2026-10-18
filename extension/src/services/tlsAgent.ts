@@ -16,19 +16,41 @@ type TlsProfileOptions = Pick<
 
 const agentCache = new Map<string, Agent>();
 
-/** More agents than this are not expected (one per distinct certificate setting in use); the oldest are retired beyond it. */
+/** More agents than this are not expected (one per distinct certificate setting in use); the least recently used are retired beyond it. */
 const MAX_CACHED_AGENTS = 32;
-/** How long a replaced agent is left to finish requests that are already running before its sockets are closed. */
+/** The shortest time a replaced agent is left to finish requests that are already running before its sockets are closed. */
 export const RETIRED_AGENT_GRACE_MS = 30_000;
+/** A running request can last as long as the request timeout, so the grace is at least that plus this margin. */
+const GRACE_MARGIN_MS = 10_000;
+let retiredAgentGraceMs = RETIRED_AGENT_GRACE_MS;
+
+/** Tells the agent cache how long a request may run, so a replaced agent outlives it. Only ever raises the grace. */
+export function noteRequestTimeout(timeoutMs: number): void {
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    retiredAgentGraceMs = Math.max(retiredAgentGraceMs, RETIRED_AGENT_GRACE_MS, timeoutMs + GRACE_MARGIN_MS);
+  }
+}
+
+/** The current grace period (for tests). */
+export function retiredAgentGrace(): number {
+  return retiredAgentGraceMs;
+}
+
+const retiring = new Map<NodeJS.Timeout, Agent>();
 
 /**
  * Closes the sockets of an agent that is no longer handed out (its CA file changed, or it was the
- * oldest of too many). It waits a short grace period first so a request that is already running on
- * it is not cut off; the timer does not keep the process alive.
+ * least recently used of too many). It waits a grace period first, at least as long as a request may
+ * take, so a request that is already running on it is not cut off; the timer does not keep the
+ * process alive.
  */
 function retireAgent(agent: Agent): void {
-  const timer = setTimeout(() => agent.destroy(), RETIRED_AGENT_GRACE_MS);
+  const timer = setTimeout(() => {
+    retiring.delete(timer);
+    agent.destroy();
+  }, retiredAgentGraceMs);
   timer.unref?.();
+  retiring.set(timer, agent);
 }
 
 function cacheAgent(key: string, agent: Agent): void {
@@ -46,8 +68,20 @@ function cacheAgent(key: string, agent: Agent): void {
   }
 }
 
-/** Closes every cached agent's sockets now (extension shutdown) and forgets them. */
+/** A cache hit makes the entry the most recently used (a Map iterates in insertion order). */
+function touchAgent(key: string, agent: Agent): Agent {
+  agentCache.delete(key);
+  agentCache.set(key, agent);
+  return agent;
+}
+
+/** Closes every cached and retiring agent's sockets now (extension shutdown), cancels the timers, and forgets them. */
 export function disposeTlsAgents(): void {
+  for (const [timer, agent] of retiring) {
+    clearTimeout(timer);
+    agent.destroy();
+  }
+  retiring.clear();
   for (const agent of agentCache.values()) {
     agent.destroy();
   }
@@ -334,7 +368,7 @@ export function createHttpsAgentForProfile(profile: TlsProfileOptions): Agent {
   const cacheKey = `${prefix}${fileStamp}`;
   const cachedAgent = agentCache.get(cacheKey);
   if (cachedAgent) {
-    return cachedAgent;
+    return touchAgent(cacheKey, cachedAgent);
   }
 
   if (pinned) {

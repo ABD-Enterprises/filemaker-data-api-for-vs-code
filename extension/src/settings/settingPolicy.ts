@@ -5,6 +5,7 @@
 
 import { ROLE_RANK, isRoleName } from '../enterprise/roles';
 import type { RestrictedReading } from '../utils/policySetting';
+import { usableRelativeDir } from '../utils/relativeDir';
 
 export type SettingKind =
   /** `"scope": "application"`: only the user's own settings count. */
@@ -152,19 +153,22 @@ const RESTRICTED_MODE_NOTICE =
  * Sentences about a configured value that the extension does not use as written. They explain a
  * value that is present and in force, so they appear whichever scope holds it.
  */
-function valueNotes(setting: PolicySetting, values: ScopeValues, effective: unknown): string[] {
+function valueNotes(setting: PolicySetting, values: ScopeValues, restrictedMode: boolean): string[] {
   const notes: string[] = [];
-  const configured = values.workspaceFolder ?? values.workspace ?? values.workspaceFile ?? values.user;
   if (setting.kind === 'stricter-role') {
     // The user's own value is the baseline. Anything but viewer, developer or admin counts as developer.
     const own = values.user;
     if (own !== undefined && !isRoleName(own)) {
       notes.push(`Your User value ${fmt(own)} is not a role (viewer, developer or admin), so it is treated as developer.`);
     }
-  } else if (setting.key === 'typegen.outputDir' && typeof configured === 'string' && typeof values.default === 'string') {
-    if (same(effective, values.default) && configured !== values.default) {
+  } else if (setting.key === 'typegen.outputDir') {
+    // The value that is actually in force: in Restricted Mode the workspace value is hidden, so only the
+    // User value counts. Judge it with the same rule the code uses (usableRelativeDir), and only say it
+    // is unusable when it really is; Restricted Mode is never the reason this note appears.
+    const inForce = restrictedMode ? values.user : (values.workspaceFolder ?? values.workspace ?? values.workspaceFile ?? values.user);
+    if (typeof inForce === 'string' && usableRelativeDir(inForce) === undefined) {
       notes.push(
-        `The value ${fmt(configured)} is not a folder inside the workspace (it is empty, absolute, or contains ".."), so the default ${fmt(values.default)} is used.`
+        `The value ${fmt(inForce)} is not a folder inside the workspace (it is empty, absolute, or contains ".."), so the default ${fmt(values.default)} is used.`
       );
     }
   }
@@ -191,7 +195,7 @@ export function explainSetting(input: ExplainInput): Explanation {
   let noticeReason: string | undefined;
   let note: string | undefined;
   let workspaceMeaningful = true;
-  const extraNotes = valueNotes(setting, values, effective);
+  const extraNotes = valueNotes(setting, values, restrictedMode);
 
   if (restrictedMode) {
     // VS Code hides restricted keys from a workspace that is not trusted, and the code does not

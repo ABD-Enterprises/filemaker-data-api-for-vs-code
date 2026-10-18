@@ -443,4 +443,25 @@ describe('Show Effective Settings command', () => {
     const command = manifest.contributes.commands.find((entry) => entry.command === 'filemakerDataApiTools.showEffectiveSettings');
     expect(command).toMatchObject({ title: 'Show Effective Settings', category: 'FileMaker' });
   });
+
+  describe('the unusable-folder note for typegen.outputDir', () => {
+    const setting = policyFor('typegen.outputDir') as PolicySetting;
+    const explain = (values: Record<string, unknown>, trusted: boolean) =>
+      explainSetting({ setting, values: { default: 'filemaker-types', ...values }, effective: 'filemaker-types', trusted, restrictedInUntrusted: true });
+
+    it('is never given because of Restricted Mode: a hidden workspace value (valid or not) is not judged', () => {
+      expect(explain({ workspace: 'types' }, false).note ?? '').not.toMatch(/not a folder inside the workspace/);
+      expect(explain({ workspace: '../escape' }, false).note ?? '').not.toMatch(/not a folder inside the workspace/);
+    });
+
+    it('is given for the value in force when it really is unusable', () => {
+      expect(explain({ workspace: '../escape' }, true).note).toMatch(/"\.\.\/escape" is not a folder inside the workspace/);
+      expect(explain({ user: '' }, false).note).toMatch(/"" is not a folder inside the workspace/);
+    });
+
+    it('is not given for a usable value', () => {
+      expect(explain({ workspace: 'types' }, true).note).toBeUndefined();
+      expect(explain({ user: 'out/types/' }, true).note).toBeUndefined();
+    });
+  });
 });
