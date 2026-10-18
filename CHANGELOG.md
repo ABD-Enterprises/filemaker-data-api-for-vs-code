@@ -31,6 +31,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Batch CSV import ignores the `recordId`/`modId` meta columns (case-insensitive) so an exported file re-imports cleanly; round-trip test added.
 - FM Web preview: write the bridge URL and session token to the generated runtime's gitignored `.env.local`, send `X-FM-Bridge-Token` from the runtime client (and call `fetch` unbound), and apply `features.recordEdit.enabled` and the enterprise `recordEdit` guard to bridge edit/create/delete.
 - Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.
 - Share one session renewal between parallel requests after a session expires, instead of opening one session per request and orphaning the rest.
@@ -62,7 +63,7 @@ PR title prefix matches the highest-tier label added:
 
 - Record edit, create and upload and the Script Runner require a trusted workspace (commands, panels and panel messages), matching the documented behaviour; the manifest's untrusted-workspace description lists them.
 - Escape database-supplied names in generated types, clients and snippets; give punctuation-only-different layouts distinct file names and safe Windows names.
-- Neutralize spreadsheet formulas in CSV exports.
+- Neutralize spreadsheet formulas in CSV exports: a cell starting with `=`, `+`, `-`, `@`, tab or carriage return gets a leading apostrophe.
 - Validate the workspace snapshot index entries so a repository's index cannot make pruning delete other files; reject Windows drive-relative output folders.
 - Redact the session token in request paths, more query parameters and JSON keys, and credentials embedded in URLs.
 - Ask before running a workspace plugin, once per folder content (workspace + SHA-256 of every file), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.

@@ -300,6 +300,29 @@ export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): 
   return parseCsvBatchUpdates(content);
 }
 
+/**
+ * Columns the export writes before the fields (`recordId`, `modId`). They are record
+ * metadata, not fields: `recordId` names the record to edit, and `modId` is ignored on
+ * import because the update path sends no modification-id guard (and FileMaker would reject
+ * `modId` as an unknown field). Matched case-insensitively and ignoring surrounding space.
+ */
+function metaColumn(header: string): 'recordId' | 'modId' | undefined {
+  const normalized = header.trim().toLowerCase();
+  if (normalized === 'recordid') {
+    return 'recordId';
+  }
+
+  return normalized === 'modid' ? 'modId' : undefined;
+}
+
+/**
+ * Reads a CSV written by the batch export (or any file with a `recordId` column) into
+ * updates. Every other column is a field name. Empty cells are skipped (they cannot be
+ * told apart from "leave unchanged"), and a cell that looks like JSON (an object, array,
+ * `true`, `false`, `null` or a plain number) is parsed as that JSON value, so a text field
+ * holding `12` is sent as the number 12. Text that merely starts like a formula was given a
+ * leading apostrophe by the export; it is taken off again here.
+ */
 function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   const rows = parseCsv(content);
   if (rows.length === 0) {
@@ -310,7 +333,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   if (!headers) {
     return [];
   }
-  const recordIdIndex = headers.findIndex((header) => header === 'recordId');
+  const recordIdIndex = headers.findIndex((header) => metaColumn(header) === 'recordId');
   if (recordIdIndex < 0) {
     throw new Error('CSV must include a "recordId" column.');
   }
@@ -325,7 +348,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
 
     const fieldData: Record<string, unknown> = {};
     headers.forEach((header, index) => {
-      if (header === 'recordId') {
+      if (metaColumn(header)) {
         return;
       }
 

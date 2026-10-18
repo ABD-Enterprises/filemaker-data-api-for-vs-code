@@ -264,3 +264,64 @@ describe('parseBatchUpdateInput', () => {
     expect(entries[0]).toEqual({ recordId: '1', fieldData: { name: 'Alice', age: 30 } });
   });
 });
+
+describe('batch export then import round trip', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'batch-roundtrip-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function exportRecords(records: FileMakerRecord[]): Promise<string> {
+    const findRecords = vi.fn().mockResolvedValueOnce(findResult(records)).mockResolvedValueOnce(findResult([]));
+    const service = new BatchService(createFmClient({ findRecords } as never), {
+      getPerformanceMode: () => 'standard'
+    });
+    const outputPath = join(dir, 'export.csv');
+    await service.batchExportFind(profile(), 'Contacts', { query: [{}] }, { outputPath, format: 'csv', pageSize: 10, maxRecords: 100 });
+    return readFile(outputPath, 'utf8');
+  }
+
+  it('re-imports what the real writer exported, without sending recordId or modId as fields', async () => {
+    const records = [
+      record('1', {
+        name: 'Alice, "Al" Smith',
+        note: 'line one\nline two',
+        age: 30,
+        active: true,
+        tags: ['a', 'b'],
+        formula: '=HYPERLINK("http://example.com")',
+        cmd: '@SUM(1)',
+        tab: '\tindented',
+        negative: -5
+      }),
+      record('2', { name: 'Bob', age: 25 })
+    ];
+
+    const csv = await exportRecords(records);
+    const entries = parseBatchUpdateInput(csv, 'csv');
+
+    expect(entries.map((entry) => entry.recordId)).toEqual(['1', '2']);
+    for (const [index, entry] of entries.entries()) {
+      expect(Object.keys(entry.fieldData)).not.toContain('modId');
+      expect(Object.keys(entry.fieldData)).not.toContain('recordId');
+      expect(entry.fieldData).toEqual(records[index]?.fieldData);
+    }
+  });
+
+  it('ignores the recordId and modId meta columns whatever their case', () => {
+    const entries = parseBatchUpdateInput('RecordID,MODID, modId ,name\n7,3,4,Zed\n', 'csv');
+    expect(entries).toEqual([{ recordId: '7', fieldData: { name: 'Zed' } }]);
+  });
+
+  it('documents the lossy cases: cells that look like JSON or numbers become JSON values, empty cells are skipped', async () => {
+    const csv = await exportRecords([record('1', { code: '12', flag: 'true', blank: '', text: 'plain' })]);
+    expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
+      { recordId: '1', fieldData: { code: 12, flag: true, text: 'plain' } }
+    ]);
+  });
+});
