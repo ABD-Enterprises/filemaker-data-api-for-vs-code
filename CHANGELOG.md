@@ -28,6 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Mid-response connection drops are reported clearly instead of as (HTTP 200).
 - Refresh Schema Cache re-reads the layout list.
 - Layout names are no longer trimmed; spacing/case variants stay distinct.
 

@@ -176,6 +176,41 @@ describe('responses that are not the Data API, redirects, and business errors on
     }
   });
 
+  describe('a connection that drops while the response is being read', () => {
+    const cases: Array<[string, Record<string, string>]> = [
+      ['with a Content-Length that is never reached', { 'Content-Length': '500' }],
+      ['in a chunked response', {}]
+    ];
+    for (const [name, extra] of cases) {
+      it(`${name}: a clear "dropped while reading the response" error, never "(HTTP 200)"`, async () => {
+        const server = await serve((_request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json', ...extra });
+          response.write('{"response":{"tok');
+          setTimeout(() => response.socket?.destroy(), 30);
+        });
+        const { fm, profile } = await client(server.url);
+        const error = await fail(fm.createSession(profile));
+        expect(error.message).toMatch(/dropped while reading the response/);
+        expect(error.message).toMatch(/check whether it was applied before repeating it/);
+        expect(error.message).not.toMatch(/HTTP 200/);
+        expect(error.kind).toBe('network');
+        expect(error.networkCode).toBe('ERR_RESPONSE_ABORTED');
+        expect(error.isRetryable).toBe(true);
+      });
+    }
+
+    it('a normal 2xx answer, an HTTP error answer and a plain reset are not described that way', async () => {
+      const server = await serve((_request, response) => {
+        response.statusCode = 503;
+        response.end('Service Unavailable');
+      });
+      const { fm, profile } = await client(server.url);
+      const error = await fail(fm.createSession(profile));
+      expect(error.message).not.toMatch(/dropped while reading/);
+      expect(error.message).toMatch(/503/);
+    });
+  });
+
   it('a 200 whose first message is a FileMaker error is a failure, with that code', async () => {
     const server = await serve((_request, response) => {
       response.setHeader('Content-Type', 'application/json');

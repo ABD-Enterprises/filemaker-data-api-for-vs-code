@@ -92,6 +92,24 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
     }
   }
 
+  // The answer started (HTTP 2xx) and the connection ended before it was complete. Axios reports that as
+  // "stream has been aborted" with the status of the part that did arrive, which used to be shown as
+  // "(HTTP 200)" as if the request had worked.
+  if (isDroppedMidResponse(error)) {
+    const where = targetOfUrl(error.config?.url);
+    const target = where.host ? where.host + (where.port ? `:${where.port}` : '') : 'the server';
+    return {
+      kind: 'network',
+      message: `The connection to ${target} dropped while reading the response, so the answer is incomplete. The server may have restarted, or a firewall or proxy cut the connection. Try again; if this was a change (an edit, a delete or a script), check whether it was applied before repeating it.`,
+      networkCode: 'ERR_RESPONSE_ABORTED',
+      status,
+      safeHeaders,
+      isRetryable: true,
+      details,
+      originalName: error.name
+    };
+  }
+
   const timeoutLike = error.code === 'ECONNABORTED' || /timeout/i.test(error.message);
   if (timeoutLike) {
     const seconds = error.config?.timeout ? Math.round(error.config.timeout / 1000) : undefined;
@@ -150,6 +168,19 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
     details,
     originalName: error.name
   };
+}
+
+function isDroppedMidResponse(error: AxiosError): boolean {
+  const status = error.response?.status;
+  if (status === undefined || status < 200 || status >= 300) {
+    return false;
+  }
+  const text = `${error.message ?? ''} ${String((error.cause as { message?: unknown } | undefined)?.message ?? '')}`;
+  return (
+    (error.code === 'ERR_BAD_RESPONSE' && /abort|premature|closed/i.test(text)) ||
+    error.code === 'ECONNRESET' ||
+    error.code === 'ERR_STREAM_PREMATURE_CLOSE'
+  );
 }
 
 function buildFallbackAxiosMessage(
