@@ -61,7 +61,7 @@ Minor release: no data migration, and no command or setting was removed. User-fa
 
 ### [FIX]
 
-- Restored webview tabs show a reopen page instead of staying dead (serializer for every panel type).
+- Restored webview tabs show a reopen page instead of staying dead: a serializer for every panel type, and `onWebviewPanel` activation events for each so the serializer exists before a saved tab is restored.
 - Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
 - Command Palette context keys refresh when profiles change and after Initialize FM Web.
 - Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.
