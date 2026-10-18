@@ -1,3 +1,4 @@
+import { isPlainJsonFileName } from '../utils/safeText';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -272,7 +273,7 @@ function isOfflineIndexRecord(value: unknown): value is OfflineIndexRecord {
     typeof item.layout === 'string' &&
     typeof item.capturedAt === 'string' &&
     typeof item.hash === 'string' &&
-    typeof item.fileName === 'string'
+    isPlainJsonFileName(item.fileName)
   );
 }
 
