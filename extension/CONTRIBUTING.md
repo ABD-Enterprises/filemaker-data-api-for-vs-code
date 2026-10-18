@@ -22,7 +22,7 @@ Launch the extension host:
 
 ### A FileMaker server for testing
 
-If you have no server, run the mock Data API (it is not shipped in the VSIX). It does not yet implement the server-level calls Test Connection makes (`/productInfo`, `/databases`), so use a saved password and **Connect** instead of Test Connection:
+If you have no server, run the mock Data API (it is not shipped in the VSIX). It does not yet implement the server-level calls Test Connection makes (`/productInfo`, `/databases`), so skip Test Connection: fill in the profile, select **Save Profile** and confirm the dialog that warns the connection was not tested (`filemaker.connectionWizard.requireTestBeforeSave` defaults to `warn`), then **Connect**:
 
 ```bash
 npm run mock:server -w extension     # http://127.0.0.1:18080, override with PORT
