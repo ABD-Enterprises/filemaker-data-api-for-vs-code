@@ -59,7 +59,7 @@ Threats and mitigations in short: remote access (loopback binding and socket che
 
 ## What the Marketplace build contains
 
-The Marketplace extension does not include the `runtime-next` and `shared` packages the preview app needs. In that installation **Start FM Web Preview Server** and **Generate FM Web Next.js App** stop with "The FM Web preview is not available in this installation" and point at the repository. Layout Mode, metadata sync and layout files work everywhere. Do not promise the preview to Marketplace users.
+The Marketplace extension does not include the `runtime-next` and `shared` packages the preview app needs. In that installation **Start FM Web Preview Server** and **Generate FM Web Next.js App** are hidden from the Command Palette; invoked another way they stop with "The FM Web preview is not available in this installation" and point at the repository. When you rerun them in an installation that has the template, files the extension keeps current in an earlier app are refreshed, except files you edited and symbolic links, which are left alone and named in a warning. Layout Mode, metadata sync and layout files work everywhere. Do not promise the preview to Marketplace users.
 
 ## Develop and test
 

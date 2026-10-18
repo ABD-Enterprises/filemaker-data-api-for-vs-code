@@ -79,6 +79,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Docs: remove the known-issue notes fixed by #390 and describe its behavior (hidden preview commands, preview-file refresh, script-error warnings for find and upload).
 - Tests for review-flagged gaps (About flag, build identity guard, footer CSS, trust listener, redirects, resume backstop, template hash guard).
 - Docs: reconcile the user guide, upgrade notes, smoke test and failure-mode catalogue with certificate pinning, the settings view and About / Show Version.
 - Note: the self-signed checkbox was never released; legacy field is still read.
