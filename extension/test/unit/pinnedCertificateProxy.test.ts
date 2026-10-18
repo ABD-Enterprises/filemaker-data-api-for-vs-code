@@ -41,7 +41,6 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   const servers: Array<{ close(): Promise<void> }> = [];
   const saved: Record<string, string | undefined> = {};
   let connects: string[];
-  let proxyUrl: string;
 
   beforeAll(() => nock.restore());
   afterAll(() => {

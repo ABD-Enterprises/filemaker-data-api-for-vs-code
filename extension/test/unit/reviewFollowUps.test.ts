@@ -26,8 +26,8 @@ const json = (response: Record<string, unknown>, code = '0') => JSON.stringify({
 
 describe('certificate dialog text from the server is made safe', () => {
   it('strips control characters and bidirectional overrides, caps the length and quotes the value', () => {
-    const quoted = quoteCertificateText('evil\nSHA-256: 00:11\r\n‮Subject: gnirts\u0000');
-    expect(quoted).not.toMatch(/[\n\r‮\u0000]/);
+    const quoted = quoteCertificateText(`evil\nSHA-256: 00:11\r\n${String.fromCharCode(0x202e)}Subject: gnirts${String.fromCharCode(0)}`);
+    expect([...quoted].every((char) => char.charCodeAt(0) >= 32 && char !== String.fromCharCode(0x202e))).toBe(true);
     expect(quoted.startsWith('"') && quoted.endsWith('"')).toBe(true);
     expect(JSON.parse(quoted)).toBe('evil SHA-256: 00:11 Subject: gnirts');
     expect(JSON.parse(quoteCertificateText('x'.repeat(5000))).length).toBeLessThanOrEqual(161);
