@@ -1846,11 +1846,13 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "bundle:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=inline --outfile=dist/extension.js",
-    "bundle:schema-diff-worker": "esbuild src/services/schemaDiffWorker.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=inline --outfile=dist/schemaDiffWorker.js",
+    "bundle:extension": "node ./scripts/bundle.mjs extension",
+    "bundle:schema-diff-worker": "node ./scripts/bundle.mjs worker",
     "build:designer-ui": "node ./scripts/build-designer-ui-if-available.mjs",
     "copy:webviews": "shx mkdir -p dist/webviews/queryBuilder/ui dist/webviews/recordViewer/ui dist/webviews/scriptRunner/ui dist/webviews/schemaDiff/ui dist/webviews/recordEditor/ui dist/webviews/connectionWizard/ui dist/webviews/layoutMode/ui && shx cp -r src/webviews/queryBuilder/ui/* dist/webviews/queryBuilder/ui && shx cp -r src/webviews/recordViewer/ui/* dist/webviews/recordViewer/ui && shx cp -r src/webviews/scriptRunner/ui/* dist/webviews/scriptRunner/ui && shx cp -r src/webviews/schemaDiff/ui/* dist/webviews/schemaDiff/ui && shx cp -r src/webviews/recordEditor/ui/* dist/webviews/recordEditor/ui && shx cp -r src/webviews/connectionWizard/ui/* dist/webviews/connectionWizard/ui && shx cp -r src/webviews/layoutMode/ui/* dist/webviews/layoutMode/ui && sh -c 'if [ -d ../designer-ui/dist ]; then shx cp -r ../designer-ui/dist/* dist/webviews/layoutMode/ui; fi'",
-    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run copy:webviews",
+    "notices": "node ./scripts/generate-third-party-notices.mjs",
+    "notices:check": "node ./scripts/generate-third-party-notices.mjs --check",
+    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run copy:webviews && npm run notices",
     "watch": "tsc -w -p .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,js,json,md,css,html}\"",
@@ -1863,7 +1865,7 @@
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p tsconfig.vitest.json --noEmit",
     "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
-    "package:check": "npm run package:vsix"
+    "package:check": "npm run notices:check && npm run package:vsix"
   },
   "dependencies": {
     "axios": "^1.20.0",

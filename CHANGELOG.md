@@ -48,6 +48,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Ship generated `THIRD_PARTY_NOTICES.txt` (checked in CI via `package:check` and a unit test); exclude lint config, build scripts, QA docs and ARCHITECTURE.md from the VSIX.
+- Production-minify the extension, worker and Layout Mode UI bundles; no inline or shipped source maps; clear designer-ui build failure message.
 - Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
 - Job aid for the Marketplace publishing token, with the 2026-12-01 PAT retirement noted.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
