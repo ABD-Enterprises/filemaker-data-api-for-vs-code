@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 - Refresh Schema Cache re-reads the layout list.
 - Layout names are no longer trimmed; spacing/case variants stay distinct.
 - The Record Editor no longer hides the fact that fields are missing. A note above the field list says that fields your account cannot access are not shown, and when the layout lists fields that the record has no value for it says how many and names them (up to five).
+- The Record Viewer no longer sits on a loading skeleton. Opened for a record (from a results row, for example) it loads that record by itself; opened without one it shows the form with the hint 'Enter a record ID and select Load Record.'; a failed load shows its error.
 
 ### [INTERNAL]
 
