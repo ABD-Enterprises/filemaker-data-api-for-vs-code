@@ -59,6 +59,9 @@ describe('exportCsv round trip', () => {
     for (const text of ['=1+1', '@x', '-N/A', '+cmd|calc', '-Notes']) {
       expect(restoreFormulaText(escapeCsvValue(text).replace(/^"|"$/g, ''))).toBe(text);
     }
+    for (const text of ["'=1", "''=1", "'-x", "'+1", "'@x"]) {
+      expect(restoreFormulaText(escapeCsvValue(text).replace(/^"|"$/g, ''))).toBe(text);
+    }
     expect(restoreFormulaText("it's fine")).toBe("it's fine");
     expect(restoreFormulaText("'plain")).toBe("'plain");
   });

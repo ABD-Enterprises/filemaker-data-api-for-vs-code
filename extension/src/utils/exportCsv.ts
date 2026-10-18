@@ -17,7 +17,7 @@ const NUMBER_OR_PHONE = /^[-+][\d\s().,/-]*\d[\d\s().,/-]*$/;
  * as `-5` are left alone.
  */
 function neutralizeFormula(text: string): string {
-  if (!/^[=+\-@\t\r]/.test(text) || PLAIN_NUMBER.test(text) || NUMBER_OR_PHONE.test(text)) {
+  if (!/^'*[=+\-@\t\r]/.test(text) || PLAIN_NUMBER.test(text) || NUMBER_OR_PHONE.test(text)) {
     return text;
   }
 
@@ -86,5 +86,5 @@ export function recordsToCsv(
 
 /** Reverses `neutralizeFormula` when reading back a file this extension exported. */
 export function restoreFormulaText(text: string): string {
-  return /^'[=+\-@\t\r]/.test(text) ? text.slice(1) : text;
+  return /^'+[=+\-@\t\r]/.test(text) ? text.slice(1) : text;
 }
