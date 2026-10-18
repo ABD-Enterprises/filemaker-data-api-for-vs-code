@@ -19,7 +19,7 @@ A workspace `.vscode/settings.json` or `.vscode/filemaker.config.json` can make 
 
 Action if you relied on a repository file to grant `admin`, to switch enterprise mode off or to switch a feature back on: set that in your **user** settings instead. `filemaker.offline.mode` and `filemaker.features.ai.enabled` are also ignored in an untrusted workspace.
 
-The **Toggle Offline Mode** command writes the workspace setting, so it cannot turn offline mode off when your user settings turn it on. Change it in your user settings.
+The **Toggle Offline Mode** command writes the workspace setting, so it needs an open folder and cannot turn offline mode off when your user settings turn it on. Change it in your user settings.
 
 ### New prompts
 
@@ -41,7 +41,7 @@ You will now be asked before:
 ### Generated files and exports
 
 - **Generated type, client and snippet file names changed** for layouts whose names contain spaces or punctuation: such a layout now gets `<safe name>-<8 characters>.ts` under `<typegen output>/layouts/`. Names made of letters, digits, `_`, `.` and `-` are unchanged. Layouts that used to collide on one file now get separate files. Action: regenerate, update imports, and delete the old files.
-- **CSV exports** (batch export and Query Builder) put a leading apostrophe in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, for example `'=SUM(A1)`. Plain numbers and phone numbers are not changed. **Batch update** strips the apostrophe on import, so a round trip is safe. Action: if another program reads these CSV files, strip a leading apostrophe there.
+- **CSV exports** (batch export and Query Builder) put a leading apostrophe in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, for example `'=SUM(A1)`. Plain numbers and phone numbers are not changed. **Copy results as table** in the Query Builder does not get this protection. A CSV export is not a ready-made import file (it has `recordId` and `modId` columns and batch update reads `modId` as a field). Action: if another program reads these CSV files, strip a leading apostrophe there.
 - Names that came from a database are escaped in generated TypeScript, so a layout named with `*/` can no longer put code in a file.
 - `.vscode/filemaker/snapshots/` and the offline cache index are validated. Entries that are not plain `.json` file names in that folder are ignored.
 - `filemaker.typegen.outputDir` rejects Windows drive-relative paths such as `D:folder` (it falls back to `filemaker-types`).
@@ -51,13 +51,13 @@ You will now be asked before:
 - **Record Editor:** saving sends the version of the record you loaded. If the record changed, FileMaker refuses the edit (error 306), the editor shows what changed, and your edits stay in the form until you choose **Reload record**. Before, the last save silently won. Batch update is unchanged.
 - **Empty results:** a find that matches nothing (FileMaker's HTTP 404 with error 401) or an offset past the last match returns an empty result. Scripts or notes that expected an error for "no records" need updating.
 - **Session renewal:** parallel requests share one renewal when a session expires.
-- **FM Web bridge:** writes and script runs follow your offline mode, feature switches and enterprise policy, and the bridge serves only the active connection.
+- **FM Web bridge:** record changes are refused in offline mode and when the enterprise role disallows `writeOperations`; script runs are refused in offline mode, when the script runner is switched off and when the role disallows `scriptRunner`. The bridge serves only the active connection. The preview app does not send the bridge's session token today, so its data calls are refused with HTTP 403.
 - **Logs and details** hide more secrets (session tokens in request paths, more token-like query parameters and JSON keys, passwords inside URLs). If you grep logs for a value, it may now show as redacted.
 
 ### New, and off by default
 
 - AI features: **Write AI Context**, language-model tools for VS Code agent mode, **Set AI Access for Connection**, **Show AI Activity**, **Start New AI Session**, and the `filemaker.ai.*` settings. Profiles gain an optional `aiAccess` of `none` (default), `read` or `write`. Nothing is read by an AI tool until you set `filemaker.ai.enabled` in your user settings and choose a connection.
-- A status bar item `AI: off` on the right. It is a switch for AI tools; it does nothing when AI is off.
+- A status bar item `AI: off` on the right. It is the AI kill switch: selecting it turns AI tools off even when they were never on, and you are asked before they can be turned on again.
 - Enterprise feature id `ai` for `disabledFeatures`, and the restrict-only setting `filemaker.features.ai.enabled`.
 - Roles and enterprise files: older extension versions drop the unknown `ai` id from `disabledFeatures`. Use `filemaker.features.ai.enabled` in the same files if a team still has older versions.
 

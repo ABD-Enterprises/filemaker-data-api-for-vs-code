@@ -51,13 +51,13 @@ The bridge (`fmBridgeServer`) is started by **FileMaker: Start FM Web Preview Se
 - accepts only `localhost` and `127.0.0.1` origins and JSON `POST` requests to `/fm/*` with validated payloads;
 - caps the request body at 1 MB and applies a token-bucket rate limit and a per-session request budget (`filemaker.fmWeb.bridge.*` settings; throttled requests get HTTP 429 with `Retry-After`);
 - serves only the active connection and rejects a request that names another profile;
-- applies the same policy as the user's own commands: writes (edit, create, delete) and script runs are refused in offline mode, script runs are refused when the script runner is switched off, and both are refused when enterprise policy disallows them.
+- applies part of the user's policy: record changes (edit, create, delete) are refused in offline mode and when the enterprise role or `disabledFeatures` disallow `writeOperations`; script runs are refused in offline mode, when `filemaker.features.scriptRunner.enabled` is off, and when they disallow `scriptRunner`. It does not apply `filemaker.features.recordEdit.enabled`, the batch switch or workspace trust to those calls.
 
 The bridge never returns secrets. Generated `.env.local` contains the bridge URL only. The runtime keeps record context and found-set IDs in session storage, not credentials.
 
 Threats and mitigations in short: remote access (loopback binding and socket check), cross-site requests (origin allow-list, JSON only, token), untrusted workspace content (trust required; the preview asks before it runs `npm install` and `npm run dev`), credential leakage (secrets stay in `FMClient`), resource exhaustion (body cap, rate limit, budget). Any local process that obtains the token can use the bridge as the runtime does; the token lives only in extension host memory.
 
-Known gap in this release: the runtime's bridge client (`runtime-next/lib/bridge-client.ts`) does not send `X-FM-Bridge-Token`, and the extension does not pass the token to the runtime, so bridge calls from the generated app are rejected with HTTP 403. The user guide lists this as a known gap.
+Known problem in this release: every data call from the generated preview is refused with HTTP 403. The runtime's bridge client (`runtime-next/lib/bridge-client.ts`) does not send `X-FM-Bridge-Token`, and the extension does not pass the token to the runtime. The user guide lists this as a known problem.
 
 ## Develop and test
 

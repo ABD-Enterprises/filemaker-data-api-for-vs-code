@@ -25,8 +25,10 @@ A connection profile contains a server URL, database name, auth mode,
 and either a username (direct auth) or a proxy endpoint (proxy auth).
 Passwords, session tokens, and proxy API keys are stored separately in
 `SecretStore`, which prefers VS Code's `SecretStorage` (OS keychain)
-and falls back to an encrypted Memento when SecretStorage is
-unavailable. See `filemaker.secrets.fallback` setting.
+and, only if you choose `filemaker.secrets.fallback` = `workspace-state`,
+falls back to an AES-256-GCM envelope in workspace state when SecretStorage is
+unavailable. That fallback is obfuscated, not protection against anyone with
+local access to VS Code state: its key derives from the machine ID.
 
 ## Direct mode
 
@@ -125,10 +127,12 @@ blast radius if it is exfiltrated.
 
 ## Workspace trust and restrict-only policy
 
-- In an untrusted workspace the extension limits itself to reading: browsing,
-  metadata and finds. Writing files, record edit, create and delete, container
-  upload, batch update, plugins, the FM Web preview and AI tools need a trusted
-  workspace. `capabilities.untrustedWorkspaces` in `package.json` lists the
+- In an untrusted workspace the extension limits itself mostly to reading:
+  browsing, metadata and finds. Record delete, container upload, batch export
+  and update, writing generated files, plugins, the FM Web commands and
+  preview, and AI tools need a trusted workspace. Record edit and create and
+  the Script Runner are not blocked by workspace trust today; they are limited
+  by offline mode, the feature switches and the enterprise role. `capabilities.untrustedWorkspaces` in `package.json` lists the
   settings that are ignored in an untrusted workspace.
 - Enterprise mode, the enterprise role, offline mode and the
   `filemaker.features.*.enabled` switches are **restrict-only** for workspace

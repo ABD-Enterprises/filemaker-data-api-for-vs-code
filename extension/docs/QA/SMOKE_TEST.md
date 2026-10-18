@@ -27,7 +27,7 @@ Tick each one. A failure in checks 1 to 12 blocks the release.
 | 5 | Wizard success | Enter the real details, **Test Connection**: green. **Save Profile**, then **Connect Now** connects. The status bar shows `FileMaker: <profile>`. |
 | 6 | Secrets | After saving, the password is not in `settings.json` or the Output channel. **Edit Connection Profile**, change the server address, **Save Profile**: the wizard asks for the password again. |
 | 7 | Explorer | The profile expands to layouts, then Fields and Value Lists. |
-| 8 | Query Builder | Open it on a layout, build a find with the form, **Run**. Results show with a found count. Paging, column sort and **Save results as CSV...** work. A find that matches nothing shows an empty result, not an error. |
+| 8 | Query Builder | Open it on a layout, build a find with the form, **Run**. Results show with a found count. Paging, column sort and **Export > Save results as CSV…** work. A find that matches nothing shows an empty result, not an error. |
 | 9 | Record Editor | Open a record, change a field, **Save**, confirm: the change appears. Then open the same record in two editors, save in one, and save in the other: the second save is refused and its form keeps the edit. |
 | 10 | Batch | **Batch Export (Find)** to a `.csv` file works. **Batch Update from CSV/JSON** with **Dry-run only** shows a preview and changes nothing. |
 | 11 | Schema | **Capture Schema Snapshot** twice, then **Diff Schema Snapshots** opens the diff. |

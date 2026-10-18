@@ -37,7 +37,7 @@ In the identity's page:
 
 (Microsoft's page for this: <https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity>. The ids come from this repository's GitHub setting, read on 2026-10-18; they change only if the repository is deleted and recreated. The environment form of the subject is inferred from GitHub's documented branch form.)
 
-If the first publish fails at sign-in, the run log shows the subject GitHub sent. Tell me, or paste that value into the credential's Subject identifier field.
+If the first publish fails at sign-in, the run log shows the subject GitHub sent. Paste that value into the credential's Subject identifier field, or open an issue if it differs in a way you cannot explain.
 
 ## Part 3: tell GitHub which identity to use (3 minutes)
 
@@ -52,14 +52,22 @@ gh variable set AZURE_CLIENT_ID --env marketplace --repo SureForgeTech/filemaker
 gh variable set AZURE_TENANT_ID --env marketplace --repo SureForgeTech/filemaker-data-api-for-vs-code --body "<tenant id>"
 ```
 
-## Part 4: get the identity's Azure DevOps id (I do this; you approve once)
+## Part 4: get the identity's Azure DevOps id (10 minutes)
 
-The Marketplace identifies the identity by an id that only the identity itself can read. Reply "run the id helper" once Parts 1 to 3 are done. I will then:
+The Marketplace identifies the identity by an id that only the identity itself can read. The helper workflow `entra-identity-id.yml` prints it. The `marketplace` environment normally accepts only `v*` tags, so allow the `main` branch for the length of this step. Do Parts 1 to 3 first. You need repository admin rights and the GitHub CLI signed in (`gh auth login`).
 
-1. Temporarily allow the `main` branch on the `marketplace` environment (it is normally tags only; the helper cannot run from a branch otherwise).
-2. Start the **Entra identity id** workflow.
-3. You get a GitHub notification: open the run, click **Review deployments**, tick **marketplace**, **Approve and deploy**.
-4. I read the id from the run log, remove the temporary branch rule, and send you the id.
+1. Add a temporary branch rule to the environment:
+   ```bash
+   gh api -X POST repos/SureForgeTech/filemaker-data-api-for-vs-code/environments/marketplace/deployment-branch-policies -f name=main -f type=branch
+   ```
+   The response includes an `id`. Write it down.
+2. Start the helper from `main`: `gh workflow run entra-identity-id.yml --repo SureForgeTech/filemaker-data-api-for-vs-code --ref main`.
+3. Open the run (`gh run list --workflow entra-identity-id.yml`), click **Review deployments**, tick **marketplace**, then **Approve and deploy**.
+4. When the run finishes, open the log of the step **Print the Azure DevOps id** and copy the value. It is an identifier, not a secret.
+5. Remove the temporary rule so the environment is tags-only again, using the `id` from step 1 (or list them with `gh api repos/SureForgeTech/filemaker-data-api-for-vs-code/environments/marketplace/deployment-branch-policies`):
+   ```bash
+   gh api -X DELETE repos/SureForgeTech/filemaker-data-api-for-vs-code/environments/marketplace/deployment-branch-policies/<id>
+   ```
 
 ## Part 5: allow that identity to publish (3 minutes)
 
@@ -71,11 +79,11 @@ Microsoft's description of this step: <https://code.visualstudio.com/api/working
 
 ## Part 6: publish
 
-Push the `v*` tag. In the run, approve the **marketplace** deployment. The `publish` job signs in with the identity and publishes. **If it fails at the publish step with an access error, tell me the message** so I can fix it: this flow is documented by Microsoft only for Azure Pipelines, and reported working on GitHub Actions by one third-party write-up, not by Microsoft.
+Push the `v*` tag. In the run, approve the **marketplace** deployment. The `publish` job signs in with the identity and publishes. If it fails at the publish step with an access error, open an issue with the (redacted) message. This flow is documented by Microsoft only for Azure Pipelines, and reported working on GitHub Actions by one third-party write-up, not by Microsoft, so a failure here may need a change to the workflow.
 
 ## Afterwards
 
-- I delete the helper workflow (`entra-identity-id.yml`) once Part 5 is done.
+- Delete the helper workflow (`.github/workflows/entra-identity-id.yml`) in a pull request once Part 5 is done, and confirm the temporary `main` rule from Part 4 is gone.
 - There is no `VSCE_PAT` anywhere and nothing to renew.
 
 ## Pitfalls
@@ -87,4 +95,4 @@ Push the `v*` tag. In the run, approve the **marketplace** deployment. The `publ
 
 ## Later option
 
-`vsce` 4.0.0 also has a hidden `--oidc` option (GitHub sign-in straight to the Marketplace, no Azure at all). It is not in Microsoft's documentation and I could not find how a publisher turns it on, so it is not used. If Microsoft documents it, it would replace Parts 1 to 5.
+`vsce` 4.0.0 also has a hidden `--oidc` option (GitHub sign-in straight to the Marketplace, no Azure at all). It is not in Microsoft's documentation and the way a publisher turns it on is not documented, so it is not used. If Microsoft documents it, it would replace Parts 1 to 5.

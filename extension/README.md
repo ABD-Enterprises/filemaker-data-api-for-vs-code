@@ -93,7 +93,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 
 - Passwords, API keys and session tokens live in VS Code SecretStorage (your OS keychain), not in settings or logs.
 - Logs, history and error details hide authorization headers, tokens and passwords.
-- Writing files, editing records, batch updates and plugins need a trusted workspace. A repository can make the extension's policy stricter but never looser.
+- Deleting records, uploading, batch jobs, writing generated files and plugins need a trusted workspace. A repository can make the extension's policy stricter but never looser.
 - The extension collects no telemetry. It talks only to your FileMaker server or your proxy.
 
 Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/security.md), the [data handling notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/DATA_HANDLING.md), and the [security policy](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md) for how to report a vulnerability.

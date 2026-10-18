@@ -9,8 +9,8 @@ and compliance review.
 | Data category | Examples | Location | Format | Encryption | Retention and deletion |
 | --- | --- | --- | --- | --- | --- |
 | Connection profiles | Profile id, display name, server URL, database, auth mode, username, API path, proxy endpoint | VS Code `globalState` under the extension profile store | JSON | Not encrypted by the extension. Profile objects must not contain passwords, session tokens, or proxy API keys. | Retained until the user deletes the profile or VS Code removes extension global state. Profile deletion also clears related saved queries and active-profile selection. |
-| Credentials | FileMaker password, session token, proxy API key | VS Code `SecretStorage` by default; optional workspace-state fallback envelope when SecretStorage is unavailable and fallback mode is enabled | SecretStorage record or AES-256-GCM envelope with salt, IV, ciphertext, and auth tag | Encrypted at rest by the OS-backed SecretStorage provider, or by the extension's AES-256-GCM fallback envelope. | Deleted when the user deletes the profile. A successful SecretStorage write also removes any older fallback envelope for the same key. |
-| Schema snapshots | Captured layout metadata, field metadata, script metadata, snapshot summaries | VS Code `workspaceState` by default; optionally `.vscode/filemaker/snapshots/` when workspace-file storage is configured and the workspace is trusted | JSON | Not encrypted by the extension. Schema metadata can reveal internal names and should be treated as internal project data. | Retained until explicitly pruned by the configured max snapshots per layout, deleted with workspace state, or removed with the workspace files. |
+| Credentials | FileMaker password, session token, proxy API key | VS Code `SecretStorage` by default; optional workspace-state fallback envelope when SecretStorage is unavailable and fallback mode is enabled | SecretStorage record or an AES-256-GCM envelope with salt, IV, ciphertext, and auth tag | Encrypted at rest by the OS-backed SecretStorage provider. The fallback envelope is **obfuscated, not protection against anyone with local access to VS Code state**: its key is derived from the machine ID, which is not secret. Use the fallback only when no keyring exists. | Deleted when the user deletes the profile. A successful SecretStorage write also removes any older fallback envelope for the same key. |
+| Schema snapshots | Captured layout metadata, field metadata, script metadata, snapshot summaries | `.vscode/filemaker/snapshots/` in the workspace by default (`filemaker.schema.snapshots.storage` = `workspaceFiles`, trusted workspaces); VS Code `workspaceState` when that setting is `workspaceState` or the workspace is untrusted | JSON | Not encrypted by the extension. Schema metadata can reveal internal names and should be treated as internal project data. | Retained until explicitly pruned by the configured max snapshots per layout, deleted with workspace state, or removed with the workspace files. |
 | Saved queries | Query name, profile id, database, layout, find JSON, sort JSON, limits, timestamps | VS Code `workspaceState` or `globalState`, selected by `filemaker.savedQueries.scope` | JSON | Not encrypted by the extension. | Retained until the user deletes the query, imports over it, deletes the related profile, or VS Code removes the selected state scope. |
 | Cache | Runtime schema/layout metadata cache, in-flight request state | Extension host memory only | JavaScript objects | Not persisted. No at-rest encryption is applied because the data is not written to disk by the extension. | Cleared on extension host reload, process exit, profile invalidation, or TTL expiry. Schema cache TTL is bounded by `filemaker.schema.cacheTtlSeconds` and defaults to 300 seconds. |
 | Offline metadata cache | Layout metadata (field names, types, value lists) the extension read while online, so it can be browsed in offline mode | `.vscode/filemaker/offline-metadata/` in the workspace (trusted workspaces only), with an `index.json` | JSON | Not encrypted by the extension. Reveals internal names; do not commit to a public repository. | Refreshed by **FileMaker: Refresh Offline Metadata Cache** and whenever metadata is read online; the index keeps at most 1,000 items. Deleted with the workspace files. |
@@ -28,12 +28,13 @@ Extension host services
         +--> Connection profile metadata --> VS Code globalState
         |
         +--> Passwords, tokens, proxy keys --> SecretStorage
-        |                                      or AES-256-GCM fallback envelope
+        |                                      or obfuscated fallback envelope
         |
         +--> Saved queries -----------------> workspaceState or globalState
         |
-        +--> Schema snapshots --------------> workspaceState
-        |                                      or .vscode/filemaker/snapshots/
+        +--> Schema snapshots --------------> .vscode/filemaker/snapshots/
+        |                                      (workspaceState if untrusted
+        |                                      or configured)
         |
         +--> Runtime caches ----------------> extension host memory only
         |
@@ -49,10 +50,12 @@ Extension host services
   profile selection when applicable, deletes credentials for that profile, and
   removes saved queries tied to that profile.
 - Clearing VS Code extension state or removing a workspace can remove
-  workspace-scoped records such as saved queries, history, metrics, and default
-  schema snapshots.
-- Workspace-file schema snapshots live in `.vscode/filemaker/snapshots/` and
-  should be deleted from the workspace when the project no longer needs them.
+  workspace-scoped records such as saved queries, history and metrics, and
+  schema snapshots kept in `workspaceState` (untrusted workspaces, or when
+  `filemaker.schema.snapshots.storage` is `workspaceState`).
+- By default schema snapshots are files in `.vscode/filemaker/snapshots/` in
+  the workspace. They are removed with the workspace files and should be
+  deleted from the workspace when the project no longer needs them.
 - Offline metadata cache files live in `.vscode/filemaker/offline-metadata/` and are deleted with the workspace files.
 - The AI activity log and generated AI context file (default location) live in the extension's storage folder; removing the extension's global storage removes them.
 - In-memory caches do not survive extension host restart or VS Code reload.

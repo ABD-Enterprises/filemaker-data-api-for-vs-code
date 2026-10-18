@@ -58,16 +58,20 @@ Branch from green `main`: `git switch -c release/vX.Y.Z origin/main`.
 - [ ] **Marketplace listing (non-code).** In `extension/package.json`: description, `keywords`, `categories`, `icon`, `homepage`, `bugs`. In the README: screenshots in `extension/docs/marketplace/` still show the product and the files exist (the listing loads them from `main` on GitHub, so do not rename or delete one later). Nothing in the listing may describe a feature that is off by default without saying so, or one that is not in this release.
 - [ ] **Compatibility.** [extension/docs/COMPATIBILITY.md](../extension/docs/COMPATIBILITY.md) lists the server versions you actually tested.
 - [ ] **Dependencies.** `npm audit --omit=dev --audit-level=high` is clean (CI enforces it). Review the Dependabot pull requests that would otherwise land right after the release ([dependency policy](./CI.md)).
-- [ ] Push, open the pull request titled `[patch] Release X.Y.Z` (or the tier that matches), and wait for `build-test`. Merge when it is green.
+- [ ] Push the branch and open the pull request titled `[patch] Release X.Y.Z` (or the tier that matches). Mark it draft or hold the merge: verify first (next section), then merge.
 
-### 3. Verify the build
+### 3. Verify the build, on the release branch, before merging
 
-- [ ] On a clean machine or profile, `npm ci && npm run package:check` and install `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`.
+Do this against the release branch (the content that will be tagged), not after the merge. Merging puts the version bump on `main`; the tag follows quickly, and a problem found afterwards costs a patch release.
+
+- [ ] `build-test` is green on the release pull request.
+- [ ] On a clean machine or profile, from the release branch, `npm ci && npm run package:check` and install `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`.
 - [ ] Run the [smoke test](../extension/docs/QA/SMOKE_TEST.md) against a real server, or against the mock server (`npm run mock:server -w extension`) if no server is available. Note which you used.
 - [ ] Run the checks that matter for this release's changes. For a release with a security change, try the failure path too (for example open a repository with a hostile settings file).
 
-### 4. Publish
+### 4. Merge and publish
 
+- [ ] Merge the release pull request once the verification above passed and `build-test` is green. Do not add code after verifying; if you must, verify again.
 - [ ] Make sure the release commit is on `origin/main` and `extension/package.json` has the new version there: `git fetch origin && git show origin/main:extension/package.json | grep '"version"'`.
 - [ ] Create and push the tag from `main` (as a repository admin):
   ```bash

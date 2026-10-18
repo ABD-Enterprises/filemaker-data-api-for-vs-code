@@ -64,7 +64,7 @@ PR title prefix matches the highest-tier label added:
 - Validate the workspace snapshot index entries so a repository's index cannot make pruning delete other files; reject Windows drive-relative output folders.
 - Redact the session token in request paths, more query parameters and JSON keys, and credentials embedded in URLs.
 - Ask before running a workspace plugin, once per folder content (workspace + SHA-256 of every file), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.
-- Make offline mode and `features.*.enabled` restrict-only for workspace settings, and gate the FM Web preview bridge (writes, script runs) on offline mode, feature switches and enterprise policy.
+- Make offline mode and `features.*.enabled` restrict-only for workspace settings, and gate the FM Web preview bridge (writes on offline mode and the `writeOperations` role check; script runs on offline mode, the script runner switch and the `scriptRunner` role check).
 - Make enterprise policy restrict-only: workspace settings and `.vscode/filemaker.config.json` may turn enterprise mode on or lower the role, never turn it off or raise the role above the user's own.
 - Layout Mode `runScript` behaviours get the Script Runner's checks plus an explicit confirmation naming the script, parameter and connection.
 - FM Web Preview confirms before running `npm install` / `npm run dev` in the generated runtime folder.
