@@ -1146,6 +1146,14 @@
             "description": "Enable the Script Runner JSON parameter builder.",
             "order": 1
           },
+          "filemaker.export.neutralizeFormulas": {
+            "type": "boolean",
+            "default": true,
+            "scope": "application",
+            "description": "Protect spreadsheets: put an apostrophe in front of CSV cells and copied table cells that start with =, +, -, @, tab or carriage return. User settings only.",
+            "markdownDescription": "Protect spreadsheets from formulas hidden in data. A cell whose text starts with `=`, `+`, `-`, `@`, a tab or a carriage return is run as a formula by Excel, Sheets and Numbers (for example `=HYPERLINK(...)` can send data to another site), so CSV exports and **Copy as table** put an apostrophe in front of it. Plain numbers and phone numbers are left alone. Turn this off only if you need the exact text and never open the files in a spreadsheet. Importing a file always takes the apostrophe back off, whichever way this is set. Read from your **user** settings only; a workspace cannot turn it off.",
+            "order": 10
+          },
           "filemaker.batch.maxRecords": {
             "type": "number",
             "default": 10000,

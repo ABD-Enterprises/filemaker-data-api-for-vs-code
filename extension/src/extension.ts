@@ -253,6 +253,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           },
           getConcurrency: () => settingsService.getBatchConcurrency(),
           getDryRunDefault: () => settingsService.getBatchDryRunDefault(),
+          getNeutralizeFormulas: () => settingsService.getNeutralizeExportFormulas(),
           getPerformanceMode: () => roleGuard.resolvePerformanceMode(),
           circuitBreakerRegistry: registry
         });

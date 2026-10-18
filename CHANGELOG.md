@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Add user-scope `filemaker.export.neutralizeFormulas` to opt out of CSV/Copy-as-table formula apostrophes (workspace cannot turn it off).
 - Connection wizard: custom CA certificate file (validated PEM) and per-profile, confirmed 'allow self-signed (insecure)' option; neither can come from a workspace template; flagged in the profile list and picker; editing keeps `aiAccess`.
 - AI tools for MCP clients (ADR-0004 phase 3): `AiMcpServer` over a local socket with per-session token, discovery file with pid and start time, the bundled `aiMcpShim.js` stdio program, `list_changed` on policy changes, commands to start/stop the server and copy the client config; off by default (`filemaker.ai.externalServer.enabled`, user scope), no local policy of its own.
 - AI tools for VS Code language-model clients (ADR-0004 phase 2): `AiToolService` tool core (policy, layout consent, record and write caps, hidden-field filter, host-built write dialogs with fresh modId, delete by typed id, script allowlist, redaction, audit log), registered as language-model tools only when the user-scope switches allow; profile `aiAccess`, `ai` enterprise feature id, kill-switch status bar item, **Set AI Access for Connection** and **Show AI Activity** commands.

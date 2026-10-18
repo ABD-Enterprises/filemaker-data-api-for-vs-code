@@ -761,6 +761,7 @@ function applyInit(payload) {
   state.defaults = payload.defaults;
 
   includeAuthCheckbox.checked = payload.includeAuthByDefault === true;
+  state.neutralizeFormulas = payload.neutralizeFormulas !== false;
   state.recordEditEnabled = payload.recordEditEnabled !== false;
 
   renderProfiles();
@@ -1316,7 +1317,10 @@ function buildResultsTsv() {
   const columns = ['recordId', ...collectColumns(records, Infinity)];
   // A cell that a spreadsheet would run as a formula (=HYPERLINK(...), +cmd|...) gets a leading
   // apostrophe, as in the CSV export. Tabs and line breaks are flattened first.
-  const clean = (value) => window.CellText.neutralizeFormula(toCellValue(value).replace(/[\t\r\n]+/g, ' '));
+  const clean = (value) => {
+    const flat = toCellValue(value).replace(/[\t\r\n]+/g, ' ');
+    return state.neutralizeFormulas === false ? flat : window.CellText.neutralizeFormula(flat);
+  };
   const lines = [columns.map(clean).join('\t')];
   sortRecords(records).forEach((record) => {
     lines.push(columns.map((column) => clean(getCellRaw(record, column))).join('\t'));

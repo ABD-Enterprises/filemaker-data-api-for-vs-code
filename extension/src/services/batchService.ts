@@ -26,6 +26,8 @@ interface BatchServiceOptions {
   getConcurrency?: () => number;
   getDryRunDefault?: () => boolean;
   getPerformanceMode?: () => PerformanceMode;
+  /** CSV formula protection; on unless the user turned it off. */
+  getNeutralizeFormulas?: () => boolean;
   circuitBreakerRegistry?: CircuitBreakerRegistry;
 }
 
@@ -34,6 +36,7 @@ export class BatchService {
   private readonly getConcurrency: () => number;
   private readonly getDryRunDefault: () => boolean;
   private readonly getPerformanceMode: () => PerformanceMode;
+  private readonly getNeutralizeFormulas: () => boolean;
   private readonly circuitBreakerRegistry?: CircuitBreakerRegistry;
 
   public constructor(private readonly fmClient: FMClient, options?: BatchServiceOptions) {
@@ -41,6 +44,7 @@ export class BatchService {
     this.getConcurrency = options?.getConcurrency ?? (() => 4);
     this.getDryRunDefault = options?.getDryRunDefault ?? (() => true);
     this.getPerformanceMode = options?.getPerformanceMode ?? (() => 'standard');
+    this.getNeutralizeFormulas = options?.getNeutralizeFormulas ?? (() => true);
     this.circuitBreakerRegistry = options?.circuitBreakerRegistry;
   }
 
@@ -67,7 +71,7 @@ export class BatchService {
     let offset = typeof request.offset === 'number' ? request.offset : 1;
     let truncated = false;
     const jsonlWriter = format === 'jsonl' ? await createJsonlWriter(options.outputPath) : undefined;
-    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath) : undefined;
+    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath, { neutralizeFormulas: this.getNeutralizeFormulas() }) : undefined;
 
     try {
       while (exported < maxRecords) {
