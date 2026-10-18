@@ -3,6 +3,8 @@ import { readFileSync, statSync } from 'fs';
 import { Agent, type AgentOptions } from 'https';
 import * as tls from 'tls';
 
+import shouldBypassProxy from 'axios/unsafe/helpers/shouldBypassProxy.js';
+
 import type { ConnectionProfile } from '../types/fm';
 import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE } from '../utils/networkErrors';
 import { FMClientError } from './errors';
@@ -128,12 +130,17 @@ export function checkPinnedCertificate(
  * The check runs when the handshake finishes. Writes are corked until then so that nothing, not
  * even the Basic-auth header, can be sent to a server whose certificate is not the pinned one.
  */
-class PinnedCertificateAgent extends Agent {
+export class PinnedCertificateAgent extends Agent {
   public constructor(
     options: AgentOptions,
     private readonly pin: { sha256: string; allowExpired: boolean }
   ) {
-    super(options);
+    // No TLS session cache. A resumed session has no peer certificate to read, so the second and
+    // later connections through a caching agent would find nothing to compare with the pin (and be
+    // refused as "certificate changed"). Every connection of this agent therefore does a full
+    // handshake, and every socket it hands out has passed the check below: a kept-alive socket
+    // that is reused was checked when it was created.
+    super({ ...options, maxCachedSessions: 0 });
     // `rejectUnauthorized: false` is forced per connection in createConnection and is deliberately
     // NOT kept in `this.options`. When an HTTP proxy applies, axios replaces this agent with a
     // tunnelling one and copies `options` into it; if `rejectUnauthorized: false` were copied too,
@@ -158,7 +165,10 @@ class PinnedCertificateAgent extends Agent {
     // this is not known to change the outcome and no test can tell the two apart.
     socket.cork();
     socket.once('secureConnect', () => {
-      const failure = checkPinnedCertificate(socket.getPeerCertificate(false), this.pin);
+      // A resumed session shows no certificate, so it could not be checked: never accept it.
+      const failure = socket.isSessionReused()
+        ? { code: CERT_PIN_MISMATCH_CODE, message: 'The connection resumed an earlier session, so the certificate could not be checked.' }
+        : checkPinnedCertificate(socket.getPeerCertificate(false), this.pin);
       if (failure) {
         socket.destroy(Object.assign(new Error(failure.message), { code: failure.code }));
         return;
@@ -169,48 +179,71 @@ class PinnedCertificateAgent extends Agent {
   }
 }
 
+/** Environment variable as `proxy-from-env` reads it: lower case first, then upper case. */
+function readEnv(key: string): string {
+  return process.env[key.toLowerCase()] || process.env[key.toUpperCase()] || '';
+}
+
+const DEFAULT_PORTS: Record<string, number> = { ftp: 21, gopher: 70, http: 80, https: 443, ws: 80, wss: 443 };
+
+/** `proxy-from-env`'s `shouldProxy` (its own NO_PROXY rules: exact host unless the entry starts with `.` or `*`). */
+function proxyFromEnvShouldProxy(hostname: string, port: number): boolean {
+  const noProxy = readEnv('no_proxy').toLowerCase();
+  if (!noProxy) {
+    return true;
+  }
+  if (noProxy === '*') {
+    return false;
+  }
+  return noProxy.split(/[,\s]/).every((entry) => {
+    if (!entry) {
+      return true;
+    }
+    const parsed = entry.match(/^(.+):(\d+)$/);
+    let entryHost = parsed ? (parsed[1] as string) : entry;
+    const entryPort = parsed ? parseInt(parsed[2] as string, 10) : 0;
+    if (entryPort && entryPort !== port) {
+      return true;
+    }
+    if (!/^[.*]/.test(entryHost)) {
+      return hostname !== entryHost;
+    }
+    if (entryHost.charAt(0) === '*') {
+      entryHost = entryHost.slice(1);
+    }
+    return !hostname.endsWith(entryHost);
+  });
+}
+
 /**
- * Environment proxy settings, read the way axios reads them (the `proxy-from-env` rules: the
- * scheme's `*_proxy`, `all_proxy`, `npm_config_*`, either case), and `NO_PROXY`. Only used to decide
- * whether a pinned certificate can be checked: it errs towards "a proxy applies".
+ * The proxy axios would use for `url`, or undefined. This is axios's own rule, not an approximation:
+ * the `proxy-from-env` lookup (`<scheme>_proxy`, else `all_proxy`; its `NO_PROXY` matching), reproduced
+ * here, and then axios's own `shouldBypassProxy` (a second, different `NO_PROXY` matching that it applies
+ * after the first), imported from axios itself. A proxy is in use only when both leave it in place.
+ * `npm_config_*` variables are NOT read (axios does not). Used to decide whether a pinned certificate can
+ * be checked; a test compares this with the real `proxy-from-env` on a corpus.
  */
-export function environmentProxyFor(url: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+export function environmentProxyFor(url: string): string | undefined {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return undefined;
   }
-  const scheme = parsed.protocol.replace(':', '').toLowerCase();
-  const read = (name: string): string | undefined => env[name.toLowerCase()] || env[name.toUpperCase()] || undefined;
-  const proxy =
-    read(`npm_config_${scheme}_proxy`) ||
-    read(`${scheme}_proxy`) ||
-    read('npm_config_proxy') ||
-    read('all_proxy') ||
-    read('npm_config_all_proxy');
+  const scheme = parsed.protocol.split(':', 1)[0] as string;
+  const hostname = parsed.host.replace(/:\d*$/, '');
+  const port = parseInt(parsed.port, 10) || DEFAULT_PORTS[scheme] || 0;
+  if (!hostname || !proxyFromEnvShouldProxy(hostname, port)) {
+    return undefined;
+  }
+  let proxy = readEnv(`${scheme}_proxy`) || readEnv('all_proxy');
   if (!proxy) {
     return undefined;
   }
-
-  const noProxy = (read('npm_config_no_proxy') || read('no_proxy') || '').toLowerCase();
-  const host = parsed.hostname.toLowerCase();
-  const port = parsed.port || (scheme === 'https' ? '443' : '80');
-  for (const entry of noProxy.split(/[,\s]+/).filter(Boolean)) {
-    if (entry === '*') {
-      return undefined;
-    }
-    const match = /^(.+?)(?::(\d+))?$/.exec(entry);
-    const entryHost = (match?.[1] ?? entry).replace(/^\*/, '');
-    const entryPort = match?.[2];
-    if (entryPort && entryPort !== port) {
-      continue;
-    }
-    if (entryHost.startsWith('.') ? host.endsWith(entryHost) || host === entryHost.slice(1) : host === entryHost || host.endsWith(`.${entryHost}`)) {
-      return undefined;
-    }
+  if (!proxy.includes('://')) {
+    proxy = `${scheme}://${proxy}`;
   }
-  return proxy;
+  return shouldBypassProxy(url) ? undefined : proxy;
 }
 
 /**

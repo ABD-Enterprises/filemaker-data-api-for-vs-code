@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { ConnectionProfile } from '../types/fm';
 import { describeNetworkFailure, targetOfUrl } from '../utils/networkErrors';
 import { certificateTargetUrl, formatFingerprint, inspectServerCertificate, type ServerCertificateInfo } from './certificateInspect';
-import { normalizeSha256 } from './tlsAgent';
+import { environmentProxyFor, normalizeSha256 } from './tlsAgent';
 
 export { certificateTargetUrl, inspectServerCertificate, type ServerCertificateInfo };
 
@@ -42,6 +42,12 @@ export function describeCertificate(info: ServerCertificateInfo): string {
   ].join('\n');
 }
 
+/** This look at the certificate dials the server directly. Say so when a proxy is configured for it. */
+const PROXY_NOTE = (url: string): string =>
+  environmentProxyFor(url)
+    ? ' Note: this check connects directly to the server and does not use the HTTP proxy configured on this computer, and a trusted (pinned) certificate cannot be used through a proxy.'
+    : '';
+
 export interface TrustFlowDeps {
   inspect?: (url: string) => Promise<ServerCertificateInfo>;
   /** Shows the dialog; resolves to the label of the pressed button, or undefined if dismissed. */
@@ -76,7 +82,7 @@ export async function reviewAndTrustCertificate(
   } catch (error) {
     const failure = describeNetworkFailure((error as { code?: string }).code, targetOfUrl(url));
     void vscode.window.showErrorMessage(
-      failure?.message ?? 'The server\'s certificate could not be read. Check the address and that the server is reachable.'
+      `${failure?.message ?? 'The server\'s certificate could not be read. Check the address and that the server is reachable.'}${PROXY_NOTE(url)}`
     );
     return undefined;
   }
@@ -91,6 +97,7 @@ export async function reviewAndTrustCertificate(
     describeCertificate(info),
     changed ? `\nPreviously trusted: ${formatFingerprint(previous)}` : undefined,
     '',
+    PROXY_NOTE(url).trim() || undefined,
     'Only continue if you recognise this fingerprint (ask your FileMaker administrator, or compare it with the one in the Admin Console). The extension will then accept exactly this certificate for this connection, and warn you if it ever changes.'
   ].filter((line): line is string => line !== undefined);
 

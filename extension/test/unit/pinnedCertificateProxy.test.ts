@@ -10,7 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
-import { createHttpsAgentForProfile, environmentProxyFor, normalizeSha256 } from '../../src/services/tlsAgent';
+import { createHttpsAgentForProfile, normalizeSha256 } from '../../src/services/tlsAgent';
 import type { ConnectionProfile } from '../../src/types/fm';
 import { startTlsServer, type TestTlsServer } from '../helpers/tlsServer';
 import { DAY, makeCertificate, newKeyPair } from '../helpers/x509';
@@ -201,24 +201,3 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   });
 });
 
-describe('environmentProxyFor', () => {
-  const url = 'https://fm.example.com:16000/fmi/data';
-  it('finds the proxy the way axios does, lower or upper case, and honours NO_PROXY', () => {
-    expect(environmentProxyFor(url, {})).toBeUndefined();
-    expect(environmentProxyFor(url, { HTTPS_PROXY: 'http://p:1' })).toBe('http://p:1');
-    expect(environmentProxyFor(url, { https_proxy: 'http://p:1' })).toBe('http://p:1');
-    expect(environmentProxyFor(url, { ALL_PROXY: 'http://p:2' })).toBe('http://p:2');
-    expect(environmentProxyFor(url, { npm_config_https_proxy: 'http://p:3' })).toBe('http://p:3');
-    expect(environmentProxyFor('http://fm.example.com', { HTTPS_PROXY: 'http://p:1' })).toBeUndefined();
-
-    const proxied = { HTTPS_PROXY: 'http://p:1' };
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: '*' })).toBeUndefined();
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: 'fm.example.com' })).toBeUndefined();
-    expect(environmentProxyFor(url, { ...proxied, no_proxy: 'localhost, .example.com' })).toBeUndefined();
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: 'example.com' })).toBeUndefined();
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: 'fm.example.com:16000' })).toBeUndefined();
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: 'fm.example.com:443' })).toBe('http://p:1');
-    expect(environmentProxyFor(url, { ...proxied, NO_PROXY: 'other.example.net' })).toBe('http://p:1');
-    expect(environmentProxyFor('not a url', proxied)).toBeUndefined();
-  });
-});

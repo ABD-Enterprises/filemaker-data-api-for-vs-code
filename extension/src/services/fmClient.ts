@@ -35,7 +35,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
-import { httpsTransportFor } from './tlsAgent';
+import { environmentProxyFor, httpsTransportFor } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
@@ -1128,7 +1128,7 @@ export class FMClient {
 
   /**
    * When the certificate was refused because this computer does not trust its issuer, look at what
-   * the server presents (one extra handshake, no request) and, if it is FileMaker Server's own
+   * the server presents (one extra handshake, no request, at most 1.5 s, made directly and not through any proxy) and, if it is FileMaker Server's own
    * default certificate, say so in the message. Best effort: any problem returns the error as it was.
    */
   private async refineCertificateError(profile: ConnectionProfile, failure: FMClientError): Promise<FMClientError> {
@@ -1143,11 +1143,12 @@ export class FMClient {
       return failure;
     }
     const url = certificateTargetUrl(profile);
-    if (!url) {
+    // This look dials the server directly; behind a proxy it would only hang, so it is skipped there.
+    if (!url || environmentProxyFor(url)) {
       return failure;
     }
     try {
-      const info = await inspectServerCertificate(url, 2500);
+      const info = await inspectServerCertificate(url, 1500);
       if (!isFileMakerDefaultCertificate(info)) {
         return failure;
       }

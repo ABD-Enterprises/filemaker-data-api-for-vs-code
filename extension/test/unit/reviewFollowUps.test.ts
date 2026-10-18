@@ -69,6 +69,24 @@ describe('trust offers', () => {
     sha256: 'ab'.repeat(32), expired: false, notYetValid: false, selfSigned: false, ...extra
   });
 
+  it('says in the dialog that the review dials directly when a proxy is configured', async () => {
+    const saved = process.env.HTTPS_PROXY;
+    try {
+      const details: string[] = [];
+      const run = () =>
+        reviewAndTrustCertificate(profile, {}, { inspect: async () => info({}), confirm: async (_m, detail, buttons) => (details.push(detail), buttons[0]) });
+      process.env.HTTPS_PROXY = 'http://proxy:3128';
+      await run();
+      delete process.env.HTTPS_PROXY;
+      await run();
+      expect(details[0]).toMatch(/connects directly to the server and does not use the HTTP proxy/);
+      expect(details[1]).not.toMatch(/proxy/i);
+    } finally {
+      if (saved === undefined) delete process.env.HTTPS_PROXY;
+      else process.env.HTTPS_PROXY = saved;
+    }
+  });
+
   it('remembers that the user accepted an expired or not-yet-valid certificate, and only then', async () => {
     const seen: string[][] = [];
     const run = (extra: object) =>

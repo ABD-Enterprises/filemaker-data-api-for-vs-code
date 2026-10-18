@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Pinned agent: maxCachedSessions 0 and refuse resumed sessions; proxy detection replicates proxy-from-env + axios shouldBypassProxy (corpus-tested); review notes direct dial; Claris detection capped at 1.5 s.
 - Conditional/neutral certificate wording, no-host-names message, trust offer only where trustable, safe dialog text, IPv6, template confirmation on review, latch details (214 wording, proactive renewal, 1703, test-profile cleanup).
 - Linear-time tag stripping on a 4 KB cut of server bodies; health: gateway 5xx/404 => unreachable, cancelled => unchanged.
 - Batch stops only on account-wide errors (9/205/207/credentials); 200 fails the record only.
