@@ -28,6 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Refresh Schema Cache re-reads the layout list.
 - Layout names are no longer trimmed; spacing/case variants stay distinct.
 
 ### [INTERNAL]
