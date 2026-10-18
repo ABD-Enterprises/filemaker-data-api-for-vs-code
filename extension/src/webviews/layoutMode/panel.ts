@@ -9,6 +9,7 @@ import {
 import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
+import type { ConnectionProfile } from '../../types/fm';
 import type { FmWebProjectService } from '../../services/fmWebProjectService';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import {
@@ -20,6 +21,8 @@ import { executeBehaviorBinding, type BehaviorExecutionResult } from './behavior
 
 interface LayoutModeOpenOptions {
   layoutId?: string;
+  /** Applies the enterprise role/feature policy for running scripts; resolves false when blocked. */
+  assertScriptRunAllowed?: () => Promise<boolean>;
 }
 
 type IncomingMessage =
@@ -41,6 +44,7 @@ export class LayoutModePanel {
   private static currentPanel: LayoutModePanel | undefined;
 
   private pendingLayoutId: string | undefined;
+  private assertScriptRunAllowed: (() => Promise<boolean>) | undefined;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -52,6 +56,7 @@ export class LayoutModePanel {
     options?: LayoutModeOpenOptions
   ) {
     this.pendingLayoutId = options?.layoutId;
+    this.assertScriptRunAllowed = options?.assertScriptRunAllowed;
     this.panel.webview.html = this.getHtml(this.panel.webview);
 
     this.panel.onDidDispose(() => {
@@ -76,6 +81,7 @@ export class LayoutModePanel {
     if (LayoutModePanel.currentPanel) {
       LayoutModePanel.currentPanel.panel.reveal(column);
       LayoutModePanel.currentPanel.pendingLayoutId = options?.layoutId;
+      LayoutModePanel.currentPanel.assertScriptRunAllowed = options?.assertScriptRunAllowed;
       void LayoutModePanel.currentPanel.sendInitState();
       return;
     }
@@ -177,6 +183,15 @@ export class LayoutModePanel {
   }): Promise<void> {
     try {
       const profile = await this.resolveActiveProfile();
+
+      if (payload.behavior.type === 'runScript' && profile) {
+        const refusal = await this.refuseScriptRun(payload, profile);
+        if (refusal) {
+          await this.postBehaviorResult({ ok: false, action: 'runScript', stub: false, message: refusal });
+          return;
+        }
+      }
+
       const result = await executeBehaviorBinding({
         behavior: payload.behavior,
         objectName: payload.objectName,
@@ -203,6 +218,58 @@ export class LayoutModePanel {
         message: this.formatError(error)
       });
     }
+  }
+
+  /**
+   * A layout file arrives with the repository, so a `runScript` binding is the repository
+   * asking to run a script on the user's FileMaker server. It gets the same checks as the
+   * Script Runner, then an explicit confirmation naming the script, parameter and
+   * connection. Returns why it must not run, or undefined when the user said yes.
+   */
+  private async refuseScriptRun(
+    payload: { layoutName: string; fmLayoutName?: string; objectName: string; behavior: BehaviorBinding },
+    profile: ConnectionProfile
+  ): Promise<string | undefined> {
+    if (!vscode.workspace.isTrusted) {
+      return 'Running scripts from Layout Mode needs a trusted workspace.';
+    }
+
+    const configuration = vscode.workspace.getConfiguration('filemaker');
+    if (!configuration.get<boolean>('features.scriptRunner.enabled', true)) {
+      return 'Script running is disabled by the setting filemaker.features.scriptRunner.enabled.';
+    }
+    if (configuration.get<boolean>('offline.mode', false)) {
+      return 'Offline mode is enabled; scripts cannot run.';
+    }
+    if (this.assertScriptRunAllowed && !(await this.assertScriptRunAllowed())) {
+      return 'Running scripts is not allowed by your enterprise policy.';
+    }
+
+    const scriptName = (payload.behavior.scriptName ?? '').trim();
+    const parameter = (payload.behavior.parameter ?? '').trim();
+    const layout = (payload.fmLayoutName ?? payload.layoutName ?? '').trim();
+    const target = profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl;
+    const project = await this.fmWebProjectService.readProjectConfig();
+    const userProfileId = this.profileStore.getActiveProfileId();
+    const chosenByProject = Boolean(project?.activeProfileId) && project?.activeProfileId !== userProfileId;
+
+    const answer = await vscode.window.showWarningMessage(
+      [
+        `Run the script "${scriptName}" on the FileMaker layout "${layout}"?`,
+        `Parameter: ${parameter ? truncate(parameter, 200) : '(none)'}`,
+        `Connection: ${profile.name} (${target ?? profile.serverUrl})`,
+        chosenByProject
+          ? 'The project file in this workspace chose this connection; it is not your active connection.'
+          : '',
+        'This request comes from the layout file in your workspace, not from you.'
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      { modal: true },
+      'Run script'
+    );
+
+    return answer === 'Run script' ? undefined : 'Script run cancelled.';
   }
 
   private async resolveActiveProfile(): Promise<Awaited<ReturnType<ProfileStore['getProfile']>> | undefined> {
@@ -366,4 +433,8 @@ function parseBehaviorBinding(value: unknown): BehaviorBinding | undefined {
     dialogId: getStringField(behavior, 'dialogId'),
     parameter: getStringField(behavior, 'parameter')
   };
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
 }

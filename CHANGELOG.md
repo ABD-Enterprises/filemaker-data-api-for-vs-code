@@ -53,6 +53,10 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Ask before running a workspace plugin, once per file version (workspace + SHA-256), instead of running every file in `.vscode/filemaker-plugins` when the folder is trusted.
+- Make enterprise policy restrict-only: workspace settings and `.vscode/filemaker.config.json` may turn enterprise mode on or lower the role, never turn it off or raise the role above the user's own.
+- Layout Mode `runScript` behaviours get the Script Runner's checks plus an explicit confirmation naming the script, parameter and connection.
+- FM Web Preview confirms before running `npm install` / `npm run dev` in the generated runtime folder.
 - Ignore `.filemaker/profile-template.json` in an untrusted workspace, never lock the server address from it, name the address on the wizard banner, and confirm before saving or testing credentials against a template-supplied address.
 - Connection wizard: no credential reuse after the server, proxy or user changes; Test Connection uses throwaway credentials and full address validation; confirm before sending credentials over remote `http://`; reject URLs with embedded credentials; validate proxy endpoint and form data.
 - Generate webview CSP nonces with `crypto.randomInt` instead of `Math.random()` (#292).

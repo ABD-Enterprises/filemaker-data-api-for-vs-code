@@ -274,7 +274,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     isWorkspaceTrusted: () => vscode.workspace.isTrusted
   });
-  const pluginRegistry = new PluginRegistry(profileStore, fmClient, roleGuard, logger);
+  const pluginRegistry = new PluginRegistry(profileStore, fmClient, roleGuard, logger, {
+    approvalState: context.globalState
+  });
   const fmWebProjectService = new FmWebProjectService(
     profileStore,
     fmClient,
@@ -467,6 +469,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     fmWebProjectService,
     fmWebRuntimeGenerator,
     fmBridgeServer,
+    roleGuard,
     logger,
     refreshExplorer
   });
