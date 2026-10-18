@@ -4,6 +4,7 @@ import type { FMClient } from '../services/fmClient';
 import type { ProfileStore } from '../services/profileStore';
 import type { ConnectionProfile } from '../types/fm';
 import { type ShowErrorOptions, showErrorWithDetails, toUserErrorMessage } from '../utils/errorUx';
+import { describeTlsSettings } from '../utils/tlsProfile';
 
 export interface ProfileCommandArg {
   profileId?: string;
@@ -73,7 +74,12 @@ export async function pickProfile(
     profiles.map((profile) => ({
       label: profile.name,
       description: profile.id === profileStore.getActiveProfileId() ? 'Active' : undefined,
-      detail: `${profile.database} • ${new URL(profile.serverUrl).origin} • ${profile.authMode}`,
+      detail: [
+        `${profile.database} • ${new URL(profile.serverUrl).origin} • ${profile.authMode}`,
+        describeTlsSettings(profile)
+      ]
+        .filter(Boolean)
+        .join(' • '),
       profile
     })),
     {

@@ -11,6 +11,7 @@ import type { SchemaService } from '../services/schemaService';
 import type { SchemaSnapshotStore } from '../services/schemaSnapshotStore';
 import type { ConnectionProfile, FileMakerFieldMetadata, JobRuntimeState } from '../types/fm';
 import { extractValueLists } from '../utils/valueListParser';
+import { describeTlsSettings } from '../utils/tlsProfile';
 
 export type ExplorerNodeKind =
   | 'offlineBadge'
@@ -360,8 +361,10 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
         kind: 'profile',
         label: profile.name,
         profileId: profile.id,
-        description: `${profile.database} (${profile.authMode})`,
-        tooltip: `${profile.serverUrl}\nDatabase: ${profile.database}`,
+        description: `${profile.database} (${profile.authMode})${profile.allowSelfSigned === true ? ' ⚠ insecure TLS' : ''}`,
+        tooltip: [`${profile.serverUrl}\nDatabase: ${profile.database}`, describeTlsSettings(profile)]
+          .filter(Boolean)
+          .join('\n'),
         collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
         contextValue,
         iconPath: connected ? new vscode.ThemeIcon('plug') : new vscode.ThemeIcon('circle-outline')

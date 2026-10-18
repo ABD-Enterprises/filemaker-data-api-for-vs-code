@@ -13,6 +13,7 @@ import {
   validateServerUrl
 } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
+import { validateCaBundleFile } from '../../utils/tlsProfile';
 import {
   loadConnectionProfileTemplate,
   PROFILE_TEMPLATE_LOCKED_FIELDS,
@@ -37,6 +38,10 @@ interface WizardFormData {
   password?: string;
   proxyEndpoint?: string;
   proxyApiKey?: string;
+  /** Path to a PEM file of extra trusted CA certificates. Empty means none. */
+  caBundlePath?: string;
+  /** Accept any certificate for this connection (insecure). Asks for confirmation. */
+  allowSelfSigned?: boolean;
 }
 
 const MAX_FORM_FIELD_LENGTH = 4096;
@@ -65,7 +70,9 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
   const password = text('password', false);
   const proxyEndpoint = text('proxyEndpoint', false);
   const proxyApiKey = text('proxyApiKey', false);
+  const caBundlePath = text('caBundlePath', false);
   const authMode = value.authMode;
+  const rawSelfSigned = value.allowSelfSigned;
 
   if (
     name === null ||
@@ -77,6 +84,8 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
     password === null ||
     proxyEndpoint === null ||
     proxyApiKey === null ||
+    caBundlePath === null ||
+    (rawSelfSigned !== undefined && typeof rawSelfSigned !== 'boolean') ||
     (authMode !== 'direct' && authMode !== 'proxy') ||
     name === undefined ||
     serverUrl === undefined ||
@@ -87,7 +96,20 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
     return undefined;
   }
 
-  return { name, authMode, serverUrl, database, apiBasePath, apiVersionPath, username, password, proxyEndpoint, proxyApiKey };
+  return {
+    name,
+    authMode,
+    serverUrl,
+    database,
+    apiBasePath,
+    apiVersionPath,
+    username,
+    password,
+    proxyEndpoint,
+    proxyApiKey,
+    caBundlePath,
+    allowSelfSigned: rawSelfSigned === true
+  };
 }
 
 function originOf(url: string | undefined): string | undefined {
@@ -107,6 +129,8 @@ export class ConnectionWizardPanel {
   private editingProfile: ConnectionProfile | undefined;
   /** Origins that came from the workspace's profile template, not from the user. */
   private templateOrigins = new Set<string>();
+  /** https origins for which the user already accepted "allow self-signed" in this panel. */
+  private insecureConfirmedOrigins = new Set<string>();
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -296,6 +320,12 @@ export class ConnectionWizardPanel {
         return;
       }
 
+      const tls = await this.resolveTlsSettings(data, [target, serverValidation.value]);
+      if (!tls.ok) {
+        await this.panel.webview.postMessage({ type: 'saveError', message: tls.message });
+        return;
+      }
+
       const typedSecret = data.authMode === 'direct' ? data.password : data.proxyApiKey;
       const bindingChanged = this.credentialBindingChanged(
         data.authMode,
@@ -323,6 +353,17 @@ export class ConnectionWizardPanel {
         apiBasePath: data.apiBasePath.trim(),
         apiVersionPath: data.apiVersionPath.trim()
       };
+      if (tls.caBundlePath) {
+        profile.caBundlePath = tls.caBundlePath;
+      }
+      if (tls.allowSelfSigned) {
+        profile.allowSelfSigned = true;
+      }
+      // Editing must not silently drop what AI tools were allowed to do, unless the profile now
+      // points at a different server or user (then the earlier choice no longer applies).
+      if (this.editingProfile?.aiAccess && !bindingChanged) {
+        profile.aiAccess = this.editingProfile.aiAccess;
+      }
 
       if (data.authMode === 'direct') {
         profile.username = data.username?.trim();
@@ -491,6 +532,68 @@ export class ConnectionWizardPanel {
     return true;
   }
 
+  /**
+   * Checks the certificate options from the form. The custom CA file must be a real PEM
+   * certificate file. "Allow self-signed" is insecure, so enabling it asks once in a modal
+   * naming the address (not again for the same address, whether on this profile already or
+   * confirmed earlier in this panel). It only applies to https addresses. These two values
+   * come from this form alone: neither the workspace's profile template nor any setting
+   * can carry them.
+   */
+  private async resolveTlsSettings(
+    data: WizardFormData,
+    targets: Array<string | undefined>
+  ): Promise<
+    | { ok: true; caBundlePath?: string; allowSelfSigned: boolean }
+    | { ok: false; message: string }
+  > {
+    let caBundlePath: string | undefined;
+    if (data.caBundlePath && data.caBundlePath.trim().length > 0) {
+      const validation = await validateCaBundleFile(data.caBundlePath);
+      if (!validation.ok) {
+        return { ok: false, message: validation.error ?? 'Invalid CA certificate file.' };
+      }
+      caBundlePath = validation.value;
+    }
+
+    const httpsOrigins = [
+      ...new Set(
+        targets
+          .filter((target): target is string => Boolean(target) && target!.startsWith('https:'))
+          .map((target) => originOf(target))
+          .filter((origin): origin is string => Boolean(origin))
+      )
+    ];
+    if (data.allowSelfSigned !== true || httpsOrigins.length === 0) {
+      return { ok: true, caBundlePath, allowSelfSigned: false };
+    }
+
+    const editing = this.editingProfile;
+    const savedOrigins = new Set(
+      editing?.allowSelfSigned === true
+        ? [originOf(editing.serverUrl), originOf(editing.proxyEndpoint)].filter((origin): origin is string =>
+            Boolean(origin)
+          )
+        : []
+    );
+    const unconfirmed = httpsOrigins.filter(
+      (origin) => !savedOrigins.has(origin) && !this.insecureConfirmedOrigins.has(origin)
+    );
+    if (unconfirmed.length > 0) {
+      const answer = await vscode.window.showWarningMessage(
+        `Accept any certificate from ${unconfirmed.join(' and ')}?\n\nThis turns off certificate checking for this connection. Anyone on the network between you and the server could pretend to be it and read your password and data. Prefer "Custom CA certificate file", and only continue on a network you control.`,
+        { modal: true },
+        'Allow insecure connection'
+      );
+      if (answer !== 'Allow insecure connection') {
+        return { ok: false, message: 'Not saved: you did not confirm accepting self-signed certificates.' };
+      }
+      unconfirmed.forEach((origin) => this.insecureConfirmedOrigins.add(origin));
+    }
+
+    return { ok: true, caBundlePath, allowSelfSigned: true };
+  }
+
   private async handleTestConnection(data: WizardFormData): Promise<void> {
     const timeoutMs = vscode.workspace
       .getConfiguration('filemaker')
@@ -525,6 +628,11 @@ export class ConnectionWizardPanel {
         throw new Error('Test cancelled: you did not confirm the server address.');
       }
 
+      const tls = await this.resolveTlsSettings(data, [target, serverValidation.value]);
+      if (!tls.ok) {
+        throw new Error(tls.message);
+      }
+
       const tempProfile: ConnectionProfile = {
         id: testId,
         name: data.name.trim(),
@@ -534,6 +642,12 @@ export class ConnectionWizardPanel {
         apiBasePath: data.apiBasePath.trim(),
         apiVersionPath: data.apiVersionPath.trim()
       };
+      if (tls.caBundlePath) {
+        tempProfile.caBundlePath = tls.caBundlePath;
+      }
+      if (tls.allowSelfSigned) {
+        tempProfile.allowSelfSigned = true;
+      }
 
       await this.postTestProgress('Preparing credentials…');
       const typedSecret = data.authMode === 'direct' ? data.password : data.proxyApiKey;
@@ -688,6 +802,26 @@ export class ConnectionWizardPanel {
           <input id="apiVersionPath" type="text" value="vLatest"
                  aria-describedby="apiVersionPath-hint" />
           <div id="apiVersionPath-hint" class="hint">Usually <code>vLatest</code>.</div>
+        </div>
+      </details>
+    </div>
+
+    <div class="form-section">
+      <details class="advanced-toggle" id="certificateOptions">
+        <summary>Certificates (advanced)</summary>
+        <div class="field">
+          <label for="caBundlePath">Custom CA certificate file</label>
+          <input id="caBundlePath" type="text" autocomplete="off"
+                 aria-describedby="caBundlePath-hint"
+                 placeholder="/path/to/company-ca.pem" />
+          <div id="caBundlePath-hint" class="hint">Optional. Absolute path to a PEM file with the certificate authority that signed your server's certificate. This is the safe way to trust a private server.</div>
+        </div>
+        <div class="field insecure-field">
+          <label class="checkbox-label" for="allowSelfSigned">
+            <input id="allowSelfSigned" type="checkbox" aria-describedby="allowSelfSigned-hint" />
+            Allow self-signed certificate (insecure)
+          </label>
+          <div id="allowSelfSigned-hint" class="hint warning-hint">Warning: this turns off certificate checking for this connection, so anyone on the network could impersonate the server and read your password and data. Use it only on a network you control; you will be asked to confirm. It applies to this profile only.</div>
         </div>
       </details>
     </div>
