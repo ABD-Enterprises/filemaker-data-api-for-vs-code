@@ -31,6 +31,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on.
 - Batch CSV import ignores the `recordId`/`modId` meta columns (case-insensitive) so an exported file re-imports cleanly; round-trip test added.
 - FM Web preview: write the bridge URL and session token to the generated runtime's gitignored `.env.local`, send `X-FM-Bridge-Token` from the runtime client (and call `fetch` unbound), and apply `features.recordEdit.enabled` and the enterprise `recordEdit` guard to bridge edit/create/delete.
 - Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.

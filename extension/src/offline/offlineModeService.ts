@@ -28,6 +28,15 @@ interface OfflineIndexDocument {
   items: OfflineIndexRecord[];
 }
 
+export interface OfflineToggleResult {
+  /** What the toggle asked for. */
+  requested: boolean;
+  /** Offline mode as it is in effect after the change. */
+  effective: boolean;
+  /** Set when the mode is still on although the toggle asked for off. */
+  keptOnBy?: string;
+}
+
 interface OfflineModeServiceOptions {
   getWorkspaceRoot?: () => string | undefined;
   getConfiguration?: () => vscode.WorkspaceConfiguration;
@@ -57,10 +66,46 @@ export class OfflineModeService {
     return isOfflineModeOn(this.getConfiguration());
   }
 
-  public async toggleOfflineMode(enabled?: boolean): Promise<boolean> {
-    const next = enabled ?? !this.isOfflineModeEnabled();
-    await this.getConfiguration().update('offline.mode', next, vscode.ConfigurationTarget.Workspace);
-    return next;
+  /**
+   * Switches offline mode in the user's own settings. It never writes the workspace scope:
+   * that needs an open folder, drops a `.vscode/settings.json` into the repository, and a
+   * repository could not loosen the mode anyway (a workspace value only counts when it turns
+   * offline mode ON). The result carries the mode that is in effect afterwards, because
+   * another setting (a workspace one, or a remote machine's) can keep it on.
+   */
+  public async toggleOfflineMode(enabled?: boolean): Promise<OfflineToggleResult> {
+    const requested = enabled ?? !this.isOfflineModeEnabled();
+    await this.getConfiguration().update('offline.mode', requested, vscode.ConfigurationTarget.Global);
+
+    const effective = this.isOfflineModeEnabled();
+    const result: OfflineToggleResult = { requested, effective };
+    if (effective && !requested) {
+      result.keptOnBy = this.findOfflineModeSource();
+    }
+    return result;
+  }
+
+  /** Where an `offline.mode: true` that outlives the user's own switch is coming from. */
+  private findOfflineModeSource(): string {
+    const inspect = this.getConfiguration().inspect?.<boolean>('offline.mode') as
+      | (ReturnType<vscode.WorkspaceConfiguration['inspect']> & {
+          globalLocalValue?: boolean;
+          globalRemoteValue?: boolean;
+        })
+      | undefined;
+    if (inspect?.workspaceFolderValue === true) {
+      return 'the workspace folder settings';
+    }
+    if (inspect?.workspaceValue === true) {
+      return 'the workspace settings';
+    }
+    if (inspect?.globalRemoteValue === true) {
+      return 'the remote machine settings';
+    }
+    if (inspect?.globalValue === true || inspect?.globalLocalValue === true) {
+      return 'your user settings';
+    }
+    return 'another settings source';
   }
 
   public async cacheLayoutMetadata(
