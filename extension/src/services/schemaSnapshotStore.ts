@@ -314,7 +314,7 @@ export class SchemaSnapshotStore {
       return {
         schemaVersion:
           typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : SNAPSHOT_SCHEMA_VERSION,
-        items: parsed.items
+        items: parsed.items.filter(isIndexEntry)
       };
     } catch {
       return {
@@ -395,6 +395,29 @@ function sanitizeValue(value: unknown): unknown {
   }
 
   return value;
+}
+
+/**
+ * The index file sits in the workspace, so a cloned repository can ship its own. An entry is
+ * only used when it is well formed and names a plain snapshot file in this folder; otherwise
+ * `join(dir, fileName)` could point anywhere the user can write (pruning deletes that file).
+ */
+function isIndexEntry(value: unknown): value is SchemaSnapshotSummary & { fileName: string } {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.id === 'string' &&
+    typeof entry.profileId === 'string' &&
+    typeof entry.layout === 'string' &&
+    typeof entry.capturedAt === 'string' &&
+    typeof entry.fileName === 'string' &&
+    /^[A-Za-z0-9_.-]+\.json$/.test(entry.fileName) &&
+    !entry.fileName.includes('..') &&
+    entry.fileName !== SNAPSHOT_INDEX_FILE
+  );
 }
 
 function toSafeFileName(value: string): string {

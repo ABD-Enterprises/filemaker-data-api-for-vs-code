@@ -13,6 +13,7 @@ import type {
 } from '../types/fm';
 import { hashObject } from '../utils/hash';
 import { createNameMap, toPascalCaseIdentifier } from '../utils/nameSanitize';
+import { commentText, distinctFileName, snippetPlaceholderText } from '../utils/safeText';
 
 interface TypeGenServiceOptions {
   getOutputDir?: () => string;
@@ -101,8 +102,8 @@ export class TypeGenService {
       description: `Find ${layout} records via extension client`,
       body: [
         "const result = await vscode.commands.executeCommand('filemakerDataApiTools.runFindJson', {",
-        `  profileId: '\${1:${profile.id}}',`,
-        `  layout: '\${2:${layout}}'`,
+        `  profileId: '\${1:${snippetPlaceholderText(profile.id)}}',`,
+        `  layout: '\${2:${snippetPlaceholderText(layout)}}'`,
         '});',
         'console.log(result);'
       ]
@@ -113,8 +114,8 @@ export class TypeGenService {
       description: `Get ${layout} record by ID via extension client`,
       body: [
         "await vscode.commands.executeCommand('filemakerDataApiTools.getRecordById', {",
-        `  profileId: '\${1:${profile.id}}',`,
-        `  layout: '\${2:${layout}}'`,
+        `  profileId: '\${1:${snippetPlaceholderText(profile.id)}}',`,
+        `  layout: '\${2:${snippetPlaceholderText(layout)}}'`,
         '});'
       ]
     };
@@ -224,7 +225,7 @@ export class TypeGenService {
     const friendlyRows = nameMap.mappings
       .map(
         (mapping) =>
-          `  ${mapping.friendlyName}?: ${toTsType(findField(fields, mapping.rawName))}; // ${mapping.rawName}`
+          `  ${mapping.friendlyName}?: ${toTsType(findField(fields, mapping.rawName))}; // ${commentText(mapping.rawName)}`
       )
       .join('\n');
 
@@ -235,8 +236,8 @@ export class TypeGenService {
     return `/**
  * AUTO-GENERATED FILE. DO NOT EDIT.
  * Generated at: ${timestamp}
- * Profile: ${profile.name} (${profile.id})
- * Layout: ${layout}
+ * Profile: ${commentText(profile.name)} (${commentText(profile.id)})
+ * Layout: ${commentText(layout)}
  * Metadata hash (sha256): ${metadataHash}
  */
 
@@ -374,8 +375,8 @@ export interface ${suffix}FindRequest {
   return `/**
  * AUTO-GENERATED FILE. DO NOT EDIT.
  * Generated at: ${generatedAt}
- * Profile: ${profile.name} (${profile.id})
- * Layouts: ${schemas.map((schema) => schema.layout).join(', ')}
+ * Profile: ${commentText(profile.name)} (${commentText(profile.id)})
+ * Layouts: ${schemas.map((schema) => commentText(schema.layout)).join(', ')}
  */
 
 export interface FileMakerMessage {
@@ -428,7 +429,7 @@ function renderClientSource(
   return `/**
  * AUTO-GENERATED FILE. DO NOT EDIT.
  * Generated at: ${generatedAt}
- * Profile: ${profile.name} (${profile.id})
+ * Profile: ${commentText(profile.name)} (${commentText(profile.id)})
  */
 
 import type {
@@ -584,7 +585,7 @@ function renderClientReadme(
 
   return `# FileMaker TypeScript Client
 
-Generated at ${generatedAt} for profile \`${profile.name}\`.
+Generated at ${generatedAt} for profile \`${commentText(profile.name)}\`.
 
 ## Files
 
@@ -610,7 +611,7 @@ const records = await client.find${firstMethod}({
 
 Selected layouts:
 
-${layouts.map((layout) => `- ${layout}`).join('\n')}
+${layouts.map((layout) => `- ${commentText(layout)}`).join('\n')}
 
 Regenerating this client overwrites these files with a new timestamp.
 `;
@@ -646,7 +647,7 @@ function sanitizeLayoutFileName(layout: string): string {
     .replace(/[^A-Za-z0-9_.-]+/g, '_')
     .replace(/^_+|_+$/g, '');
 
-  return normalized.length > 0 ? normalized : 'layout';
+  return distinctFileName(layout, normalized);
 }
 
 function sanitizeSnippetKey(layout: string): string {
@@ -655,7 +656,9 @@ function sanitizeSnippetKey(layout: string): string {
 
 function sanitizeRelativeOutputDir(value: string): string {
   const normalized = value.replace(/\\/g, '/').trim().replace(/^\/+|\/+$/g, '');
-  if (!normalized || normalized.includes('..') || isAbsolute(normalized)) {
+  // A colon also rules out Windows drive-relative paths such as "D:folder", which are not
+  // "absolute" to isAbsolute() but still leave the workspace.
+  if (!normalized || normalized.includes('..') || normalized.includes(':') || isAbsolute(normalized)) {
     return 'filemaker-types';
   }
 

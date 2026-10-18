@@ -25,6 +25,7 @@ import {
   type FmWebProjectConfig,
   type FmWebSyncSummary
 } from '../types/fmWeb';
+import { distinctFileName } from '../utils/safeText';
 
 const FMWEB_FOLDER = '.fmweb';
 const DEFAULT_FEATURE_FLAGS: FmWebFeatureFlags = {
@@ -547,13 +548,15 @@ function getNested(value: Record<string, unknown>, pathSegments: string[]): unkn
 }
 
 function toSafeFileName(raw: string): string {
-  return raw
+  const sanitized = raw
     .trim()
     .replace(/\s+/g, '_')
     .replace(/[^a-zA-Z0-9_.-]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
-    .slice(0, 120) || 'layout';
+    .slice(0, 120);
+
+  return distinctFileName(raw, sanitized);
 }
 
 function sanitizeLayoutId(raw: string | undefined): string | undefined {
