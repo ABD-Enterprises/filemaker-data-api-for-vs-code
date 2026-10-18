@@ -104,7 +104,17 @@ export async function run(ctx) {
     async () => {
       const t0 = Date.now();
       const r = await runScript('Big Result');
-      return `rendered in ${Date.now() - t0} ms; raw length ${r.raw.length}; summary ${r.summary.slice(0, 80)}`;
+      const ms = Date.now() - t0;
+      assert(ms < 20000, `the panel took ${ms} ms to show a 1 MB result`);
+      assert(
+        r.raw.length > 0 || r.summary.length > 0 || r.status.length > 0,
+        'nothing was shown for the 1 MB result'
+      );
+      assert(
+        r.raw.length < 3 * 1024 * 1024,
+        `the whole result is rendered (${r.raw.length} chars)`
+      );
+      return `rendered in ${ms} ms; raw length ${r.raw.length}; summary ${r.summary.slice(0, 80)}`;
     }
   );
   await s.step(

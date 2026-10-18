@@ -97,25 +97,40 @@ Status: **Y** implemented, **P** partial, **N** intentionally not implemented.
 ### Responses and errors
 
 Success: HTTP 200 with `{"response": {...}, "messages": [{"code": "0", "message": "OK"}]}`.
-Errors: `{"messages": [{"code": "<n>", "message": "..."}]}`. HTTP status per the guide's error-responses page:
+Errors: `{"messages": [{"code": "<n>", "message": "..."}]}`.
 
-| Situation                                                                    | HTTP | `messages[0].code`                                    |
-| ---------------------------------------------------------------------------- | ---- | ----------------------------------------------------- |
-| Invalid or expired token, or database name with different case than at login | 401  | 952                                                   |
-| Wrong account or password, inactive account, bad OAuth/FMID                  | 401  | 212                                                   |
-| No records match (find, or `_offset` past the end)                           | 404  | 401 (body also has `response: {}`)                    |
-| Insufficient privileges (writes or scripts for `reader`)                     | 403  | 9                                                     |
-| Invalid parameter (bad `_offset`, malformed JSON, bad `dateformats`)         | 400  | 960                                                   |
-| Empty find criteria (`query: []`)                                            | 500  | 400                                                   |
-| Unknown layout / field / script / record                                     | 500  | 105 / 102 / 104 / 101                                 |
-| modId mismatch                                                               | 500  | 306                                                   |
-| Validation                                                                   | 500  | 500, 502, 504, 506, 509; 201 field cannot be modified |
-| Database cannot be opened (`Locked`, unknown database)                       | 500  | 802                                                   |
-| Script returned an error                                                     | 200  | `scriptError` holds the code (e.g. "3")               |
-| Wrong HTTP method                                                            | 405  | -1                                                    |
-| Wrong Content-Type                                                           | 415  | -1                                                    |
-| Too many sessions (`maxSessions`)                                            | 503  | 1633 (invented: the guide gives no code)              |
-| Rate limit scenario                                                          | 429  | -1 (invented; FileMaker documents no rate limit)      |
+**Basis column.** The guide's error-responses page only states that an invalid URL gives HTTP 404. Every other
+code-to-HTTP-status mapping below is an assumption of this mock (it matches what servers have been observed to
+do in field reports and the extension's own tests, but nobody re-checked it against a real server here). Rows
+marked "unverified" must not be read as the product's specification.
+
+| Situation                                                                        | HTTP | `messages[0].code`                                         | Basis                                                                                                         |
+| -------------------------------------------------------------------------------- | ---- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Invalid URL / not a Data API path                                                | 404  | 105                                                        | documented (error-responses page)                                                                             |
+| Invalid or expired token, or database name with different case than at login     | 401  | 952                                                        | unverified                                                                                                    |
+| Wrong account or password, inactive account, bad OAuth/FMID (210, 211, 212, 214) | 401  | 212 (and 210/211/214 where used)                           | unverified                                                                                                    |
+| No records match (find, or `_offset` past the end)                               | 404  | 401 (body also has `response: {}`)                         | unverified; a switch: `NO_RECORDS_STATUS=500` or `POST /__admin/config {"noRecordsStatus":500}` (default 404) |
+| Insufficient privileges (writes or scripts for `reader`)                         | 403  | 9                                                          | unverified                                                                                                    |
+| Invalid parameter (bad `_offset`, `_limit=0`, malformed JSON, bad `dateformats`) | 400  | 960                                                        | unverified                                                                                                    |
+| Empty find criteria (`query: []`)                                                | 500  | 400                                                        | unverified                                                                                                    |
+| Unknown layout / field / script / record                                         | 500  | 105 / 102 / 104 / 101                                      | unverified                                                                                                    |
+| modId mismatch                                                                   | 500  | 306                                                        | unverified                                                                                                    |
+| Validation                                                                       | 500  | 500, 502, 504, 506, 509; 201 field cannot be modified; 205 | unverified                                                                                                    |
+| Database cannot be opened (`Locked`, unknown database)                           | 500  | 802                                                        | unverified                                                                                                    |
+| Script returned an error                                                         | 200  | `scriptError` holds the code (e.g. "3")                    | unverified                                                                                                    |
+| Wrong HTTP method                                                                | 405  | -1                                                         | unverified                                                                                                    |
+| Wrong Content-Type (`STRICT_CONTENT_TYPE=0` turns this off)                      | 415  | -1                                                         | unverified                                                                                                    |
+| Too many sessions (`maxSessions`)                                                | 503  | 1633                                                       | invented                                                                                                      |
+| Rate limit scenario                                                              | 429  | -1                                                         | invented (FileMaker documents no rate limit)                                                                  |
+
+Other behaviours that are assumptions, not documented facts (all **unverified**):
+
+- A login request with no body and no `Content-Type` is accepted (200); any request with a body but no `application/json` `Content-Type` is refused with 415 unless `STRICT_CONTENT_TYPE=0`.
+- `DELETE /sessions/{token}` with a bogus token answers 200 (a logout is idempotent here).
+- `_limit=0`, a negative `_limit`, `_offset=0` (offsets start at 1) and a negative `_offset` give 400 / 960; an `_offset` past the end gives the "no records" answer above.
+- A newly created record has `modId` `"0"`.
+- Field metadata reports `maxCharacters: 0` for fields with no limit.
+- `GET /productInfo` returns invented `version` (`22.0.1`) and `buildDate` (`09/01/2026`) values; its `dateFormat` and `timeFormat` are the mock's, and the seeded dates follow that format.
 
 FileMaker error code 3 ("command invalid") occurs as a script result (`Fail` script), not as a request error. HTTP 500 for FileMaker errors is as documented.
 

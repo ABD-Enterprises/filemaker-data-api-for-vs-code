@@ -16,7 +16,7 @@ import {
   ensureProfileCommands,
   readClipboard
 } from '../lib/flows.mjs';
-import { assert } from '../lib/session.mjs';
+import { assert, safeEnv } from '../lib/session.mjs';
 
 const J = 'J10b MCP server';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,7 +30,7 @@ async function connectClient(config, { env = {}, name = 'e2e-sdk' } = {}) {
   const transport = new StdioClientTransport({
     command: entry.command,
     args: entry.args,
-    env: { ...process.env, ...env },
+    env: safeEnv(env),
     stderr: 'pipe'
   });
   let stderr = '';
@@ -55,6 +55,10 @@ async function modalCall(s, p, answer) {
 
 export async function run(ctx) {
   const { s, mock } = ctx;
+  s.observeOnly([
+    'SDK MCP client: initialize through the copied config',
+    'quota: repeated 50-record reads'
+  ]); // these steps only record behaviour
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
@@ -378,31 +382,48 @@ export async function run(ctx) {
           fieldData: { SKU: 'MCP-DEL', Name: 'to delete' }
         })
       ).body.response.recordId;
-      const p = a.callTool({
-        name: 'fm_delete_record',
-        arguments: { layout: 'Products', recordId: created, description: 'e2e' }
-      });
-      await sleep(1500);
-      await s.shot('delete-prompt');
-      let used = 'modal';
-      if (await s.modalVisible()) {
-        const t = await s.modalText();
-        const buttons = await s.modalButtons();
-        used = `modal "${t.slice(0, 200)}" buttons ${buttons.join('/')}`;
-        await s.modal(buttons.find((b) => /continue|delete|confirm|yes/i.test(b)) ?? buttons[0]);
-      }
-      if (await s.pickerOpen()) {
-        // an input box asking for the id
-        used += ` | input: ${await s.quickInputTitle()} / ${await s.quickInputMessage()}`;
-        await s.inputBox('0000'); // wrong id first
-        await sleep(1500);
-        if (await s.pickerOpen()) await s.inputBox(String(created));
-      }
-      const result = await p;
-      const gone =
+      const exists = async () =>
         (await data.call('GET', `/layouts/Products/records/${created}`)).body.messages[0].code ===
-        '101';
-      return `${used} | client: ${text(result).slice(0, 140)} | record deleted: ${gone}`;
+        '0';
+      let used = 'none';
+      // One delete attempt: confirm the host-side modal, then type the given id into the input box.
+      const attempt = async (typedId) => {
+        const p = a.callTool({
+          name: 'fm_delete_record',
+          arguments: { layout: 'Products', recordId: created, description: 'e2e' }
+        });
+        await sleep(1500);
+        await s.shot('delete-prompt');
+        if (await s.modalVisible()) {
+          const t = await s.modalText();
+          const buttons = await s.modalButtons();
+          used = `modal "${t.slice(0, 200)}" buttons ${buttons.join('/')}`;
+          await s.modal(buttons.find((b) => /continue|delete|confirm|yes/i.test(b)) ?? buttons[0]);
+        }
+        if (await s.pickerOpen()) {
+          used += ` | input: ${await s.quickInputTitle()} / ${await s.quickInputMessage()}`;
+          await s.inputBox(typedId);
+          await sleep(1000);
+        }
+        return text(await p).slice(0, 140);
+      };
+      // The extension allows 3 write attempts a minute; wait the window out rather than fail on the cap.
+      const attemptUntilNotCapped = async (typedId) => {
+        let out = await attempt(typedId);
+        if (/write cap/i.test(out)) {
+          await sleep(62000);
+          out = await attempt(typedId);
+        }
+        return out;
+      };
+      const wrong = await attemptUntilNotCapped('0000'); // a wrong id deletes nothing
+      const survivedWrongId = await exists();
+      const right = await attemptUntilNotCapped(String(created));
+      const gone = !(await exists());
+      assert(/modal|input/.test(used), 'no confirmation of any kind was shown before the delete');
+      assert(survivedWrongId, `a wrong typed id deleted the record: ${wrong}`);
+      assert(gone, `the right id did not delete the record: ${right}`);
+      return `${used} | wrong id: ${wrong} | right id: ${right} | record deleted: ${gone}`;
     }
   );
   await s.step(
@@ -447,7 +468,7 @@ export async function run(ctx) {
   const runShim = (args, { input, timeoutMs = 8000, env = {} } = {}) =>
     new Promise((resolve) => {
       const child = spawn(config.mcpServers.filemaker.command, args, {
-        env: { ...process.env, ...env },
+        env: safeEnv(env),
         stdio: ['pipe', 'pipe', 'pipe']
       });
       let out = '';
@@ -512,6 +533,18 @@ export async function run(ctx) {
         () => true,
         () => false
       );
+      const unclean = Object.keys(tally).filter(
+        (k) => k !== 'ok' && !/too many requests in flight|rate/i.test(k)
+      );
+      assert(
+        alive,
+        `the server stopped answering after 20 parallel calls: ${JSON.stringify(tally)}`
+      );
+      assert(
+        unclean.length === 0,
+        `unclean failures under load: ${unclean.join(' | ')} (${JSON.stringify(tally)})`
+      );
+      assert((tally.ok ?? 0) > 0, `no call succeeded: ${JSON.stringify(tally)}`);
       return `${JSON.stringify(tally)}; server still answers after: ${alive}`;
     }
   );
@@ -526,6 +559,8 @@ export async function run(ctx) {
         (x) => !x.isError,
         () => false
       );
+      assert(/too large/i.test(r.out), `no 'too large' refusal on stdout: ${r.out.slice(0, 200)}`);
+      assert(stillUp, 'the oversized message took the server down for other clients');
       return `shim exit ${r.code}; stdout ${r.out.length} bytes (${r.out.replace(/\s+/g, ' ').slice(0, 120)}); stderr: ${r.err.slice(0, 120)}; other client still works: ${stillUp}`;
     }
   );
@@ -538,6 +573,14 @@ export async function run(ctx) {
         input: '{not json}\n{"jsonrpc":"2.0","id":7,"method":"nope"}\n',
         timeoutMs: 5000
       });
+      assert(
+        /-32700/.test(r.out),
+        `no parse error (-32700) for the malformed line: ${r.out.slice(0, 200)}`
+      );
+      assert(
+        /"id":7/.test(r.out.replace(/\s+/g, '')),
+        `no JSON-RPC answer for the unknown method (id 7): ${r.out.slice(0, 260)}`
+      );
       return `stdout: ${r.out.replace(/\s+/g, ' ').slice(0, 260)} stderr: ${r.err.slice(0, 100)}`;
     }
   );
@@ -555,7 +598,7 @@ export async function run(ctx) {
       spawnSync(
         ctx.vscode.cli,
         ['--user-data-dir', s.ud, '--extensions-dir', s.ex, '--new-window', ws2],
-        { env: { ...process.env, HOME: s.home }, encoding: 'utf8' }
+        { env: safeEnv({ HOME: s.home }), encoding: 'utf8' }
       );
       let page2;
       for (let i = 0; i < 60 && !page2; i += 1) {
@@ -593,7 +636,7 @@ export async function run(ctx) {
         const t = new StdioClientTransport({
           command: 'node',
           args: [config.mcpServers.filemaker.args[0], '--dir', dir, '--workspace', ws2],
-          env: process.env,
+          env: safeEnv(),
           stderr: 'pipe'
         });
         await withWs.connect(t);
@@ -779,6 +822,15 @@ export async function run(ctx) {
       );
       const r = await runShim(shimArgs, { timeoutMs: 4000 });
       fs.rmSync(staleFile, { force: true });
+      assert(
+        r.code === null || r.code === 0,
+        `the shim did not connect with a stale file next to the live one (exit ${r.code}): ${r.err.slice(0, 200)}`
+      );
+      assert(!r.err.includes('0'.repeat(64)), 'the stale token was printed');
+      assert(
+        !/stale-window|nonexistent/.test(r.err),
+        `the stale file was mentioned: ${r.err.slice(0, 200)}`
+      );
       return `shim with a stale file present: exit ${r.code === null ? 'still running = connected to the live window' : r.code}; stderr: ${r.err.replace(/\s+/g, ' ').slice(0, 200) || '(empty)'}; stale token printed: ${r.err.includes('0'.repeat(64))}`;
     }
   );
@@ -800,20 +852,34 @@ export async function run(ctx) {
   );
 
   // ---- real Claude Code CLI ----------------------------------------------------------------
-  const claudeVersion = spawnSync('claude', ['--version'], { encoding: 'utf8' });
-  if (claudeVersion.status !== 0) {
+  // Opt-in only (E2E_CLAUDE=1): it starts a real third-party CLI. The environment below is an allowlist;
+  // nothing from the caller's environment (no ANTHROPIC_*, AWS_*, CLAUDE_CODE_USE_*, GH_TOKEN ...) is passed.
+  // HOME and CLAUDE_CONFIG_DIR point at an empty temporary directory, but on macOS the CLI may still read its
+  // credentials from the login Keychain, which HOME does not control. That is why this is never run by default.
+  const claudeVersion =
+    process.env.E2E_CLAUDE === '1'
+      ? spawnSync('claude', ['--version'], { encoding: 'utf8' })
+      : { status: -1 };
+  if (process.env.E2E_CLAUDE !== '1') {
+    s.notTestable(
+      J,
+      'Claude Code CLI',
+      'opt-in: set E2E_CLAUDE=1 to run the real CLI journey (see e2e-ui/README.md)'
+    );
+  } else if (claudeVersion.status !== 0) {
     s.notTestable(J, 'Claude Code CLI', 'claude is not installed');
   } else {
     const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-e2e-claude-'));
     const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-e2e-claude-proj-'));
     (ctx.extraRoots ??= []).push(cfgDir, proj);
     const env = {
-      ...process.env,
+      PATH: process.env.PATH,
+      TERM: 'dumb',
+      LANG: process.env.LANG ?? 'en_US.UTF-8',
+      TMPDIR: process.env.TMPDIR ?? os.tmpdir(),
       CLAUDE_CONFIG_DIR: cfgDir,
       HOME: cfgDir,
-      ANTHROPIC_API_KEY: '',
-      CLAUDE_CODE_OAUTH_TOKEN: '',
-      ANTHROPIC_AUTH_TOKEN: ''
+      CI: '1'
     };
     const claude = (args, timeout = 90000) =>
       spawnSync('claude', args, { cwd: proj, env, encoding: 'utf8', timeout });
@@ -836,6 +902,10 @@ export async function run(ctx) {
       async () => {
         const r = claude(['mcp', 'list'], 120000);
         const out = `${r.stdout}${r.stderr}`;
+        assert(
+          /filemaker/i.test(out) && /connected|✓/i.test(out),
+          `filemaker not shown as connected: ${out.slice(0, 200)}`
+        );
         return `exit ${r.status}: ${out.replace(/\s+/g, ' ').trim().slice(0, 300)}`;
       }
     );

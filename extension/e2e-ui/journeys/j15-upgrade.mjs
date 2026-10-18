@@ -63,6 +63,8 @@ export async function run(ctx) {
       const ext = (await u.helper('extensions')).find((e) =>
         /filemaker-data-api-tools/i.test(e.id)
       );
+      assert(ext && ext.version, 'the published extension is not running');
+      assert(ext.version !== '1.4.0', `expected the published older build, running ${ext.version}`);
       return `running ${ext.id} ${ext.version}`;
     }
   );

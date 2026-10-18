@@ -1,5 +1,5 @@
 // Reusable user flows built on Session primitives.
-import { assert } from './session.mjs';
+import { assert, markAsserted } from './session.mjs';
 
 /** Create a direct-auth profile through the wizard (test, then save). Returns when the wizard says "saved". */
 export async function createProfile(
@@ -42,7 +42,8 @@ export async function connect(s, name) {
   await s.cmd('FileMaker: Connect');
   await s.page.waitForTimeout(700);
   if (await s.pickerOpen()) await s.pick(name);
-  const t = await s.waitToast(/onnected to/i, { timeout: 25000 });
+  const t = await s.waitToast(/onnected to/i, { timeout: 25000 }); // throws when there is no such toast
+  markAsserted();
   return t;
 }
 

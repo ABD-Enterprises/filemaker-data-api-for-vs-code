@@ -101,6 +101,12 @@ export async function run({ s }) {
       await s.page.waitForTimeout(1500);
       const toasts = await s.toasts();
       const tabs = await s.editorTabs();
+      const opened = tabs.some((t) => /add connection profile|connection wizard/i.test(t));
+      const warned = toasts.some((t) => /trust|restricted|untrusted/i.test(t));
+      assert(
+        !opened || warned,
+        `the connection wizard opened in an untrusted workspace with no warning (toasts: ${toasts.join(' || ') || 'none'}; tabs: ${tabs.join(', ')})`
+      );
       return `toasts: ${toasts.join(' || ') || '(none)'}; tabs: ${tabs.join(', ')}`;
     }
   );

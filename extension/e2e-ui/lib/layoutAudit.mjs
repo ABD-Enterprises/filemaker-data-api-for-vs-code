@@ -23,6 +23,29 @@ export const AUDIT_SCRIPT = () => {
     }
     return null;
   };
+  // Root cause first: a <select> wider than the panel (a very long option text widens it) pushes the whole
+  // page sideways. Report that once, then constrain such selects and audit the rest of the page without it.
+  const rootCauses = [];
+  for (const sel of document.querySelectorAll('select')) {
+    if (!visible(sel)) continue;
+    const w = sel.getBoundingClientRect().width;
+    if (w > vw + 1) {
+      const longest = [...sel.options].reduce(
+        (m, o) => (o.text.length > m.length ? o.text : m),
+        ''
+      );
+      rootCauses.push({
+        type: 'select-widened-by-long-option',
+        where: `${desc(sel)} is ${Math.round(w)}px wide in a ${vw}px panel; longest option has ${longest.length} characters`
+      });
+    }
+  }
+  if (rootCauses.length) {
+    const st = document.createElement('style');
+    st.textContent =
+      'select{max-width:100% !important;width:100% !important;min-width:0 !important}';
+    document.head.appendChild(st);
+  }
   if (doc.scrollWidth > vw + 1)
     issues.push({
       type: 'page-horizontal-scroll',
@@ -36,9 +59,10 @@ export const AUDIT_SCRIPT = () => {
   for (const el of interactive) {
     const r = el.getBoundingClientRect();
     if (r.right > vw + 1 || r.left < -1) {
-      const sc = scrollerOf(el);
+      // A control inside a designed scroller (a wide results table, a code block) is reachable by scrolling.
+      if (scrollerOf(el)) continue;
       issues.push({
-        type: sc ? 'needs-horizontal-scroll-to-reach' : 'off-screen-control',
+        type: 'off-screen-control',
         where: `${desc(el)} spans ${Math.round(r.left)}..${Math.round(r.right)} of ${vw}`
       });
     }
@@ -48,10 +72,15 @@ export const AUDIT_SCRIPT = () => {
   )) {
     if (!visible(el)) continue;
     const cs = getComputedStyle(el);
+    // An ellipsis on a table cell or a header with a title attribute is a design choice; text cut off
+    // silently (overflow hidden without an ellipsis) or an ellipsis on a button or tab is not.
+    const ellipsis = cs.textOverflow === 'ellipsis';
+    const designed = ellipsis && (el.matches('th, td') || el.hasAttribute('title'));
     const clipped =
-      (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.textOverflow === 'ellipsis') &&
-      el.scrollWidth > el.clientWidth + 2;
-    const tab = el.matches('button, [role=tab], summary, label, th, h1, h2');
+      (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || ellipsis) &&
+      el.scrollWidth > el.clientWidth + 2 &&
+      !designed;
+    const tab = el.matches('button, [role=tab], summary, label, h1, h2');
     if (clipped && tab)
       issues.push({
         type: 'truncated-label',
@@ -71,23 +100,26 @@ export const AUDIT_SCRIPT = () => {
         where: `${desc(t)} ${t.scrollWidth}px in ${p?.clientWidth}px`
       });
   }
-  const boxes = interactive.map((el) => ({ el, r: el.getBoundingClientRect() }));
+  // Overlap counts only when one control actually covers the centre of another (it cannot be clicked),
+  // not when their bounding boxes merely intersect.
   let overlaps = 0;
-  for (let i = 0; i < boxes.length && overlaps < 6; i += 1)
-    for (let j = i + 1; j < boxes.length && overlaps < 6; j += 1) {
-      const a = boxes[i];
-      const b = boxes[j];
-      if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
-      const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
-      const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
-      if (w > 4 && h > 4) {
-        overlaps += 1;
-        issues.push({
-          type: 'overlap',
-          where: `${desc(a.el)} over ${desc(b.el)} (${Math.round(w)}x${Math.round(h)}px)`
-        });
-      }
+  for (const el of interactive) {
+    if (overlaps >= 6) break;
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    if (cx < 0 || cy < 0 || cx > vw || cy > vh) continue;
+    const top = document.elementFromPoint(cx, cy);
+    if (
+      top &&
+      !el.contains(top) &&
+      !top.contains(el) &&
+      interactive.some((o) => o !== el && o.contains(top))
+    ) {
+      overlaps += 1;
+      issues.push({ type: 'covered-control', where: `${desc(el)} is covered by ${desc(top)}` });
     }
+  }
   // buttons too small to hit
   for (const el of interactive) {
     const r = el.getBoundingClientRect();
@@ -97,5 +129,5 @@ export const AUDIT_SCRIPT = () => {
         where: `${desc(el)} ${Math.round(r.width)}x${Math.round(r.height)}`
       });
   }
-  return { vw, vh, count: interactive.length, issues: issues.slice(0, 25) };
+  return { vw, vh, count: interactive.length, rootCauses, issues: issues.slice(0, 25) };
 };

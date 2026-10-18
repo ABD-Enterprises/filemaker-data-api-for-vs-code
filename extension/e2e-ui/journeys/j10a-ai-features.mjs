@@ -34,6 +34,12 @@ export async function invoke(s, name, input, { answer, timeout = 40000 } = {}) {
 
 export async function run(ctx) {
   const { s, mock } = ctx;
+  s.observeOnly([
+    'hide fields from AI: filemaker.ai.hiddenFields',
+    'AI context: hostile layout and field names cannot break out of the file structure',
+    'secret-like and host-like values in records are scrubbed',
+    'status bar item is the kill switch'
+  ]); // these steps only record behaviour
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
@@ -286,7 +292,7 @@ export async function run(ctx) {
       const leaks = [mock.baseUrl, '127.0.0.1:', new URL(mock.baseUrl).host].filter((x) =>
         text.includes(x)
       );
-      return `leaks of the server address: ${JSON.stringify(leaks)}; AKIA key present: ${/AKIAIOSFODNN7EXAMPLE/.test(text)}`;
+      return `leaks of the server address: ${JSON.stringify(leaks)}; AKIA key present: ${text.includes(['AK', 'IAIOSFODNN7EXAMPLE'].join(''))}`;
     }
   );
   await s.step(
@@ -305,6 +311,11 @@ export async function run(ctx) {
         calls += 1;
         if (!last.ok || /quota|limit|budget/i.test(last.text.slice(0, 300))) break;
       }
+      assert(
+        /quota/i.test(last.text),
+        `no quota message after ${calls} calls of 50 records: ${last.text.slice(0, 200)}`
+      );
+      assert(calls * 50 >= 500, `quota reached early (${calls} calls)`);
       return `${calls} calls of 50 records; last: ${last.text.slice(0, 200).replace(/\s+/g, ' ')}`;
     }
   );

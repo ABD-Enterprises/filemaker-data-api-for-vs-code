@@ -6,6 +6,11 @@
 //   E2E_VSCODE_VERSION    VS Code version for @vscode/test-electron (default: stable)
 //   E2E_VSCODE_CACHE      download cache (default: <tmp>/fm-e2e-vscode-cache)
 //   E2E_VSIX              VSIX to test (default: ../artifacts/filemaker-data-api-tools-<version>.vsix)
+//   E2E_CLAUDE=1          also run the real Claude Code CLI steps in J10b (off by default, see README)
+//   E2E_UPDATE_KNOWN=1    rewrite known-findings.json from this run (the findings the suite tolerates)
+//   E2E_STRICT=1          every failing step fails the run, ignoring known-findings.json
+// Exit code: 0 when every FAIL is listed in e2e-ui/known-findings.json (a known finding); 1 when a step
+// fails that is not listed (a regression or a new finding), when a journey crashes, or with E2E_STRICT=1.
 // Skips cleanly (exit 0 and a message) when prerequisites are missing.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,6 +42,18 @@ if (!fs.existsSync(vsix))
   skip(
     `no VSIX at ${vsix}. Build it first: npm run build -w shared && npm run package:check (from the repo root / extension/)`
   );
+
+// Leftovers of a run that was killed hard (SIGKILL cannot be caught): remove old temp roots of ours.
+for (const name of fs.readdirSync(os.tmpdir())) {
+  if (!/^fm-(e2e|mock-tls)-/.test(name) || name === 'fm-e2e-vscode-cache') continue;
+  const dir = path.join(os.tmpdir(), name);
+  try {
+    if (Date.now() - fs.statSync(dir).mtimeMs > 6 * 3600 * 1000)
+      fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* not ours or already gone */
+  }
+}
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const artifacts = process.env.E2E_ARTIFACTS ?? path.join(repoRoot, 'artifacts', 'e2e-ui', stamp);
@@ -76,7 +93,10 @@ const ctx = {
   version
 };
 let exitCode = 0;
+let cleaned = false;
 const cleanup = async () => {
+  if (cleaned) return;
+  cleaned = true;
   try {
     await s.dispose({ keepLogsTo: path.join(artifacts, 'vscode-logs') });
   } catch {
@@ -96,14 +116,25 @@ const cleanup = async () => {
   }
   for (const dir of ctx.extraRoots ?? []) fs.rmSync(dir, { recursive: true, force: true });
 };
-process.on('SIGINT', async () => {
-  await cleanup();
-  process.exit(130);
-});
+for (const [sig, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129]
+])
+  process.on(sig, async () => {
+    await cleanup();
+    process.exit(code);
+  });
+for (const ev of ['uncaughtException', 'unhandledRejection'])
+  process.on(ev, async (e) => {
+    console.error(`${ev}: ${e?.stack ?? e}`);
+    await cleanup();
+    process.exit(1);
+  });
 try {
   s.installVsix(vsix);
   console.log(
-    `VS Code ${path.basename(path.dirname(path.dirname(path.dirname(path.dirname(vscode.exe)))))} | mock ${mock.baseUrl} | artifacts ${artifacts}`
+    `VS Code (${vscode.integrity}) ${path.basename(path.dirname(path.dirname(path.dirname(path.dirname(vscode.exe)))))} | mock ${mock.baseUrl} | artifacts ${artifacts}`
   );
   for (const file of selected) {
     const mod = await import(path.join(here, 'journeys', file));
@@ -112,6 +143,7 @@ try {
     try {
       if (!s.app && !mod.ownsLaunch) await s.launch();
       else if (s.app && !s.helperOn && !mod.ownsLaunch) await s.restart();
+      s.trustThrow = false;
       await mod.run(ctx);
     } catch (e) {
       exitCode = 1;
@@ -130,8 +162,54 @@ try {
   report.write();
   await cleanup();
 }
-const failed = report.rows.filter((r) => r.result === 'FAIL').length;
-console.log(
-  `\nDone in ${Math.round((Date.now() - t0) / 1000)}s: ${report.rows.length} steps, ${failed} failed. Report: ${path.join(artifacts, 'report.md')}`
+const failedRows = report.rows.filter((r) => r.result === 'FAIL');
+const knownFile = path.join(here, 'known-findings.json');
+const knownKey = (r) => `${r.journey} | ${r.step}`;
+const ran = new Set(report.rows.map((r) => String(r.journey).split(' ')[0]));
+if (process.env.E2E_UPDATE_KNOWN === '1') {
+  // Keep the entries of journeys that were not run this time; replace the ones that were.
+  const old = fs.existsSync(knownFile)
+    ? JSON.parse(fs.readFileSync(knownFile, 'utf8')).findings
+    : [];
+  const kept = old.filter((k) => !ran.has(k.split(' ')[0]));
+  const now = failedRows.map(knownKey);
+  const findings = [...new Set([...kept, ...now])].sort();
+  fs.writeFileSync(
+    knownFile,
+    `${JSON.stringify(
+      {
+        note: 'Steps that fail today because of a known product finding (see the PR report). A step listed here may fail without failing the run; a step NOT listed fails the run. Regenerate with E2E_UPDATE_KNOWN=1 npm run test:e2e-ui after triaging every new failure.',
+        findings
+      },
+      null,
+      2
+    )}\n`
+  );
+  console.log(`known-findings.json updated: ${findings.length} entries`);
+}
+const known = new Set(
+  fs.existsSync(knownFile) ? JSON.parse(fs.readFileSync(knownFile, 'utf8')).findings : []
 );
-process.exit(exitCode || (failed ? 1 : 0));
+const strict = process.env.E2E_STRICT === '1';
+const newFailures = failedRows.filter((r) => strict || !known.has(knownKey(r)));
+const unasserted = report.rows.filter((r) => r.unasserted);
+const fixed = [...known].filter(
+  (k) =>
+    ran.has(k.split(' ')[0]) &&
+    report.rows.some((r) => knownKey(r) === k) &&
+    !failedRows.some((r) => knownKey(r) === k)
+);
+console.log(
+  `\nDone in ${Math.round((Date.now() - t0) / 1000)}s: ${report.rows.length} steps, ${failedRows.length} failed (${failedRows.length - newFailures.length} known findings, ${newFailures.length} new). Report: ${path.join(artifacts, 'report.md')}`
+);
+if (fixed.length)
+  console.log(
+    `Known findings that now pass (remove them from known-findings.json): ${fixed.length}`
+  );
+if (unasserted.length)
+  console.log(
+    `Steps without an assertion (reported as NOTE): ${unasserted.length}\n  ${unasserted.map((r) => knownKey(r)).join('\n  ')}`
+  );
+for (const r of newFailures)
+  console.log(`NEW FAILURE: ${knownKey(r)} -- ${String(r.detail).split('\n')[0].slice(0, 200)}`);
+process.exit(exitCode || (newFailures.length ? 1 : 0));

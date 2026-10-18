@@ -191,9 +191,11 @@ export async function run(ctx) {
       await s.cmd('FileMaker: Reload Plugins').catch(() => {});
       await s.page.waitForTimeout(1500);
       const r = await tryCommand(s, 'FileMaker: Delete Record');
-      const blocked =
-        r.toasts.some((t) => /viewer|role|not allowed|disabled|permission/i.test(t)) ||
-        r.modal === '';
+      const blocked = r.toasts.some((t) => /viewer|read-only|unavailable/i.test(t));
+      assert(
+        blocked,
+        `the workspace config raised the role: no 'viewer' refusal was shown (a missing modal does not count as blocked): ${JSON.stringify(r)}`
+      );
       return `Delete Record with admin in workspace config and viewer in user settings -> ${JSON.stringify(r)}`;
     }
   );

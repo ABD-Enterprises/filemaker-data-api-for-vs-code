@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { api, type RunningMock, startMockProcess } from './mockHelper';
+import { api, hasOpenssl, type RunningMock, startMockProcess } from './mockHelper';
 
 const mockDir = path.resolve(__dirname, '../../mock-server');
 let mock: RunningMock;
@@ -210,7 +210,7 @@ describe('mock dataset', () => {
   });
 });
 
-describe('TLS modes', () => {
+describe.skipIf(!hasOpenssl)('TLS modes', () => {
   const get = (url: string, options: https.RequestOptions) =>
     new Promise<number>((resolve, reject) => {
       https

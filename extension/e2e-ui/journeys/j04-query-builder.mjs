@@ -83,8 +83,15 @@ export async function run(ctx) {
       const log = await mock.log();
       const last = [...log].reverse().find((l) => /records|_find/.test(l.path));
       const sum = await summary(wv);
+      assert(/101.200/.test(sum), `after Next the summary says: ${sum}`);
+      assert(
+        (last?.body?.offset ?? Number(last?.query?.match(/offset=(\d+)/)?.[1])) === 101,
+        `server offset is not 101: ${JSON.stringify(last?.body ?? last?.query)}`
+      );
       await wv.locator('#prevButton').click();
       await s.page.waitForTimeout(1200);
+      const back = await summary(wv);
+      assert(/1.100/.test(back), `after Previous the summary says: ${back}`);
       return `after Next: ${sum}; last request ${last?.method} ${last?.path} ${last?.query ?? ''} ${JSON.stringify(last?.body ?? {}).slice(0, 120)}`;
     }
   );

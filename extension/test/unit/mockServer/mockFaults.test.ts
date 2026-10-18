@@ -3,7 +3,7 @@ import https from 'node:https';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { api, type RunningMock, startMockProcess } from './mockHelper';
+import { api, hasOpenssl, type RunningMock, startMockProcess } from './mockHelper';
 
 // The named faults, accounts and TLS modes that the failure-mode UI journeys (e2e-ui/journeys/j13*) rely on.
 let mock: RunningMock;
@@ -192,7 +192,7 @@ describe('accounts and record faults', () => {
   });
 });
 
-describe('TLS modes produce the Node errors the catalogue lists', () => {
+describe.skipIf(!hasOpenssl)('TLS modes produce the Node errors the catalogue lists', () => {
   const get = (url: string, options: https.RequestOptions) =>
     new Promise<string>((resolve) => {
       https

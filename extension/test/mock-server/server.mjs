@@ -43,7 +43,10 @@ async function readBody(req) {
   let size = 0;
   for await (const c of req) {
     size += c.length;
-    if (size > MAX_BODY_BYTES) { req.destroy(); throw new Error('request body too large'); }
+    if (size > MAX_BODY_BYTES) {
+      req.destroy();
+      throw new Error('request body too large');
+    }
     chunks.push(c);
   }
   return Buffer.concat(chunks);
@@ -66,17 +69,28 @@ function writeOut(res, out) {
       while (left > 0) {
         const n = Math.min(left, chunk.length);
         left -= n;
-        if (!res.write(n === chunk.length ? chunk : chunk.subarray(0, n))) return res.once('drain', pump);
+        if (!res.write(n === chunk.length ? chunk : chunk.subarray(0, n)))
+          return res.once('drain', pump);
       }
       res.end();
     };
     return pump();
   }
-  let body; let type = 'application/json';
+  let body;
+  let type = 'application/json';
   if (out.json !== undefined) body = JSON.stringify(out.json);
-  else if (out.text !== undefined) { body = out.text; type = out.headers?.['Content-Type'] ?? 'text/plain'; }
-  else { body = out.buffer ?? ''; type = out.headers?.['Content-Type'] ?? 'application/octet-stream'; }
-  res.writeHead(out.status, { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), ...(out.headers ?? {}) });
+  else if (out.text !== undefined) {
+    body = out.text;
+    type = out.headers?.['Content-Type'] ?? 'text/plain';
+  } else {
+    body = out.buffer ?? '';
+    type = out.headers?.['Content-Type'] ?? 'application/octet-stream';
+  }
+  res.writeHead(out.status, {
+    'Content-Type': type,
+    'Content-Length': Buffer.byteLength(body),
+    ...(out.headers ?? {})
+  });
   res.end(body);
 }
 
@@ -96,7 +110,9 @@ export async function startMock(options = {}) {
     try {
       const out = engine.admin(req.method, url.pathname, url.searchParams, body);
       writeOut(res, { status: out.status ?? 200, headers: {}, json: out.json ?? {} });
-    } catch (e) { writeOut(res, { status: 400, headers: {}, json: { error: e.message } }); }
+    } catch (e) {
+      writeOut(res, { status: 400, headers: {}, json: { error: e.message } });
+    }
   };
   const mainHandler = async (req, res) => {
     try {
@@ -104,43 +120,95 @@ export async function startMock(options = {}) {
       if (url.pathname.startsWith('/__admin/')) {
         if (separateAdmin) return writeOut(res, { status: 404, headers: {}, json: {} });
         const host = (req.headers.host ?? '').replace(/:\d+$/, '');
-        if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return writeOut(res, { status: 403, headers: {}, json: {} });
+        if (!['127.0.0.1', 'localhost', '[::1]'].includes(host))
+          return writeOut(res, { status: 403, headers: {}, json: {} });
         return adminHandler(req, res);
       }
       const body = await readBody(req);
-      const input = { method: req.method, pathname: url.pathname, query: url.searchParams, headers: req.headers, body, protocol };
-      if (url.pathname === PROXY_PATH && req.method === 'POST') return writeOut(res, await handleProxy(engine, input));
+      const input = {
+        method: req.method,
+        pathname: url.pathname,
+        query: url.searchParams,
+        headers: req.headers,
+        body,
+        protocol
+      };
+      if (url.pathname === PROXY_PATH && req.method === 'POST')
+        return writeOut(res, await handleProxy(engine, input));
       writeOut(res, await engine.dispatch(input));
     } catch (error) {
       // A malformed request must not take the mock down.
-      if (!res.headersSent) writeOut(res, { status: 500, headers: {}, json: { messages: [{ code: '1', message: `Mock server error: ${error.message}` }] } });
+      if (!res.headersSent)
+        writeOut(res, {
+          status: 500,
+          headers: {},
+          json: { messages: [{ code: '1', message: `Mock server error: ${error.message}` }] }
+        });
       else res.end();
     }
   };
 
-  const server = tlsMode === 'off' ? http.createServer(mainHandler) : https.createServer({ key: fs.readFileSync(certs.key), cert: fs.readFileSync(certs.cert), ...(certs.tlsVersions ?? {}) }, mainHandler);
+  const server =
+    tlsMode === 'off'
+      ? http.createServer(mainHandler)
+      : https.createServer(
+          {
+            key: fs.readFileSync(certs.key),
+            cert: fs.readFileSync(certs.cert),
+            ...(certs.tlsVersions ?? {})
+          },
+          mainHandler
+        );
   const adminServer = separateAdmin ? http.createServer(adminHandler) : undefined;
-  const listen = (srv, port) => new Promise((resolve, reject) => { srv.once('error', reject); srv.listen(port, '127.0.0.1', () => resolve(srv.address().port)); });
+  const listen = (srv, port) =>
+    new Promise((resolve, reject) => {
+      srv.once('error', reject);
+      srv.listen(port, '127.0.0.1', () => resolve(srv.address().port));
+    });
   const port = await listen(server, Number(env.PORT ?? 18080));
   const adminPort = adminServer ? await listen(adminServer, Number(env.ADMIN_PORT)) : port;
   const baseUrl = `${protocol}://127.0.0.1:${port}`;
   return {
-    engine, port, adminPort, baseUrl, adminUrl: separateAdmin ? `http://127.0.0.1:${adminPort}` : baseUrl, caPath: certs?.caPath, intermediatePath: certs?.intermediatePath, certPath: certs?.cert, tlsMode,
+    engine,
+    port,
+    adminPort,
+    baseUrl,
+    adminUrl: separateAdmin ? `http://127.0.0.1:${adminPort}` : baseUrl,
+    caPath: certs?.caPath,
+    intermediatePath: certs?.intermediatePath,
+    certPath: certs?.cert,
+    tlsMode,
     close: async () => {
-      server.closeAllConnections?.(); adminServer?.closeAllConnections?.();
-      await Promise.all([new Promise((r) => server.close(r)), adminServer ? new Promise((r) => adminServer.close(r)) : undefined]);
+      server.closeAllConnections?.();
+      adminServer?.closeAllConnections?.();
+      await Promise.all([
+        new Promise((r) => server.close(r)),
+        adminServer ? new Promise((r) => adminServer.close(r)) : undefined
+      ]);
       if (certs) fs.rmSync(certs.dir, { recursive: true, force: true });
     }
   };
 }
-const safeJson = (buf) => { try { const v = buf.length ? JSON.parse(buf.toString('utf8')) : {}; return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; } };
+const safeJson = (buf) => {
+  try {
+    const v = buf.length ? JSON.parse(buf.toString('utf8')) : {};
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+};
 
 /** Start the mock, print the ready lines and stop cleanly on SIGTERM/SIGINT (what `npm run mock:server` does). */
 export async function main() {
   const mock = await startMock();
   console.log(`mock FileMaker Data API on ${mock.baseUrl} (user tester)`);
-  console.log(`MOCK_READY ${JSON.stringify({ baseUrl: mock.baseUrl, adminUrl: mock.adminUrl, port: mock.port, adminPort: mock.adminPort, tls: mock.tlsMode, caPath: mock.caPath ?? null, intermediatePath: mock.intermediatePath ?? null, proxyUrl: `${mock.baseUrl}${PROXY_PATH}` })}`);
-  const stop = async () => { await mock.close(); process.exit(0); };
+  console.log(
+    `MOCK_READY ${JSON.stringify({ baseUrl: mock.baseUrl, adminUrl: mock.adminUrl, port: mock.port, adminPort: mock.adminPort, tls: mock.tlsMode, caPath: mock.caPath ?? null, intermediatePath: mock.intermediatePath ?? null, proxyUrl: `${mock.baseUrl}${PROXY_PATH}` })}`
+  );
+  const stop = async () => {
+    await mock.close();
+    process.exit(0);
+  };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
 }

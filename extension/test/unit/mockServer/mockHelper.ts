@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 import nock from 'nock';
@@ -92,3 +92,10 @@ export function api(baseUrl: string, version = 'vLatest') {
   };
   return { call, login, root };
 }
+
+/** The TLS modes generate their certificates with the openssl command; without it those tests are skipped. */
+export const hasOpenssl = spawnSync('openssl', ['version']).status === 0;
+if (!hasOpenssl)
+  console.warn(
+    'mock TLS tests are skipped: the openssl command is not on PATH (apt/brew install openssl)'
+  );

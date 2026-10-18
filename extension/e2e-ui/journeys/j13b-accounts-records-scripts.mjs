@@ -13,6 +13,7 @@ import {
   openQueryBuilder
 } from '../lib/flows.mjs';
 import { observe, summarise, toastInfo } from '../lib/observe.mjs';
+import { assert } from '../lib/session.mjs';
 
 const J = 'J13b accounts+records';
 const field = (wv, name) => wv.locator(`#fieldEditor tr:has(td:text-is("${name}")) textarea`);
@@ -44,6 +45,7 @@ async function saveEdit(s, wv) {
 
 export async function run(ctx) {
   const { s, mock } = ctx;
+  s.trustThrow = true; // these journeys judge by throwing a finding message
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
@@ -297,6 +299,12 @@ export async function run(ctx) {
     'the panel stays responsive; the result is truncated or shown safely',
     async () => {
       const o = await runScript('Echo', 'x', { name: 'script-huge-result', path: '/script/' });
+      assert(o.ms < 20000, `the panel took ${o.ms} ms to show a 2 MB result`);
+      assert(o.raw.length > 0 || String(o.st).length > 0, 'nothing was shown for the 2 MB result');
+      assert(
+        o.raw.length < 4 * 1024 * 1024,
+        `the whole 2 MB result is rendered (${o.raw.length} chars)`
+      );
       return `rendered in ${o.ms} ms; raw ${o.raw.length} chars; ${o.st}`;
     }
   );

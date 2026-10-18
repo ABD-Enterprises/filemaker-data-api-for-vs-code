@@ -4,7 +4,9 @@ export const window = {
   showErrorMessage: async () => undefined,
   showInformationMessage: async () => undefined
 };
-export const workspace = { getConfiguration: () => ({ get: (_key, fallback) => fallback, inspect: () => undefined }) };
+export const workspace = {
+  getConfiguration: () => ({ get: (_key, fallback) => fallback, inspect: () => undefined })
+};
 export const env = { machineId: 'test-machine', clipboard: { writeText: async () => undefined } };
 export class EventEmitter {
   event = () => ({ dispose() {} });

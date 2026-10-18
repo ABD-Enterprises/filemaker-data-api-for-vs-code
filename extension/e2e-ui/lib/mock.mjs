@@ -3,12 +3,14 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { safeEnv as pickEnv } from './session.mjs';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const mockEntry = path.resolve(here, 'fm-fixture.mjs');
 
 export async function startMock(env = {}) {
   const child = spawn(process.execPath, [mockEntry], {
-    env: { ...process.env, PORT: '0', ADMIN_PORT: '0', ...env },
+    env: { ...pickEnv(), PORT: '0', ADMIN_PORT: '0', ...env },
     stdio: ['ignore', 'pipe', 'inherit']
   });
   child.on('exit', (code, signal) => {
@@ -80,6 +82,7 @@ export async function startMock(env = {}) {
     log: async () => (await admin('/__admin/log')).log,
     stop: () =>
       new Promise((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) return resolve(); // already gone: no exit event will come
         child.__stopping = true;
         child.removeAllListeners('exit');
         child.once('exit', resolve);

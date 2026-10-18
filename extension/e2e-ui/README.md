@@ -11,13 +11,47 @@ download of about 300 MB). Without a prerequisite they print why and exit 0.
 npm ci                                  # repo root
 npm run build -w shared                 # the production bundle needs shared/dist
 cd extension && npm run package:check   # builds ../artifacts/filemaker-data-api-tools-<version>.vsix (the production bundle)
-npm run test:e2e-ui                     # everything (about 40 minutes), report in ../artifacts/e2e-ui/<timestamp>/
+npm run test:e2e-ui                     # everything (about 55 minutes), report in ../artifacts/e2e-ui/<timestamp>/
 E2E_ONLY=j02,j05 npm run test:e2e-ui    # some journeys (prefix match on the file name)
 ```
 
-Environment: `E2E_ARTIFACTS` (output folder, default `<repo>/artifacts/e2e-ui/<timestamp>`, git-ignored),
-`E2E_VSCODE_VERSION` (default `stable`), `E2E_VSCODE_CACHE` (download cache, default `<tmp>/fm-e2e-vscode-cache`),
-`E2E_VSIX` (VSIX path). On Linux without a display run `xvfb-run -a npm run test:e2e-ui`.
+Environment: `E2E_ARTIFACTS` (output folder, default `<repo>/artifacts/e2e-ui/<timestamp>`, git-ignored: attach evidence
+to a PR or release, never commit it), `E2E_VSCODE_VERSION` (default `stable`), `E2E_VSCODE_CACHE` (download cache, default
+a per-user directory with mode 0700: `~/Library/Caches/filemaker-data-api-e2e-vscode` on macOS, `$XDG_CACHE_HOME` or
+`~/.cache` elsewhere), `E2E_VSIX` (VSIX path), `E2E_ONLY` (journey prefixes), `E2E_CLAUDE=1` (see below).
+On Linux without a display run `xvfb-run -a npm run test:e2e-ui`. The processes the suite starts (VS Code, the mock,
+the MCP shim) get an allowlisted environment (`PATH`, `LANG`, `TMPDIR`, display variables): tokens and cloud credentials
+in your shell (`GH_TOKEN`, `AWS_*`, `ANTHROPIC_*`) are not passed on.
+
+**Download integrity.** On macOS with stable VS Code the harness downloads the build itself and checks its sha256 against
+the field in VS Code's update API (a separate request from the download), refusing a mismatch; `E2E_VSCODE_SHA256` pins
+a digest. Elsewhere, or for a pinned version, only the download server's own header is checked (`@vscode/test-electron`).
+
+**CI.** Not wired into CI on purpose: it needs a GUI session (`xvfb-run` on Linux), takes 25 to 55 minutes and downloads
+about 300 MB. Run it by hand or in a scheduled job on a runner with a display.
+
+## What gates, and the known-findings list
+
+The suite exits **0** when every failing step is listed in `e2e-ui/known-findings.json` (a finding the product still
+has), and **1** when a step fails that is not listed (a regression or a new finding), when a journey crashes, or with
+`E2E_STRICT=1` (every failure counts). After a run the console also lists known findings that now pass (remove them from the
+file) and steps that asserted nothing.
+
+To update the list after triaging the failures of a full run: `E2E_UPDATE_KNOWN=1 npm run test:e2e-ui` rewrites the entries
+of the journeys that ran (so a partial `E2E_ONLY` run keeps the others). Review the diff of `known-findings.json` in the PR:
+every added line is a failure someone accepted. Keys are `<journey> | <step name>`; renaming a step makes it new.
+
+A step passes only if it called `assert` (or returned an explicit `{ result }`). A step that asserts nothing is reported as
+a NOTE with `unasserted: true`, never as PASS, and is listed at the end of the run; use `s.step(..., fn, { observe: true })`
+for a step that only records behaviour.
+
+## Claude Code CLI (opt-in)
+
+J10b can run the real `claude` CLI against the MCP server. It is **off by default**; set `E2E_CLAUDE=1`. It starts with an
+allowlisted environment (`PATH`, `LANG`, `TMPDIR`, `HOME` and `CLAUDE_CONFIG_DIR` pointing at an empty temporary
+directory), so no `ANTHROPIC_*`, `AWS_*` or `CLAUDE_CODE_USE_*` variable reaches it. Be aware that **`HOME` does not control
+the macOS Keychain**: the CLI may still find credentials there. That is why this is opt-in and why the non-interactive
+prompt step reports NOT-TESTABLE when the CLI says it is not logged in. Do not use your own login for this.
 
 A VS Code window opens on your desktop while the tests run and takes focus; leave the machine alone. Everything the tests
 create lives under one temp folder (user data, extensions, `HOME`, workspace), removed at the end; VS Code is started with
@@ -43,6 +77,6 @@ Computer-use screen control cannot type into VS Code, so nothing here uses it.
 
 ## Layout
 
-- `run.mjs` orchestrator; `lib/session.mjs` (launch, palette, pickers, modals, webview frames), `lib/flows.mjs`, `lib/observe.mjs`, `lib/mock.mjs`, `lib/report.mjs`.
+- `run.mjs` orchestrator; `lib/session.mjs` (launch, palette, pickers, modals, webview frames), `lib/flows.mjs`, `lib/observe.mjs`, `lib/mock.mjs`, `lib/report.mjs` (paths in the report are made relative), `lib/vscode.mjs` (cache and checksum), `known-findings.json`.
 - `helper-extension/` a tiny test-only extension loaded with `--extensionDevelopmentPath`. It lets the harness call `vscode.lm.invokeTool`, read settings and list extensions through JSON files. It is never packaged (`.vscodeignore` excludes `e2e-ui/**`).
 - `journeys/j*.mjs` the journeys (see the table in the PR description).

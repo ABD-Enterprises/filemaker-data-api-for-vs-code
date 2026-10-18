@@ -9,6 +9,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
+import { cacheDir, ensurePrivateDir, prefetchVerified } from './vscode.mjs';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 export const helperDir = path.resolve(here, '../helper-extension');
@@ -32,14 +34,52 @@ export function loadDeps() {
 export async function getVSCode({ version = process.env.E2E_VSCODE_VERSION ?? 'stable' } = {}) {
   const deps = loadDeps();
   if (deps.error) throw new Error(deps.error);
-  const cachePath = process.env.E2E_VSCODE_CACHE ?? path.join(os.tmpdir(), 'fm-e2e-vscode-cache');
+  const cachePath = ensurePrivateDir(cacheDir());
+  const check = await prefetchVerified(cachePath, version).catch((e) => {
+    if (/sha256 mismatch/.test(e.message)) throw e; // never fall back after a bad checksum
+    return { verified: false, note: `independent check unavailable (${e.message})` };
+  });
   const exe = await deps.downloadAndUnzipVSCode({ version, cachePath });
   const [cli] = deps.resolveCli(exe);
-  return { exe, cli, deps, cachePath };
+  return { exe, cli, deps, cachePath, integrity: check.note };
 }
 
+/**
+ * The environment passed to VS Code, the mock, the shim and helper processes: an allowlist, so tokens and
+ * cloud credentials in the caller's shell (GH_TOKEN, AWS_*, ANTHROPIC_*, ...) never reach them.
+ */
+const ENV_ALLOW = [
+  'PATH',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'TMPDIR',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'DISPLAY',
+  'WAYLAND_DISPLAY',
+  'XAUTHORITY',
+  'XDG_RUNTIME_DIR',
+  'DBUS_SESSION_BUS_ADDRESS',
+  '__CF_USER_TEXT_ENCODING'
+];
+export const safeEnv = (extra = {}) => {
+  const out = {};
+  for (const k of ENV_ALLOW) if (process.env[k] !== undefined) out[k] = process.env[k];
+  return { ...out, ...extra };
+};
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let assertCalls = 0;
+/** Every journey assertion goes through here; `step` uses the counter to spot steps that assert nothing. */
+/** For a check that throws by itself (a wait that times out, a judge helper): count it as an assertion. */
+export const markAsserted = () => {
+  assertCalls += 1;
+};
 export const assert = (cond, msg) => {
+  assertCalls += 1;
   if (!cond) throw new Error(msg ?? 'assertion failed');
 };
 
@@ -129,7 +169,7 @@ export class Session {
         vsix,
         ...(force ? ['--force'] : [])
       ],
-      { encoding: 'utf8', env: { ...process.env, HOME: this.home } }
+      { encoding: 'utf8', env: safeEnv({ HOME: this.home }) }
     );
     if (r.status !== 0) throw new Error(`install failed: ${r.stdout}${r.stderr}`);
     return r.stdout.trim().split('\n').pop();
@@ -138,7 +178,7 @@ export class Session {
     const r = spawnSync(
       this.vscode.cli,
       ['--user-data-dir', this.ud, '--extensions-dir', this.ex, '--uninstall-extension', id],
-      { encoding: 'utf8', env: { ...process.env, HOME: this.home } }
+      { encoding: 'utf8', env: safeEnv({ HOME: this.home }) }
     );
     return `${r.stdout}${r.stderr}`.trim();
   }
@@ -153,7 +193,7 @@ export class Session {
         '--list-extensions',
         '--show-versions'
       ],
-      { encoding: 'utf8', env: { ...process.env, HOME: this.home } }
+      { encoding: 'utf8', env: safeEnv({ HOME: this.home }) }
     )
       .trim()
       .split('\n')
@@ -184,7 +224,7 @@ export class Session {
       executablePath: this.vscode.exe,
       args: [...flags, ...args, ...(folder ? [folder] : [])],
       env: {
-        ...process.env,
+        ...safeEnv(),
         HOME: this.home,
         FM_E2E_HELPER_DIR: this.helperIO,
         ELECTRON_ENABLE_LOGGING: '',
@@ -303,22 +343,52 @@ export class Session {
     }
     return file;
   }
-  async step(journey, step, expect, fn) {
+  /** Declare steps (by name) that only record behaviour and assert nothing: they are reported as NOTE. */
+  observeOnly(names) {
+    this.observeNames = new Set([...(this.observeNames ?? []), ...names]);
+  }
+  /**
+   * Runs one step. It PASSes only if it called `assert` (or returned an explicit { result }); a step that
+   * asserts nothing is recorded as a NOTE with `unasserted: true`, never as a PASS. Pass
+   * `{ observe: true }` for a step that only records what the product does (reported as NOTE).
+   */
+  async step(journey, step, expect, fn, opts = {}) {
     this.journey = journey;
+    if (this.observeNames?.has(step)) opts = { ...opts, observe: true };
     let result = 'PASS';
     let detail = '';
+    let explicit = false;
+    const before = assertCalls;
     try {
       const out = await fn();
       if (out && typeof out === 'object' && out.result) {
         result = out.result;
         detail = out.detail ?? '';
+        explicit = true;
       } else if (typeof out === 'string') detail = out;
     } catch (e) {
       result = 'FAIL';
       detail = String(e.message ?? e);
     }
+    let unasserted = false;
+    if (
+      result === 'PASS' &&
+      (opts.observe || (!explicit && !this.trustThrow && assertCalls === before))
+    ) {
+      result = 'NOTE';
+      unasserted = !opts.observe;
+      if (unasserted) detail = `no assertion in this step (observation only). ${detail}`;
+    }
     const shot = await this.shot(step.slice(0, 40), journey);
-    this.report.add({ journey, step, expect, result, shot, detail });
+    this.report.add({
+      journey,
+      step,
+      expect,
+      result,
+      shot,
+      detail,
+      ...(unasserted ? { unasserted } : {})
+    });
     return result === 'PASS';
   }
   note(journey, step, detail, result = 'NOTE') {
@@ -370,10 +440,10 @@ export class Session {
   async openPalette() {
     await this.page.bringToFront().catch(() => {}); // with two windows open only the focused one receives key events
     await this.autoDismiss();
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 7; attempt += 1) {
       if (attempt >= 1) {
         await this.page.keyboard.press('Escape');
-        await sleep(200);
+        await sleep(attempt >= 4 ? 1500 : 200);
         await this.page
           .locator('.part.editor, .monaco-workbench')
           .first()

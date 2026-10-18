@@ -1,3 +1,3 @@
 test/mock-server/DATASET.md
 test/mock-server/dataset-manifest.json
-e2e-ui/artifacts
+../artifacts/e2e-ui

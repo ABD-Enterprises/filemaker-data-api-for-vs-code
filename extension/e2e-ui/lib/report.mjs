@@ -1,6 +1,23 @@
 // Step recorder: every step has an expectation, a result and a screenshot, and ends up in report.md/json.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+
+/** Replace absolute local paths (home, temp, repository) so a committed or attached report names no machine. */
+export function scrub(text) {
+  let t = String(text ?? '');
+  const roots = [
+    [process.cwd(), '<cwd>'],
+    [os.tmpdir(), '<tmp>'],
+    [`/private${os.tmpdir()}`, '<tmp>'],
+    [os.homedir(), '~']
+  ];
+  for (const [from, to] of roots) if (from && from.length > 3) t = t.split(from).join(to);
+  return t
+    .replace(/\/(?:private\/)?var\/folders\/[^/\s]+\/[^/\s]+\/T/g, '<tmp>')
+    .replace(/\/Users\/[^/\s]+/g, '~')
+    .replace(/\/home\/[^/\s]+/g, '~');
+}
 
 export class Report {
   constructor(dir) {
@@ -25,7 +42,13 @@ export class Report {
     );
   }
   write() {
-    fs.writeFileSync(path.join(this.dir, 'report.json'), JSON.stringify(this.rows, null, 2));
+    const rows = this.rows.map((r) => ({
+      ...r,
+      shot: r.shot ? path.relative(this.dir, r.shot) : r.shot,
+      detail: scrub(r.detail),
+      expect: scrub(r.expect)
+    }));
+    fs.writeFileSync(path.join(this.dir, 'report.json'), JSON.stringify(rows, null, 2));
     const esc = (s) =>
       String(s ?? '')
         .replace(/\|/g, '\\|')
@@ -46,7 +69,7 @@ export class Report {
     );
     for (const r of this.rows)
       lines.push(
-        `| ${esc(r.journey)} | ${esc(r.step)} | ${esc(r.expect)} | ${r.result} | ${r.shot ? path.relative(this.dir, r.shot) : ''} | ${esc(r.detail)} |`
+        `| ${esc(r.journey)} | ${esc(r.step)} | ${esc(scrub(r.expect))} | ${r.result} | ${r.shot ? path.relative(this.dir, r.shot) : ''} | ${esc(scrub(r.detail))} |`
       );
     fs.writeFileSync(path.join(this.dir, 'report.md'), `${lines.join('\n')}\n`);
   }

@@ -14,3 +14,4 @@ scripts/**
 docs/QA/**
 ARCHITECTURE.md
 e2e-ui/**
+.prettierignore

@@ -188,6 +188,33 @@ describe('documented response shapes', () => {
     expect(none.status).toBe(404);
     expect(none.body.messages[0].code).toBe('401');
   });
+  it('the HTTP status for "no records" is a switch: 404 by default, 500 on request', async () => {
+    const find = () =>
+      http.call('POST', `${L('Customers')}/_find`, {
+        token,
+        body: { query: [{ LastName: 'nonexistent-zzz' }] }
+      });
+    try {
+      await admin('/__admin/config', { noRecordsStatus: 500 });
+      const r = await find();
+      expect(r.status).toBe(500);
+      expect(r.body.messages[0].code).toBe('401');
+    } finally {
+      await admin('/__admin/config', { noRecordsStatus: 404 });
+    }
+    expect((await find()).status).toBe(404);
+  });
+  it('omit requests apply in order: [include, omit] differs from [omit, include]', async () => {
+    const find = (query: unknown[]) =>
+      http.call('POST', `${L('Customers')}/_find`, { token, body: { query, limit: 5 } });
+    const inc = { Status: 'Open' };
+    const omit = { Status: 'Open', omit: 'true' };
+    const includeThenOmit = await find([inc, omit]);
+    expect(includeThenOmit.status).toBe(404);
+    const omitThenInclude = await find([omit, inc]);
+    expect(omitThenInclude.status).toBe(200);
+    expect(omitThenInclude.body.response.data.length).toBeGreaterThan(0);
+  });
   it('container upload takes a multipart part named upload', async () => {
     const form = new FormData();
     form.append('upload', new Blob(['hello'], { type: 'text/plain' }), 'hello.txt');

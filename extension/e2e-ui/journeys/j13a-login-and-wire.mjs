@@ -15,6 +15,7 @@ const RAW_JS = /Cannot read properties|undefined|TypeError|is not a function/i;
 
 export async function run(ctx) {
   const { s, mock } = ctx;
+  s.trustThrow = true; // these journeys judge by throwing a finding message
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;

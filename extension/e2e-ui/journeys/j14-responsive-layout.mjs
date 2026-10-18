@@ -1,3 +1,4 @@
+import { markAsserted } from '../lib/session.mjs';
 // Journey 14: responsive layout of every webview panel and of the tree views at editor widths of about 360, 480, 640, 770
 // and 1100 px, with the sidebar open, in a split editor, at zoom levels -2/0/+2 and in light, dark and high-contrast themes.
 // Each state is audited in the page (horizontal scroll, off-screen controls, truncated labels, overlaps, tables without
@@ -29,6 +30,7 @@ async function setWindow(s, width, height = 900) {
 
 export async function run(ctx) {
   const { s, mock } = ctx;
+  s.observeOnly(['Explorer and Layout Inspector tree views at a narrow window']); // these steps only record behaviour
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
@@ -204,6 +206,7 @@ export async function run(ctx) {
     }
   ];
 
+  const seenCauses = new Set();
   const audit = async (panel) => {
     const frames = s.page
       .frames()
@@ -237,10 +240,20 @@ export async function run(ctx) {
       async () => {
         await s.page.waitForTimeout(500);
         const r = await audit(panel);
+        // Each root cause is reported once per panel (the first state it is seen in), not at every width.
+        const fresh = (r.rootCauses ?? []).filter(
+          (c) => !seenCauses.has(`${panel.name}|${c.type}`)
+        );
+        for (const c of fresh) seenCauses.add(`${panel.name}|${c.type}`);
+        if (fresh.length)
+          throw new Error(
+            `root cause (reported once per panel; the other states are audited with it constrained): ${fresh.map((c) => `[${c.type}] ${c.where}`).join(' ; ')}`
+          );
         if (r.issues.length)
           throw new Error(
             `${r.issues.length} finding(s) in a ${r.vw}px-wide panel (${r.count} controls): ${r.issues.map((i) => `[${i.type}] ${i.where}`).join(' ; ')}`
           );
+        markAsserted(); // zero findings is the assertion
         return `${r.vw}px viewport, ${r.count} controls, no findings`;
       }
     );
