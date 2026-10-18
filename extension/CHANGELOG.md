@@ -9,6 +9,7 @@
 - [INTERNAL] Real VS Code UI end-to-end tests (`npm run test:e2e-ui`, not part of `npm test` or CI): Playwright drives the downloaded VS Code desktop app with the built VSIX through twelve user journeys plus failure-mode, AI and MCP server journeys, writing a step report with screenshots. A known-findings list (`e2e-ui/known-findings.json`) lets a run exit 0 when only known findings fail and exit 1 on a new failure; the real Claude Code CLI journey is opt-in (`E2E_CLAUDE=1`). See `extension/e2e-ui/README.md`.
 - [FIX] The Record Editor no longer hides the fact that fields are missing. A note above the field list says that fields your account cannot access are not shown, and when the layout lists fields that the record has no value for it says how many and names them (up to five).
 - [FIX] The Record Viewer no longer sits on a loading skeleton. Opened for a record (from a results row, for example) it loads that record by itself; opened without one it shows the form with the hint 'Enter a record ID and select Load Record.'; a failed load shows its error.
+- [FIX] The connection wizard says when the workspace is in Restricted Mode. A notice at the top explains what is limited (a profile template in the project is ignored; workspace settings that change how connections and commands behave are ignored until you trust the workspace) and has a **Manage Workspace Trust** button; it disappears when you trust the workspace.
 
 ## 1.4.0
 
