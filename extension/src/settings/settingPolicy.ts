@@ -148,6 +148,29 @@ const USER_ONLY_NOTICE = 'this setting only works in User settings';
 const RESTRICTED_MODE_NOTICE =
   'this workspace is in Restricted Mode, so workspace values for this setting are ignored until you trust it';
 
+/**
+ * Sentences about a configured value that the extension does not use as written. They explain a
+ * value that is present and in force, so they appear whichever scope holds it.
+ */
+function valueNotes(setting: PolicySetting, values: ScopeValues, effective: unknown): string[] {
+  const notes: string[] = [];
+  const configured = values.workspaceFolder ?? values.workspace ?? values.workspaceFile ?? values.user;
+  if (setting.kind === 'stricter-role') {
+    // The user's own value is the baseline. Anything but viewer, developer or admin counts as developer.
+    const own = values.user;
+    if (own !== undefined && !isRoleName(own)) {
+      notes.push(`Your User value ${fmt(own)} is not a role (viewer, developer or admin), so it is treated as developer.`);
+    }
+  } else if (setting.key === 'typegen.outputDir' && typeof configured === 'string' && typeof values.default === 'string') {
+    if (same(effective, values.default) && configured !== values.default) {
+      notes.push(
+        `The value ${fmt(configured)} is not a folder inside the workspace (it is empty, absolute, or contains ".."), so the default ${fmt(values.default)} is used.`
+      );
+    }
+  }
+  return notes;
+}
+
 export function explainSetting(input: ExplainInput): Explanation {
   const { setting, values, effective, trusted } = input;
   const id = `filemaker.${setting.key}`;
@@ -168,6 +191,7 @@ export function explainSetting(input: ExplainInput): Explanation {
   let noticeReason: string | undefined;
   let note: string | undefined;
   let workspaceMeaningful = true;
+  const extraNotes = valueNotes(setting, values, effective);
 
   if (restrictedMode) {
     // VS Code hides restricted keys from a workspace that is not trusted, and the code does not
@@ -258,7 +282,7 @@ export function explainSetting(input: ExplainInput): Explanation {
       noticeWorthy: ignored && !same(workspaceValue, effective),
       ...(reason ? { reason } : {}),
       ...(noticeReason ? { noticeReason } : {}),
-      ...(note ? { note } : {}),
+      ...(note || extraNotes.length > 0 ? { note: [note, ...extraNotes].filter(Boolean).join(' ') } : {}),
       workspaceMeaningful
     };
   }

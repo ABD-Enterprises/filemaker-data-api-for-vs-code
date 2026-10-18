@@ -1149,10 +1149,16 @@ export class FMClient {
     }
     try {
       const info = await inspectServerCertificate(url, 1500);
-      if (!isFileMakerDefaultCertificate(info)) {
+      const isDefault = isFileMakerDefaultCertificate(info);
+      const noHostNames = info.altNames.length === 0;
+      if (!isDefault && !noHostNames) {
         return failure;
       }
-      const better = describeNetworkFailure(failure.networkCode, { ...targetOfUrl(url), fileMakerDefaultCertificate: true });
+      const better = describeNetworkFailure(failure.networkCode, {
+        ...targetOfUrl(url),
+        fileMakerDefaultCertificate: isDefault,
+        certificateListsNoHostNames: noHostNames
+      });
       return better
         ? new FMClientError(better.message, {
             status: failure.status,

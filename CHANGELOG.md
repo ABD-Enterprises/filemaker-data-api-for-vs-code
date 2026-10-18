@@ -38,6 +38,10 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Script errors on container upload and find are shown; Effective Settings notes and workspace-file watching; TLS agents are closed when replaced.
+- Managed runtime file refresh refuses symlinks and keeps user-edited files with an older marker.
+- FM Web preview commands that need the runtime template are hidden when it is not installed.
+- Certificate messages and the trust dialog offer a CA file only for certificates that list host names; the pinned-through-proxy message says to use NO_PROXY.
 - Pinned agent: maxCachedSessions 0 and refuse resumed sessions; proxy detection replicates proxy-from-env + axios shouldBypassProxy (corpus-tested); review notes direct dial; Claris detection capped at 1.5 s.
 - Conditional/neutral certificate wording, no-host-names message, trust offer only where trustable, safe dialog text, IPv6, template confirmation on review, latch details (214 wording, proactive renewal, 1703, test-profile cleanup).
 - Linear-time tag stripping on a 4 KB cut of server bodies; health: gateway 5xx/404 => unreachable, cancelled => unchanged.
@@ -74,6 +78,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Tests for review-flagged gaps (About flag, build identity guard, footer CSS, trust listener, redirects, resume backstop, template hash guard).
 - Note: the self-signed checkbox was never released; legacy field is still read.
 - Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.

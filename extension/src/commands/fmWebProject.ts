@@ -275,7 +275,7 @@ function warnAboutEditedManagedFiles(files: string[] | undefined): void {
     return;
   }
   void vscode.window.showWarningMessage(
-    `These generated preview files were edited, so they were not updated: ${files.join(', ')}. The preview cannot reach the FileMaker bridge until they match the current template; delete them and run the command again to get fresh copies.`
+    `These generated preview files were edited (or are symbolic links), so they were not updated: ${files.join(', ')}. The preview cannot reach the FileMaker bridge until they match the current template; delete them and run the command again to get fresh copies.`
   );
 }
 

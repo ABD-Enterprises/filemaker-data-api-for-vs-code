@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'https';
+import { TLSSocket } from 'tls';
 import { get } from 'https';
 import type { AddressInfo } from 'net';
 
@@ -8,7 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
-import { PinnedCertificateAgent, normalizeSha256 } from '../../src/services/tlsAgent';
+import { PinnedCertificateAgent, httpsTransportFor, normalizeSha256 } from '../../src/services/tlsAgent';
 import { DAY, keyToPem, makeCertificate, newKeyPair } from '../helpers/x509';
 import { InMemorySecretStorage } from './mocks';
 
@@ -139,5 +140,29 @@ describe('a pinned agent works on every connection, including after TLS sessions
       expect(error.networkCode).toBe('FM_CERT_PIN_MISMATCH');
     }
     expect(server.requests).toHaveLength(0);
+  });
+
+  it('refuses a connection that reports it resumed a session, even though the certificate is the pinned one (backstop)', async () => {
+    const m = material();
+    const server = await listen(m, 'TLSv1.3');
+    const agent = new PinnedCertificateAgent({}, { sha256: pinOf(m), allowExpired: false });
+    const original = TLSSocket.prototype.isSessionReused;
+    TLSSocket.prototype.isSessionReused = () => true;
+    try {
+      expect(await fetchOnce(server.port, agent)).toBe('FM_CERT_PIN_MISMATCH');
+    } finally {
+      TLSSocket.prototype.isSessionReused = original;
+    }
+    expect(server.requests).toHaveLength(0);
+    expect(await fetchOnce(server.port, agent)).toBe('OK'); // and a normal connection works again
+    agent.destroy();
+  });
+
+  it('the pinned transport tells axios not to use a proxy of its own (the pin is checked by the agent alone)', () => {
+    const m = material();
+    expect(httpsTransportFor({ pinnedCertSha256: pinOf(m) }, 'https://fm.example.com')).toMatchObject({ proxy: false });
+    expect(httpsTransportFor({}, 'https://fm.example.com')).not.toHaveProperty('proxy');
+    // A pin has no meaning for plain http, so no change there.
+    expect(httpsTransportFor({ pinnedCertSha256: pinOf(m) }, 'http://fm.example.com')).not.toHaveProperty('proxy');
   });
 });

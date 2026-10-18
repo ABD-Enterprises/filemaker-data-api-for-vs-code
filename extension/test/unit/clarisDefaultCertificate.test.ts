@@ -69,7 +69,10 @@ describe("FileMaker Server's default certificate", () => {
     const error = (await login(server)) as FMClientError;
     expect(error.networkCode).toBe('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
     expect(error.kind).toBe('certificate');
-    expect(error.message.startsWith(PLAIN)).toBe(true);
+    // Exactly this, with nothing after it: a CA file cannot make this certificate work (it lists no
+    // host names, so host-name verification would still fail), so no such advice is given.
+    expect(error.message).toBe(PLAIN);
+    expect(error.message).not.toMatch(/CA file|CA certificate/);
     expect(error.message).not.toMatch(/\(.*\(/); // no nested parentheses
     expect(error.message).not.toMatch(/wizard/); // the same text is shown in a notification
     expect(error.isRetryable).toBe(false);
@@ -98,7 +101,7 @@ describe("FileMaker Server's default certificate", () => {
     expect(decision).toEqual({ sha256: normalizeSha256(leaf.fingerprint256), allowExpired: false });
     expect(seen.join('\n')).toContain('Claris Self Signed Certificate');
     expect(seen.join('\n')).toContain('Claris Root Authority');
-    expect(seen.join('\n')).toContain('not trusted by this computer');
+    expect(seen.join('\n')).toContain("FileMaker Server's default certificate is self-signed");
 
     const pinned = withPinnedCertificate(
       { id: 'p1', name: 'Claris', authMode: 'direct', serverUrl: `https://localhost:${server.port}`, database: 'Sales', username: 'u' },
@@ -114,5 +117,35 @@ describe("FileMaker Server's default certificate", () => {
     const result = (await login(server, { pinnedCertSha256: normalizeSha256(trusted.leaf.fingerprint256) })) as FMClientError;
     expect(result.networkCode).toBe('FM_CERT_PIN_MISMATCH');
     expect(server.requests).toHaveLength(0);
+  });
+
+  it('another private certificate with no host names is not offered a CA file either (it could not make host-name verification pass)', async () => {
+    const rootKey = newKeyPair();
+    const leafKey = newKeyPair();
+    const leaf = makeCertificate({
+      subjectCn: 'fm.internal', notBefore: new Date(Date.now() - DAY), notAfter: new Date(Date.now() + DAY), subjectKey: leafKey, issuer: { cn: 'Acme Private Root', key: rootKey }
+    });
+    const server = await startTlsServer({ key: leafKey, chain: [leaf], maxVersion: 'TLSv1.2' });
+    servers.push(server);
+
+    const error = (await login(server)) as FMClientError;
+
+    expect(error.networkCode).toBe('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
+    expect(error.message).toMatch(/trust this certificate/);
+    expect(error.message).not.toMatch(/CA file|CA certificate/);
+  });
+
+  it('a private certificate that does list its host names still gets the CA-file option', async () => {
+    const rootKey = newKeyPair();
+    const leafKey = newKeyPair();
+    const leaf = makeCertificate({
+      subjectCn: 'localhost', altNames: ['localhost'], notBefore: new Date(Date.now() - DAY), notAfter: new Date(Date.now() + DAY), subjectKey: leafKey, issuer: { cn: 'Acme Private Root', key: rootKey }
+    });
+    const server = await startTlsServer({ key: leafKey, chain: [leaf], maxVersion: 'TLSv1.2' });
+    servers.push(server);
+
+    const error = (await login(server)) as FMClientError;
+
+    expect(error.message).toMatch(/lists its host names.*CA file/s);
   });
 });

@@ -44,7 +44,7 @@ import { SecretStore } from './services/secretStore';
 import { SettingsService } from './services/settingsService';
 import { TypeGenService } from './services/typeGenService';
 import { FmWebProjectService } from './services/fmWebProjectService';
-import { FmWebRuntimeGenerator } from './services/fmWebRuntimeGenerator';
+import { FmWebRuntimeGenerator, publishPreviewAvailability } from './services/fmWebRuntimeGenerator';
 import { FmBridgeServer } from './services/fmBridgeServer';
 import { EnvironmentSetStore } from './enterprise/environmentSetStore';
 import { EnvironmentCompareService } from './enterprise/environmentCompareService';
@@ -794,6 +794,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
   void refreshPaletteContexts();
+  // Hide the preview commands in an installation that has no runtime template (the Marketplace
+  // package); computed the same way the generator resolves it.
+  void publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>
+    vscode.commands.executeCommand('setContext', key, value)
+  );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (

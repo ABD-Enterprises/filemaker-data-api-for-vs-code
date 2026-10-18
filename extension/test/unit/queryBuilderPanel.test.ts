@@ -120,6 +120,23 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.fmClient.findRecords).toHaveBeenCalledWith(profile, 'Contacts', expect.objectContaining({ offset: 21 }));
   });
 
+  it('shows script errors reported next to a find that worked, and shows nothing when there are none', async () => {
+    panel.close();
+    panel = openPanel({
+      findRecords: vi.fn(async () => ({ data: [], dataInfo: { foundCount: 0 }, scriptErrors: [{ phase: 'prerequest' as const, code: '105' }] }))
+    });
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Status":"Open"}]', runId: 1 } });
+    const warning = vi.mocked(vscode.window.showWarningMessage).mock.calls.map((call) => String(call[0])).join('\n');
+    expect(warning).toMatch(/The find worked, but the pre-request script reported error 105/);
+    expect(panel.posted.some((message) => message.type === 'queryResult')).toBe(true);
+
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    panel.close();
+    panel = openPanel();
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Status":"Open"}]', runId: 2 } });
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
   it('opens a result row in the viewer or editor with its record id', async () => {
     await panel.send({ type: 'openRecord', payload: { profileId: 'p1', layout: 'Contacts', recordId: '42', mode: 'edit' } });
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('filemakerDataApiTools.openRecordEditor', {

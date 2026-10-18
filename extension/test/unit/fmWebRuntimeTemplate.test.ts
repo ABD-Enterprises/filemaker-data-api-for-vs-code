@@ -11,7 +11,10 @@ import { FmBridgeServer } from '../../src/services/fmBridgeServer';
 import {
   FmWebRuntimeGenerator,
   RUNTIME_TEMPLATE_VERSION,
-  RuntimeTemplateUnavailableError
+  RuntimeTemplateUnavailableError,
+  SHIPPED_MARKED_HASHES,
+  decideManagedRefresh,
+  normalizedHash
 } from '../../src/services/fmWebRuntimeGenerator';
 
 const extensionDir = path.resolve(__dirname, '../..');
@@ -68,11 +71,100 @@ describe('FM Web runtime template', () => {
     expect(first.needsManualUpdate).toEqual([]);
     expect(await readFile(bridgeClientPath(), 'utf8')).toContain('X-FM-Bridge-Token');
 
-    // An older marker is refreshed; the current one is left as it is.
-    await writeFile(bridgeClientPath(), '// fmweb-managed: runtime template v1\nold();\n');
-    expect((await generator().generateRuntimeAppTemplate()).updated).toContain(path.join('lib', 'bridge-client.ts'));
+    // The current copy is left as it is.
     const second = await generator().generateRuntimeAppTemplate();
     expect(second.updated).toEqual([]);
+  });
+
+  it('does not overwrite a user-edited file that still carries an older marker: it is left alone and named', async () => {
+    await mkdir(path.dirname(bridgeClientPath()), { recursive: true });
+    const edited = '// fmweb-managed: runtime template v1\nexport const mine = true;\n';
+    await writeFile(bridgeClientPath(), edited);
+
+    const summary = await generator().generateRuntimeAppTemplate();
+
+    expect(summary.updated).not.toContain(path.join('lib', 'bridge-client.ts'));
+    expect(summary.needsManualUpdate).toEqual([path.join('lib', 'bridge-client.ts')]);
+    expect(await readFile(bridgeClientPath(), 'utf8')).toBe(edited);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('edited'), { file: path.join('lib', 'bridge-client.ts') });
+  });
+
+  describe('decideManagedRefresh', () => {
+    const shipped = Buffer.from('// fmweb-managed: runtime template v1\nshipped();\n');
+    const shippedHash = normalizedHash(shipped);
+
+    it('refreshes an older marker only when the content is a version that was shipped with a marker (line endings aside)', () => {
+      expect(decideManagedRefresh(shipped, [], [shippedHash], 2)).toBe('refresh');
+      expect(decideManagedRefresh(Buffer.from(shipped.toString().replace(/\n/g, '\r\n')), [], [shippedHash], 2)).toBe('refresh');
+      expect(decideManagedRefresh(Buffer.from(`${shipped.toString()}// my change\n`), [], [shippedHash], 2)).toBe('edited');
+      expect(decideManagedRefresh(shipped, [], [], 2)).toBe('edited');
+    });
+
+    it('leaves a current or newer marker alone, and refreshes an unmarked copy only when it is a known pre-marker version', () => {
+      expect(decideManagedRefresh(Buffer.from('// fmweb-managed: runtime template v2\nx\n'), [], [], 2)).toBe('current');
+      expect(decideManagedRefresh(Buffer.from('// fmweb-managed: runtime template v3\nx\n'), [], [], 2)).toBe('current');
+      const unmarked = Buffer.from('export const old = 1;\n');
+      expect(decideManagedRefresh(unmarked, [normalizedHash(unmarked)], [], 2)).toBe('refresh');
+      expect(decideManagedRefresh(unmarked, ['0'.repeat(64)], [], 2)).toBe('edited');
+    });
+  });
+
+  it('records the hash of every managed file in the template, so a template change cannot ship without deciding about older copies', async () => {
+    for (const [file, hashes] of Object.entries(SHIPPED_MARKED_HASHES)) {
+      const current = normalizedHash(await readFile(path.resolve(extensionDir, '..', 'runtime-next', file)));
+      expect(hashes, `${file}: bump RUNTIME_TEMPLATE_VERSION and ADD this hash (keep the older ones): ${current}`).toContain(current);
+    }
+  });
+
+  it('never writes through a symbolic link: a managed file that is a link is left alone and reported', async () => {
+    const outside = path.join(dir, 'outside.ts');
+    await writeFile(outside, 'untouched');
+    await mkdir(path.dirname(bridgeClientPath()), { recursive: true });
+    await symlink(outside, bridgeClientPath());
+
+    const summary = await generator().generateRuntimeAppTemplate();
+
+    expect(summary.needsManualUpdate).toEqual([path.join('lib', 'bridge-client.ts')]);
+    expect(summary.updated).toEqual([]);
+    expect(await readFile(outside, 'utf8')).toBe('untouched');
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('symbolic link'), { file: path.join('lib', 'bridge-client.ts') });
+  });
+
+  it('a dangling link at a template file is not written through either', async () => {
+    const target = path.join(dir, 'does-not-exist.ts');
+    await mkdir(path.dirname(bridgeClientPath()), { recursive: true });
+    await symlink(target, bridgeClientPath());
+
+    await generator().generateRuntimeAppTemplate();
+
+    await expect(stat(target)).rejects.toThrow();
+  });
+
+  it('a link at an ordinary (not managed) template file is skipped without a warning', async () => {
+    const files = (await generator().generateRuntimeAppTemplate()).created;
+    const plain = files.find((file) => !['bridge-client.ts', 'runtime-data.ts', 'runtime-behavior.ts', 'runtime-layout-client.tsx'].includes(path.basename(file)) && file.endsWith('.json'));
+    expect(plain).toBeTruthy();
+    const target = path.join(dir, 'runtime-next', plain as string);
+    const outside = path.join(dir, 'elsewhere.json');
+    await writeFile(outside, 'untouched');
+    await rm(target);
+    await symlink(outside, target);
+
+    const summary = await generator().generateRuntimeAppTemplate();
+
+    expect(summary.skipped).toContain(plain);
+    expect(summary.needsManualUpdate).toEqual([]);
+    expect(await readFile(outside, 'utf8')).toBe('untouched');
+  });
+
+  it('refuses to create files through a folder that is a link to somewhere else', async () => {
+    const elsewhere = path.join(dir, 'elsewhere-dir');
+    await mkdir(elsewhere);
+    await mkdir(path.join(dir, 'runtime-next'), { recursive: true });
+    await symlink(elsewhere, path.join(dir, 'runtime-next', 'lib'));
+
+    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/link to a folder outside/);
+    await expect(stat(path.join(elsewhere, 'bridge-client.ts'))).rejects.toThrow();
   });
 
   it('leaves an edited managed file alone and reports it', async () => {

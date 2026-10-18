@@ -70,6 +70,26 @@ describe('Upload to Container command', () => {
     ]);
   });
 
+  it('says so when a script reported an error next to an upload that worked', async () => {
+    const deps = createDeps();
+    deps.uploadContainer.mockResolvedValue({
+      recordId: '42',
+      messages: [{ code: '0', message: 'OK' }],
+      response: {},
+      scriptErrors: [{ phase: 'script', code: '3' }]
+    });
+    registerRecordEditCommands(deps);
+    const uploadCommand = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([name]) => name === 'filemakerDataApiTools.uploadContainer')?.[1] as (arg: unknown) => Promise<boolean>;
+
+    await expect(uploadCommand({ profileId: 'profile-1', layout: 'Contacts', recordId: '42', fieldName: 'Attachment' })).resolves.toBe(true);
+
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls.map((call) => String(call[0])).join('\n')).toMatch(
+      /The upload worked, but the script reported error 3/
+    );
+  });
+
   it('reads the selected file and passes the configured max bytes to FMClient', async () => {
     const deps = createDeps();
     registerRecordEditCommands(deps);

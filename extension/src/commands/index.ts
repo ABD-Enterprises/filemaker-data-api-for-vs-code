@@ -25,6 +25,7 @@ import {
   resolveLayoutContext,
   showCommandError
 } from './common';
+import { describeScriptErrors } from '../services/responseGuard';
 import { ConnectionWizardPanel } from '../webviews/connectionWizard';
 import { QueryBuilderPanel } from '../webviews/queryBuilder';
 import { RecordViewerPanel } from '../webviews/recordViewer';
@@ -381,6 +382,9 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         };
 
         const result = await fmClient.findRecords(profile, layout, request);
+        if (result.scriptErrors && result.scriptErrors.length > 0) {
+          void vscode.window.showWarningMessage(`The find worked, but ${describeScriptErrors(result.scriptErrors)}.`);
+        }
         await openJsonDocument({
           profile: profile.name,
           layout,

@@ -239,7 +239,7 @@ function statusHint(status: number): string | undefined {
 function cloudSignInNote(url: string | undefined): string {
   try {
     if (url && /\.filemaker-cloud\.com$/i.test(new URL(url).hostname)) {
-      return ' This looks like a FileMaker Cloud server. Cloud signs in with a Claris ID token, which this extension does not support yet, so the account and password you entered cannot work there even if they are correct.';
+      return ' This looks like a FileMaker Cloud server. FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support; an account name and password may not be accepted by your Cloud tenant. Ask Claris or your administrator.';
     }
   } catch {
     // not a URL: no note

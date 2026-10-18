@@ -16,6 +16,44 @@ type TlsProfileOptions = Pick<
 
 const agentCache = new Map<string, Agent>();
 
+/** More agents than this are not expected (one per distinct certificate setting in use); the oldest are retired beyond it. */
+const MAX_CACHED_AGENTS = 32;
+/** How long a replaced agent is left to finish requests that are already running before its sockets are closed. */
+export const RETIRED_AGENT_GRACE_MS = 30_000;
+
+/**
+ * Closes the sockets of an agent that is no longer handed out (its CA file changed, or it was the
+ * oldest of too many). It waits a short grace period first so a request that is already running on
+ * it is not cut off; the timer does not keep the process alive.
+ */
+function retireAgent(agent: Agent): void {
+  const timer = setTimeout(() => agent.destroy(), RETIRED_AGENT_GRACE_MS);
+  timer.unref?.();
+}
+
+function cacheAgent(key: string, agent: Agent): void {
+  agentCache.set(key, agent);
+  while (agentCache.size > MAX_CACHED_AGENTS) {
+    const oldest = agentCache.keys().next().value as string | undefined;
+    if (oldest === undefined || oldest === key) {
+      break;
+    }
+    const evicted = agentCache.get(oldest);
+    agentCache.delete(oldest);
+    if (evicted) {
+      retireAgent(evicted);
+    }
+  }
+}
+
+/** Closes every cached agent's sockets now (extension shutdown) and forgets them. */
+export function disposeTlsAgents(): void {
+  for (const agent of agentCache.values()) {
+    agent.destroy();
+  }
+  agentCache.clear();
+}
+
 /**
  * Whether to add the operating system's trusted certificates to Node's built-in public roots (what
  * VS Code itself does unless `http.systemCertificates` is off). Off until the extension turns it
@@ -152,11 +190,13 @@ export class PinnedCertificateAgent extends Agent {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public createConnection(...args: any[]): any {
-    for (const arg of args) {
-      if (arg && typeof arg === 'object') {
-        Object.assign(arg, { rejectUnauthorized: false, checkServerIdentity: () => undefined });
-      }
-    }
+    // Work on copies. Node files a kept-alive socket under a name built from the request options
+    // (which include rejectUnauthorized and checkServerIdentity), so changing the caller's options
+    // object here made the name used when the socket was freed differ from the one a later request
+    // looks up: the socket was never found again and sat idle instead of being reused or closed.
+    // The check below runs on every socket when it is created, so a reused socket has passed it.
+    const forced = { rejectUnauthorized: false, checkServerIdentity: () => undefined };
+    args = args.map((arg) => (arg && typeof arg === 'object' ? { ...arg, ...forced } : arg));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const socket = (super.createConnection as (...a: any[]) => tls.TLSSocket)(...args);
     // Defence in depth: hold writes until the check has run, so that not even the request line or
@@ -263,7 +303,7 @@ export function httpsTransportFor(
   const proxy = environmentProxyFor(url);
   if (proxy) {
     throw new FMClientError(
-      'A proxy is configured on this computer (HTTPS_PROXY or similar), and a trusted (pinned) server certificate cannot be checked through a proxy, so the connection was not made. Add this server to NO_PROXY, remove the proxy setting, or use a custom CA file for this connection instead.',
+      'A proxy is configured on this computer (HTTPS_PROXY or similar), and a trusted (pinned) server certificate cannot be checked through a proxy, so the connection was not made. To fix it, add this server\'s host name to NO_PROXY so the connection goes direct, or remove the proxy setting. (A custom CA file does not help here, because a trusted certificate does not use the CA file. If you would rather keep the proxy, forget the trusted certificate and use a CA file for a certificate that lists the server\'s host names.)',
       { code: 'PIN_THROUGH_PROXY', kind: 'certificate', isRetryable: false }
     );
   }
@@ -299,7 +339,7 @@ export function createHttpsAgentForProfile(profile: TlsProfileOptions): Agent {
 
   if (pinned) {
     const agent = new PinnedCertificateAgent({}, { sha256: pinned, allowExpired });
-    agentCache.set(cacheKey, agent);
+    cacheAgent(cacheKey, agent);
     return agent;
   }
 
@@ -324,14 +364,15 @@ export function createHttpsAgentForProfile(profile: TlsProfileOptions): Agent {
   }
 
   // Drop agents made for an earlier version of the same file.
-  for (const key of agentCache.keys()) {
+  for (const [key, stale] of [...agentCache.entries()]) {
     if (key.startsWith(prefix)) {
       agentCache.delete(key);
+      retireAgent(stale);
     }
   }
 
   const agent = new Agent(options);
-  agentCache.set(cacheKey, agent);
+  cacheAgent(cacheKey, agent);
   return agent;
 }
 

@@ -143,6 +143,39 @@ describe('responses that are not the Data API, redirects, and business errors on
     expect(await secrets.getSessionToken('p1')).toBeUndefined();
   });
 
+  describe('no request path follows a redirect (each reports where it pointed and sends nothing to the other server)', () => {
+    async function pair() {
+      const other = await serve((_request, response) => {
+        response.end(ok({ productInfo: { name: 'x' }, databases: [], layouts: [] }));
+      });
+      const server = await serve((_request, response) => {
+        response.statusCode = 307;
+        response.setHeader('Location', `${other.url}/elsewhere`);
+        response.end();
+      });
+      return { other, server };
+    }
+
+    const cases: Array<[string, (fm: FMClient, profile: ConnectionProfile) => Promise<unknown>]> = [
+      ['product info (no account)', (fm, profile) => fm.getProductInfo(profile)],
+      ['database list (no account)', (fm, profile) => fm.listHostedDatabases(profile)],
+      ['an authenticated request', (fm, profile) => fm.listLayouts(profile)],
+      ['an authenticated metadata request', (fm, profile) => fm.getLayoutMetadata(profile, 'Contacts')]
+    ];
+
+    for (const [name, call] of cases) {
+      it(name, async () => {
+        const { other, server } = await pair();
+        const { fm, profile, secrets } = await client(server.url);
+        await secrets.setSessionToken('p1', 'existing-token');
+        const error = await fail(call(fm, profile));
+        expect(error.message, name).toMatch(/redirected to a different address/);
+        expect(error.status, name).toBe(307);
+        expect(other.requests, name).toEqual([]);
+      });
+    }
+  });
+
   it('a 200 whose first message is a FileMaker error is a failure, with that code', async () => {
     const server = await serve((_request, response) => {
       response.setHeader('Content-Type', 'application/json');

@@ -146,11 +146,11 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
   954: { meaning: 'Unsupported XML grammar.', category: 'config' },
   955: { meaning: 'No database name.', category: 'config', advice: 'Enter the database name in the connection.' },
   956: {
-    meaning: 'The maximum number of Data API sessions was exceeded.',
+    meaning: 'The maximum number of database or Admin API sessions was exceeded (FileMaker error 956).',
     category: 'transient',
     retryable: true,
     advice:
-      'The server has no free Data API sessions. Try again shortly, or ask the administrator to disconnect idle clients (Admin Console > Databases).'
+      'The server has no free Data API sessions. Try again shortly, or ask the administrator to disconnect idle clients (Admin Console > Databases, Clients list).'
   },
   957: { meaning: 'Conflicting commands.', category: 'request' },
   958: { meaning: 'A parameter is missing.', category: 'request' },

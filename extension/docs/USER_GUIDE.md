@@ -727,7 +727,7 @@ The most common first-run failure is a **certificate error** (the first row of t
 | HTTP 404 (no FileMaker error code) | Nothing answered at that address: check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled in the Admin Console (Connectors). A 404 that carries a FileMaker error code, or HTTP 405/501, means the server does not offer metadata for that layout; run **FileMaker: Refresh Schema Cache** or check the layout name. |
 | "Sign-in is paused" | FileMaker rejected the saved account or password (error 210-214), so the extension stopped signing in by itself to avoid locking the account. Edit the connection, or run **Connect**. |
 | "The server did not return Data API JSON" | A web page, firewall, proxy or sign-in page answered instead of FileMaker Server. Check the Server URL and base path. |
-| Rejected sign-in on a FileMaker Cloud host | FileMaker Cloud signs in with a Claris ID token, which this extension does not support yet. |
+| Rejected sign-in on a FileMaker Cloud host | FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support; an account name and password may not be accepted by your Cloud tenant. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
 | Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |
 | Error 301 (record in use) | Another user or process has the record open. Try again later. |
