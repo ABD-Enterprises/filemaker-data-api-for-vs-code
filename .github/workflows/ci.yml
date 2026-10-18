@@ -102,9 +102,62 @@ jobs:
           name: extension-vsix
           path: artifacts/*.vsix
 
+  # Marketplace publishing is its own job so that the VSCE_PAT secret is never present in a job
+  # that installs project dependencies or has write access to the repository. It runs only for a
+  # tag that points at a commit on main whose version matches the tag, and it waits for the
+  # `marketplace` environment (set required reviewers on it in the repository settings).
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
+    runs-on: ${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}
+    environment: marketplace
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Require a release tag on main that matches the version
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME does not point at a commit on main; refusing to publish."
+            exit 1
+          fi
+          VERSION="$(node -p "require('./extension/package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match extension/package.json version $VERSION."
+            exit 1
+          fi
+
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: extension-vsix
+          path: artifacts
+
+      # No `npm ci` here: project dependencies and their install scripts must not run in the job
+      # that holds the token. vsce is fetched at a pinned version and run from a clean directory.
+      - name: Publish to Marketplace
+        run: |
+          VSIX_PATH="$(realpath artifacts/*.vsix)"
+          cd "$RUNNER_TEMP"
+          npx --yes @vscode/vsce@4.0.0 publish --packagePath "$VSIX_PATH" --no-update-package-json
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
     runs-on: ${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}
     permissions:
       contents: write
@@ -114,27 +167,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-          package-manager-cache: false
-
-      - name: Install Dependencies
-        run: npm ci
-
       - name: Download VSIX Artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: extension-vsix
           path: artifacts
-
-      - name: Publish to Marketplace
-        run: |
-          VSIX_PATH="$(echo artifacts/*.vsix)"
-          npx @vscode/vsce publish --packagePath "$VSIX_PATH" --no-update-package-json
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       # The self-hosted Linux runners do not ship the GitHub CLI. Place a gh
       # binary at a fixed job-scoped path: reuse one already on PATH, or

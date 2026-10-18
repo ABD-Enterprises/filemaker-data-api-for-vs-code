@@ -7,7 +7,7 @@ expires, and how to rotate it.
 
 | Secret name | Purpose | Required for | Source | Default expiry |
 |---|---|---|---|---|
-| `VSCE_PAT` | Publish to VS Code Marketplace | Tag-triggered `publish` job in `.github/workflows/ci.yml` | Azure DevOps Personal Access Token (Marketplace → Manage scope, "All accessible organizations") | 1 year |
+| `VSCE_PAT` | Publish to VS Code Marketplace | Tag-triggered `publish` job (environment `marketplace`) in `.github/workflows/ci.yml` | Azure DevOps Personal Access Token (Marketplace → Manage scope, "All accessible organizations") | 1 year |
 | `OVSX_PAT` (planned, #160) | Publish to Open VSX Registry | Open VSX `ovsx publish` step in CI | Open VSX user → Settings → New Token | 1 year |
 | `ANTHROPIC_API_KEY` (optional) | Claude Code cloud agent (PAYG path) | `.github/workflows/claude-code-agent.yml` Run Claude Code step, only when `CLAUDE_CODE_OAUTH_TOKEN` is unset | https://console.anthropic.com/settings/keys | No expiry (revoke manually) |
 | `CLAUDE_CODE_OAUTH_TOKEN` (preferred) | Claude Code cloud agent (subscription path) | Same workflow step as above | `claude setup-token` locally | 1 year |
