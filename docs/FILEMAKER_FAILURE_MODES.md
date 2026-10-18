@@ -299,7 +299,17 @@ cleared by `POST /__admin/reset`. Add users `viewer` (read-only) and `limited` (
 ## 8. Troubleshooting by symptom (content for the user guide)
 
 Written for people who run the extension, not for developers. "Ask your FileMaker administrator" lines are
-what to put in the message to them. Messages are as the extension shows them today.
+what to put in the message to them. Messages are as the extension showed them when this catalogue was written;
+the 1.4 fixes (PR #386) changed these rows as follows.
+
+> **Status after the failure-modes fixes (1.4).** The bare `Failed to create FileMaker session.` line, the
+> `Cannot read properties of undefined` error, the unexplained 404 and the repeated failed sign-ins are fixed:
+> every certificate, TLS and connection failure now has its own message that says what happened and what to do or ask
+> (the "today the message is the bare line" notes below describe the old behaviour); a page that is not the Data API is
+> reported as such; a plain 404 is explained as a wrong address or a disabled Data API; automatic sign-ins stop after
+> the server rejects the stored credentials (210-214) until the profile is edited or **Connect** is run;
+> **Test Connection** names the step that failed; the connection can be trusted by pinning its certificate; FileMaker
+> Cloud hosts get a Claris ID note. The user-facing text is in the user guide's troubleshooting table.
 
 | What you see | Most likely cause | What to do | What to ask the FileMaker administrator |
 |---|---|---|---|

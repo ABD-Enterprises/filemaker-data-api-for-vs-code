@@ -88,7 +88,7 @@ async function setup(options: { editing?: typeof saved; knownProfiles?: Array<Re
     { extensionUri: { fsPath: '/ext' }, extension: { id: 'x.y' } } as never,
     profileStore as never,
     secrets,
-    { createSession, deleteSession } as never,
+    { createSession, deleteSession, getProductInfo: vi.fn(async () => ({ name: 'FileMaker Server', version: '21.0.1' })), listHostedDatabases: vi.fn(async () => undefined) } as never,
     logger as never,
     options.editing as never
   );

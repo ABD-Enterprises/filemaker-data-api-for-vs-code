@@ -74,7 +74,7 @@ describe('ProxyClient', () => {
     });
 
     it('passes per-profile TLS overrides to the proxy HTTPS request', async () => {
-      const agentSpy = vi.spyOn(tlsAgent, 'createHttpsAgentForProfile');
+      const agentSpy = vi.spyOn(tlsAgent, 'httpsTransportFor');
       const httpClient = new FakeAxios();
       httpClient.post.mockResolvedValue({ data: { ok: true, data: { token: 'abc-session' } } });
       const client = new ProxyClient(
@@ -88,11 +88,11 @@ describe('ProxyClient', () => {
         client.createSession(createProfile({ allowSelfSigned: true }))
       ).resolves.toBe('abc-session');
 
-      expect(agentSpy).toHaveBeenCalledWith(expect.objectContaining({ allowSelfSigned: true }));
+      expect(agentSpy).toHaveBeenCalledWith(expect.objectContaining({ allowSelfSigned: true }), `${PROXY_URL}${PROXY_PATH}`);
       const requestConfig = httpClient.post.mock.calls[0]?.[2] as {
         httpsAgent?: unknown;
       };
-      expect(requestConfig.httpsAgent).toBe(agentSpy.mock.results[0]?.value);
+      expect(requestConfig.httpsAgent).toBe((agentSpy.mock.results[0]?.value as { httpsAgent: unknown }).httpsAgent);
       agentSpy.mockRestore();
     });
   });
@@ -332,6 +332,67 @@ describe('ProxyClient', () => {
 
       expect(result.recordId).toBe('42');
       scope.done();
+    });
+  });
+});
+
+describe('ProxyClient keeps what FileMaker said (proxy error envelope)', () => {
+  const reply = (status: number, body: unknown) =>
+    nock(PROXY_URL).post(PROXY_PATH).reply(status, body as nock.Body);
+
+  it('rebuilds the FileMaker code and status from fmCode / status, as direct mode would raise them', async () => {
+    reply(200, { ok: false, error: 'Record modification ID does not match', fmCode: '306', status: 500 });
+    const error = await createClient().editRecord(createProfile(), 'L', '1', { a: 1 }).catch((e) => e);
+    expect(error.code).toBe('306');
+    expect(error.status).toBe(500);
+    expect(error.message).toMatch(/\[306\]/);
+    const { isRecordModifiedConflict } = await import('../../src/services/errors');
+    expect(isRecordModifiedConflict(error)).toBe(true);
+  });
+
+  it('accepts a numeric fmCode and an error HTTP status carrying the envelope', async () => {
+    reply(409, { ok: false, message: 'No records match the request', fmCode: 401 });
+    const error = await createClient().findRecords(createProfile(), 'L', { query: [{ a: 1 }] }).catch((e) => e);
+    expect(error.code).toBe('401');
+    expect(error.status).toBe(409);
+  });
+
+  it('a rejected password through the proxy is an authentication error with advice', async () => {
+    reply(401, { ok: false, error: 'Invalid user account and/or password', fmCode: '212' });
+    const error = await createClient().createSession(createProfile()).catch((e) => e);
+    expect(error.code).toBe('212');
+    expect(error.kind).toBe('auth');
+    expect(error.isRetryable).toBe(false);
+  });
+
+  it('without fmCode the proxy\'s own message still comes through', async () => {
+    reply(200, { ok: false, error: 'Upstream unavailable' });
+    const error = await createClient().createSession(createProfile()).catch((e) => e);
+    expect(error.message).toBe('Upstream unavailable');
+    expect(error.code).toBeUndefined();
+  });
+
+  it('an HTML page instead of the proxy\'s JSON is explained, not passed on as data', async () => {
+    reply(200, '<html>Sign in</html>');
+    const error = await createClient().createSession(createProfile()).catch((e) => e);
+    expect(error.message).toMatch(/proxy did not return JSON.*proxy endpoint/s);
+  });
+
+  it('does not follow a redirect from the proxy endpoint', async () => {
+    nock(PROXY_URL).post(PROXY_PATH).reply(302, '', { Location: 'https://elsewhere.example.net/x' });
+    const error = await createClient().createSession(createProfile()).catch((e) => e);
+    expect(error.status).toBe(302);
+    expect(error.message).toMatch(/redirected to a different address/);
+  });
+
+  it('through FMClient, "no records match" from the proxy is an empty result and a 306 is a conflict', async () => {
+    const { FMClient } = await import('../../src/services/fmClient');
+    const fm = new FMClient(createSecretStore() as never, createLogger() as never, 5000);
+
+    nock(PROXY_URL).post(PROXY_PATH).reply(200, { ok: false, error: 'No records match the request', fmCode: '401', status: 404 });
+    expect(await fm.findRecords(createProfile(), 'L', { query: [{ a: 1 }] })).toEqual({
+      data: [],
+      dataInfo: { foundCount: 0, returnedCount: 0 }
     });
   });
 });

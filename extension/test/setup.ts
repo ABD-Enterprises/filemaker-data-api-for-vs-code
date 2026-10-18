@@ -116,6 +116,12 @@ vi.mock('vscode', () => {
         this.collapsibleState = collapsibleState ?? 0;
       }
     },
+    ThemeColor: class {
+      id: string;
+      constructor(id: string) {
+        this.id = id;
+      }
+    },
     ThemeIcon: class {
       id: string;
       constructor(id: string) {

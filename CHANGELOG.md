@@ -25,6 +25,8 @@ PR title prefix matches the highest-tier label added:
 ### [FEATURE]
 
 - Add `FileMaker: Show Effective Settings` and a once-per-setting notice when a workspace value is ignored; label every setting `User settings only.`, `Workspace can only make this stricter.` or `Per workspace.`; explain savedQueries.scope, snapshots storage and typegen output dir; docs section on User vs Workspace settings. Notices use fixed text only; Restricted Mode and multi-root are explained. Explanation only: no enforcement change.
+- Test Connection ladder (productInfo, databases, sign-in) naming the failed step; status bar shows real session health.
+- Pin one server certificate by SHA-256 (trust dialog from Test Connection/Connect/errors), refuse changed or expired pinned certificates, no checks disabled except the legacy flag, legacy profiles warned and convertible; system certificates included when Node can read them.
 - Add user-scope `filemaker.export.neutralizeFormulas` to opt out of CSV/Copy-as-table formula apostrophes (workspace cannot turn it off).
 - Connection wizard: custom CA certificate file (validated PEM) and per-profile, confirmed 'allow self-signed (insecure)' option; neither can come from a workspace template; flagged in the profile list and picker; editing keeps `aiAccess`.
 - AI tools for MCP clients (ADR-0004 phase 3): `AiMcpServer` over a local socket with per-session token, discovery file with pid and start time, the bundled `aiMcpShim.js` stdio program, `list_changed` on policy changes, commands to start/stop the server and copy the client config; off by default (`filemaker.ai.externalServer.enabled`, user scope), no local policy of its own.
@@ -35,6 +37,19 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Pinned agent: maxCachedSessions 0 and refuse resumed sessions; proxy detection replicates proxy-from-env + axios shouldBypassProxy (corpus-tested); review notes direct dial; Claris detection capped at 1.5 s.
+- Conditional/neutral certificate wording, no-host-names message, trust offer only where trustable, safe dialog text, IPv6, template confirmation on review, latch details (214 wording, proactive renewal, 1703, test-profile cleanup).
+- Linear-time tag stripping on a 4 KB cut of server bodies; health: gateway 5xx/404 => unreachable, cancelled => unchanged.
+- Batch stops only on account-wide errors (9/205/207/credentials); 200 fails the record only.
+- System roots = Node default (incl. NODE_EXTRA_CA_CERTS) + system store; warmed in the background, 10 min TTL.
+- Wizard shows a test failure once with the trust button; plain-words message for FileMaker Server's default certificate; pinning tested with that certificate shape.
+- Claris ID / FileMaker Cloud hint on rejected sign-in; user guide 404 and setting-name fixes.
+- Proxy error envelope with fmCode/status (documented), HTML replies reported, no redirects.
+- Invalidate the schema cache on new sign-in/sign-out/profile save.
+- Batch: retry only transient failures (honour Retry-After), no breaker trips on business errors, stop on privilege/credential errors with a reason; truncated only when more rows exist.
+- Connect retries only transient failures (decided once where the error is built); no retry of 500/802 or certificate errors.
+- Validate the Data API envelope in one place (HTML/empty/array/truncated/redirect), maxRedirects 0 with a clear redirect message, messages[0].code on 2xx, scriptError reported with writes, no-records by code (404 or 500), bare 404 no longer cached as unsupported.
+- Map Node/OpenSSL error codes to actionable messages via one shared mapping (normalizeError); Retry only where it helps; no Edit Profile for 403/privilege; shared FileMaker error-code table with advice; Retry-After; HTML details truncated.
 - Release workflow: the release job now downloads the source-map artifact (it previously failed after publish); packaging fails if no maps are produced.
 - Wizard: http+self-signed message, custom CA extends system roots, TLS agent keyed by file stamp, database/API path change resets aiAccess; kill-switch message names the true cause.
 - FM Web preview: clear 'unavailable in this installation' error instead of the old fallback app; version-marked managed runtime files refreshed in already generated apps; env file written without following symlinks.
@@ -58,6 +73,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Note: the self-signed checkbox was never released; legacy field is still read.
 - Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.
 - Untrack artifacts/*.log and gitignore them.
@@ -80,6 +96,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Pinned certificates fail closed behind an HTTP proxy (refused with a clear message; agent no longer advertises rejectUnauthorized:false); CA-file/default/legacy behaviour through a proxy tested.
+- Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
 - Make `filemaker.secrets.fallback` application-scoped and `filemaker.typegen.outputDir` restricted in untrusted workspaces.
 - Query Builder copy-as-table neutralizes formula-looking cells like the CSV export (shared behaviour, parity-tested).

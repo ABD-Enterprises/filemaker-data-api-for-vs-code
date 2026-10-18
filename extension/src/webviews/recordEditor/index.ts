@@ -9,6 +9,7 @@ import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
+import { describeScriptErrors } from '../../services/responseGuard';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
 
 interface RecordEditorOpenOptions {
@@ -381,6 +382,8 @@ export class RecordEditorPanel {
         return;
       }
 
+      warnAboutScriptErrors('Record saved', saveResult);
+
       try {
         const refreshedRecord = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
         this.loadedRecord = {
@@ -540,6 +543,7 @@ export class RecordEditorPanel {
       const result = await this.fmClient.createRecord(profile, payload.layout, nonEmptyFields);
 
       void vscode.window.showInformationMessage(`Record created (ID: ${result.recordId}).`);
+      warnAboutScriptErrors('Record created', result);
 
       await this.panel.webview.postMessage({
         type: 'recordCreated',
@@ -780,6 +784,13 @@ function sameRecordId(left: unknown, right: unknown): boolean {
     return /^\d+$/.test(text) ? String(Number(text)) : text;
   };
   return normalize(left) === normalize(right);
+}
+
+/** The write worked, but a script that ran with it reported an error: say so next to the success. */
+function warnAboutScriptErrors(done: string, result: EditRecordResult): void {
+  if (result.scriptErrors && result.scriptErrors.length > 0) {
+    void vscode.window.showWarningMessage(`${done}, but ${describeScriptErrors(result.scriptErrors)}.`);
+  }
 }
 
 function formatError(error: unknown): string {

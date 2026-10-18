@@ -228,7 +228,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
 
             jobContext.log(
               'info',
-              `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}`
+              `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}${result.stoppedReason ? `. Stopped early (${result.notAttempted ?? 0} not attempted): ${result.stoppedReason}` : ''}`
             );
 
             return result;
