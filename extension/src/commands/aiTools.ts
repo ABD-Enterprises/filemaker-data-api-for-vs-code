@@ -92,7 +92,8 @@ export function registerAiToolCommands(deps: Deps & { statusBar: AiStatusBar }):
             ...(settingsCause ? ['Open AI Settings'] : [])
           );
           if (choice === 'Open AI Settings') {
-            await vscode.commands.executeCommand('workbench.action.openSettings', 'filemaker.ai');
+            // AI settings are user-only (application scope): open the User tab, not the last-used one.
+            await vscode.commands.executeCommand('workbench.action.openGlobalSettings', { query: 'filemaker.ai' });
           }
           return;
         }

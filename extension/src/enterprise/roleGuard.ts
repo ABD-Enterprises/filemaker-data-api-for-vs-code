@@ -3,12 +3,12 @@ import { join } from 'path';
 
 import * as vscode from 'vscode';
 
+import { ROLE_RANK } from '../settings/settingPolicy';
 import type { EnterpriseRole, PerformanceMode } from '../types/fm';
 import { isOfflineModeOn } from '../utils/policySetting';
 
 const ENTERPRISE_CONFIG_RELATIVE_PATH = '.vscode/filemaker.config.json';
 
-const ROLE_RANK: Record<EnterpriseRole, number> = { viewer: 0, developer: 1, admin: 2 };
 
 function isRole(value: unknown): value is EnterpriseRole {
   return value === 'viewer' || value === 'developer' || value === 'admin';
@@ -155,6 +155,11 @@ export class RoleGuard {
     }
 
     return candidates.reduce((lowest, role) => (ROLE_RANK[role] < ROLE_RANK[lowest] ? role : lowest));
+  }
+
+  /** What `.vscode/filemaker.config.json` asks for, for the Effective Settings view. */
+  public getEnterpriseFileSettings(): { enterpriseMode?: boolean; role?: EnterpriseRole } {
+    return { enterpriseMode: this.enterpriseConfig?.enterpriseMode, role: this.enterpriseConfig?.role };
   }
 
   public isOfflineModeEnabled(): boolean {

@@ -26,6 +26,7 @@ import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/ai
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
+import { registerEffectiveSettings } from './settings/effectiveSettings';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
 import type { BatchService } from './services/batchService';
@@ -304,6 +305,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   await environmentSetStore.ensureSeeded(roleGuard.getDefaultEnvironmentSetSeeds());
   await pluginRegistry.reload();
+  context.subscriptions.push(...registerEffectiveSettings({ context, roleGuard, settingsService }));
 
   const fmExplorerProvider = new FMExplorerProvider(
     profileStore,

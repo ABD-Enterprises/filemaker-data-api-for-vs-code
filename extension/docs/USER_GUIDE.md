@@ -24,10 +24,11 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 16. [Enterprise mode and roles](#enterprise-mode-and-roles)
 17. [Plugins](#plugins)
 18. [Using AI with FileMaker](#using-ai-with-filemaker)
-19. [Settings reference](#settings-reference)
-20. [Security behavior you will notice](#security-behavior-you-will-notice)
-21. [Troubleshooting](#troubleshooting)
-22. [FAQ](#faq)
+19. [User settings vs Workspace settings in plain words](#user-settings-vs-workspace-settings-in-plain-words)
+20. [Settings reference](#settings-reference)
+21. [Security behavior you will notice](#security-behavior-you-will-notice)
+22. [Troubleshooting](#troubleshooting)
+23. [FAQ](#faq)
 
 ---
 
@@ -68,7 +69,7 @@ In an untrusted workspace this extension can browse, read metadata and run finds
 
 ### Opening your user settings
 
-Several settings (everything under `filemaker.ai.*`) are read from your **user** settings only. To edit them, run **Preferences: Open User Settings (JSON)** from the Command Palette and add entries such as `"filemaker.ai.enabled": true`, or run **Preferences: Open Settings (UI)**, search for `filemaker`, and make sure the **User** tab is selected (not **Workspace**).
+Several settings (everything under `filemaker.ai.*` except `hiddenFields`) are read from your **user** settings only. To edit them, run **Preferences: Open User Settings (JSON)** from the Command Palette and add entries such as `"filemaker.ai.enabled": true`, or run **Preferences: Open Settings (UI)**, search for `filemaker`, and make sure the **User** tab is selected (not **Workspace**).
 
 ---
 
@@ -548,14 +549,33 @@ How it is protected: a socket in a folder only you can use (on Windows an ungues
 
 ---
 
+## User settings vs Workspace settings in plain words
+
+VS Code has two places to set most options. **User settings** are yours and follow you to every project. **Workspace settings** live in the project (`.vscode/settings.json`) and apply only there, to everyone who opens it. A project can therefore ship settings you did not choose, so this extension does not let a project loosen anything that protects you. That is why a value you type in the **Workspace** tab can seem to do nothing. There are three kinds of setting:
+
+| Kind | What the Workspace tab does | Examples |
+| --- | --- | --- |
+| **User settings only** | Nothing. A workspace value is ignored (VS Code may not even show the setting in the Workspace tab). | all `filemaker.ai.*` settings except `hiddenFields`, `filemaker.secrets.fallback`, `filemaker.export.neutralizeFormulas` |
+| **Workspace can only make this stricter** | A value that adds a restriction counts; one that would loosen your user value is ignored. | `filemaker.offline.mode` (can only turn on), `filemaker.features.*.enabled` (can only turn off), `filemaker.enterprise.mode` (can only turn on), `filemaker.enterprise.role` (can only lower), `filemaker.ai.hiddenFields` (can only add names) |
+| **Per workspace** | Works as you expect. Some are ignored until you trust the folder. | `filemaker.savedQueries.scope`, `filemaker.typegen.outputDir`, `filemaker.schema.snapshots.storage`, `filemaker.batch.*`, timeouts, and the rest |
+
+Every setting's description in the Settings editor starts with one of these three labels.
+
+**See what is really in effect.** Run **FileMaker: Show Effective Settings**. For every setting of the first two kinds, and the per-workspace ones that matter for policy, it shows the value in effect, where it comes from (Default, User, Workspace, Workspace Folder, Enterprise file or Restricted Mode), your User and Workspace values, and a plain sentence when a workspace value is being ignored, with buttons to open the User or Workspace tab at that setting. The explanation comes from the same code that applies the rule. When a project ships a value that is ignored, the extension also tells you once per setting for that workspace, with **Don't show again for this workspace**.
+
+**Saved query scope.** `filemaker.savedQueries.scope` stores `workspace` or `global`. `workspace` saves queries with this project (other projects do not see them); `global` makes them available in every project on this computer. Changing it does not move queries already saved.
+
+---
+
 ## Settings reference
 
-Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **User** tab is selected for the user-only settings (or see [Opening your user settings](#opening-your-user-settings)). In the table, **Where** says where a value is read from:
+Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **User** tab is selected for the user-only settings (or see [Opening your user settings](#opening-your-user-settings)). Not sure which value wins? Run **FileMaker: Show Effective Settings**. In the table, **Where** says where a value is read from:
 
 - **User or workspace**: either; a workspace value applies only to that workspace.
 - **User only**: read from your user settings only. A workspace or dev container value is ignored.
 - **ignored in an untrusted workspace**: in Restricted Mode the setting's workspace value is not used.
-- **a workspace can only make it stricter**: a workspace may turn offline mode on, a feature off, enterprise mode on, or the role lower, and never the reverse.
+- **Workspace can only make it stricter**: a workspace may turn offline mode on, a feature off, enterprise mode on, or the role lower, and never the reverse. A workspace value that would loosen your user value is ignored. Details: [User settings vs Workspace settings in plain words](#user-settings-vs-workspace-settings-in-plain-words).
+- **(T)**: VS Code ignores the workspace value in an untrusted workspace (Restricted Mode).
 
 **Connection**
 
@@ -577,7 +597,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.savedQueries.scope` | `"workspace"` | User or workspace | Where saved queries are kept: `workspace` or `global`. |
+| `filemaker.savedQueries.scope` | `"workspace"` | User or workspace | Where saved queries are kept: `workspace` (with this project; other projects do not see them) or `global` (every project on this computer). |
 | `filemaker.history.maxEntries` | `10` | User or workspace | Request history entries kept per workspace. |
 | `filemaker.snippets.includeAuthByDefault` | `false` | User or workspace | Include authorization headers in Copy as curl and Copy as fetch(). |
 
@@ -585,15 +605,15 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.features.scriptRunner.enabled` | `true` | User or workspace (T) (R) | Turns the Script Runner off when false. |
+| `filemaker.features.scriptRunner.enabled` | `true` | Workspace can only make it stricter (T) | Turns the Script Runner off when false. |
 | `filemaker.scripts.parameterBuilder.enabled` | `true` | User or workspace | Shows the JSON parameter builder in the Script Runner. |
 | `filemaker.export.neutralizeFormulas` | `true` | User only | Put an apostrophe in front of CSV cells and Copy results as table cells that start with `=`, `+`, `-`, `@`, tab or carriage return. Turn off only if you need the raw text. |
 | `filemaker.batch.maxRecords` | `10000` | User or workspace (T) | Most records a batch export fetches. |
 | `filemaker.batch.concurrency` | `4` | User or workspace (T) | Requests sent at a time by a batch update (1 to 10). |
 | `filemaker.batch.dryRunDefault` | `true` | User or workspace (T) | Default mode shown for batch updates. |
-| `filemaker.features.recordEdit.enabled` | `true` | User or workspace (T) (R) | Turns the Record Editor write-back and container upload off when false. |
+| `filemaker.features.recordEdit.enabled` | `true` | Workspace can only make it stricter (T) | Turns the Record Editor write-back and container upload off when false. |
 | `filemaker.containerUploadMaxBytes` | `104857600` | User or workspace | Largest file Upload to Container accepts, in bytes (default 100 MB). |
-| `filemaker.features.batch.enabled` | `true` | User or workspace (T) (R) | Turns batch export and update off when false. |
+| `filemaker.features.batch.enabled` | `true` | Workspace can only make it stricter (T) | Turns batch export and update off when false. |
 | `filemaker.performance.mode` | `"standard"` | User or workspace | `standard` or `high-scale`. High-scale writes batch exports as JSONL. |
 
 **Schema**
@@ -625,15 +645,15 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.offline.mode` | `false` | User or workspace (T) (R) | Use cached metadata and block writes. |
+| `filemaker.offline.mode` | `false` | Workspace can only make it stricter (T) | Use cached metadata and block writes. |
 | `filemaker.offline.staleCacheWarnHours` | `24` | User or workspace | Warn when the offline cache is older than this many hours. 0 turns the warning off. |
 
 **Enterprise**
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.enterprise.mode` | `false` | User or workspace (T) (R) | Turns on role-based limits. |
-| `filemaker.enterprise.role` | `"developer"` | User or workspace (T) (R) | `viewer`, `developer` or `admin`. |
+| `filemaker.enterprise.mode` | `false` | Workspace can only make it stricter (T) | Turns on role-based limits. |
+| `filemaker.enterprise.role` | `"developer"` | Workspace can only make it stricter (T) | `viewer`, `developer` or `admin`. |
 
 **Advanced**
 
@@ -656,9 +676,9 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 | `filemaker.ai.allowScripts` | `false` | User only | Offers the tool that runs scripts from the allowlist. |
 | `filemaker.ai.scriptAllowlist` | `{}` | User only | Scripts AI tools may run, by profile id: `{"<profile id>": ["Script Name"]}`. |
 | `filemaker.ai.readableLayouts` | `{}` | User only | Layouts AI tools may read without asking, by profile id. |
-| `filemaker.ai.hiddenFields` | `[]` | User or workspace | Field names AI tools never see. A workspace can add names, not remove yours. |
+| `filemaker.ai.hiddenFields` | `[]` | Workspace can only add names | Field names AI tools never see. A workspace can add names, not remove yours. |
 | `filemaker.ai.connection` | `""` | User only | Profile id AI tools use. Set it with Set AI Access for Connection. |
-| `filemaker.features.ai.enabled` | `true` | User or workspace (T) (R) | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
+| `filemaker.features.ai.enabled` | `true` | Workspace can only make it stricter (T) | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
 | `filemaker.ai.externalServer.enabled` | `false` | User only | Permission for MCP clients (Claude Code, Cursor) to use the AI tools through a local server. It never starts the server; you start it in a window with Start/Stop AI Server for External Tools. |
 
 Old names: `filemakerDataApiTools.logLevel`, `.requestTimeoutMs`, `.defaultApiBasePath` and `.defaultApiVersionPath` still work but are replaced by `filemaker.logging.level`, `filemaker.requestTimeoutMs`, `filemaker.defaultApiBasePath` and `filemaker.defaultApiVersionPath`. A more specific value wins whichever name it uses. The extension offers a one-click migration.

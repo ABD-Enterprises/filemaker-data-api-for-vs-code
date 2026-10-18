@@ -18,6 +18,11 @@ vi.mock('vscode', () => {
         get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue)
       })),
       openTextDocument: vi.fn(),
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+        dispose: vi.fn()
+      })),
       fs: {
         writeFile: vi.fn(),
         readFile: vi.fn(),
