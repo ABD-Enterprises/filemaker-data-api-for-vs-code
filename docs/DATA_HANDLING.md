@@ -59,3 +59,23 @@ Extension host services
   workspace-file copies as internal project artifacts.
 - The extension sends API requests only to the configured FileMaker server or
   proxy endpoint for the active profile.
+
+## AI Context File
+
+**FileMaker: Write AI Context** writes a Markdown file with database structure:
+the connection name, database name, and the layout, field and script names you
+select. It contains no record data, value-list values, field descriptions,
+server address, user name or credentials.
+
+- It is written to the extension's storage folder by default, outside any
+  repository. If you copy it into a workspace or point
+  `filemaker.ai.contextPath` there, treat it as an internal project artifact and
+  keep it out of public repositories.
+- Names come from the database. Names are filtered (letters, digits, space and
+  `_ - . : ( )`, 64 characters) and shown as JSON strings, but a name made only
+  of allowed characters can still read like an instruction. An AI agent that
+  loads the file can be influenced by it.
+- Anything an AI tool reads, including this file, goes to the model provider
+  you chose. The extension cannot control what that provider or the tool's other
+  capabilities do with it.
+

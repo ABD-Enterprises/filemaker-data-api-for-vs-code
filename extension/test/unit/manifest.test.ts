@@ -120,4 +120,19 @@ describe('extension manifest UX contract', () => {
       expect(() => readFileSync(join(extensionRoot, markdown as string)), step.id).not.toThrow();
     }
   });
+
+  it('declares the AI context command and keeps its path setting user-scope only', () => {
+    expect(commandIds.has(id('writeAiContext'))).toBe(true);
+    expect(commands.find((command) => command.command === id('writeAiContext'))?.title).toBe('Write AI Context');
+    expect(palette.get(id('writeAiContext'))).toBe('filemaker.hasProfiles');
+
+    const properties = Object.assign({}, ...configuration.map((section) => section.properties)) as Record<
+      string,
+      { scope?: string; default?: unknown }
+    >;
+    // An application-scoped setting cannot come from a workspace file; the extension also
+    // reads only the user value (see userScopeSetting.test.ts).
+    expect(properties['filemaker.ai.contextPath']?.scope).toBe('application');
+    expect(properties['filemaker.ai.contextPath']?.default).toBe('');
+  });
 });
