@@ -1006,7 +1006,7 @@ export class FMClient {
     authOptions?: { skipProactiveRefresh?: boolean }
   ): Promise<DataApiEnvelope<TResponse>> {
     if (trace) {
-      trace.endpoint = `${request.method} ${request.path}`;
+      trace.endpoint = redactString(`${request.method} ${request.path}`);
     }
 
     const token = await this.ensureSessionToken(profile, { signal: request.signal }, authOptions);
@@ -1048,9 +1048,9 @@ export class FMClient {
 
       throw toFMClientError(
         normalizeError(error, {
-          fallbackMessage: `FileMaker request failed (${request.method} ${request.path}).`,
+          fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
           requestId: trace?.requestId,
-          endpoint: `${request.method} ${request.path}`
+          endpoint: redactString(`${request.method} ${request.path}`)
         })
       );
     }
@@ -1067,7 +1067,7 @@ export class FMClient {
     envelope?: DataApiEnvelope<TResponse>;
   }> {
     if (trace) {
-      trace.endpoint = `${request.method} ${request.path}`;
+      trace.endpoint = redactString(`${request.method} ${request.path}`);
     }
 
     const token = await this.ensureSessionToken(profile, { signal: request.signal });
@@ -1122,9 +1122,9 @@ export class FMClient {
 
       throw toFMClientError(
         normalizeError(error, {
-          fallbackMessage: `FileMaker request failed (${request.method} ${request.path}).`,
+          fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
           requestId: trace?.requestId,
-          endpoint: `${request.method} ${request.path}`
+          endpoint: redactString(`${request.method} ${request.path}`)
         })
       );
     }
