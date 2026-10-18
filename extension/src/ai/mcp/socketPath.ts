@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import net from 'net';
 import { lstat, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 
 import { ensureOwnerOnlyDirectory } from './discovery';
 
@@ -37,11 +37,31 @@ export async function createEndpoint(options: { platform?: NodeJS.Platform; base
   }
 
   const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
-  const base = options.baseDirectory ?? process.env.XDG_RUNTIME_DIR ?? tmpdir();
+  // Where to put the socket folder, best first. An empty or relative XDG_RUNTIME_DIR (or
+  // TMPDIR) is skipped so the path is always absolute. An explicit base directory is used as
+  // given; the environment's folders fall back to the next one if they cannot be used (for
+  // example an XDG_RUNTIME_DIR that does not exist or is not ours).
+  const explicit = options.baseDirectory !== undefined;
+  const candidates = (explicit ? [options.baseDirectory] : [process.env.XDG_RUNTIME_DIR, tmpdir()]).filter(
+    (candidate): candidate is string => typeof candidate === 'string' && isAbsolute(candidate)
+  );
   // VS Code, Cursor and Insiders share the temp folder but each has its own storage: the
   // folder carries a short hash of the storage path, so one product never sees another's sockets.
-  const directory = join(base, socketFolderName(uid, options.scope));
-  await ensureOwnerOnlyDirectory(directory);
+  const folder = socketFolderName(uid, options.scope);
+  let directory: string | undefined;
+  let lastError: unknown = new Error('No usable folder for the socket.');
+  for (const base of candidates) {
+    try {
+      await ensureOwnerOnlyDirectory(join(base, folder));
+      directory = join(base, folder);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!directory) {
+    throw lastError;
+  }
   const path = join(directory, `${id.slice(0, 12)}.sock`);
   if (Buffer.byteLength(path) > MAX_SOCKET_PATH_BYTES) {
     throw new Error(`The socket path would be ${Buffer.byteLength(path)} bytes, over the ${MAX_SOCKET_PATH_BYTES} byte limit. Set TMPDIR to a shorter folder.`);

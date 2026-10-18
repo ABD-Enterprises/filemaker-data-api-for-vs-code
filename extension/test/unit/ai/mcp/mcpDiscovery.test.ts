@@ -279,6 +279,54 @@ describe('socketFolderName', () => {
   });
 });
 
+describe('createEndpoint folder choice', () => {
+  const restore = (name: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  };
+
+  it.skipIf(!posix)('ignores an empty or relative XDG_RUNTIME_DIR and uses the temp folder, so the socket path is always absolute', async () => {
+    const saved = process.env.XDG_RUNTIME_DIR;
+    try {
+      for (const bad of ['', 'relative/run']) {
+        process.env.XDG_RUNTIME_DIR = bad;
+        const endpoint = await createEndpoint({ scope: `scope-${bad || 'empty'}` });
+        expect(endpoint.path.startsWith('/')).toBe(true);
+        expect(endpoint.path.startsWith(tmpdir())).toBe(true);
+        await rm(dirname(endpoint.path), { recursive: true, force: true });
+      }
+    } finally {
+      restore('XDG_RUNTIME_DIR', saved);
+    }
+  });
+
+  it.skipIf(!posix)('falls back to the temp folder when XDG_RUNTIME_DIR cannot be used, but never when the caller named a folder', async () => {
+    const saved = process.env.XDG_RUNTIME_DIR;
+    try {
+      process.env.XDG_RUNTIME_DIR = '/proc/does-not-exist-fm-ai';
+      const endpoint = await createEndpoint({ scope: 'fallback' });
+      expect(endpoint.path.startsWith(tmpdir())).toBe(true);
+      await rm(dirname(endpoint.path), { recursive: true, force: true });
+      await expect(createEndpoint({ baseDirectory: '/proc/does-not-exist-fm-ai', scope: 'explicit' })).rejects.toThrow();
+    } finally {
+      restore('XDG_RUNTIME_DIR', saved);
+    }
+  });
+
+  it.skipIf(!posix)('uses an absolute XDG_RUNTIME_DIR when it is set', async () => {
+    const saved = process.env.XDG_RUNTIME_DIR;
+    const run = await mkdtemp(join(tmpdir(), 'fmx-'));
+    try {
+      process.env.XDG_RUNTIME_DIR = run;
+      const endpoint = await createEndpoint({ scope: 'xdg' });
+      expect(endpoint.path.startsWith(run)).toBe(true);
+    } finally {
+      restore('XDG_RUNTIME_DIR', saved);
+      await rm(run, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('createEndpoint', () => {
   it.skipIf(!posix)('makes a short socket path in an owner-only folder', async () => {
     const base = await mkdtemp(join(tmpdir(), 'fmp-'));

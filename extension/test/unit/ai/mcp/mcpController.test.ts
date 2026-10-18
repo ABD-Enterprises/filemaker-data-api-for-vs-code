@@ -366,9 +366,10 @@ describe('AiMcpController', () => {
       await new Promise<void>((resolve) => server.listen(live, resolve));
       expect(await probeSocket(live)).toBe('alive');
       server.close();
+      // A plain file is not a listener (Linux reports a refused connection, macOS a different error).
       const notSocket = join(directory, '444444444444.sock');
       await writeFile(notSocket, 'x');
-      expect(await probeSocket(notSocket)).toBe('unknown');
+      expect(await probeSocket(notSocket)).not.toBe('alive');
     });
 
     it.skipIf(!posix)('a start removes a leftover socket of a dead server in its own folder but leaves a young one (a window starting at the same moment)', async () => {
@@ -418,7 +419,9 @@ describe('AiMcpController', () => {
           expect(await probeSocket(a.path)).toBe('alive');
         } finally {
           await cursor.stop();
-          process.env.TMPDIR = previous;
+          // Assigning undefined to process.env stores the text "undefined": restore by deleting.
+          if (previous === undefined) delete process.env.TMPDIR;
+          else process.env.TMPDIR = previous;
           if (previousRuntime !== undefined) process.env.XDG_RUNTIME_DIR = previousRuntime;
           live.close();
         }
