@@ -569,7 +569,7 @@ These are the controls the extension applies. They are the reasons it is safe to
 - **Every write is confirmed by you.** Each change opens a dialog built by the extension from a fresh read of the record. VS Code cannot set it to "always allow". It shows the connection, layout, record, every field with the old and new value, and the AI's own description, labelled as the AI's. Deleting asks you to type the record ID. A record changed in the meantime is not overwritten. A write is limited to 10 fields and 200 characters per value, and the whole dialog text to 4,000 characters (escaped characters take extra room), so that the dialog can show all of it; a larger write is refused.
 - **You approve each layout.** The first read of a layout in a session asks you (at most 20 layouts a session). List layouts you trust in `filemaker.ai.readableLayouts` to skip the question.
 - **Limits.** 50 records per call, 500 records per session, 30 calls a minute, 10 write attempts per session and 3 a minute (a declined attempt counts). Results are capped at 200 KB.
-- **Hidden fields.** `filemaker.ai.hiddenFields` lists field names AI tools never see (case-insensitive, with or without `Table::`). This is by name only. It does not stop disclosure through a calculation, a summary field or a script result.
+- **Hidden fields.** `filemaker.ai.hiddenFields` lists field names AI tools never see (case-insensitive, with or without `Table::`). **Write AI Context** honours it too: hidden fields are left out of the context file, and the file and the confirmation say how many were left out. This is by name only. It does not stop disclosure through a calculation, a summary field or a script result.
 - **Offline mode** blocks AI reads as well as writes. AI tools are not registered in an untrusted workspace.
 - **Left out of results:** container fields and URLs, and the server address. Text that looks like a secret is redacted, which can rewrite a field value that looks like one; writes refuse values that contain the redaction marker.
 
@@ -727,7 +727,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 | `filemaker.ai.allowScripts` | `false` | User settings only | Offers the tool that runs scripts from the allowlist. |
 | `filemaker.ai.scriptAllowlist` | `{}` | User settings only | Scripts AI tools may run, by profile id: `{"<profile id>": ["Script Name"]}`. |
 | `filemaker.ai.readableLayouts` | `{}` | User settings only | Layouts AI tools may read without asking, by profile id. |
-| `filemaker.ai.hiddenFields` | `[]` | Workspace can only make this stricter | Field names AI tools never see. A workspace can add names, not remove yours. |
+| `filemaker.ai.hiddenFields` | `[]` | Workspace can only make this stricter | Field names AI tools never see, in tool results and in the file written by Write AI Context. A workspace can add names, not remove yours. |
 | `filemaker.ai.connection` | `""` | User settings only | Profile id AI tools use. Set it with Set AI Access for Connection. |
 | `filemaker.features.ai.enabled` | `true` | Workspace can only make this stricter; ignored until you trust the folder | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
 | `filemaker.ai.externalServer.enabled` | `false` | User settings only | Permission for MCP clients (Claude Code, Cursor) to use the AI tools through a local server. It never starts the server; you start it in a window with Start/Stop AI Server for External Tools. |

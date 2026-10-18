@@ -105,6 +105,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Write AI Context leaves out fields hidden by filemaker.ai.hiddenFields and says how many.
 - Pinned certificates fail closed behind an HTTP proxy (refused with a clear message; agent no longer advertises rejectUnauthorized:false); CA-file/default/legacy behaviour through a proxy tested.
 - Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
