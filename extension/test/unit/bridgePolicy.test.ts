@@ -46,4 +46,31 @@ describe('bridge route policy', () => {
     expect(bridgeRouteRefusal('/runScript', none, deny as never)).toBe('no scriptRunner');
     expect(bridgeRouteRefusal('/getRecord', none, deny as never)).toBeUndefined();
   });
+
+  it('refuses edit, create and delete when record editing is switched off, even if the repository turns it on', () => {
+    const off = config({
+      'features.recordEdit.enabled': { defaultValue: true, globalValue: false, workspaceValue: true }
+    });
+    for (const route of ['/editRecord', '/createRecord', '/deleteRecord']) {
+      expect(bridgeRouteRefusal(route, off, allow)).toMatch(/features\.recordEdit\.enabled/);
+    }
+    expect(bridgeRouteRefusal('/find', off, allow)).toBeUndefined();
+    expect(bridgeRouteRefusal('/getRecord', off, allow)).toBeUndefined();
+    expect(bridgeRouteRefusal('/runScript', off, allow)).toBeUndefined();
+  });
+
+  it('applies the enterprise recordEdit guard to writes (viewer role) but not to reads or scripts', () => {
+    const viewer = {
+      getFeatureGuard: (feature: string) =>
+        feature === 'recordEdit'
+          ? { allowed: false, reason: 'Enterprise role "viewer" is read-only for this command.' }
+          : { allowed: true }
+    };
+    const none = config({});
+    for (const route of ['/editRecord', '/createRecord', '/deleteRecord']) {
+      expect(bridgeRouteRefusal(route, none, viewer as never)).toMatch(/viewer/);
+    }
+    expect(bridgeRouteRefusal('/find', none, viewer as never)).toBeUndefined();
+    expect(bridgeRouteRefusal('/runScript', none, viewer as never)).toBeUndefined();
+  });
 });

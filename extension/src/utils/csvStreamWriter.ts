@@ -16,6 +16,8 @@ export interface CsvStreamWriterOptions {
    * the natural shape of the data.
    */
   columns?: string[];
+  /** Defuse text that a spreadsheet would run as a formula. On unless set to false. */
+  neutralizeFormulas?: boolean;
 }
 
 export interface CsvStreamWriter {
@@ -60,7 +62,7 @@ export async function createCsvStreamWriter(
 
   const writeHeader = async (): Promise<void> => {
     if (headerWritten || !columns) return;
-    await writeLine(columns.map((column) => escapeCsvValue(column)).join(','));
+    await writeLine(columns.map((column) => escapeCsvValue(column, { neutralizeFormulas: options.neutralizeFormulas })).join(','));
     headerWritten = true;
   };
 
@@ -74,7 +76,7 @@ export async function createCsvStreamWriter(
         columns = Object.keys(record);
         await writeHeader();
       }
-      const cells = columns.map((col) => escapeCsvValue(record[col]));
+      const cells = columns.map((col) => escapeCsvValue(record[col], { neutralizeFormulas: options.neutralizeFormulas }));
       await writeLine(cells.join(','));
     },
     async close(): Promise<void> {

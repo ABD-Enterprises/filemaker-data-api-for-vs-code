@@ -85,10 +85,10 @@ describe('QueryBuilderPanel messages', () => {
     panel = openPanel();
   });
 
-  it('loads both webview scripts under the nonce', () => {
+  it('loads every webview script under the nonce', () => {
     const html = vi.mocked(vscode.window.createWebviewPanel).mock.results[0]?.value.webview.html as string;
-    const nonces = [...html.matchAll(/<script nonce="([^"]+)" src="[^"]*(findForm|index)\.js"/g)];
-    expect(nonces).toHaveLength(2);
+    const nonces = [...html.matchAll(/<script nonce="([^"]+)" src="[^"]*(findForm|cellText|index)\.js"/g)];
+    expect(nonces).toHaveLength(3);
     expect(html).toContain(`'nonce-${nonces[0]?.[1]}'`);
   });
 

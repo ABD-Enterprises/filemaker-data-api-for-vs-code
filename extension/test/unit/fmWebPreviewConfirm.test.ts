@@ -23,7 +23,10 @@ function start() {
     schemaService: {} as never,
     fmWebProjectService: {} as never,
     fmWebRuntimeGenerator: generator as never,
-    fmBridgeServer: { ensureStarted: vi.fn(async () => ({ baseUrl: 'http://127.0.0.1:1234' })) } as never,
+    fmBridgeServer: {
+      ensureStarted: vi.fn(async () => ({ baseUrl: 'http://127.0.0.1:1234' })),
+      getSessionToken: () => 'session-token'
+    } as never,
     roleGuard: { assertFeature: vi.fn(async () => true) } as never,
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
     refreshExplorer: vi.fn()
@@ -33,7 +36,7 @@ function start() {
     ([id]) => id === 'filemakerDataApiTools.startFmWebPreviewServer'
   );
   const handler = registered[registered.length - 1]?.[1] as () => Promise<void>;
-  return { run: handler, terminal };
+  return { run: handler, terminal, generator };
 }
 
 describe('FM Web preview', () => {
@@ -65,6 +68,26 @@ describe('FM Web preview', () => {
 
     expect(terminal.sendText).toHaveBeenCalledWith('npm install --no-audit --no-fund');
     expect(terminal.sendText).toHaveBeenCalledWith('npm run dev');
+  });
+
+  it('hands the preview app the bridge address and its session token', async () => {
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Run' as never);
+    const { run, generator } = start();
+
+    await run();
+
+    expect(generator.writeBridgeEnv).toHaveBeenCalledWith('http://127.0.0.1:1234', 'session-token');
+  });
+
+  it('warns when an edited generated file could not be updated, so a silent failure is not left to the user', async () => {
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(undefined as never);
+    const { run, generator } = start();
+    generator.generateRuntimeAppTemplate.mockResolvedValue({ needsManualUpdate: ['lib/bridge-client.ts'] } as never);
+
+    await run();
+
+    const messages = vi.mocked(vscode.window.showWarningMessage).mock.calls.map((call) => String(call[0]));
+    expect(messages.some((message) => message.includes('lib/bridge-client.ts') && message.includes('not updated'))).toBe(true);
   });
 
   it('refuses in an untrusted workspace without asking', async () => {

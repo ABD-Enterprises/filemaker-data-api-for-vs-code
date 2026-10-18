@@ -142,8 +142,11 @@ describe('extension manifest UX contract', () => {
       expect(palette.get(id(name)), name).toBe('filemaker.hasProfiles');
     }
     const scripts = (JSON.parse(readFileSync(join(extensionRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts;
-    expect(scripts['bundle:ai-mcp-shim']).toContain('src/ai/mcp/shim.ts');
-    expect(scripts['bundle:ai-mcp-shim']).toContain('dist/aiMcpShim.js');
+    // The bundle itself is defined in scripts/esbuild-config.mjs.
+    expect(scripts['bundle:ai-mcp-shim']).toContain('bundle.mjs aiMcpShim');
+    const config = readFileSync(join(extensionRoot, 'scripts/esbuild-config.mjs'), 'utf8');
+    expect(config).toContain('src/ai/mcp/shim.ts');
+    expect(config).toContain('dist/aiMcpShim.js');
     expect(scripts.build).toContain('bundle:ai-mcp-shim');
   });
 });

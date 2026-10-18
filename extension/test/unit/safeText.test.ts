@@ -39,6 +39,47 @@ describe('safeText', () => {
     }
   });
 
+  it('accepts dots inside a layout-derived name such as Q1..Q2, so those entries are kept and pruned', () => {
+    for (const good of [
+      'p1__Q1..Q2__2020-01-01T00-00-00-000Z.json',
+      'p1__a...b__x.json',
+      'p1__v1.2..v1.3__x.json',
+      '.hidden-but-plain.json',
+      'x..json.json'
+    ]) {
+      expect(isPlainJsonFileName(good), good).toBe(true);
+    }
+  });
+
+  it('still refuses path traversal and anything that is not a bare file name', () => {
+    const traversal = [
+      '..',
+      '.',
+      '.json',
+      '..json',
+      '...json',
+      '../x.json',
+      '..\\x.json',
+      'a/../x.json',
+      'a\\..\\x.json',
+      '/etc/passwd.json',
+      '\\\\server\\share\\x.json',
+      'C:x.json',
+      'C:\\x.json',
+      'c:/x.json',
+      'x.json/',
+      'x.json\0',
+      'x.json ',
+      'a b.json',
+      '..%2fx.json',
+      'x.JSON.txt',
+      ''
+    ];
+    for (const bad of traversal) {
+      expect(isPlainJsonFileName(bad), JSON.stringify(bad)).toBe(false);
+    }
+  });
+
   it('leaves plain names alone and avoids Windows device names and dot-only names', () => {
     expect(distinctFileName('Contacts', 'Contacts')).toBe('Contacts');
     expect(distinctFileName('CON', 'CON')).toBe('_CON');

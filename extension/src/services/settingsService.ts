@@ -8,6 +8,7 @@ import type { LogLevel } from './logger';
 import type { SecretFallbackMode } from './secretStore';
 import { DEFAULT_CONTAINER_UPLOAD_MAX_BYTES, normalizeContainerUploadMaxBytes } from '../utils/containerUpload';
 import { isFeatureEnabled, isOfflineModeOn } from '../utils/policySetting';
+import { isFormulaNeutralizationOn } from '../utils/userScopeSetting';
 
 /**
  * Lazily computed allow-list of crypto hash algorithms available on this Node
@@ -422,6 +423,11 @@ export class SettingsService {
       return 30_000;
     }
     return clamp(Math.round(seconds), 0, 300) * 1_000;
+  }
+
+  /** `filemaker.export.neutralizeFormulas`: user settings only; on unless the user turned it off. */
+  public getNeutralizeExportFormulas(): boolean {
+    return isFormulaNeutralizationOn(this.getConfiguration('filemaker'));
   }
 
   public getSecretsFallbackMode(): SecretFallbackMode {

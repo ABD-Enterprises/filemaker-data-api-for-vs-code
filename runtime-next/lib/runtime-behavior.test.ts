@@ -119,6 +119,29 @@ describe('runtime behavior actions', () => {
     );
   });
 
+  it('sends the bridge token with runScript when the page has one, and none otherwise', async () => {
+    const run = async (bridgeToken?: string) => {
+      const fetchFn = vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ response: {} })
+      })) as unknown as typeof fetch;
+      await executeRuntimeBehaviorAction(buttonObject({ type: 'runScript', scriptName: 'S' }), {
+        layoutName: 'Contacts',
+        bridgeBaseUrl: 'http://127.0.0.1:9876/fm',
+        bridgeToken,
+        navigateToLayout: vi.fn(),
+        openUrl: vi.fn(),
+        showDialog: vi.fn(),
+        fetchFn
+      });
+      return (vi.mocked(fetchFn).mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    };
+
+    expect((await run('session-token'))['X-FM-Bridge-Token']).toBe('session-token');
+    expect(Object.keys(await run())).not.toContain('X-FM-Bridge-Token');
+  });
+
   it('opens URLs and displays dialogs for behavior actions', async () => {
     const openUrl = vi.fn();
     const showDialog = vi.fn();

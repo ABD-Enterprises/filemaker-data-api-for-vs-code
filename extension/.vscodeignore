@@ -9,3 +9,7 @@ vitest.config.ts
 node_modules/**
 coverage/**
 .mock-check/**
+eslint.config.mjs
+scripts/**
+docs/QA/**
+ARCHITECTURE.md

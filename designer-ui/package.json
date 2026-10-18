@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --sourcemap",
-    "dev": "esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --sourcemap --watch",
+    "build": "esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --minify --define:process.env.NODE_ENV=\\\"production\\\"",
+    "dev": "esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --sourcemap --define:process.env.NODE_ENV=\\\"development\\\" --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

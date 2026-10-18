@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 
 import type { FindRecordsRequest } from '../types/fm';
@@ -153,7 +153,7 @@ export class FmBridgeServer {
       this.setCorsHeaders(response, origin);
 
       const bridgeToken = readHeader(request.headers['x-fm-bridge-token']);
-      if (request.method !== 'OPTIONS' && bridgeToken !== this.sessionToken) {
+      if (request.method !== 'OPTIONS' && !tokenMatches(bridgeToken, this.sessionToken)) {
         this.sendJson(response, 403, { error: 'Invalid or missing bridge session token.' });
         return;
       }
@@ -360,6 +360,18 @@ export class FmBridgeServer {
 
     response.end(`${JSON.stringify(payload)}\n`);
   }
+}
+
+/**
+ * Compares the presented token with the session's in constant time (both are hashed first so the
+ * buffers have equal length). A missing token on either side never matches.
+ */
+function tokenMatches(presented: string | undefined, expected: string | undefined): boolean {
+  if (!presented || !expected) {
+    return false;
+  }
+  const digest = (value: string): Buffer => createHash('sha256').update(value).digest();
+  return timingSafeEqual(digest(presented), digest(expected));
 }
 
 function requireString(value: unknown, fieldName: string): string {

@@ -157,6 +157,10 @@ async function invokeBridgeRequest(
   }
 ): Promise<{ status: number; body: string; json: unknown; headers: Record<string, string> }> {
   const request = buildRequest(route, input.origin, input.payload, input.remoteAddress);
+  // These tests call the handler without starting the server, so give it a session token and
+  // present it, as the preview app does. (Tests of a missing or wrong token use a real server.)
+  (server as unknown as { sessionToken: string }).sessionToken = 'test-session-token';
+  request.headers['x-fm-bridge-token'] = 'test-session-token';
   const response = buildResponse();
 
   const bridge = server as unknown as {

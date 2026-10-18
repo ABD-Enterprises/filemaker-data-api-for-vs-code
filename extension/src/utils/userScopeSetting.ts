@@ -35,3 +35,17 @@ export function readUserScopeString(
   const value = readUserScopeValue(configuration, key, isString);
   return value !== undefined && value.trim().length > 0 ? value : undefined;
 }
+
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
+
+/**
+ * `filemaker.export.neutralizeFormulas` (default on): whether CSV exports and "Copy as table" put
+ * an apostrophe in front of text a spreadsheet would run as a formula. Only the user's own
+ * `false` turns it off; a repository's `.vscode/settings.json` cannot (the setting is also
+ * declared `"scope": "application"`).
+ */
+export function isFormulaNeutralizationOn(
+  configuration: Partial<Pick<vscode.WorkspaceConfiguration, 'inspect'>>
+): boolean {
+  return readUserScopeValue(configuration, 'export.neutralizeFormulas', isBoolean) !== false;
+}

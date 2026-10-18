@@ -1,7 +1,0 @@
-2026-04-13T06:10:25Z
-
-Validation summary:
-- npm run package:check -w extension
-- Result: PASS
-- Output: artifacts/filemaker-data-api-tools-1.0.0.vsix
-- Note: packaging now skips the optional designer-ui bundle when its workspace dependencies are unavailable and uses the bundled extension artifact with vsce --no-dependencies.
