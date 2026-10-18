@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isLoopbackUrl,
+  isUnencryptedRemoteUrl,
   parseFindJson,
   parseOptionalNonNegativeInteger,
   parseSortJson,
-  validateObjectArray
+  validateObjectArray,
+  validateServerUrl
 } from '../../src/utils/jsonValidate';
 
 describe('jsonValidate', () => {
@@ -32,5 +35,34 @@ describe('jsonValidate', () => {
     expect(parseOptionalNonNegativeInteger('', 'Limit')).toBeUndefined();
     expect(parseOptionalNonNegativeInteger('10', 'Limit')).toBe(10);
     expect(() => parseOptionalNonNegativeInteger('-1', 'Limit')).toThrow();
+  });
+});
+
+describe('validateServerUrl', () => {
+  it('accepts http and https addresses and trims trailing slashes', () => {
+    expect(validateServerUrl('https://fm.example.com/')).toEqual({ ok: true, value: 'https://fm.example.com' });
+    expect(validateServerUrl('http://127.0.0.1:18080').ok).toBe(true);
+  });
+
+  it('rejects a username or password in the address', () => {
+    const result = validateServerUrl('https://admin:Hunter2@fm.example.com');
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/must not contain a username or password/);
+    expect(validateServerUrl('https://admin@fm.example.com').ok).toBe(false);
+  });
+
+  it('uses the given label in messages', () => {
+    expect(validateServerUrl('', 'Proxy endpoint').error).toBe('Proxy endpoint is required.');
+    expect(validateServerUrl('ftp://x', 'Proxy endpoint').error).toMatch(/^Proxy endpoint must start with/);
+  });
+
+  it('tells loopback from remote cleartext addresses', () => {
+    expect(isLoopbackUrl('http://localhost:8080')).toBe(true);
+    expect(isLoopbackUrl('http://127.0.0.1')).toBe(true);
+    expect(isLoopbackUrl('http://[::1]:9')).toBe(true);
+    expect(isLoopbackUrl('http://localhost.evil.com')).toBe(false);
+    expect(isUnencryptedRemoteUrl('http://fm.example.com')).toBe(true);
+    expect(isUnencryptedRemoteUrl('https://fm.example.com')).toBe(false);
+    expect(isUnencryptedRemoteUrl('http://127.0.0.1:18080')).toBe(false);
   });
 });

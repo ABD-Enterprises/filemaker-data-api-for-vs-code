@@ -80,12 +80,12 @@ export function parseOptionalNonNegativeInteger(value: string | undefined, label
   return parsed;
 }
 
-export function validateServerUrl(value: string): JsonValidationResult<string> {
+export function validateServerUrl(value: string, label = 'Server URL'): JsonValidationResult<string> {
   const trimmed = value.trim();
   if (!trimmed) {
     return {
       ok: false,
-      error: 'Server URL is required.'
+      error: `${label} is required.`
     };
   }
 
@@ -94,7 +94,14 @@ export function validateServerUrl(value: string): JsonValidationResult<string> {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return {
         ok: false,
-        error: 'Server URL must start with http:// or https://.'
+        error: `${label} must start with http:// or https://.`
+      };
+    }
+
+    if (parsed.username || parsed.password) {
+      return {
+        ok: false,
+        error: `${label} must not contain a username or password. Enter them in their own fields.`
       };
     }
 
@@ -105,8 +112,27 @@ export function validateServerUrl(value: string): JsonValidationResult<string> {
   } catch {
     return {
       ok: false,
-      error: 'Server URL is invalid.'
+      error: `${label} is invalid.`
     };
+  }
+}
+
+/** True for http://127.0.0.1, http://localhost and http://[::1], where cleartext never leaves the machine. */
+export function isLoopbackUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/** True for an http:// address that is not on this machine: credentials sent there travel unencrypted. */
+export function isUnencryptedRemoteUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'http:' && !isLoopbackUrl(value);
+  } catch {
+    return false;
   }
 }
 

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   loadConnectionProfileTemplate,
-  parseConnectionProfileTemplate
+  parseConnectionProfileTemplate,
+  PROFILE_TEMPLATE_LOCKED_FIELDS
 } from '../../src/services/profileTemplate';
 
 describe('parseConnectionProfileTemplate', () => {
@@ -102,5 +103,30 @@ describe('parseConnectionProfileTemplate', () => {
     readFile.mockRejectedValue({ code: 'FileNotFound' });
 
     await expect(loadConnectionProfileTemplate()).resolves.toEqual({});
+  });
+
+  it('ignores a template in an untrusted workspace', async () => {
+    const readFile = vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>;
+    readFile.mockResolvedValue(Buffer.from(JSON.stringify({ serverUrl: 'https://attacker.example', database: 'Sales' })));
+    const workspace = vscode.workspace as unknown as { isTrusted: boolean };
+    workspace.isTrusted = false;
+    try {
+      const result = await loadConnectionProfileTemplate();
+      expect(result.template).toBeUndefined();
+      expect(result.warning).toMatch(/not trusted/);
+    } finally {
+      workspace.isTrusted = true;
+    }
+  });
+
+  it('never locks the server address', () => {
+    expect(PROFILE_TEMPLATE_LOCKED_FIELDS).not.toContain('serverUrl');
+    expect(PROFILE_TEMPLATE_LOCKED_FIELDS).not.toContain('proxyEndpoint');
+  });
+
+  it('rejects a template with credentials in a URL or an invalid proxyEndpoint', () => {
+    expect(parseConnectionProfileTemplate(JSON.stringify({ serverUrl: 'https://admin:pw@fm.example.com' })).warning).toContain('invalid serverUrl');
+    expect(parseConnectionProfileTemplate(JSON.stringify({ authMode: 'proxy', proxyEndpoint: 'ftp://x' })).warning).toContain('invalid proxyEndpoint');
+    expect(parseConnectionProfileTemplate(JSON.stringify({ authMode: 'proxy', proxyEndpoint: 'https://proxy.example.com/api' })).template?.proxyEndpoint).toBe('https://proxy.example.com/api');
   });
 });
