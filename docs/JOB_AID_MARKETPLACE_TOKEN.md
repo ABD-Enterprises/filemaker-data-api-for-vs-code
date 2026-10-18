@@ -17,7 +17,7 @@ So you have two ways to publish. Pick one:
 | Works after 1 Dec 2026 | No, switch to Entra before then | Yes |
 | Secrets to manage | One | None |
 
-If you only release a few times before December, manual upload is simplest: download the `.vsix` from the GitHub release, then open <https://marketplace.visualstudio.com/manage>, click the **...** menu on the extension and choose **Update**, and upload the file.
+If you only release a few times before December, manual upload is simplest: download the `.vsix` from the GitHub release, then upload it on the publisher management page, <https://marketplace.visualstudio.com/manage>. Microsoft's guide only says to upload the `.vsix` there (with a screenshot titled "Add an extension through management page"); the exact menu wording was not confirmed, so follow the screenshot in the [VS Code publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
 
 ## Part A: create the token
 
@@ -39,7 +39,7 @@ In a terminal:
 npx @vscode/vsce@4.0.0 login SureForgeTech
 ```
 
-Paste the token when asked. You should see that it was verified. If you get 401 or 403, redo Part A step 4 (the organization setting is the usual cause). Then run `npx @vscode/vsce@4.0.0 logout SureForgeTech`.
+Paste the token when asked. You should see that it was verified. (This stores the token on your computer; skip this part if you would rather not.) If you get 401 or 403, redo Part A step 4 (the organization setting is the usual cause).
 
 ## Part C: store it where only the release job can read it
 
