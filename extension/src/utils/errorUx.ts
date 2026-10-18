@@ -24,6 +24,12 @@ export interface ShowErrorOptions {
     retry?: () => void | Promise<void>;
     profileId?: string;
     settingsKey?: string;
+    /**
+     * For certificate problems: review the server's certificate and, if the user agrees, trust it.
+     * Offered for the failures a person may sensibly decide on (self-signed, unknown issuer, wrong
+     * name, expired); `Review and re-trust` when the certificate differs from the one trusted.
+     */
+    trustCertificate?: () => void | Promise<void>;
   };
 }
 
@@ -32,13 +38,21 @@ const COPY_REPORT_ACTION = 'Copy as Bug Report';
 const RETRY_ACTION = 'Retry';
 const EDIT_PROFILE_ACTION = 'Edit Profile';
 const OPEN_SETTINGS_ACTION = 'Open Settings';
+const TRUST_CERTIFICATE_ACTION = 'Trust this certificate…';
+const RETRUST_CERTIFICATE_ACTION = 'Review and re-trust';
 
 /**
  * Decide which action buttons to surface on an error toast based on the
  * normalized error kind. Exported for unit testing.
  */
 export function selectErrorActions(
-  normalized: { kind: string; status?: number; isRetryable?: boolean },
+  normalized: {
+    kind: string;
+    status?: number;
+    isRetryable?: boolean;
+    networkCode?: string;
+    fmCategory?: string;
+  },
   actions: ShowErrorOptions['actions']
 ): string[] {
   const out: string[] = [];
@@ -47,17 +61,38 @@ export function selectErrorActions(
   }
 
   const status = normalized.status;
+  const isCertificate = normalized.kind === 'certificate';
+  // Fixing the profile helps for rejected credentials and a wrong database name. It does not help
+  // when the account is fine but lacks a privilege (HTTP 403, FileMaker privilege errors): that is
+  // for the FileMaker administrator.
+  const isPrivilege = status === 403 || normalized.fmCategory === 'privilege';
   const isAuth =
-    normalized.kind === 'auth' || status === 401 || status === 403;
+    !isPrivilege &&
+    !isCertificate &&
+    (normalized.kind === 'auth' ||
+      status === 401 ||
+      normalized.fmCategory === 'credentials' ||
+      normalized.fmCategory === 'config');
+  // `isRetryable` is decided where the error is built; the old guess from the kind or the status
+  // only remains for callers that pass nothing else.
   const isTransient =
-    normalized.isRetryable === true ||
-    normalized.kind === 'timeout' ||
-    normalized.kind === 'network' ||
-    (typeof status === 'number' && status >= 500 && status < 600);
+    !isCertificate &&
+    (normalized.isRetryable !== undefined
+      ? normalized.isRetryable === true
+      : normalized.kind === 'timeout' ||
+        normalized.kind === 'network' ||
+        (typeof status === 'number' && status >= 500 && status < 600));
   const isTimeout = normalized.kind === 'timeout';
 
   if (actions.retry && isTransient) {
     out.push(RETRY_ACTION);
+  }
+  if (actions.trustCertificate && isCertificate && normalized.networkCode) {
+    out.push(
+      normalized.networkCode === 'FM_CERT_PIN_MISMATCH' || normalized.networkCode === 'FM_CERT_PIN_EXPIRED'
+        ? RETRUST_CERTIFICATE_ACTION
+        : TRUST_CERTIFICATE_ACTION
+    );
   }
   if (actions.profileId && isAuth) {
     out.push(EDIT_PROFILE_ACTION);
@@ -95,6 +130,17 @@ export async function showErrorWithDetails(
       await options.actions.retry();
     } catch (retryError) {
       options?.logger?.error('Retry action failed.', { error: retryError });
+    }
+    return;
+  }
+  if (
+    (selection === TRUST_CERTIFICATE_ACTION || selection === RETRUST_CERTIFICATE_ACTION) &&
+    options?.actions?.trustCertificate
+  ) {
+    try {
+      await options.actions.trustCertificate();
+    } catch (trustError) {
+      options?.logger?.error('Trust certificate action failed.', { error: trustError });
     }
     return;
   }
@@ -185,6 +231,9 @@ export function renderErrorReport(
   }
   if (normalized.code) {
     lines.push(`- **Code:** ${normalized.code}`);
+  }
+  if (normalized.networkCode) {
+    lines.push(`- **Network code:** ${normalized.networkCode}`);
   }
   if (normalized.endpoint) {
     lines.push(`- **Endpoint:** ${redactString(normalized.endpoint)}`);

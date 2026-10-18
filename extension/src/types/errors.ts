@@ -5,6 +5,8 @@ export type NormalizedErrorKind =
   | 'server'
   | 'timeout'
   | 'cancellation'
+  /** A TLS certificate problem; trying again cannot help. */
+  | 'certificate'
   | 'unknown';
 
 export interface RequestChainEntry {
@@ -22,6 +24,12 @@ export interface NormalizedError {
   message: string;
   status?: number;
   code?: string;
+  /** Node / OpenSSL code of a network or TLS failure (`CERT_HAS_EXPIRED`, `ECONNREFUSED`, ...). */
+  networkCode?: string;
+  /** Meaning of the FileMaker code: who can fix it (see utils/fileMakerCodes.ts). */
+  fmCategory?: string;
+  /** `Retry-After` from the response, in milliseconds. */
+  retryAfterMs?: number;
   requestId?: string;
   endpoint?: string;
   safeHeaders?: Record<string, string>;

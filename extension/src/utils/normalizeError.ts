@@ -2,6 +2,8 @@ import type { AxiosError } from 'axios';
 
 import { FMClientError } from '../services/errors';
 import type { NormalizeErrorOptions, NormalizedError, NormalizedErrorKind } from '../types/errors';
+import { getFileMakerErrorInfo } from './fileMakerCodes';
+import { describeNetworkFailure, extractNetworkCode, extractNetworkMessage, targetOfUrl } from './networkErrors';
 import { redactHeaders, redactValue } from './redact';
 
 interface FileMakerMessage {
@@ -66,18 +68,41 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
   const payload = error.response?.data;
   const fmMessage = extractFileMakerMessage(payload);
   const safeHeaders = redactHeaders(toUnknownRecord(error.response?.headers));
+  const retryAfterMs = parseRetryAfterMs(error.response?.headers);
+  const details = safeDetails(payload);
+
+  // A connection that never produced an HTTP response: map Node's error code to a message that
+  // says what happened and what to do (certificates, DNS, refused, reset, old TLS ...).
+  if (!error.response) {
+    const networkCode = extractNetworkCode(error);
+    const failure = describeNetworkFailure(networkCode, {
+      ...targetOfUrl(error.config?.url),
+      nodeMessage: extractNetworkMessage(error) ?? error.message
+    });
+    if (failure) {
+      return {
+        kind: failure.kind,
+        message: failure.message,
+        networkCode: failure.code,
+        isRetryable: failure.retryable,
+        details,
+        originalName: error.name
+      };
+    }
+  }
 
   const timeoutLike = error.code === 'ECONNABORTED' || /timeout/i.test(error.message);
   if (timeoutLike) {
+    const seconds = error.config?.timeout ? Math.round(error.config.timeout / 1000) : undefined;
     return {
       kind: 'timeout',
       message: options?.fallbackMessage
-        ? `${options.fallbackMessage} (request timed out${status ? `, HTTP ${status}` : ''}).`
-        : `Request timed out${status ? ` (HTTP ${status})` : ''}.`,
+        ? `${options.fallbackMessage} (request timed out${seconds ? ` after ${seconds} s` : ''}${status ? `, HTTP ${status}` : ''}). If the server is slow, raise the setting filemaker.requestTimeoutMs.`
+        : `Request timed out${seconds ? ` after ${seconds} s` : ''}${status ? ` (HTTP ${status})` : ''}. If the server is slow, raise the setting filemaker.requestTimeoutMs.`,
       status,
       safeHeaders,
       isRetryable: true,
-      details: redactValue(payload)
+      details
     };
   }
 
@@ -90,24 +115,35 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
       status,
       safeHeaders,
       isRetryable: false,
-      details: redactValue(payload)
+      details
     };
   }
 
-  const kind = inferKind(status);
   const code = fmMessage?.code;
+  const info = getFileMakerErrorInfo(code);
+  // A FileMaker credentials problem is an authentication failure whatever the HTTP status was.
+  const kind: NormalizedErrorKind = info?.category === 'credentials' ? 'auth' : inferKind(status);
   const resolvedMessage = fmMessage
-    ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}`
+    ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}${info?.advice ? ` ${info.advice}` : ''}`
     : buildFallbackAxiosMessage(error, options, status);
+
+  // Retry only what can change: a transport problem, or a server error that is not a FileMaker
+  // answer. FileMaker's own errors (HTTP 500 with a code) are answers, not outages, unless the
+  // code is one that clears (a locked record, a full session pool, a restarting host).
+  const transportOrGateway = kind === 'network' || kind === 'timeout' || status === 429;
+  const serverOutage = kind === 'server' && !fmMessage;
+  const isRetryable = fmMessage ? info?.retryable === true : transportOrGateway || serverOutage;
 
   return {
     kind,
     message: resolvedMessage,
     status,
     code,
+    fmCategory: info?.category,
     safeHeaders,
-    isRetryable: kind === 'network' || kind === 'timeout' || kind === 'server',
-    details: redactValue(payload),
+    isRetryable,
+    ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    details,
     originalName: error.name
   };
 }
@@ -117,18 +153,84 @@ function buildFallbackAxiosMessage(
   options: NormalizeErrorOptions | undefined,
   status: number | undefined
 ): string {
+  const hint = status ? statusHint(status) : undefined;
   if (options?.fallbackMessage) {
     if (!status && error.message && isTlsCertificateMessage(error.message)) {
       return `${options.fallbackMessage} (${error.message})`;
     }
-    return status ? `${options.fallbackMessage} (HTTP ${status})` : options.fallbackMessage;
+    return status
+      ? `${options.fallbackMessage} (HTTP ${status})${hint ? ` ${hint}` : ''}`
+      : options.fallbackMessage;
   }
 
   if (status) {
-    return `Request failed with HTTP ${status}.`;
+    return `Request failed with HTTP ${status}.${hint ? ` ${hint}` : ''}`;
   }
 
   return error.message || 'Network request failed.';
+}
+
+/** What a status without a FileMaker error body most likely means. */
+function statusHint(status: number): string | undefined {
+  switch (status) {
+    case 301:
+    case 302:
+    case 303:
+    case 307:
+    case 308:
+      return 'The server redirected the request; the Data API does not redirect. Use the final address as the Server URL (check http vs https, and any sign-in page in front of the server).';
+    case 403:
+      return 'The server refused the request: your account may lack the privilege, or a gateway or firewall blocked it. Ask your FileMaker administrator; editing this connection will not help.';
+    case 404:
+      return 'Nothing answered at that address. Check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled (Admin Console > Connectors).';
+    case 413:
+      return 'The request was too large for the server or a gateway in front of it.';
+    case 429:
+      return 'The server (or a gateway) is receiving too many requests and asked for a pause.';
+    case 502:
+    case 503:
+    case 504:
+      return 'A gateway or proxy could not reach FileMaker Server, or it did not answer in time. The server may be restarting or overloaded; try again shortly.';
+    default:
+      return undefined;
+  }
+}
+
+/** `Retry-After` as milliseconds: delay-seconds or an HTTP date; capped at five minutes. */
+function parseRetryAfterMs(headers: unknown): number | undefined {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+  const record = headers as Record<string, unknown>;
+  const raw = record['retry-after'] ?? record['Retry-After'];
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof text !== 'string' && typeof text !== 'number') {
+    return undefined;
+  }
+  const seconds = Number(text);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1000, 300_000);
+  }
+  const date = Date.parse(String(text));
+  return Number.isNaN(date) ? undefined : Math.min(Math.max(0, date - Date.now()), 300_000);
+}
+
+const MAX_DETAIL_TEXT = 300;
+
+/**
+ * Response bodies end up in "Copy as Bug Report". A gateway's HTML error page can name internal
+ * hosts, so text bodies are reduced to plain text and cut short; JSON stays (redacted).
+ */
+function safeDetails(payload: unknown): unknown {
+  if (typeof payload === 'string') {
+    const plain = payload
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return redactValue(plain.length > MAX_DETAIL_TEXT ? `${plain.slice(0, MAX_DETAIL_TEXT)}…` : plain);
+  }
+  return redactValue(payload);
 }
 
 function isTlsCertificateMessage(message: string): boolean {

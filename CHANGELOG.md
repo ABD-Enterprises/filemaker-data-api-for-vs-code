@@ -34,6 +34,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Map Node/OpenSSL error codes to actionable messages via one shared mapping (normalizeError); Retry only where it helps; no Edit Profile for 403/privilege; shared FileMaker error-code table with advice; Retry-After; HTML details truncated.
 - Wizard: http+self-signed message, custom CA extends system roots, TLS agent keyed by file stamp, database/API path change resets aiAccess; kill-switch message names the true cause.
 - FM Web preview: clear 'unavailable in this installation' error instead of the old fallback app; version-marked managed runtime files refreshed in already generated apps; env file written without following symlinks.
 - Implement Create Record in the Record Editor (field list, validation, confirmation, new record ID) with unit tests and an end-to-end test against the mock FileMaker server.
