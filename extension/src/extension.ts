@@ -26,9 +26,9 @@ import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/ai
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
-import { registerEffectiveSettings } from './settings/effectiveSettings';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
+import { registerEffectiveSettings } from './settings/effectiveSettings';
 import type { BatchService } from './services/batchService';
 import type { FMClient } from './services/fmClient';
 import { HistoryStore } from './services/historyStore';

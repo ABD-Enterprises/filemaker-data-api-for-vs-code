@@ -3,8 +3,8 @@
 // setting (readRestrictedSetting, readUserScopeValue, RoleGuard, SettingsService); this module
 // only compares it with what each scope holds, so the explanation cannot disagree with the rule.
 
-/** The role order a workspace may only lower. Shared with RoleGuard. */
-export const ROLE_RANK: Record<'viewer' | 'developer' | 'admin', number> = { viewer: 0, developer: 1, admin: 2 };
+import { ROLE_RANK, isRoleName } from '../enterprise/roles';
+import type { RestrictedReading } from '../utils/policySetting';
 
 export type SettingKind =
   /** `"scope": "application"`: only the user's own settings count. */
@@ -81,7 +81,7 @@ export type SettingSource =
   | 'Enterprise file'
   | 'Restricted Mode';
 
-/** What each scope holds for one setting. `workspaceFile` is read from `.vscode/settings.json` directly. */
+/** What each scope holds for one setting. `workspaceFile` is read from a settings file directly. */
 export interface ScopeValues {
   default?: unknown;
   user?: unknown;
@@ -101,6 +101,8 @@ export interface ExplainInput {
   trusted: boolean;
   /** The setting is in `capabilities.untrustedWorkspaces.restrictedConfigurations`. */
   restrictedInUntrusted: boolean;
+  /** For on/off switches: the pieces `readRestrictedSetting` itself was computed from. */
+  reading?: RestrictedReading;
 }
 
 export interface Explanation {
@@ -109,13 +111,18 @@ export interface Explanation {
   effective: unknown;
   source: SettingSource;
   userValue: unknown;
-  /** The workspace folder value, else the workspace value, else the one found in the settings file. */
+  /** The workspace folder value, else the workspace value, else the one found in a settings file. */
   workspaceValue: unknown;
   /** A workspace value exists and is not what is in effect. */
   ignored: boolean;
   /** The ignored value differs from what is in effect, so telling the user is worthwhile. */
   noticeWorthy: boolean;
+  /** For the escaped view: may quote (capped) values. */
   reason?: string;
+  /** For a notification: a fixed sentence that never contains a value from a file. */
+  noticeReason?: string;
+  /** Something worth knowing even when no workspace value is present. */
+  note?: string;
   /** Opening the Workspace tab for this setting can change something. */
   workspaceMeaningful: boolean;
 }
@@ -124,27 +131,69 @@ export const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === J
 
 const onOff = (value: unknown): string => (value === true ? 'on' : value === false ? 'off' : String(value));
 
+/** A value for display, capped so a hostile file cannot flood the view. */
+export function fmt(value: unknown, max = 80): string {
+  let text: string;
+  try {
+    text = JSON.stringify(value) ?? String(value);
+  } catch {
+    text = '[unprintable]';
+  }
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+export const RESTRICTED_MODE_REASON =
+  'This workspace is in Restricted Mode, so workspace values for this setting are ignored until you trust it.';
+const USER_ONLY_NOTICE = 'this setting only works in User settings';
+const RESTRICTED_MODE_NOTICE =
+  'this workspace is in Restricted Mode, so workspace values for this setting are ignored until you trust it';
+
 export function explainSetting(input: ExplainInput): Explanation {
   const { setting, values, effective, trusted } = input;
   const id = `filemaker.${setting.key}`;
   const workspaceValue = values.workspaceFolder ?? values.workspace ?? values.workspaceFile;
   const hasWorkspace = workspaceValue !== undefined;
-  const baseline = values.user ?? values.default;
-  const baselineLabel = values.user !== undefined ? 'User' : 'default';
-  const userSource: SettingSource = values.user !== undefined ? 'User' : 'Default';
+  const reading = input.reading;
+  const baseline = reading ? reading.baseline : (values.user ?? values.default);
+  const fromUser = reading ? reading.baselineFrom === 'user' : values.user !== undefined;
+  const baselineLabel = fromUser ? 'User' : 'default';
+  const userSource: SettingSource = fromUser ? 'User' : 'Default';
   const workspaceSource: SettingSource = values.workspaceFolder !== undefined ? 'Workspace Folder' : 'Workspace';
+  const restrictedMode =
+    setting.kind !== 'user-only' && !trusted && (input.restrictedInUntrusted || setting.forcedWhenUntrusted === true);
 
   let source: SettingSource = userSource;
   let ignored = false;
   let reason: string | undefined;
+  let noticeReason: string | undefined;
+  let note: string | undefined;
   let workspaceMeaningful = true;
+
+  if (restrictedMode) {
+    // VS Code hides restricted keys from a workspace that is not trusted, and the code does not
+    // read them either, so a workspace layer never counts, whatever the kind.
+    if (values.enterpriseFile !== undefined && same(values.enterpriseFile, effective) && !same(baseline, effective)) {
+      source = 'Enterprise file';
+    } else if (setting.forcedWhenUntrusted) {
+      source = 'Restricted Mode';
+    }
+    if (hasWorkspace) {
+      ignored = true;
+      reason = RESTRICTED_MODE_REASON;
+      noticeReason = RESTRICTED_MODE_NOTICE;
+    } else {
+      note = RESTRICTED_MODE_REASON;
+    }
+    return finish();
+  }
 
   switch (setting.kind) {
     case 'user-only': {
       workspaceMeaningful = false;
       if (hasWorkspace) {
         ignored = true;
-        reason = `This setting only works in User settings; the workspace value (${JSON.stringify(workspaceValue)}) is ignored.`;
+        reason = `This setting only works in User settings; the workspace value (${fmt(workspaceValue)}) is ignored.`;
+        noticeReason = USER_ONLY_NOTICE;
       }
       break;
     }
@@ -152,30 +201,35 @@ export function explainSetting(input: ExplainInput): Explanation {
       const restricted = setting.restrictedValue;
       if (values.enterpriseFile === restricted && baseline !== restricted) {
         source = 'Enterprise file';
-      } else if (hasWorkspace && workspaceValue === restricted && baseline !== restricted) {
+      } else if (hasWorkspace && (reading ? reading.workspaceCounted : workspaceValue === restricted) && baseline !== restricted) {
         source = workspaceSource;
       }
       if (hasWorkspace && workspaceValue !== effective) {
         ignored = true;
         reason =
-          `This workspace sets ${setting.key} to ${String(workspaceValue)} but your ${baselineLabel} value is ` +
-          `${String(baseline)}, and a workspace can only turn it ${restricted === true ? 'on' : 'off'}, ` +
+          `This workspace sets ${setting.key} to ${fmt(workspaceValue)} but your ${baselineLabel} value is ` +
+          `${fmt(baseline)}, and a workspace can only turn it ${restricted === true ? 'on' : 'off'}, ` +
           `so it stays ${onOff(effective)}.`;
+        noticeReason = `a workspace can only turn it ${restricted === true ? 'on' : 'off'}, so it stays ${onOff(effective)}`;
       }
       break;
     }
     case 'stricter-role': {
-      const rank = (role: unknown): number => ROLE_RANK[role as keyof typeof ROLE_RANK] ?? 1;
       if (!same(effective, baseline) && values.enterpriseFile === effective) {
         source = 'Enterprise file';
       } else if (!same(effective, baseline) && same(effective, workspaceValue)) {
         source = workspaceSource;
       }
-      if (hasWorkspace && rank(workspaceValue) > rank(effective)) {
+      if (hasWorkspace && !isRoleName(workspaceValue)) {
+        ignored = true;
+        reason = `This workspace sets ${setting.key} to ${fmt(workspaceValue)}, which is not a role, so it is ignored.`;
+        noticeReason = 'it is not a valid role';
+      } else if (hasWorkspace && isRoleName(workspaceValue) && isRoleName(effective) && ROLE_RANK[workspaceValue] > ROLE_RANK[effective]) {
         ignored = true;
         reason =
-          `This workspace sets ${setting.key} to ${String(workspaceValue)} but your ${baselineLabel} value is ` +
-          `${String(baseline)}, and a workspace can only lower the role, so it stays ${String(effective)}.`;
+          `This workspace sets ${setting.key} to ${fmt(workspaceValue)} but your ${baselineLabel} value is ` +
+          `${fmt(baseline)}, and a workspace can only lower the role, so it stays ${fmt(effective)}.`;
+        noticeReason = 'a workspace can only lower the role';
       }
       break;
     }
@@ -184,33 +238,30 @@ export function explainSetting(input: ExplainInput): Explanation {
       break;
     }
     case 'workspace': {
-      const untrustedBlocked =
-        !trusted && hasWorkspace && (input.restrictedInUntrusted || setting.forcedWhenUntrusted === true);
-      if (untrustedBlocked) {
-        source = 'Restricted Mode';
-        ignored = true;
-        reason =
-          `This workspace is in Restricted Mode, so its value for ${setting.key} is not used until you trust ` +
-          `the folder.`;
-      } else if (hasWorkspace) {
+      if (hasWorkspace) {
         source = workspaceSource;
       }
       break;
     }
   }
+  return finish();
 
-  return {
-    key: id,
-    kind: setting.kind,
-    effective,
-    source,
-    userValue: values.user,
-    workspaceValue,
-    ignored,
-    noticeWorthy: ignored && !same(workspaceValue, effective),
-    ...(reason ? { reason } : {}),
-    workspaceMeaningful
-  };
+  function finish(): Explanation {
+    return {
+      key: id,
+      kind: setting.kind,
+      effective,
+      source,
+      userValue: values.user,
+      workspaceValue,
+      ignored,
+      noticeWorthy: ignored && !same(workspaceValue, effective),
+      ...(reason ? { reason } : {}),
+      ...(noticeReason ? { noticeReason } : {}),
+      ...(note ? { note } : {}),
+      workspaceMeaningful
+    };
+  }
 }
 
 // --- one notification per ignored setting per workspace --------------------------------------
@@ -238,92 +289,94 @@ export function pickNotices(
     : { show, next: { ...state, seen: [...state.seen, ...show.map((entry) => entry.key)] } };
 }
 
-/** The text of the one notification for a batch of ignored settings. */
+/**
+ * The text of the one notification. Built only from registry keys and fixed sentences: notification
+ * text renders Markdown links that can run commands, so nothing from a settings file goes in.
+ */
 export function noticeMessage(show: readonly Explanation[]): string {
   const [first] = show;
   if (first && show.length === 1) {
-    return first.reason ?? `This workspace sets ${first.key} but it is ignored.`;
+    return `This workspace sets ${first.key} but it is ignored: ${first.noticeReason ?? 'it has no effect here'}.`;
   }
   return `This workspace sets ${show.length} settings that are ignored: ${show.map((entry) => entry.key).join(', ')}.`;
 }
 
 // --- reading `.vscode/settings.json` -----------------------------------------------------------
 
-/** Removes comments and trailing commas from JSONC, leaving strings alone. */
+/** The largest settings file the extension will read (VS Code's own are a few KB). */
+export const MAX_SETTINGS_FILE_BYTES = 256 * 1024;
+
+/** Removes comments, a leading BOM and trailing commas from JSONC in one linear pass, leaving strings alone. */
 export function stripJsonc(text: string): string {
-  let out = '';
+  const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const out: string[] = [];
   let inString = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i] as string;
-    const next = text[i + 1];
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i] as string;
+    const next = source[i + 1];
     if (inString) {
-      out += ch;
+      out.push(ch);
       if (ch === '\\') {
-        out += next ?? '';
+        out.push(next ?? '');
         i += 1;
       } else if (ch === '"') {
         inString = false;
       }
     } else if (ch === '"') {
       inString = true;
-      out += ch;
+      out.push(ch);
     } else if (ch === '/' && next === '/') {
-      while (i < text.length && text[i] !== '\n') {
+      while (i < source.length && source[i] !== '\n') {
         i += 1;
       }
-      out += '\n';
+      out.push('\n');
     } else if (ch === '/' && next === '*') {
       i += 2;
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
         i += 1;
       }
       i += 1;
-    } else {
-      out += ch;
-    }
-  }
-  return removeTrailingCommas(out);
-}
-
-function removeTrailingCommas(text: string): string {
-  let out = '';
-  let inString = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i] as string;
-    if (inString) {
-      out += ch;
-      if (ch === '\\') {
-        out += text[i + 1] ?? '';
-        i += 1;
-      } else if (ch === '"') {
-        inString = false;
+    } else if (ch === '}' || ch === ']') {
+      // Drop a comma that only whitespace separates from this closer.
+      let back = out.length - 1;
+      while (back >= 0 && /\s/.test(out[back] as string)) {
+        back -= 1;
       }
-    } else if (ch === '"') {
-      inString = true;
-      out += ch;
-    } else if (ch === ',' && /^\s*[}\]]/.test(text.slice(i + 1))) {
-      // trailing comma: drop it
+      if (back >= 0 && out[back] === ',') {
+        out.splice(back, 1);
+      }
+      out.push(ch);
     } else {
-      out += ch;
+      out.push(ch);
     }
   }
-  return out;
+  return out.join('');
 }
 
-/** The `filemaker.*` entries of a settings file, keyed without the prefix. Unparseable text gives `{}`. */
-export function parseFilemakerSettings(text: string): Record<string, unknown> {
+export type ParsedSettings = { ok: true; values: Record<string, unknown> } | { ok: false };
+
+/** The `filemaker.*` entries of a settings file, keyed without the prefix. Oversized or invalid text is `{ ok: false }`. */
+export function parseFilemakerSettings(text: string, section?: string): ParsedSettings {
+  if (text.length > MAX_SETTINGS_FILE_BYTES) {
+    return { ok: false };
+  }
   try {
     const parsed = JSON.parse(stripJsonc(text)) as unknown;
-    const result: Record<string, unknown> = {};
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      for (const [key, value] of Object.entries(parsed)) {
-        if (key.startsWith('filemaker.')) {
-          result[key.slice('filemaker.'.length)] = value;
-        }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false };
+    }
+    const holder = section ? (parsed as Record<string, unknown>)[section] : parsed;
+    if (!holder || typeof holder !== 'object' || Array.isArray(holder)) {
+      return section ? { ok: true, values: {} } : { ok: false };
+    }
+    const values: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(holder)) {
+      if (key.startsWith('filemaker.')) {
+        values[key.slice('filemaker.'.length)] = value;
       }
     }
-    return result;
+    return { ok: true, values };
   } catch {
-    return {};
+    return { ok: false };
   }
 }

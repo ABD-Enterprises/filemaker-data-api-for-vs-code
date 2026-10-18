@@ -3,12 +3,11 @@ import { join } from 'path';
 
 import * as vscode from 'vscode';
 
-import { ROLE_RANK } from '../settings/settingPolicy';
+import { ROLE_RANK } from './roles';
 import type { EnterpriseRole, PerformanceMode } from '../types/fm';
 import { isOfflineModeOn } from '../utils/policySetting';
 
 const ENTERPRISE_CONFIG_RELATIVE_PATH = '.vscode/filemaker.config.json';
-
 
 function isRole(value: unknown): value is EnterpriseRole {
   return value === 'viewer' || value === 'developer' || value === 'admin';

@@ -561,9 +561,11 @@ VS Code has two places to set most options. **User settings** are yours and foll
 
 Every setting's description in the Settings editor starts with one of these three labels.
 
-**See what is really in effect.** Run **FileMaker: Show Effective Settings**. For every setting of the first two kinds, and the per-workspace ones that matter for policy, it shows the value in effect, where it comes from (Default, User, Workspace, Workspace Folder, Enterprise file or Restricted Mode), your User and Workspace values, and a plain sentence when a workspace value is being ignored, with buttons to open the User or Workspace tab at that setting. The explanation comes from the same code that applies the rule. When a project ships a value that is ignored, the extension also tells you once per setting for that workspace, with **Don't show again for this workspace**.
+**See what is really in effect.** Run **FileMaker: Show Effective Settings**. For every policy-related setting it shows the value in effect, where it comes from (Default, User, Workspace, Workspace Folder, Enterprise file or Restricted Mode), your User and Workspace values and, when a workspace value is ignored, a plain sentence saying why, with buttons to open the User or Workspace tab at that setting. The value in effect is read by the same code that applies the rule (and for the on/off switches the explanation is built from the same reading); the page is a snapshot that refreshes when settings change. When a project ships a value that is ignored, the extension also tells you once per setting for that workspace, with **Don't show again for this workspace**.
 
-**Saved query scope.** `filemaker.savedQueries.scope` stores `workspace` or `global`. `workspace` saves queries with this project (other projects do not see them); `global` makes them available in every project on this computer. Changing it does not move queries already saved.
+Limits worth knowing. In **Restricted Mode** VS Code hides workspace values of the restricted settings, so the page says they are ignored until you trust the folder, and the extension does not read the workspace settings files at all. In a trusted workspace it reads `.vscode/settings.json` and the `.code-workspace` file only to catch User-only settings (VS Code hides those); a file that is large, a link or not valid JSON is reported instead of being used. In a multi-root workspace a folder's `.vscode/settings.json` applies only to files in that folder, not to these window-wide settings.
+
+**Saved query scope.** `filemaker.savedQueries.scope` stores `workspace` or `global`. `workspace` keeps queries for this workspace on this computer (VS Code stores them; they are not in your project files, and other workspaces do not see them); `global` makes them available in every workspace on this computer (on each machine separately in a remote window). Changing it does not move queries you already saved.
 
 ---
 
@@ -597,7 +599,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.savedQueries.scope` | `"workspace"` | User or workspace | Where saved queries are kept: `workspace` (with this project; other projects do not see them) or `global` (every project on this computer). |
+| `filemaker.savedQueries.scope` | `"workspace"` | User or workspace | Where saved queries are kept: `workspace` (this workspace on this computer, not in your project files) or `global` (every workspace on this computer). |
 | `filemaker.history.maxEntries` | `10` | User or workspace | Request history entries kept per workspace. |
 | `filemaker.snippets.includeAuthByDefault` | `false` | User or workspace | Include authorization headers in Copy as curl and Copy as fetch(). |
 
@@ -631,7 +633,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.typegen.outputDir` | `"filemaker-types"` | User or workspace (T) | Workspace folder for generated types (a relative path inside the workspace). |
+| `filemaker.typegen.outputDir` | `"filemaker-types"` | User or workspace (T) | Workspace folder for generated types (a relative path inside the workspace; a leading `/` is dropped and a path with `..` falls back to the default). |
 
 **FM Web Projects**
 

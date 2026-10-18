@@ -17,6 +17,7 @@ vi.mock('vscode', () => {
       getConfiguration: vi.fn(() => ({
         get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue)
       })),
+      onDidGrantWorkspaceTrust: vi.fn(() => ({ dispose: vi.fn() })),
       openTextDocument: vi.fn(),
       createFileSystemWatcher: vi.fn(() => ({
         onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
