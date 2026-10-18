@@ -51,7 +51,17 @@
     "crud"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:filemakerConnectionWizard",
+    "onWebviewPanel:filemakerQueryBuilder",
+    "onWebviewPanel:filemakerRecordViewer",
+    "onWebviewPanel:filemakerRecordEditor",
+    "onWebviewPanel:filemakerScriptRunner",
+    "onWebviewPanel:filemakerLayoutMode",
+    "onWebviewPanel:filemakerSchemaDiff",
+    "onWebviewPanel:filemakerEnvironmentCompare",
+    "onWebviewPanel:filemakerDiagnosticsDashboard",
+    "onWebviewPanel:filemakerEffectiveSettings"
   ],
   "main": "./dist/extension.js",
   "capabilities": {

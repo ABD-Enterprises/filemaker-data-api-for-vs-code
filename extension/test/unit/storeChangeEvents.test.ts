@@ -28,6 +28,20 @@ describe('ProfileStore change events (they keep the Command Palette context keys
     expect(await store.listProfiles()).toEqual([]);
   });
 
+  it('fires exactly once for the removal of a profile that is not the active one', async () => {
+    const store = make();
+    await store.upsertProfile(profile);
+    await store.upsertProfile({ ...profile, id: 'p2', name: 'Other' });
+    await store.setActiveProfileId('p2');
+    const listener = vi.fn();
+    store.onDidChange(listener);
+
+    await store.removeProfile('p1');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect((await store.listProfiles()).map((item) => item.id)).toEqual(['p2']);
+  });
+
   it('does not fire for a profile that fails validation, stops after dispose, and survives a throwing listener', async () => {
     const store = make();
     const listener = vi.fn();

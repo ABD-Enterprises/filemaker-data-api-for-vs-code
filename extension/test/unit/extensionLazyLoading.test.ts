@@ -241,6 +241,17 @@ describe('extension lazy FM runtime loading', () => {
     // A project.json created, changed or deleted outside the extension is noticed as well.
     const watcherCalls = vi.mocked(vscode.workspace.createFileSystemWatcher).mock.calls.map(([pattern]) => String(pattern));
     expect(watcherCalls).toContain('**/.fmweb/project.json');
+    const watcher = vi.mocked(vscode.workspace.createFileSystemWatcher).mock.results[
+      vi.mocked(vscode.workspace.createFileSystemWatcher).mock.calls.findIndex(([pattern]) => String(pattern) === '**/.fmweb/project.json')
+    ]?.value as Record<'onDidChange' | 'onDidCreate' | 'onDidDelete', ReturnType<typeof vi.fn>>;
+    for (const event of ['onDidCreate', 'onDidChange', 'onDidDelete'] as const) {
+      const callback = watcher[event].mock.calls[0]?.[0] as (() => void) | undefined;
+      expect(callback, event).toBeTypeOf('function');
+      const before = keyCalls('filemaker.fmWebProjectInitialized');
+      callback?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(keyCalls('filemaker.fmWebProjectInitialized'), event).toBe(before + 1);
+    }
     disposeSubscriptions(context);
     vi.restoreAllMocks();
   });
