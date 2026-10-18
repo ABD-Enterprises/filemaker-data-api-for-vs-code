@@ -106,7 +106,14 @@ jobs:
       # build are kept as a release asset so a user-reported stack trace can be symbolicated.
       - name: Collect source maps
         run: |
+          set -euo pipefail
           mkdir -p artifacts/maps
+          shopt -s nullglob
+          maps=(extension/dist/*.map)
+          if [ "${#maps[@]}" -eq 0 ]; then
+            echo "::error::No source maps were produced by the build; the release would have no symbolication asset."
+            exit 1
+          fi
           (cd extension/dist && tar -czf "../../artifacts/maps/sourcemaps-${GITHUB_REF_NAME}.tgz" ./*.map)
 
       - name: Upload source maps Artifact
@@ -164,12 +171,6 @@ jobs:
           name: extension-vsix
           path: artifacts
 
-      - name: Download source maps Artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: extension-sourcemaps
-          path: artifacts/maps
-
       # Project dependencies and their install scripts never run in this job. vsce comes from its
       # own minimal lockfile (tools/publish), installed without lifecycle scripts, before the
       # Azure login exists.
@@ -217,6 +218,12 @@ jobs:
         with:
           name: extension-vsix
           path: artifacts
+
+      - name: Download source maps Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: extension-sourcemaps
+          path: artifacts/maps
 
       # The self-hosted Linux runners do not ship the GitHub CLI. Place a gh
       # binary at a fixed job-scoped path: reuse one already on PATH, or
