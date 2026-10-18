@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FIX] Schema snapshot and offline-cache index entries for layouts whose name contains `..` (for example `Q1..Q2`) are no longer dropped as unsafe, so they are listed and pruned like any other. A file name is still refused if it has a path separator, a drive letter, a segment of `.` or `..`, or nothing but dots before `.json`.
 - [FIX] Clicking the AI status bar item while AI tools are not on no longer sets the kill switch behind the scenes. Before, enabling AI afterwards left the tools off until you clicked again and confirmed a dialog; now the click explains how to turn AI on and changes nothing.
 - [FIX] **Toggle Offline Mode** now switches the mode in your user settings. Before, it wrote the workspace scope, so it failed with no folder open and left a `.vscode/settings.json` in the repository. It also said "Offline mode disabled." when a setting elsewhere kept the mode on; it now reports the mode that is in effect and, if a workspace setting keeps it on, says so.
 - [SECURITY] Query Builder **Copy as table** now applies the same spreadsheet-formula protection as the CSV export: a cell that starts with `=`, `+`, `-`, `@`, tab or carriage return gets a leading apostrophe when pasted (plain numbers and phone numbers are left alone). Before, `=HYPERLINK(...)` from a field value pasted into Excel or Sheets as a live formula.
