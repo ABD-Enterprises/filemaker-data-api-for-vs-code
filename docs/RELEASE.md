@@ -108,7 +108,7 @@ Use this when Entra publishing is not set up (today) or the publish job failed. 
 
 1. Build the VSIX from the merged release commit (`npm ci && npm run build && npm run package:check`), and verify its version, file list (no source maps) and sha256. Make `sourcemaps-vX.Y.Z.tgz` from `extension/dist/*.map`.
 2. Upload the `.vsix` at <https://marketplace.visualstudio.com/manage> and wait for verification.
-3. Create the GitHub release from the same files with `gh release create` (as a draft first). Creating the release creates the `vX.Y.Z` tag, which starts the tag run in CI; **reject** its `marketplace` deployment (the publish job would only fail at the Azure check) instead of approving it.
+3. Create the tag at the recorded release commit (`git tag -a vX.Y.Z -m vX.Y.Z <sha> && git push origin vX.Y.Z`, as an admin), then create the GitHub release on it with `gh release create vX.Y.Z --verify-tag ...` and the same files. The tag starts the tag run in CI; **reject** its `marketplace` deployment (the publish job would only fail at the Azure check) instead of approving it.
 4. Continue with step 5 of the checklist. Say in the pull request that the release was published by hand, and why.
 
 ## Pre-releases

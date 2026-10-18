@@ -686,12 +686,21 @@ function renderResult(payload) {
   const result = payload && payload.result ? payload.result : {};
   const messages = Array.isArray(result.messages) ? result.messages : [];
 
-  summary.textContent = messages.length
-    ? `Messages: ${messages.map((item) => `${item.code}:${item.message}`).join(' | ')}`
-    : 'Script executed.';
+  const scriptErrors = payload && Array.isArray(payload.scriptErrors) ? payload.scriptErrors : [];
+  const failed = scriptErrors.length > 0;
+
+  if (failed) {
+    // The request worked, the script did not: say so in the headline, with the error code and its meaning.
+    summary.textContent = `Script reported an error: ${payload.scriptErrorText || scriptErrors.map((item) => item.code).join(', ')}`;
+  } else {
+    summary.textContent = messages.length
+      ? `Messages: ${messages.map((item) => `${item.code}:${item.message}`).join(' | ')}`
+      : 'Script executed.';
+  }
+  summary.classList.toggle('error', failed);
 
   rawResult.textContent = JSON.stringify(payload, null, 2);
-  setStatus('Script execution completed.');
+  setStatus(failed ? 'Script ran, but it reported an error.' : 'Script execution completed.', failed);
 }
 
 function setStatus(message, isError = false) {

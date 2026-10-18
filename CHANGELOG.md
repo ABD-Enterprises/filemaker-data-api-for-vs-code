@@ -40,7 +40,7 @@ PR title prefix matches the highest-tier label added:
 
 ## 1.4.0 - 2026-10-18
 
-Minor release; nothing breaking. User-facing notes: `extension/CHANGELOG.md` and `extension/UPGRADE.md`. Entries that shipped in 1.2.0 and 1.3.0 are in `extension/CHANGELOG.md` under those versions and were removed from this ledger.
+Minor release: no data migration, and no command or setting was removed. User-facing notes: `extension/CHANGELOG.md` and `extension/UPGRADE.md`. Entries for 1.2.0 and 1.3.0 were removed from this ledger. The user-facing ones are in `extension/CHANGELOG.md` under those versions; the CI and tooling ones that are not there (zizmor workflow hardening, the TypeScript 7 build restore, the Node 22 move, runner routing, the `dependency-auto-merge.yml` `pull_request_target` hardening, the npm ci and coverage-threshold changes) are in git history (commits up to 89c5109) only.
 
 ### [BREAKING]
 
@@ -61,6 +61,9 @@ Minor release; nothing breaking. User-facing notes: `extension/CHANGELOG.md` and
 
 ### [FIX]
 
+- Restored webview tabs show a reopen page instead of staying dead (serializer for every panel type).
+- Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
+- Command Palette context keys refresh when profiles change and after Initialize FM Web.
 - Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.
 - Script errors on container upload and find are shown; Effective Settings notes and workspace-file watching; TLS agents are closed when replaced.
 - Managed runtime file refresh refuses symlinks and keeps user-edited files with an older marker.
@@ -114,6 +117,7 @@ Minor release; nothing breaking. User-facing notes: `extension/CHANGELOG.md` and
 
 ### [SECURITY]
 
+- Write AI Context leaves out fields hidden by filemaker.ai.hiddenFields and says how many.
 - Pinned certificates fail closed behind an HTTP proxy (refused with a clear message; agent no longer advertises rejectUnauthorized:false); CA-file/default/legacy behaviour through a proxy tested.
 - Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.

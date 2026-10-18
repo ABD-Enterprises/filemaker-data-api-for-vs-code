@@ -33,6 +33,7 @@ vi.mock('vscode', () => {
       }
     },
     window: {
+      registerWebviewPanelSerializer: vi.fn(() => ({ dispose: vi.fn() })),
       showErrorMessage: vi.fn(),
       showWarningMessage: vi.fn(),
       showInformationMessage: vi.fn(),

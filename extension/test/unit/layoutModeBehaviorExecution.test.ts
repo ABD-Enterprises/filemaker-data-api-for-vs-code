@@ -94,4 +94,33 @@ describe('layout mode behavior execution', () => {
     expect(withTarget.stub).toBe(true);
     expect(withTarget.message).toContain('would open FileMaker layout "Invoices"');
   });
+
+  it('reports a script that ran but returned a script error as a failure, with the code and its meaning', async () => {
+    const runScript = vi.fn(async () => ({
+      response: { scriptError: '3' },
+      messages: [{ code: '0', message: 'OK' }]
+    }));
+    const result = await executeBehaviorBinding({
+      behavior: { type: 'runScript', scriptName: 'Save_Record' },
+      objectName: 'SaveButton',
+      layoutName: 'Contacts',
+      fmLayoutName: 'Contacts',
+      profile,
+      runScript
+    });
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/Ran script "Save_Record" on "Contacts", but the script reported error 3/);
+  });
+
+  it('a script error of 0 is still a success', async () => {
+    const result = await executeBehaviorBinding({
+      behavior: { type: 'runScript', scriptName: 'Save_Record' },
+      objectName: 'SaveButton',
+      layoutName: 'Contacts',
+      fmLayoutName: 'Contacts',
+      profile,
+      runScript: vi.fn(async () => ({ response: { scriptError: '0' }, messages: [] }))
+    });
+    expect(result.ok).toBe(true);
+  });
 });

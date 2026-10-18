@@ -35,12 +35,20 @@ const DEFAULT_FEATURE_FLAGS: FmWebFeatureFlags = {
 };
 
 export class FmWebProjectService {
+  private readonly changeListeners = new Set<() => void>();
+
   public constructor(
     private readonly profileStore: Pick<ProfileStore, 'setActiveProfileId'>,
     private readonly fmClient: Pick<FMClient, 'listLayouts' | 'getLayoutMetadata' | 'listScripts'>,
     private readonly schemaService: Pick<SchemaService, 'getLayoutSchema'>,
     private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>
   ) {}
+
+  /** Calls `listener` after this service writes the project file (the project now exists, or changed). */
+  public onDidChangeProject(listener: () => void): { dispose(): void } {
+    this.changeListeners.add(listener);
+    return { dispose: () => void this.changeListeners.delete(listener) };
+  }
 
   public getWorkspaceRoot(): string | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -74,6 +82,13 @@ export class FmWebProjectService {
 
     await this.ensureProjectDirectories();
     await this.writeJson(this.getProjectConfigPath(), project);
+    for (const listener of [...this.changeListeners]) {
+      try {
+        listener();
+      } catch {
+        // a listener must not break initialising
+      }
+    }
 
     return project;
   }

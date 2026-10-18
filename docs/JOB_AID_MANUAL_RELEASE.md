@@ -15,8 +15,13 @@ Written for version `1.4.0`; replace the version where it appears. "Checked" bel
 ```bash
 git clone https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.git release-1.4.0   # or use a clean checkout
 cd release-1.4.0
-git checkout origin/main --detach        # the merged release commit
-git log -1 --oneline                     # note this SHA: it is the release commit
+git fetch origin
+# RELEASE_SHA is the merge commit of the release PR: copy it from the merged PR page on GitHub
+# (the "merged commit" link), and use this same value everywhere below.
+RELEASE_SHA=<paste the full 40-character SHA>
+git checkout --detach "$RELEASE_SHA"
+git log -1 --oneline                     # confirm: this is the release commit
+git merge-base --is-ancestor "$RELEASE_SHA" origin/main && echo "on main"
 grep '"version"' extension/package.json  # must say 1.4.0
 npm ci
 npm run build
@@ -29,7 +34,8 @@ Verify it:
 
 ```bash
 ls -l artifacts/*.vsix
-shasum -a 256 artifacts/filemaker-data-api-tools-1.4.0.vsix | tee artifacts/SHA256SUMS.txt   # on Linux: sha256sum
+(cd artifacts && shasum -a 256 filemaker-data-api-tools-1.4.0.vsix > SHA256SUMS.txt && cat SHA256SUMS.txt)   # on Linux: sha256sum
+(cd artifacts && shasum -a 256 -c SHA256SUMS.txt)                                                              # must print: ...vsix: OK
 unzip -p artifacts/filemaker-data-api-tools-1.4.0.vsix extension/package.json | grep '"version"'   # "version": "1.4.0"
 unzip -l artifacts/filemaker-data-api-tools-1.4.0.vsix | grep -c '\.map$'                         # 0: no source maps in the VSIX
 ```
@@ -59,36 +65,38 @@ If the upload is rejected, read the message on the page. A version that is not h
 
 **What a tag does here.** `ci.yml` runs on every pushed `v*` tag: `build-test`, then `package`, then `publish` (which waits for the `marketplace` environment's approval, then fails at "Require the Azure identity settings" because `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` are not set), then `release` (skipped when `publish` fails). So **any `v1.4.0` tag, however created, starts that run**. Only repository admins can create `v*` tags (ruleset `release-tags`); you are one.
 
-`gh release create v1.4.0 --target <sha>` creates the tag itself when it does not exist (checked: <https://cli.github.com/manual/gh_release_create>: "--target: Target branch or full commit SHA"; "gh creates the tag if it doesn't exist"). GitHub's events page does not say whether a tag created through a release fires the `push` trigger; **assume it does** (unverified). A draft release can be edited, and its tag deleted, until it is published (same gh page).
+`gh release create` makes the tag itself when it does not exist, and GitHub's events page does not say whether such a tag fires the `push` trigger (unverified). So the sequence below creates the tag first, on purpose, and then attaches the release to it with `--verify-tag`.
 
-**Safest sequence**
+**Safest sequence** (kept simple because whether a release creates its tag early or late is not documented)
 
 1. Upload to the Marketplace first (step 2) and confirm the version is live, so a problem there does not leave a GitHub release pointing at a version users cannot install.
-2. Create the release as a **draft** and check it:
+2. Create the tag yourself, at the release commit (an admin bypasses the `release-tags` ruleset):
 
    ```bash
-   RELEASE_SHA=$(git rev-parse HEAD)     # the merged release commit from step 1
+   git tag -a v1.4.0 -m "v1.4.0" "$RELEASE_SHA"
+   git push origin v1.4.0
+   ```
+
+3. Create the release on that existing tag. `--verify-tag` makes `gh` stop instead of creating a tag if it is missing (checked: <https://cli.github.com/manual/gh_release_create>):
+
+   ```bash
    bash tools/release-notes.sh v1.4.0 > artifacts/release-notes.md
    head -5 artifacts/release-notes.md    # must show the 1.4.0 notes, not be empty
    gh release create v1.4.0 \
      --repo SureForgeTech/filemaker-data-api-for-vs-code \
-     --target "$RELEASE_SHA" \
+     --verify-tag \
      --title v1.4.0 \
      --notes-file artifacts/release-notes.md \
-     --draft \
      artifacts/filemaker-data-api-tools-1.4.0.vsix \
      artifacts/maps/sourcemaps-v1.4.0.tgz \
      artifacts/SHA256SUMS.txt
    ```
 
-   Open the draft on GitHub (Releases), read the notes, and check that the three files are attached.
-3. Publish the draft (the **Publish release** button, or `gh release edit v1.4.0 --draft=false --latest`). Publishing creates the tag `v1.4.0` at `$RELEASE_SHA`.
-4. Open **Actions**. A `CI` run for `v1.4.0` will start (assumed above). It runs `build-test` and `package` and then waits at `publish`. **Open the run, choose Review deployments, tick `marketplace`, and Reject.** (Alternatively cancel the run.) The run ends red or cancelled; that is expected. Do **not** approve it: the publish job would only fail at the Azure check, and `release` would try to create a release that already exists.
-5. The tag run still builds the VSIX in CI (artifact `extension-vsix`). You can compare its contents with the one you uploaded, but its bytes will differ (different build time stamps), so compare `package.json` version and the file list rather than the hash.
+   Read the release on GitHub: notes, and the three files attached.
+4. Pushing the tag in step 2 started a `CI` run for `v1.4.0`. It runs `build-test` and `package` and then waits at `publish`. **Open the run, choose Review deployments, tick `marketplace`, and Reject.** The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
+5. The tag run also builds the VSIX in CI (artifact `extension-vsix`). Its bytes differ from yours (build time stamps), so compare the version and file list, not the hash.
 
-If you would rather not have a red run: there is no supported way to skip it with the current workflow (it only has a tag trigger); the Entra setup removes the problem.
-
-**Do not push the tag yourself** (`git tag` / `git push origin v1.4.0`) before the draft exists: it starts the same run and gives you nothing extra.
+There is no supported way to avoid that red run with the current workflow (it only triggers on tags); the Entra setup removes the problem. A draft release or `--target` does not avoid it either, and when the tag appears in those cases is undocumented, so they are not used here.
 
 ## 4. After publishing
 
