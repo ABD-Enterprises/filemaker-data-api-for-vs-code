@@ -18,10 +18,11 @@ export async function startTlsServer(options: {
   key: KeyPair;
   chain: Certificate[];
   body?: string;
+  maxVersion?: 'TLSv1.2' | 'TLSv1.3';
 }): Promise<TestTlsServer> {
   const requests: TestTlsServer['requests'] = [];
   const server: Server = createServer(
-    { key: keyToPem(options.key), cert: options.chain.map((c) => c.pem).join('') },
+    { key: keyToPem(options.key), cert: options.chain.map((c) => c.pem).join(''), ...(options.maxVersion ? { maxVersion: options.maxVersion } : {}) },
     (request, response) => {
       requests.push({ method: request.method, url: request.url, authorization: request.headers.authorization });
       response.setHeader('Content-Type', 'application/json');

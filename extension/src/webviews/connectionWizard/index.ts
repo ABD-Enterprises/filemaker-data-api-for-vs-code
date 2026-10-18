@@ -800,7 +800,14 @@ export class ConnectionWizardPanel {
       }
       await this.panel.webview.postMessage({
         type: 'testError',
-        message: toUserErrorMessage(error, 'Connection test failed.')
+        message: toUserErrorMessage(error, 'Connection test failed.'),
+        // Shown as a button with the error, so a declined or dismissed dialog can be reopened.
+        trust:
+          networkCode && describeNetworkFailure(networkCode)?.trustable
+            ? networkCode === 'FM_CERT_PIN_MISMATCH' || networkCode === 'FM_CERT_PIN_EXPIRED'
+              ? 'retrust'
+              : 'trust'
+            : undefined
       });
     } finally {
       try {

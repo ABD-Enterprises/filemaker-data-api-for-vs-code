@@ -171,6 +171,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const hash = data ? hashForm(data) : undefined;
         testState = { state: 'failure', message: message.message, hash };
         showStatus('error', message.message || 'Connection failed.');
+        if (message.trust) {
+          // The actionable message is shown once, here, with the way to act on it.
+          const trustBtn = document.createElement('button');
+          trustBtn.type = 'button';
+          trustBtn.id = 'trustCertFromErrorBtn';
+          trustBtn.className = 'secondary';
+          trustBtn.textContent = message.trust === 'retrust' ? 'Review and re-trust' : 'Trust this certificate…';
+          trustBtn.addEventListener('click', () => reviewCertificate('reviewCertificate'));
+          statusEl.appendChild(document.createElement('br'));
+          statusEl.appendChild(trustBtn);
+        }
         hideTestProgress();
         renderTestState();
         testBtn.disabled = false;
@@ -501,7 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
         cls += ' success';
         break;
       case 'failure':
-        label = `🔴 Test failed${testState.message ? ': ' + testState.message : ''}`;
+        // The reason is shown once, in the message box below; the badge only says the result.
+        label = '🔴 Test failed';
         cls += ' failure';
         break;
       case 'stale':

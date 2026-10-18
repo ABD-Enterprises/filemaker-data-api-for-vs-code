@@ -29,6 +29,10 @@ export interface NetworkFailureContext {
   nodeMessage?: string;
 }
 
+/** The plain-words opening for every "this computer does not trust the certificate" failure. */
+const UNTRUSTED_PLAIN =
+  "This server uses a certificate that is not trusted (FileMaker Server's default certificate is self-signed). You can trust this certificate in the wizard, or install a certificate from a public authority on the server.";
+
 const CLOCK_HINT = "First check that your computer's date and time are correct.";
 const CA_HINT =
   'Ask your FileMaker administrator for the company\'s CA certificate (a .pem file) and set it as the connection\'s CA file, or, if you trust this server, review and trust its certificate.';
@@ -182,7 +186,7 @@ export function describeNetworkFailure(
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `${target} presents a self-signed certificate that this computer does not trust. A new FileMaker Server uses such a certificate until the administrator installs a signed one. ${CA_HINT}`
+        message: `${UNTRUSTED_PLAIN} (${target} presents a self-signed certificate.) ${CA_HINT}`
       };
     case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
     case 'UNABLE_TO_GET_ISSUER_CERT':
@@ -192,7 +196,7 @@ export function describeNetworkFailure(
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `This computer cannot verify who signed the certificate of ${target}. Either the signing authority is private (${CA_HINT.charAt(0).toLowerCase()}${CA_HINT.slice(1)}) or the server did not send its intermediate certificate: ask the administrator to install the full certificate chain and restart FileMaker Server.`
+        message: `${UNTRUSTED_PLAIN} (This computer cannot verify who signed the certificate of ${target}. Either the signing authority is private (${CA_HINT.charAt(0).toLowerCase()}${CA_HINT.slice(1)}) or the server did not send its intermediate certificate: ask the administrator to install the full certificate chain and restart FileMaker Server.)`
       };
     case 'ERR_TLS_CERT_ALTNAME_INVALID':
       return {
