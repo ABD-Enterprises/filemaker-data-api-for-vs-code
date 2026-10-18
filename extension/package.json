@@ -337,6 +337,11 @@
         "category": "FileMaker"
       },
       {
+        "command": "filemakerDataApiTools.writeAiContext",
+        "title": "Write AI Context",
+        "category": "FileMaker"
+      },
+      {
         "command": "filemakerDataApiTools.generateTypesForLayout",
         "title": "Generate Types for Layout",
         "category": "FileMaker"
@@ -713,6 +718,10 @@
         },
         {
           "command": "filemakerDataApiTools.disconnect",
+          "when": "filemaker.hasProfiles"
+        },
+        {
+          "command": "filemakerDataApiTools.writeAiContext",
           "when": "filemaker.hasProfiles"
         },
         {
@@ -1162,6 +1171,13 @@
             "default": "sha256",
             "description": "Hash algorithm used for schema metadata fingerprinting.",
             "order": 5
+          },
+          "filemaker.ai.contextPath": {
+            "type": "string",
+            "default": "",
+            "scope": "application",
+            "markdownDescription": "Where **FileMaker: Write AI Context** writes its file. Empty (the default) writes to the extension's storage folder, outside any repository. A relative path is resolved against the first workspace folder; the file must stay inside the workspace or the extension storage folder (no `..`, no symbolic links, no `.git`). If the file already exists, only the section between `<!-- filemaker-ai-context:start -->` and `<!-- filemaker-ai-context:end -->` is replaced. This setting is read from your user settings only; a workspace or dev container cannot set it.",
+            "order": 6
           }
         }
       },

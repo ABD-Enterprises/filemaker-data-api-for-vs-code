@@ -14,6 +14,7 @@ import { registerPluginCommands } from './commands/plugins';
 import { registerRecordEditCommands } from './commands/recordEdit';
 import { registerSavedQueriesCommands } from './commands/savedQueries';
 import { registerSchemaCommands } from './commands/schema';
+import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
@@ -414,6 +415,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger
   });
 
+  const aiContextDisposables = registerAiContextCommands({
+    context,
+    profileStore,
+    fmClient,
+    schemaService,
+    logger
+  });
+
   const typeGenDisposables = registerTypeGenCommands({
     profileStore,
     fmClient,
@@ -515,6 +524,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ...scriptRunnerDisposables,
     ...recordEditDisposables,
     ...typeGenDisposables,
+    ...aiContextDisposables,
     ...batchDisposables,
     ...jobsDisposables,
     ...historyDisposables,
