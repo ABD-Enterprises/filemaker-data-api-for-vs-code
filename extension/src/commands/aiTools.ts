@@ -6,6 +6,7 @@ import type { AuditLog } from '../ai/aiAudit';
 import type { AiToolsController } from '../ai/aiRegistration';
 import {
   KILL_SWITCH_COMMAND,
+  NEW_SESSION_COMMAND,
   SET_ACCESS_COMMAND,
   SHOW_ACTIVITY_COMMAND,
   computeAiStatus
@@ -39,7 +40,13 @@ export class AiStatusBar implements vscode.Disposable {
   public async refresh(): Promise<void> {
     const settings = readAiSettings(vscode.workspace.getConfiguration('filemaker'));
     const profile = settings.connection ? await this.deps.profileStore.getProfile(settings.connection) : undefined;
-    const model = computeAiStatus(this.deps.service.listTools(), settings, this.deps.service.status(), profile?.username);
+    const model = computeAiStatus(
+      this.deps.service.listTools(),
+      settings,
+      this.deps.service.status(),
+      profile?.username,
+      profile?.aiAccess
+    );
     this.item.text = model.text;
     this.item.tooltip = model.tooltip;
   }
@@ -52,15 +59,44 @@ export class AiStatusBar implements vscode.Disposable {
 export function registerAiToolCommands(deps: Deps & { statusBar: AiStatusBar }): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand(KILL_SWITCH_COMMAND, async () => {
-      const killed = !deps.service.isKilled();
-      deps.service.setKilled(killed);
+      // Any caller can run this command (another extension, a keybinding), so switching OFF is
+      // immediate and switching back ON asks in a modal dialog.
+      if (deps.service.isKilled()) {
+        const choice = await vscode.window.showWarningMessage(
+          'Switch AI tools back on?',
+          { modal: true, detail: 'AI tools will be available again with the same session limits and layout approvals as before.' },
+          'Switch On'
+        );
+        if (choice !== 'Switch On') {
+          return;
+        }
+        deps.service.setKilled(false);
+      } else {
+        deps.service.setKilled(true);
+      }
       deps.controller.refresh();
       await deps.statusBar.refresh();
       void vscode.window.showInformationMessage(
-        killed
-          ? 'AI tools are switched off for this session.'
-          : 'AI tools are switched back on with a new session: counters and layout approvals were reset.'
+        deps.service.isKilled() ? 'AI tools are switched off.' : 'AI tools are switched back on.'
       );
+    }),
+
+    vscode.commands.registerCommand(NEW_SESSION_COMMAND, async () => {
+      const choice = await vscode.window.showWarningMessage(
+        'Start a new AI session?',
+        {
+          modal: true,
+          detail:
+            'This resets the record quota, the write counters and every layout approval. AI tools will ask again before reading a layout.'
+        },
+        'Start New Session'
+      );
+      if (choice !== 'Start New Session') {
+        return;
+      }
+      deps.service.resetSession();
+      await deps.statusBar.refresh();
+      void vscode.window.showInformationMessage('Started a new AI session.');
     }),
 
     vscode.commands.registerCommand(SHOW_ACTIVITY_COMMAND, async () => {

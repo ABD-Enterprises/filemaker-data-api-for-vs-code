@@ -180,15 +180,15 @@ describe('computeAiStatus', () => {
   const tools = (kinds: Array<'read' | 'write' | 'script'>) => AI_TOOL_DEFINITIONS.filter((tool) => kinds.includes(tool.kind));
 
   it('shows off, read-only, writes on and scripts on', () => {
-    expect(computeAiStatus([], { enabled: false }, state, undefined).text).toBe('$(circle-slash) AI: off');
-    expect(computeAiStatus(tools(['read']), { enabled: true }, state, 'svc').text).toBe('$(sparkle) AI: read-only');
-    expect(computeAiStatus(tools(['read', 'write']), { enabled: true }, state, 'svc').text).toBe('$(sparkle) AI: writes on');
-    expect(computeAiStatus(tools(['read', 'write', 'script']), { enabled: true }, state, 'svc').text).toBe('$(sparkle) AI: scripts on');
-    expect(computeAiStatus(tools(['read']), { enabled: true }, { ...state, killed: true }, 'svc').text).toBe('$(circle-slash) AI: off');
+    expect(computeAiStatus([], { enabled: false }, state, undefined, 'write').text).toBe('$(circle-slash) AI: off');
+    expect(computeAiStatus(tools(['read']), { enabled: true }, state, 'svc', 'write').text).toBe('$(sparkle) AI: read-only');
+    expect(computeAiStatus(tools(['read', 'write']), { enabled: true }, state, 'svc', 'write').text).toBe('$(sparkle) AI: writes on');
+    expect(computeAiStatus(tools(['read', 'write', 'script']), { enabled: true }, state, 'svc', 'write').text).toBe('$(sparkle) AI: scripts on');
+    expect(computeAiStatus(tools(['read']), { enabled: true }, { ...state, killed: true }, 'svc', 'write').text).toBe('$(circle-slash) AI: off');
   });
 
   it('shows the counters and the FileMaker account, with the account cleaned', () => {
-    const { tooltip } = computeAiStatus(tools(['read']), { enabled: true }, state, 'svc\nacct');
+    const { tooltip } = computeAiStatus(tools(['read']), { enabled: true }, state, 'svc\nacct', 'read');
     expect(tooltip).toContain('Records read this session: 3 of 500');
     expect(tooltip).toContain('Write attempts this session: 1 of 10');
     expect(tooltip).toContain('FileMaker account used: svc acct');

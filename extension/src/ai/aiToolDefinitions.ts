@@ -16,7 +16,11 @@ export interface AiToolDefinition {
 
 export const MAX_FIND_REQUESTS = 5;
 export const MAX_RECORDS_PER_CALL = 50;
-export const MAX_FIELDS_PER_WRITE = 20;
+/** Also the number of changes the write dialog shows: a write never sends a field the dialog hid. */
+export const MAX_FIELDS_PER_WRITE = 10;
+/** A written value is shown in the dialog in full, so it is capped to what the dialog can show. */
+export const MAX_WRITE_VALUE_CHARS = 300;
+export const MAX_SCRIPT_PARAMETER_CHARS = 200;
 
 const layoutProperty: JsonSchema = {
   type: 'string',
@@ -38,7 +42,7 @@ const dryRunProperty: JsonSchema = {
   type: 'boolean',
   description: 'When true, returns what would change and writes nothing.'
 };
-const fieldValue: JsonSchema = { type: 'string', maxLength: 10000 };
+const fieldValue: JsonSchema = { type: 'string', maxLength: MAX_WRITE_VALUE_CHARS };
 
 export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
   {
@@ -158,7 +162,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
     name: 'fm_edit_record',
     displayName: 'Edit FileMaker Record',
     modelDescription:
-      'Changes fields of ONE record. The user is shown the exact old and new values and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). Use dryRun to preview.',
+      'Changes fields of ONE record (at most 10 fields, each value at most 300 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.',
     userDescription: 'Changes fields of one record after you approve each change.',
     toolReferenceName: 'fmEditRecord',
     kind: 'write',
@@ -183,7 +187,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
     name: 'fm_create_record',
     displayName: 'Create FileMaker Record',
     modelDescription:
-      'Creates ONE record with the given field values. The user must approve every call. Fields must be on the layout itself. Use dryRun to preview.',
+      'Creates ONE record (at most 10 fields, each value at most 300 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.',
     userDescription: 'Creates one record after you approve it.',
     toolReferenceName: 'fmCreateRecord',
     kind: 'write',
@@ -203,7 +207,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
     name: 'fm_delete_record',
     displayName: 'Delete FileMaker Record',
     modelDescription:
-      'Deletes ONE record. The user sees the record and must type its id to confirm; they may refuse. This cannot be undone.',
+      'Deletes ONE record. The user sees the first 10 fields of the record and must type its id to confirm; they may refuse. This cannot be undone.',
     userDescription: 'Deletes one record after you type its id.',
     toolReferenceName: 'fmDeleteRecord',
     kind: 'write',
@@ -232,7 +236,7 @@ export const AI_TOOL_DEFINITIONS: readonly AiToolDefinition[] = [
       properties: {
         layout: layoutProperty,
         script: { type: 'string', minLength: 1, maxLength: 64 },
-        parameter: { type: 'string', maxLength: 1000 },
+        parameter: { type: 'string', maxLength: MAX_SCRIPT_PARAMETER_CHARS },
         description: descriptionProperty
       },
       required: ['layout', 'script'],

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import type { AiAccess } from '../types/fm';
 import type { AiSettings } from './aiSettings';
 import { AI_TOOL_DEFINITIONS, type AiToolDefinition } from './aiToolDefinitions';
 import type { AiToolService } from './aiToolService';
@@ -7,6 +8,7 @@ import type { AiToolService } from './aiToolService';
 export const KILL_SWITCH_COMMAND = 'filemakerDataApiTools.toggleAiKillSwitch';
 export const SHOW_ACTIVITY_COMMAND = 'filemakerDataApiTools.showAiActivity';
 export const SET_ACCESS_COMMAND = 'filemakerDataApiTools.setAiAccess';
+export const NEW_SESSION_COMMAND = 'filemakerDataApiTools.newAiSession';
 
 /** The part of `vscode.lm` this module uses; absent on an editor that predates the API. */
 export interface LanguageModelApi {
@@ -33,7 +35,9 @@ export function computeAiStatus(
   tools: readonly AiToolDefinition[],
   settings: Pick<AiSettings, 'enabled'>,
   state: { killed: boolean; recordsUsed: number; recordQuota: number; writesUsed: number; writeCap: number },
-  account: string | undefined
+  account: string | undefined,
+  /** What the chosen connection allows; the state shown is the effective one. */
+  access: AiAccess | undefined
 ): AiStatusModel {
   if (state.killed) {
     return { text: '$(circle-slash) AI: off', tooltip: 'AI tools are switched off for this session. Click to switch them back on.' };
@@ -42,11 +46,20 @@ export function computeAiStatus(
     return { text: '$(circle-slash) AI: off', tooltip: 'AI tools are not available (filemaker.ai.enabled, policy, trust or offline mode).' };
   }
 
-  const mode = tools.some((tool) => tool.kind === 'script')
-    ? 'scripts on'
-    : tools.some((tool) => tool.kind === 'write')
-      ? 'writes on'
-      : 'read-only';
+  if (access === undefined || access === 'none') {
+    return {
+      text: '$(circle-slash) AI: off (connection not enabled)',
+      tooltip: 'The connection chosen for AI is not enabled. Run "FileMaker: Set AI Access for Connection".'
+    };
+  }
+
+  // The connection decides: a profile set to "read" never allows writes, whatever the settings say.
+  const mode =
+    access === 'write' && tools.some((tool) => tool.kind === 'script')
+      ? 'scripts on'
+      : access === 'write' && tools.some((tool) => tool.kind === 'write')
+        ? 'writes on'
+        : 'read-only';
   return {
     text: `$(sparkle) AI: ${mode}`,
     tooltip: [

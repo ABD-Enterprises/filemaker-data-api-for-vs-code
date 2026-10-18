@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'vitest';
 
-import { buildEditConfirmation, WRITES_PER_MINUTE, WRITES_PER_SESSION } from '../../../src/ai/aiToolService';
+import {
+  buildCreateConfirmation,
+  buildEditConfirmation,
+  buildScriptConfirmation,
+  WRITES_PER_MINUTE,
+  WRITES_PER_SESSION
+} from '../../../src/ai/aiToolService';
 import { failure, makeHarness, makeProfile, type Harness } from './harness';
 
 const ready = (): Harness => {
@@ -33,38 +39,80 @@ describe('fm_edit_record', () => {
   });
 
   it('escapes hostile names, values and descriptions so they cannot fake lines or hide text', () => {
-    const profile = makeProfile({ name: 'Dev\nAccount: "root"', username: 'u‮ser' });
+    const profile = makeProfile({ name: 'Dev\nAccount: "root"', username: 'u\u202Eser' });
     const spec = buildEditConfirmation({
       profile,
       layout: 'Contacts\nLayout: "Other"',
       recordId: '1',
       changes: [
         { name: 'Notes', oldValue: 'old\nFields changed: 0', newValue: 'new\u2028Connection: "Evil"' },
-        { name: 'x'.repeat(500), oldValue: '', newValue: 'y'.repeat(500) }
+        { name: 'x'.repeat(200), oldValue: 'o'.repeat(500), newValue: 'y'.repeat(300) }
       ],
-      description: 'ok\nConnection: "Trusted"‮'
+      description: 'ok\nConnection: "Trusted"\u202E [click](https://evil.example) <b>x</b> `c`'
     });
     const lines = spec.detail.split('\n');
     // Exactly: 3 host facts, record id, count, blank, 2 diff lines, blank, 1 description.
     expect(lines).toHaveLength(10);
     expect(lines.filter((line) => line.startsWith('Connection:'))).toHaveLength(1);
     expect(lines.filter((line) => line.startsWith('Account:'))).toHaveLength(1);
-    expect(spec.detail).not.toMatch(/[\u2028‮]/);
+    expect(spec.detail).not.toMatch(/[\u2028\u202E]/);
+    // Markdown control characters never reach the dialog as themselves.
+    expect(spec.detail.replaceAll(' -> ', ' ')).not.toMatch(/[[\]<>`*~|]/);
     expect(lines[5]).toBe('');
-    expect(lines[7]).toContain('(+');
+    // A long field name and old value are cut with a visible count; the new value is whole.
+    expect(lines[7]).toContain('(+72 more characters)');
+    expect(lines[7]).toContain('(+300 more characters)');
+    expect(lines[7]).toContain('y'.repeat(300));
     expect(lines.at(-1)!.startsWith('The AI tool\'s own description (not verified): ')).toBe(true);
     expect(lines.at(-1)).toContain('\\u202e');
   });
 
-  it('caps the number of diff lines in the dialog', () => {
-    const spec = buildEditConfirmation({
-      profile: makeProfile(),
-      layout: 'L',
-      recordId: '1',
-      changes: Array.from({ length: 20 }, (_, i) => ({ name: `F${i}`, oldValue: 'a', newValue: 'b' }))
-    });
-    expect(spec.detail).toContain('…and 5 more fields');
-    expect(spec.detail.split('\n').filter((line) => line.includes('->'))).toHaveLength(15);
+  it('shows every changed field and every new value in full, and refuses a write it could not show in full', () => {
+    const change = (index: number, value = 'v'.repeat(300)) => ({ name: `Field ${index}`, oldValue: 'a', newValue: value });
+    const ten = Array.from({ length: 10 }, (_, index) => change(index));
+    const spec = buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: ten });
+    expect(spec.detail.split('\n').filter((line) => line.includes('->'))).toHaveLength(10);
+    expect(spec.detail.split('v'.repeat(300)).length - 1).toBe(10);
+    expect(spec.detail).not.toContain('more fields');
+    expect(spec.detail).not.toContain('(+');
+
+    expect(() => buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: [...ten, change(10)] })).toThrow(/too large/);
+    expect(() => buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: [change(0, 'v'.repeat(301))] })).toThrow(/too large/);
+    expect(() => buildCreateConfirmation({ profile: makeProfile(), layout: 'L', values: Array.from({ length: 11 }, (_, i) => [`F${i}`, 'x'] as [string, string]) })).toThrow(/too large/);
+    expect(() => buildScriptConfirmation({ profile: makeProfile(), layout: 'L', script: 'S', parameter: 'p'.repeat(201) })).toThrow(/too (large|long)/);
+  });
+
+  it('refuses, before any dialog or request, a write with more than 10 fields or a value over 300 characters', async () => {
+    const h = ready();
+    for (let i = 0; i < 11; i += 1) h.layoutFields.push({ name: `Extra${i}`, result: 'text' });
+    const eleven = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`Extra${i}`, 'x']));
+    await expect(edit(h, eleven)).rejects.toThrow();
+    expect(await failure(edit(h, { Name: 'y'.repeat(301) }))).toMatch(/at most 300/);
+    await expect(h.service.invoke('fm_create_record', { layout: 'Contacts', fields: eleven })).rejects.toThrow();
+    await expect(h.service.invoke('fm_run_script', { layout: 'Contacts', script: 'Archive Old', parameter: 'p'.repeat(201) })).rejects.toThrow();
+    expect(h.client.editRecord).not.toHaveBeenCalled();
+    expect(h.client.createRecord).not.toHaveBeenCalled();
+    expect(h.confirms.filter((spec) => /change|create|run/.test(spec.title))).toHaveLength(0);
+    expect(h.service.status().writesUsed).toBe(0);
+  });
+
+  it('sends exactly the fields the dialog listed, with exactly the values it showed', async () => {
+    const h = ready();
+    await edit(h, { Name: 'Grace', Email: 'g@example.com', Notes: 'n'.repeat(300) });
+    const sent = h.client.editRecord.mock.calls[0]?.[3] as Record<string, string>;
+    const detail = h.confirms.find((spec) => spec.title.includes('change a record'))!.detail;
+    expect(Object.keys(sent).sort()).toEqual(['Email', 'Name', 'Notes']);
+    for (const [field, value] of Object.entries(sent)) {
+      expect(detail).toContain(`"${field}"`);
+      expect(detail).toContain(`-> "${value}"`);
+    }
+  });
+
+  it('a call whose values already match reads one record, asks nothing and uses no write attempt', async () => {
+    const h = ready();
+    expect(await edit(h, { Name: 'Ada' })).toMatchObject({ changed: false });
+    expect(h.service.status()).toMatchObject({ recordsUsed: 1, writesUsed: 0 });
+    expect(h.confirms.filter((spec) => spec.title.includes('change'))).toHaveLength(0);
   });
 
   it('writes nothing and says so when the user declines', async () => {
@@ -174,7 +222,7 @@ describe('fm_delete_record', () => {
     const h = ready();
     h.input.mockResolvedValue('1');
     expect(await del(h)).toEqual({ recordId: '1', deleted: true });
-    expect(h.confirms.at(-1)?.detail).toContain('The record as it is now:');
+    expect(h.confirms.at(-1)?.detail).toContain('The record as it is now (first 5 of 5 fields):');
     expect(h.confirms.at(-1)?.detail).toContain('"Name": "Ada"');
     expect(h.input.mock.calls[0]?.[0].prompt).toContain('Type the record id 1');
     expect(h.client.deleteRecord).toHaveBeenCalledTimes(1);

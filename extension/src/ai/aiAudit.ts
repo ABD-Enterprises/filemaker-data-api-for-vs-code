@@ -1,7 +1,8 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
 import { dirname } from 'path';
 
-import { displayText } from './aiText';
+import { redactString } from '../utils/redact';
+import { displayText, scrubGenericText } from './aiText';
 
 export const AUDIT_MAX_BYTES = 256 * 1024;
 const AUDIT_MAX_LINE = 2000;
@@ -35,13 +36,31 @@ export function formatAuditLine(entry: AuditEntry, at: Date): string {
     recordIds: entry.recordIds?.slice(0, 50).map((id) => displayText(id, 20)),
     outcome: entry.outcome,
     confirmed: entry.confirmed,
-    note: safe(entry.note, 200)
+    note: safe(entry.note === undefined ? undefined : scrubGenericText(redactString(entry.note)), 200)
   });
   return line.length > AUDIT_MAX_LINE ? `${line.slice(0, AUDIT_MAX_LINE)}…` : line;
 }
 
-/** Append-only activity log in extension storage (never the workspace), size-capped. */
+const WRITE_TOOLS = new Set(['fm_edit_record', 'fm_create_record', 'fm_delete_record', 'fm_run_script']);
+
+/** A line worth keeping when the file has to shrink: a write or script attempt. */
+function isWriteLine(line: string): boolean {
+  try {
+    const parsed = JSON.parse(line) as { tool?: unknown };
+    return typeof parsed.tool === 'string' && WRITE_TOOLS.has(parsed.tool);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Append-only activity log in extension storage (never the workspace), size-capped. Every
+ * operation goes through one promise queue, so two calls can neither interleave an append
+ * with a trim nor race on the temporary file.
+ */
 export class AuditLog {
+  private queue: Promise<void> = Promise.resolve();
+
   public constructor(
     private readonly pathSource: string | (() => string),
     private readonly now: () => Date = () => new Date(),
@@ -52,17 +71,23 @@ export class AuditLog {
     return typeof this.pathSource === 'function' ? this.pathSource() : this.pathSource;
   }
 
-  public async record(entry: AuditEntry): Promise<void> {
-    try {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await appendFile(this.filePath, `${formatAuditLine(entry, this.now())}\n`, { encoding: 'utf8', mode: 0o600 });
-      await this.trim();
-    } catch {
-      // A full disk or a read-only folder must not turn a tool call into a failure.
-    }
+  public record(entry: AuditEntry): Promise<void> {
+    const line = `${formatAuditLine(entry, this.now())}\n`;
+    const task = this.queue.then(async () => {
+      try {
+        await mkdir(dirname(this.filePath), { recursive: true });
+        await appendFile(this.filePath, line, { encoding: 'utf8', mode: 0o600 });
+        await this.trim();
+      } catch {
+        // A full disk or a read-only folder must not turn a tool call into a failure.
+      }
+    });
+    this.queue = task;
+    return task;
   }
 
   public async read(): Promise<string> {
+    await this.queue;
     try {
       return await readFile(this.filePath, 'utf8');
     } catch {
@@ -70,21 +95,34 @@ export class AuditLog {
     }
   }
 
-  /** Keeps the newest lines when the file is over the cap. */
+  /**
+   * Shrinks an over-cap file to half the cap. Reads, refusals and other non-write lines go
+   * first (oldest first), so a burst of noise cannot push write attempts out; if the write
+   * lines alone are still too many, the oldest of those go too.
+   */
   private async trim(): Promise<void> {
     const { size } = await stat(this.filePath);
     if (size <= this.maxBytes) {
       return;
     }
 
-    const text = await readFile(this.filePath, 'utf8');
-    const lines = text.split('\n').filter((line) => line.length > 0);
-    let kept = lines.slice(Math.floor(lines.length / 2));
-    while (kept.length > 1 && Buffer.byteLength(kept.join('\n'), 'utf8') > this.maxBytes / 2) {
-      kept = kept.slice(1);
+    const lines = (await readFile(this.filePath, 'utf8')).split('\n').filter((line) => line.length > 0);
+    const target = this.maxBytes / 2;
+    const bytes = (list: string[]): number => list.reduce((total, line) => total + Buffer.byteLength(line, 'utf8') + 1, 0);
+    const keep = lines.map(() => true);
+    let total = bytes(lines);
+
+    for (const writesOnly of [false, true]) {
+      for (let index = 0; index < lines.length && total > target; index += 1) {
+        if (keep[index] && (writesOnly || !isWriteLine(lines[index] as string))) {
+          keep[index] = false;
+          total -= Buffer.byteLength(lines[index] as string, 'utf8') + 1;
+        }
+      }
     }
+
     const temporary = `${this.filePath}.tmp`;
-    await writeFile(temporary, `${kept.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
+    await writeFile(temporary, `${lines.filter((_line, index) => keep[index]).join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
     await rename(temporary, this.filePath);
   }
 }

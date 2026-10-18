@@ -154,15 +154,19 @@ describe('per-call policy', () => {
     expect(message).toMatch(/request failed/);
   });
 
-  it('turning the kill switch back on starts a new session: counters and approvals are reset', async () => {
+  it('switching the kill switch off and on does NOT reset counters or approvals; only resetSession does', async () => {
     const h = makeHarness();
     await h.service.invoke('fm_describe_layout', { layout: 'Contacts' });
-    expect(h.confirm).toHaveBeenCalledTimes(1);
     await h.service.invoke('fm_get_record', { layout: 'Contacts', recordId: '1' });
     expect(h.service.status().recordsUsed).toBe(1);
 
     h.service.setKilled(true);
     h.service.setKilled(false);
+    expect(h.service.status().recordsUsed).toBe(1);
+    await h.service.invoke('fm_describe_layout', { layout: 'Contacts' });
+    expect(h.confirm).toHaveBeenCalledTimes(1);
+
+    h.service.resetSession();
     expect(h.service.status().recordsUsed).toBe(0);
     await h.service.invoke('fm_describe_layout', { layout: 'Contacts' });
     expect(h.confirm).toHaveBeenCalledTimes(2);

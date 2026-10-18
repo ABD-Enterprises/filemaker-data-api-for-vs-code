@@ -47,13 +47,33 @@ describe('AI commands', () => {
     (vscode as unknown as { ConfigurationTarget: { Global: number } }).ConfigurationTarget.Global = 1;
   });
 
-  it('the kill switch turns tools off, then back on with a new session', async () => {
+  it('the kill switch turns tools off at once, and asks in a modal before turning them back on', async () => {
     await command('filemakerDataApiTools.toggleAiKillSwitch')();
     expect(h.service.isKilled()).toBe(true);
     await expect(h.service.invoke('fm_list_layouts', {})).rejects.toThrow(/switched off/);
+
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(undefined as never); // dismissed
+    await command('filemakerDataApiTools.toggleAiKillSwitch')();
+    expect(h.service.isKilled()).toBe(true);
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls.at(-1)?.[1]).toMatchObject({ modal: true });
+
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Switch On' as never);
     await command('filemakerDataApiTools.toggleAiKillSwitch')();
     expect(h.service.isKilled()).toBe(false);
     await expect(h.service.invoke('fm_list_layouts', {})).resolves.toBeDefined();
+  });
+
+  it('a new session resets counters and approvals only after the user confirms', async () => {
+    await h.service.invoke('fm_describe_layout', { layout: 'Contacts' });
+    await h.service.invoke('fm_get_record', { layout: 'Contacts', recordId: '1' });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(undefined as never);
+    await command('filemakerDataApiTools.newAiSession')();
+    expect(h.service.status().recordsUsed).toBe(1);
+
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Start New Session' as never);
+    await command('filemakerDataApiTools.newAiSession')();
+    expect(h.service.status().recordsUsed).toBe(0);
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls.at(-1)?.[1]).toMatchObject({ modal: true });
   });
 
   it('shows the activity log in an untitled document, or a note when it is empty', async () => {

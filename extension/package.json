@@ -511,6 +511,11 @@
         "command": "filemakerDataApiTools.showAiActivity",
         "title": "Show AI Activity",
         "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.newAiSession",
+        "title": "Start New AI Session",
+        "category": "FileMaker"
       }
     ],
     "menus": {
@@ -950,6 +955,10 @@
         },
         {
           "command": "filemakerDataApiTools.showAiActivity",
+          "when": "filemaker.ai.active"
+        },
+        {
+          "command": "filemakerDataApiTools.newAiSession",
           "when": "filemaker.ai.active"
         }
       ]
@@ -1652,7 +1661,7 @@
       {
         "name": "fm_edit_record",
         "displayName": "Edit FileMaker Record",
-        "modelDescription": "Changes fields of ONE record. The user is shown the exact old and new values and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). Use dryRun to preview.",
+        "modelDescription": "Changes fields of ONE record (at most 10 fields, each value at most 300 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.",
         "userDescription": "Changes fields of one record after you approve each change.",
         "toolReferenceName": "fmEditRecord",
         "canBeReferencedInPrompt": true,
@@ -1677,10 +1686,10 @@
             },
             "fields": {
               "type": "object",
-              "maxProperties": 20,
+              "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 10000
+                "maxLength": 300
               }
             },
             "description": {
@@ -1704,7 +1713,7 @@
       {
         "name": "fm_create_record",
         "displayName": "Create FileMaker Record",
-        "modelDescription": "Creates ONE record with the given field values. The user must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
+        "modelDescription": "Creates ONE record (at most 10 fields, each value at most 300 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
         "userDescription": "Creates one record after you approve it.",
         "toolReferenceName": "fmCreateRecord",
         "canBeReferencedInPrompt": true,
@@ -1724,10 +1733,10 @@
             },
             "fields": {
               "type": "object",
-              "maxProperties": 20,
+              "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 10000
+                "maxLength": 300
               }
             },
             "description": {
@@ -1750,7 +1759,7 @@
       {
         "name": "fm_delete_record",
         "displayName": "Delete FileMaker Record",
-        "modelDescription": "Deletes ONE record. The user sees the record and must type its id to confirm; they may refuse. This cannot be undone.",
+        "modelDescription": "Deletes ONE record. The user sees the first 10 fields of the record and must type its id to confirm; they may refuse. This cannot be undone.",
         "userDescription": "Deletes one record after you type its id.",
         "toolReferenceName": "fmDeleteRecord",
         "canBeReferencedInPrompt": true,
@@ -1818,7 +1827,7 @@
             },
             "parameter": {
               "type": "string",
-              "maxLength": 1000
+              "maxLength": 200
             },
             "description": {
               "type": "string",

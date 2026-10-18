@@ -65,6 +65,8 @@ export interface Harness {
   >;
   schema: { getLayoutSchema: ReturnType<typeof vi.fn> };
   layoutFields: Array<{ name: string; result?: string }>;
+  profiles: Map<string, ConnectionProfile>;
+  getProfile: ReturnType<typeof vi.fn>;
 }
 
 /** A tool core wired to in-memory fakes. Every dependency is a vi.fn so tests can assert calls. */
@@ -123,6 +125,9 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
     getLayoutSchema: vi.fn(async () => ({ supported: true, fromCache: false, fields: layoutFields }))
   };
 
+  const profiles = new Map<string, ConnectionProfile>([[profile.id, profile]]);
+  const getProfile = vi.fn(async (id: string) => profiles.get(id));
+
   const deps: AiToolDeps = {
     settings: () => settings,
     featureSwitchOn: () => state.featureSwitch,
@@ -130,7 +135,7 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
       state.denyFeatures.has(feature) ? { allowed: false, reason: `${feature} is disabled by policy.` } : { allowed: true },
     isTrusted: () => state.trusted,
     isOffline: () => state.offline,
-    getProfile: async (id) => (id === profile.id ? profile : undefined),
+    getProfile,
     client: client as never,
     schema: schema as never,
     ui: { confirm, input },
@@ -138,7 +143,7 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
     now: () => state.now
   };
 
-  return { service: new AiToolService(deps), settings, profile, records, audit, confirms, state, confirm, input, client, schema, layoutFields };
+  return { service: new AiToolService(deps), profiles, getProfile, settings, profile, records, audit, confirms, state, confirm, input, client, schema, layoutFields };
 }
 
 /** Runs a call that should fail and returns its message. */

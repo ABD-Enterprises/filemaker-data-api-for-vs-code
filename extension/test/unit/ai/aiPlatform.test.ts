@@ -87,11 +87,13 @@ describe('profile aiAccess', () => {
     expect((await store.getProfile('a'))?.aiAccess).toBeUndefined();
   });
 
-  it('a profile saved with write keeps it when the lenient hydration re-reads it', async () => {
+  it('saving refuses a server address with credentials, and a profile stored that way before keeps its access when read back', async () => {
     const memento = new InMemoryMemento();
     const store = new ProfileStore(memento as never, new InMemoryMemento() as never);
-    await store.upsertProfile({ ...base, aiAccess: 'write', serverUrl: 'https://user:pw@fm.example.com' } as never).catch(() => undefined);
-    await store.upsertProfile({ ...base, aiAccess: 'write' });
+    await expect(store.upsertProfile({ ...base, aiAccess: 'write', serverUrl: 'https://user:pw@fm.example.com' })).rejects.toThrow();
+    await memento.update('filemakerDataApiTools.profiles', [{ ...base, aiAccess: 'write', serverUrl: 'https://user:pw@fm.example.com' }]);
     expect((await store.listProfiles())[0]?.aiAccess).toBe('write');
+    await store.upsertProfile({ ...base, id: 'ok', aiAccess: 'write' });
+    expect((await store.getProfile('ok'))?.aiAccess).toBe('write');
   });
 });
