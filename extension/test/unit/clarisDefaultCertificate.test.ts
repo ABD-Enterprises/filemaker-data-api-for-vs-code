@@ -13,7 +13,7 @@ import { InMemorySecretStorage } from './mocks';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const PLAIN =
-  "This server uses a certificate that is not trusted (FileMaker Server's default certificate is self-signed). You can trust this certificate in the wizard, or install a certificate from a public authority on the server.";
+  "This server uses a certificate that is not trusted: FileMaker Server's default certificate is self-signed. You can trust this certificate, or install a certificate from a public authority on the server.";
 
 /**
  * FileMaker Server's default certificate, as seen in the field: the leaf is "Claris Self Signed
@@ -70,6 +70,8 @@ describe("FileMaker Server's default certificate", () => {
     expect(error.networkCode).toBe('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
     expect(error.kind).toBe('certificate');
     expect(error.message.startsWith(PLAIN)).toBe(true);
+    expect(error.message).not.toMatch(/\(.*\(/); // no nested parentheses
+    expect(error.message).not.toMatch(/wizard/); // the same text is shown in a notification
     expect(error.isRetryable).toBe(false);
     expect(server.requests).toHaveLength(0);
   });
@@ -96,7 +98,7 @@ describe("FileMaker Server's default certificate", () => {
     expect(decision).toEqual({ sha256: normalizeSha256(leaf.fingerprint256), allowExpired: false });
     expect(seen.join('\n')).toContain('Claris Self Signed Certificate');
     expect(seen.join('\n')).toContain('Claris Root Authority');
-    expect(seen.join('\n')).toContain(PLAIN.slice(0, 40));
+    expect(seen.join('\n')).toContain('not trusted by this computer');
 
     const pinned = withPinnedCertificate(
       { id: 'p1', name: 'Claris', authMode: 'direct', serverUrl: `https://localhost:${server.port}`, database: 'Sales', username: 'u' },

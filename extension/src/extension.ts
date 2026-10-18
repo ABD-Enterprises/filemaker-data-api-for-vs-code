@@ -80,6 +80,10 @@ function createLazyFmClient(
         return (profileId: string): boolean => getLoadedClient()?.isSignInPaused(profileId) ?? false;
       }
 
+      if (property === 'forgetProfile') {
+        return (profileId: string): void => getLoadedClient()?.forgetProfile(profileId);
+      }
+
       if (property === 'clearAuthPause') {
         return (profileId: string): void => getLoadedClient()?.clearAuthPause(profileId);
       }

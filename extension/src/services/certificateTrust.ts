@@ -1,28 +1,11 @@
-import * as tls from 'tls';
-
 import * as vscode from 'vscode';
 
 import type { ConnectionProfile } from '../types/fm';
 import { describeNetworkFailure, targetOfUrl } from '../utils/networkErrors';
+import { certificateTargetUrl, formatFingerprint, inspectServerCertificate, type ServerCertificateInfo } from './certificateInspect';
 import { normalizeSha256 } from './tlsAgent';
 
-/** What a server presented during the TLS handshake. Read without sending any request. */
-export interface ServerCertificateInfo {
-  host: string;
-  port: string;
-  subject: string;
-  issuer: string;
-  altNames: string[];
-  validFrom: string;
-  validTo: string;
-  /** SHA-256 fingerprint as 64 lower-case hex digits. */
-  sha256: string;
-  expired: boolean;
-  notYetValid: boolean;
-  selfSigned: boolean;
-  /** The reason OpenSSL gave for not trusting it by the normal rules, if any. */
-  verifyError?: string;
-}
+export { certificateTargetUrl, inspectServerCertificate, type ServerCertificateInfo };
 
 export interface TrustDecision {
   sha256: string;
@@ -30,94 +13,29 @@ export interface TrustDecision {
   allowExpired: boolean;
 }
 
-/** The address a TLS handshake goes to: the proxy in proxy mode, otherwise the server. https only. */
-export function certificateTargetUrl(profile: Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>): string | undefined {
-  const url = profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl;
-  return url && /^https:/i.test(url) ? url : undefined;
-}
-
-function nameOf(value: unknown): string {
-  if (!value || typeof value !== 'object') {
-    return '';
-  }
-  const record = value as Record<string, string | string[]>;
-  const parts: string[] = [];
-  for (const key of ['CN', 'O', 'OU', 'C']) {
-    const entry = record[key];
-    if (entry) {
-      parts.push(`${key}=${Array.isArray(entry) ? entry.join('+') : entry}`);
-    }
-  }
-  return parts.join(', ');
-}
+const MAX_FIELD_CHARS = 160;
 
 /**
- * Connects, completes the TLS handshake without verifying anything, reads the certificate the
- * server presents and closes. No request, header or credential is sent.
+ * Certificate text comes from the server, so before it goes into a dialog it is stripped of control
+ * characters (line breaks that could fake extra lines, bidirectional overrides that could reorder
+ * the text), cut to a sensible length and shown as a quoted JSON string.
  */
-export function inspectServerCertificate(url: string, timeoutMs = 8000): Promise<ServerCertificateInfo> {
-  const target = targetOfUrl(url);
-  const host = target.host ?? '';
-  const port = target.port || '443';
-  return new Promise((resolve, reject) => {
-    const socket = tls.connect({
-      host,
-      port: Number(port),
-      servername: /^[\d.]+$|:/.test(host) ? undefined : host,
-      rejectUnauthorized: false,
-      timeout: timeoutMs
-    });
-    const fail = (error: Error): void => {
-      socket.destroy();
-      reject(error);
-    };
-    socket.once('timeout', () => fail(Object.assign(new Error('Timed out reading the certificate.'), { code: 'ETIMEDOUT' })));
-    socket.once('error', fail);
-    socket.once('secureConnect', () => {
-      const certificate = socket.getPeerCertificate(false);
-      const verifyError = socket.authorizationError ? String(socket.authorizationError) : undefined;
-      socket.end();
-      const sha256 = normalizeSha256(certificate.fingerprint256);
-      if (!sha256) {
-        reject(new Error('The server did not present a certificate.'));
-        return;
-      }
-      const from = Date.parse(certificate.valid_from);
-      const to = Date.parse(certificate.valid_to);
-      const subject = nameOf(certificate.subject);
-      const issuer = nameOf(certificate.issuer);
-      resolve({
-        host,
-        port,
-        subject,
-        issuer,
-        altNames: (certificate.subjectaltname ?? '')
-          .split(',')
-          .map((entry) => entry.trim())
-          .filter(Boolean),
-        validFrom: certificate.valid_from,
-        validTo: certificate.valid_to,
-        sha256,
-        expired: !Number.isNaN(to) && Date.now() > to,
-        notYetValid: !Number.isNaN(from) && Date.now() < from,
-        selfSigned: subject !== '' && subject === issuer,
-        verifyError
-      });
-    });
-  });
-}
-
-/** Fingerprint in the groups people compare: `AB:CD:...`. */
-export function formatFingerprint(sha256: string): string {
-  return sha256.toUpperCase().replace(/(..)(?=.)/g, '$1:');
+export function quoteCertificateText(value: string): string {
+  const cleaned = value
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const cut = cleaned.length > MAX_FIELD_CHARS ? `${cleaned.slice(0, MAX_FIELD_CHARS)}…` : cleaned;
+  return JSON.stringify(cut);
 }
 
 export function describeCertificate(info: ServerCertificateInfo): string {
-  const names = info.altNames.slice(0, 6).join(', ') + (info.altNames.length > 6 ? `, and ${info.altNames.length - 6} more` : '');
+  const names = info.altNames.slice(0, 6).map(quoteCertificateText).join(', ') + (info.altNames.length > 6 ? `, and ${info.altNames.length - 6} more` : '');
   return [
-    `Server: ${info.host}${info.port === '443' ? '' : `:${info.port}`}`,
-    `Subject: ${info.subject || '(none)'}`,
-    `Issuer: ${info.issuer || '(none)'}${info.selfSigned ? ' (self-signed)' : ''}`,
+    `Server: ${quoteCertificateText(`${info.host}${info.port === '443' ? '' : `:${info.port}`}`)}`,
+    `Subject: ${info.subject ? quoteCertificateText(info.subject) : '(none)'}`,
+    `Issuer: ${info.issuer ? quoteCertificateText(info.issuer) : '(none)'}${info.selfSigned ? ' (self-signed)' : ''}`,
     `Names: ${names || '(none listed)'}`,
     `Valid: ${info.validFrom} to ${info.validTo}${info.expired ? '  EXPIRED' : info.notYetValid ? '  NOT VALID YET' : ''}`,
     `SHA-256: ${formatFingerprint(info.sha256)}`

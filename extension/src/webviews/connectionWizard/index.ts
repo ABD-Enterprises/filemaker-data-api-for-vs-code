@@ -645,6 +645,15 @@ export class ConnectionWizardPanel {
       });
       return;
     }
+    // Same rule as for saving or testing: an address that came from the workspace's profile template
+    // is confirmed first (the review connects to it).
+    if (!(await this.confirmCredentialTargets([target.value, serverValidation.value]))) {
+      await this.panel.webview.postMessage({
+        type: 'saveError',
+        message: 'Not reviewed: you did not confirm the server address.'
+      });
+      return;
+    }
     const decision = await reviewAndTrustCertificate(
       {
         name: data.name || 'this connection',
@@ -814,6 +823,8 @@ export class ConnectionWizardPanel {
         await this.secretStore.deletePassword(testId);
         await this.secretStore.deleteProxyApiKey(testId);
         await this.secretStore.deleteSessionToken(testId);
+        // The throwaway test profile must not linger in the client's pause and health tables.
+        this.fmClient.forgetProfile?.(testId);
       } catch (error) {
         this.logger.warn('Could not remove temporary test credentials.', { error });
       }

@@ -33,6 +33,8 @@ import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
+import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
+import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { httpsTransportFor } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
@@ -74,6 +76,11 @@ interface ClientRequestControl {
    * renews that pause.
    */
   userInitiated?: boolean;
+  /**
+   * A renewal ahead of expiry while the current token is still valid. If it fails, nothing is
+   * paused and the caller keeps using the token it has.
+   */
+  proactive?: boolean;
   /** For list, get and find calls: refuse a response body larger than this many bytes. */
   maxResponseBytes?: number;
 }
@@ -123,7 +130,6 @@ export interface EditRecordOptions {
   modId?: string;
 }
 
-/** FileMaker reports "no records match the request" as error code 401 (seen as HTTP 404 or 500). */
 /** `{ scriptErrors }` to spread into a result, or nothing when no script reported an error. */
 function scriptErrorsOf(response: unknown): { scriptErrors?: ReturnType<typeof extractScriptErrors> } {
   const scriptErrors = extractScriptErrors(response);
@@ -136,9 +142,12 @@ function credentialStamp(profile: ConnectionProfile, username: string, password:
     .digest('hex');
 }
 
+/**
+ * FileMaker reports "no records match the request" as error code 401. It is matched on that code,
+ * whatever the HTTP status: Claris documents business errors as HTTP 500 and says nothing about 404
+ * for this case, and servers differ.
+ */
 function isNoRecordsFound(error: unknown): boolean {
-  // Matched on FileMaker's own code, whatever the HTTP status: Claris documents business errors as
-  // HTTP 500 and says nothing about 404 for this case, and servers differ.
   return error instanceof FMClientError && error.code === '401';
 }
 
@@ -160,6 +169,12 @@ export class FMClient {
    * user runs Connect / Test Connection.
    */
   private readonly authPauses = new Map<string, AuthPause>();
+  /**
+   * Profiles whose last renewal ahead of expiry failed: no more of those are tried (each would be
+   * another failed login) until a sign-in succeeds. The current token is used until the server
+   * rejects it, and that rejection starts a real renewal, which can set a pause.
+   */
+  private readonly proactiveSuspended = new Set<string>();
   /** Profiles told "no free sessions" (956): automatic sign-ins wait, with growing delays. */
   private readonly sessionLimitBackoff = new Map<string, { until: number; attempts: number }>();
   private readonly timeoutMs: number;
@@ -285,6 +300,7 @@ export class FMClient {
           this.invalidateProfileCache(profile.id);
           this.authPauses.delete(profile.id);
           this.sessionLimitBackoff.delete(profile.id);
+          this.proactiveSuspended.delete(profile.id);
 
           return token;
         } catch (error) {
@@ -295,8 +311,10 @@ export class FMClient {
               endpoint: 'POST /sessions'
             })
           );
-          this.recordSignInFailure(profile, stamp, failure);
-          throw failure;
+          if (control?.proactive !== true) {
+            this.recordSignInFailure(profile, stamp, failure);
+          }
+          throw await this.refineCertificateError(profile, failure);
         }
       }
     );
@@ -1064,7 +1082,10 @@ export class FMClient {
       });
       return parseDataApiEnvelope<TResponse>(response);
     } catch (error) {
-      throw toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }));
+      throw await this.refineCertificateError(
+        profile,
+        toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }))
+      );
     }
   }
 
@@ -1102,6 +1123,49 @@ export class FMClient {
       if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutMetadataEtags.delete(key);
       }
+    }
+  }
+
+  /**
+   * When the certificate was refused because this computer does not trust its issuer, look at what
+   * the server presents (one extra handshake, no request) and, if it is FileMaker Server's own
+   * default certificate, say so in the message. Best effort: any problem returns the error as it was.
+   */
+  private async refineCertificateError(profile: ConnectionProfile, failure: FMClientError): Promise<FMClientError> {
+    const untrusted = new Set([
+      'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+      'UNABLE_TO_GET_ISSUER_CERT',
+      'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+      'DEPTH_ZERO_SELF_SIGNED_CERT',
+      'SELF_SIGNED_CERT_IN_CHAIN'
+    ]);
+    if (failure.kind !== 'certificate' || !failure.networkCode || !untrusted.has(failure.networkCode)) {
+      return failure;
+    }
+    const url = certificateTargetUrl(profile);
+    if (!url) {
+      return failure;
+    }
+    try {
+      const info = await inspectServerCertificate(url, 2500);
+      if (!isFileMakerDefaultCertificate(info)) {
+        return failure;
+      }
+      const better = describeNetworkFailure(failure.networkCode, { ...targetOfUrl(url), fileMakerDefaultCertificate: true });
+      return better
+        ? new FMClientError(better.message, {
+            status: failure.status,
+            code: failure.code,
+            networkCode: failure.networkCode,
+            kind: failure.kind,
+            isRetryable: failure.isRetryable,
+            details: failure.details,
+            requestId: failure.requestId,
+            endpoint: failure.endpoint
+          })
+        : failure;
+    } catch {
+      return failure;
     }
   }
 
@@ -1175,6 +1239,20 @@ export class FMClient {
   public clearAuthPause(profileId: string): void {
     this.authPauses.delete(profileId);
     this.sessionLimitBackoff.delete(profileId);
+    this.proactiveSuspended.delete(profileId);
+  }
+
+  /**
+   * Forgets everything held for a profile id that is no longer used (the throwaway profile behind a
+   * Test Connection): pause, backoff, health and token timing.
+   */
+  public forgetProfile(profileId: string): void {
+    this.authPauses.delete(profileId);
+    this.sessionLimitBackoff.delete(profileId);
+    this.proactiveSuspended.delete(profileId);
+    this.sessionTracker.clear(profileId);
+    this.inFlightRefresh.delete(profileId);
+    this.setHealth(profileId, undefined);
   }
 
   /** True while automatic sign-ins are paused for this profile because FileMaker rejected its credentials. */
@@ -1189,7 +1267,7 @@ export class FMClient {
         this.authPauses.delete(profile.id);
       } else {
         throw new FMClientError(
-          `Sign-in is paused: FileMaker rejected the saved credentials (error ${pause.code}) and the extension will not try again on its own, so repeated attempts cannot lock the account. Edit the connection to fix the account or password, or run "FileMaker: Connect".`,
+          `Sign-in is paused: FileMaker rejected the saved credentials (error ${pause.code}) and the extension will not try again on its own, so repeated attempts cannot lock the account.${pause.code === '214' ? ' Error 214 can be a temporary lockout: wait a while before trying again.' : ''} Edit the connection to fix the account or password, or run "FileMaker: Connect".`,
           {
             code: pause.code,
             kind: 'auth',
@@ -1206,7 +1284,7 @@ export class FMClient {
       const seconds = Math.ceil((wait.until - this.now()) / 1000);
       throw new FMClientError(
         `FileMaker has no free Data API sessions. Waiting ${seconds} s before signing in again (run "FileMaker: Connect" to try now), or ask the administrator to disconnect idle clients.`,
-        { code: '956', kind: 'server', fmCategory: 'transient', isRetryable: true, details: { retryAfterMs: wait.until - this.now() } }
+        { code: '956', kind: 'server', fmCategory: 'transient', isRetryable: true, retryAfterMs: wait.until - this.now() }
       );
     }
   }
@@ -1236,7 +1314,7 @@ export class FMClient {
     // the existing token rather than creating a new session that gets orphaned on the server.
     const skipProactive = options?.skipProactiveRefresh === true;
 
-    if (existing && (skipProactive || !this.shouldRefreshSession(profile.id))) {
+    if (existing && (skipProactive || this.proactiveSuspended.has(profile.id) || !this.shouldRefreshSession(profile.id))) {
       return existing;
     }
 
@@ -1258,9 +1336,24 @@ export class FMClient {
       });
     }
 
-    const refreshPromise = this.createSession(profile, control).finally(() => {
-      this.inFlightRefresh.delete(profile.id);
-    });
+    // A renewal ahead of expiry that fails (the password changed meanwhile, the server is busy) must
+    // not stop work that the current token can still do: keep using it, and pause nothing. If the
+    // token has really expired, the 401 on the next request starts a real renewal, which can pause.
+    const refreshPromise = this.createSession(profile, existing ? { ...control, proactive: true } : control)
+      .catch((error) => {
+        if (!existing) {
+          throw error;
+        }
+        this.proactiveSuspended.add(profile.id);
+        this.logger.warn('Proactive session renewal failed; continuing with the current token.', {
+          profileId: profile.id,
+          error
+        });
+        return existing;
+      })
+      .finally(() => {
+        this.inFlightRefresh.delete(profile.id);
+      });
 
     this.inFlightRefresh.set(profile.id, refreshPromise);
 

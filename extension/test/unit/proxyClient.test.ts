@@ -74,7 +74,7 @@ describe('ProxyClient', () => {
     });
 
     it('passes per-profile TLS overrides to the proxy HTTPS request', async () => {
-      const agentSpy = vi.spyOn(tlsAgent, 'createHttpsAgentForProfile');
+      const agentSpy = vi.spyOn(tlsAgent, 'httpsTransportFor');
       const httpClient = new FakeAxios();
       httpClient.post.mockResolvedValue({ data: { ok: true, data: { token: 'abc-session' } } });
       const client = new ProxyClient(
@@ -88,11 +88,11 @@ describe('ProxyClient', () => {
         client.createSession(createProfile({ allowSelfSigned: true }))
       ).resolves.toBe('abc-session');
 
-      expect(agentSpy).toHaveBeenCalledWith(expect.objectContaining({ allowSelfSigned: true }));
+      expect(agentSpy).toHaveBeenCalledWith(expect.objectContaining({ allowSelfSigned: true }), `${PROXY_URL}${PROXY_PATH}`);
       const requestConfig = httpClient.post.mock.calls[0]?.[2] as {
         httpsAgent?: unknown;
       };
-      expect(requestConfig.httpsAgent).toBe(agentSpy.mock.results[0]?.value);
+      expect(requestConfig.httpsAgent).toBe((agentSpy.mock.results[0]?.value as { httpsAgent: unknown }).httpsAgent);
       agentSpy.mockRestore();
     });
   });

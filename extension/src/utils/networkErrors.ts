@@ -27,15 +27,30 @@ export interface NetworkFailureContext {
   protocol?: string;
   /** The message Node produced; used only to tell apart failures that share one code. */
   nodeMessage?: string;
+  /** The certificate is FileMaker Server's own default one (found by looking at what the server presents). */
+  fileMakerDefaultCertificate?: boolean;
 }
 
-/** The plain-words opening for every "this computer does not trust the certificate" failure. */
-const UNTRUSTED_PLAIN =
-  "This server uses a certificate that is not trusted (FileMaker Server's default certificate is self-signed). You can trust this certificate in the wizard, or install a certificate from a public authority on the server.";
+/**
+ * The plain-words opening for "this computer does not trust the certificate". Two forms: the exact
+ * shape of FileMaker Server's default certificate (a self-signed "Claris" certificate from a private
+ * root, which a new installation uses until the administrator installs another), and a neutral one
+ * for every other server, where a missing intermediate certificate is the common cause. Neither
+ * names a screen, because the same text appears in the wizard and in a notification.
+ */
+const UNTRUSTED_FILEMAKER_DEFAULT =
+  "This server uses a certificate that is not trusted: FileMaker Server's default certificate is self-signed. You can trust this certificate, or install a certificate from a public authority on the server.";
+const UNTRUSTED_NEUTRAL =
+  "This server's certificate is not trusted by this computer. The certificate chain could not be verified, and a missing intermediate certificate on the server is a common cause. You can trust this certificate, or ask the administrator to install the full certificate chain.";
+
+/** Whether a presented certificate has the shape of FileMaker Server's default one. */
+export function isFileMakerDefaultCertificate(certificate: { subject?: string; issuer?: string }): boolean {
+  return /Claris Root Authority/i.test(certificate.issuer ?? '') || /Claris Self Signed Certificate/i.test(certificate.subject ?? '');
+}
 
 const CLOCK_HINT = "First check that your computer's date and time are correct.";
 const CA_HINT =
-  'Ask your FileMaker administrator for the company\'s CA certificate (a .pem file) and set it as the connection\'s CA file, or, if you trust this server, review and trust its certificate.';
+  'Or ask your FileMaker administrator for the company\'s CA certificate (a .pem file) and set it as the connection\'s CA file.';
 
 /** Error codes that are certificate problems, with the certificate-specific wording. */
 const CERTIFICATE_CODES = new Set([
@@ -186,25 +201,30 @@ export function describeNetworkFailure(
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `${UNTRUSTED_PLAIN} (${target} presents a self-signed certificate.) ${CA_HINT}`
+        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : `The certificate of ${target} is self-signed, and this computer does not trust it. You can trust this certificate, or install one from a public authority on the server.`} ${CA_HINT}`
       };
     case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
     case 'UNABLE_TO_GET_ISSUER_CERT':
     case 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY':
+    case 'CERT_UNTRUSTED':
+    case 'CERT_REJECTED':
       return {
         code,
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `${UNTRUSTED_PLAIN} (This computer cannot verify who signed the certificate of ${target}. Either the signing authority is private (${CA_HINT.charAt(0).toLowerCase()}${CA_HINT.slice(1)}) or the server did not send its intermediate certificate: ask the administrator to install the full certificate chain and restart FileMaker Server.)`
+        message: `${context.fileMakerDefaultCertificate ? UNTRUSTED_FILEMAKER_DEFAULT : UNTRUSTED_NEUTRAL} ${CA_HINT}`
       };
     case 'ERR_TLS_CERT_ALTNAME_INVALID':
+    case 'HOSTNAME_MISMATCH':
       return {
         code,
         kind: 'certificate',
         retryable: false,
         trustable: true,
-        message: `The certificate of ${target} was not issued for that name. Connect using a name the certificate lists (not an IP address unless it is listed), or ask the administrator which host name the certificate was issued for.`
+        message: /does not contain a DNS name|cert is empty|is not cert's CN|no (subject )?alt/i.test(nodeMessage)
+          ? `The certificate of ${target} lists no host names, so it cannot match the name you connected with. You can trust this certificate, or ask the administrator for one issued for this server's name.`
+          : `The certificate of ${target} was not issued for that name. Connect using a name the certificate lists (not an IP address unless it is listed), or ask the administrator which host name the certificate was issued for.`
       };
     case 'CERT_REVOKED':
       return {
@@ -332,4 +352,9 @@ export function targetOfUrl(url: string | undefined): NetworkFailureContext {
   } catch {
     return {};
   }
+}
+
+/** Certificate failures a person may sensibly decide to trust (as opposed to, say, a revoked certificate). */
+export function isTrustableCertificateCode(code: string | undefined): boolean {
+  return describeNetworkFailure(code)?.trustable === true;
 }

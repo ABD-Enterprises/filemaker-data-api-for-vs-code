@@ -80,6 +80,7 @@ async function setup(editing?: Record<string, unknown>, client: Record<string, u
     deleteSession: vi.fn(async () => undefined),
     getProductInfo: vi.fn(async () => ({ name: 'FileMaker Server', version: '21.1' })),
     listHostedDatabases: vi.fn(async () => undefined),
+    forgetProfile: vi.fn(),
     ...client
   };
   ConnectionWizardPanel.createOrShow(
@@ -273,6 +274,39 @@ describe('Connection wizard certificate trust', () => {
       expect(moved.savedProfile()).toBeDefined();
       expect(moved.savedProfile()?.aiAccess).toBeUndefined();
     }
+  });
+
+  it('confirms an address that came from the workspace template before reviewing its certificate', async () => {
+    (vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      Buffer.from(JSON.stringify({ name: 'Team', authMode: 'direct', serverUrl: 'https://template.example.com', database: 'App' }))
+    );
+    const h = await setup();
+    const fromTemplate = { ...form, serverUrl: 'https://template.example.com' };
+
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(undefined as never); // declined
+    await h.fire({ type: 'reviewCertificate', payload: fromTemplate });
+    expect(String(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0])).toMatch(/came from the workspace file/);
+    expect(review.calls).toHaveLength(0);
+    expect(h.last('saveError')?.message).toMatch(/did not confirm/);
+
+    review.decision = { sha256: PIN, allowExpired: false };
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Continue' as never);
+    await h.fire({ type: 'reviewCertificate', payload: fromTemplate });
+    expect(review.calls).toHaveLength(1);
+
+    // An address the user typed needs no such confirmation.
+    review.calls.length = 0;
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    await h.fire({ type: 'reviewCertificate', payload: form });
+    expect(review.calls).toHaveLength(1);
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
+  it('removes the throwaway test profile from the client when a test ends', async () => {
+    const h = await setup();
+    await h.fire({ type: 'testConnection', payload: form });
+    const forgotten = (h.fmClient.forgetProfile as ReturnType<typeof vi.fn>).mock.calls.map((call) => String(call[0]));
+    expect(forgotten.some((id) => id.startsWith('test-connection-'))).toBe(true);
   });
 
   it('shows a review button and no checkbox that turns checks off', async () => {

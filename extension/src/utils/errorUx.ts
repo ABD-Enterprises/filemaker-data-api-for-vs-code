@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { NormalizedError, RequestChainEntry } from '../types/errors';
+import { isTrustableCertificateCode } from './networkErrors';
 import { normalizeError } from './normalizeError';
 import { redactString, redactValue } from './redact';
 
@@ -87,7 +88,8 @@ export function selectErrorActions(
   if (actions.retry && isTransient) {
     out.push(RETRY_ACTION);
   }
-  if (actions.trustCertificate && isCertificate && normalized.networkCode) {
+  // Only where trusting makes sense: not for, say, a revoked certificate.
+  if (actions.trustCertificate && isCertificate && isTrustableCertificateCode(normalized.networkCode)) {
     out.push(
       normalized.networkCode === 'FM_CERT_PIN_MISMATCH' || normalized.networkCode === 'FM_CERT_PIN_EXPIRED'
         ? RETRUST_CERTIFICATE_ACTION

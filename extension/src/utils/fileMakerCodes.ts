@@ -191,7 +191,11 @@ export function getFileMakerErrorInfo(code: number | string | undefined): FileMa
 
 /** Codes where signing in again with the same stored credentials cannot work. */
 export function isCredentialRejection(code: string | undefined): boolean {
-  return code === '210' || code === '211' || code === '212' || code === '213' || code === '214';
+  return (
+    code === '210' || code === '211' || code === '212' || code === '213' || code === '214' ||
+    // The server wants a different kind of sign-in (Claris ID, external authentication): the stored password cannot work.
+    code === '1703'
+  );
 }
 
 /** What the AI `explain error code` tool returns. Unknown codes say so. */

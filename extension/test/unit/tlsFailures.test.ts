@@ -121,13 +121,13 @@ describe('TLS and network failures reach the user as actionable messages', () =>
   it('private CA that this computer does not trust (UNABLE_TO_VERIFY_LEAF_SIGNATURE)', async () => {
     const { key, cert } = leaf({});
     const server = await serve(key, [cert]);
-    expectCertificateError(await connect(server.port), 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', /cannot verify who signed.*(CA file|CA certificate)/s);
+    expectCertificateError(await connect(server.port), 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', /not trusted by this computer.*CA certificate/s);
   });
 
-  it('server that omits its intermediate certificate (Node reports UNABLE_TO_VERIFY_LEAF_SIGNATURE, so the message names both causes)', async () => {
+  it('server that omits its intermediate certificate (Node reports UNABLE_TO_VERIFY_LEAF_SIGNATURE, so the message names that cause)', async () => {
     const { key, cert } = leaf({ issuer: 'intermediate' });
     const server = await serve(key, [cert]); // chain without the intermediate
-    expectCertificateError(await connect(server.port, { caBundlePath: caFile }), 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', /did not send its intermediate certificate/);
+    expectCertificateError(await connect(server.port, { caBundlePath: caFile }), 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', /missing intermediate certificate/);
   });
 
   it('a complete chain connects (the CA file extends the system roots)', async () => {
@@ -181,6 +181,9 @@ describe('describeNetworkFailure (codes that need DNS, old TLS or other setups t
       ['EHOSTUNREACH', /no network route/i, true],
       ['SELF_SIGNED_CERT_IN_CHAIN', /self-signed/, false],
       ['UNABLE_TO_GET_ISSUER_CERT', /intermediate/, false],
+      ['CERT_UNTRUSTED', /not trusted by this computer/, false],
+      ['CERT_REJECTED', /not trusted by this computer/, false],
+      ['HOSTNAME_MISMATCH', /not issued for that name/, false],
       ['CERT_REVOKED', /revoked/, false],
       ['FM_CERT_PIN_MISMATCH', /not the one you trusted/, false],
       ['FM_CERT_PIN_EXPIRED', /you trusted.*expired/s, false]

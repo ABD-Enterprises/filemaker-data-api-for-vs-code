@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Conditional/neutral certificate wording, no-host-names message, trust offer only where trustable, safe dialog text, IPv6, template confirmation on review, latch details (214 wording, proactive renewal, 1703, test-profile cleanup).
 - Linear-time tag stripping on a 4 KB cut of server bodies; health: gateway 5xx/404 => unreachable, cancelled => unchanged.
 - Batch stops only on account-wide errors (9/205/207/credentials); 200 fails the record only.
 - System roots = Node default (incl. NODE_EXTRA_CA_CERTS) + system store; warmed in the background, 10 min TTL.
@@ -70,6 +71,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Note: the self-signed checkbox was never released; legacy field is still read.
 - Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.
 - Untrack artifacts/*.log and gitignore them.
