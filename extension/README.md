@@ -31,9 +31,9 @@ Capture schema snapshots, review drift between environments, and run batch expor
 
 ## Requirements
 
-- FileMaker Server (or FileMaker Cloud) with the **Data API** enabled, reachable over HTTPS.
+- FileMaker Server with the **Data API** enabled, reachable over HTTPS. FileMaker Cloud is untested: the extension has no Claris ID login, and whether a tenant accepts an account name and password is not confirmed.
 - A FileMaker account whose privilege set has the **`fmrest`** extended privilege.
-- A server certificate your computer trusts. For a private authority or a self-signed certificate, the connection wizard has a **Certificates (advanced)** section.
+- A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file).
 - VS Code 1.96 or newer on the desktop with a folder open (virtual workspaces such as github.dev are not supported).
 
 See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for tested server versions.
