@@ -308,4 +308,71 @@ describe('FileMaker: Write AI Context', () => {
     await run();
     expect(await readdir(join(storage, 'ai-context'))).toEqual([defaultName]);
   });
+
+  it('writes nothing when the user cancels while the schema is being read', async () => {
+    vi.mocked(vscode.window.withProgress)
+      .mockImplementationOnce(((_options: unknown, task: () => unknown) => task()) as never)
+      .mockImplementationOnce(((_options: unknown, task: (p: unknown, t: unknown) => unknown) =>
+        task({ report: vi.fn() }, { isCancellationRequested: true })) as never);
+    await run();
+
+    await expect(stat(defaultFile())).rejects.toThrow();
+    expect(schemaService.getLayoutSchema).not.toHaveBeenCalled();
+    expect(fmClient.listScripts).not.toHaveBeenCalled();
+  });
+
+  it('does not replace an existing section with an empty result unless the user agrees', async () => {
+    inspected = { globalValue: 'AGENTS.md' };
+    const original = `# Rules\n${AI_CONTEXT_START_MARKER}\nGOOD\n${AI_CONTEXT_END_MARKER}\n`;
+    await writeFile(join(workspace, 'AGENTS.md'), original);
+    schemaService.getLayoutSchema.mockRejectedValue(new Error('offline'));
+    fmClient.listScripts.mockResolvedValue([]);
+
+    warningChoices = [undefined];
+    await run();
+    expect(await readFile(join(workspace, 'AGENTS.md'), 'utf8')).toBe(original);
+
+    warningChoices = ['Replace Anyway'];
+    await run();
+    const text = await readFile(join(workspace, 'AGENTS.md'), 'utf8');
+    expect(text).not.toContain('GOOD');
+    expect(text).toContain('No layouts included.');
+  });
+
+  it('refuses a Latin-1 target and leaves its bytes unchanged', async () => {
+    inspected = { globalValue: 'AGENTS.md' };
+    const bytes = Buffer.from([0x43, 0x61, 0x66, 0xe9, 0x0a]);
+    await writeFile(join(workspace, 'AGENTS.md'), bytes);
+    await run();
+
+    expect(String(vi.mocked(vscode.window.showErrorMessage).mock.calls[0]?.[0])).toMatch(/not valid UTF-8/);
+    expect((await readFile(join(workspace, 'AGENTS.md'))).equals(bytes)).toBe(true);
+  });
+
+  it('refuses to write if the file changed while a prompt was open', async () => {
+    inspected = { globalValue: 'AGENTS.md' };
+    const target = join(workspace, 'AGENTS.md');
+    await writeFile(target, '# Mine\n');
+    vi.mocked(vscode.window.showWarningMessage).mockImplementation((async () => {
+      await writeFile(target, '# Mine\nedited meanwhile\n');
+      return 'Add Section';
+    }) as never);
+    await run();
+
+    expect(String(vi.mocked(vscode.window.showErrorMessage).mock.calls[0]?.[0])).toMatch(/changed while/);
+    expect(await readFile(target, 'utf8')).toBe('# Mine\nedited meanwhile\n');
+  });
+
+  it('caps the default file name for a very long profile name', async () => {
+    const original = profile.name;
+    profile.name = 'x'.repeat(300);
+    try {
+      await run();
+    } finally {
+      profile.name = original;
+    }
+    const [name] = await readdir(join(storage, 'ai-context'));
+    expect(name?.length).toBeLessThanOrEqual(80);
+    expect(name?.endsWith('.md')).toBe(true);
+  });
 });

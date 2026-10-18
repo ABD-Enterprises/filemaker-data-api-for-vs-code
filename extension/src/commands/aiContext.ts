@@ -16,7 +16,7 @@ import {
   isTrackedByGit,
   MarkersMissingError,
   readExistingFile,
-  writeFileAtomic,
+  writeFileIfUnchanged,
   type SectionWriteMode
 } from '../services/aiContextWriter';
 import type { FMClient } from '../services/fmClient';
@@ -135,7 +135,10 @@ async function writeAiContext(deps: RegisterAiContextCommandsDeps): Promise<void
   const globalStorage = context.globalStorageUri.fsPath;
   const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
   const target = await resolveTarget(profile, globalStorage, workspaceRoots);
-  const outcome = await deliver(wrapped, target, workspaceRoots, deps);
+  // Do not replace a good section with nothing: if every picked layout failed (or nothing at
+  // all was readable), deliver() asks first when a section already exists.
+  const poorResult = rendered.includedLayouts === 0 && (selected.length > 0 || rendered.includedScripts === 0);
+  const outcome = await deliver(wrapped, target, workspaceRoots, deps, poorResult);
   if (!outcome) {
     return;
   }
@@ -217,7 +220,13 @@ async function resolveTarget(
     if (configured !== undefined) {
       return await resolveConfinedFile(configured, workspaceRoots[0] ?? globalStorage, roots);
     }
-    const sanitized = profile.name.replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '');
+    // Capped so a long profile name cannot make an over-long file name; names that differ
+    // after sanitizing or cutting get a hash from distinctFileName. Names that differ only in
+    // letter case can still share a file on a case-insensitive file system.
+    const sanitized = profile.name
+      .replace(/[^A-Za-z0-9_.-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60);
     const fileName = `${distinctFileName(profile.name, sanitized, 'connection')}.md`;
     return await resolveConfinedFile(join('ai-context', fileName), globalStorage, [globalStorage]);
   } catch (error) {
@@ -243,7 +252,8 @@ async function deliver(
   wrapped: string,
   target: ConfinedPath,
   workspaceRoots: string[],
-  deps: RegisterAiContextCommandsDeps
+  deps: RegisterAiContextCommandsDeps,
+  poorResult = false
 ): Promise<Delivered | undefined> {
   const insideWorkspace = workspaceRoots.includes(target.root);
   if (insideWorkspace && !vscode.workspace.isTrusted) {
@@ -272,7 +282,18 @@ async function deliver(
     applied = applyMarkerSection(existing, wrapped, true);
   }
 
-  await writeFileAtomic(target.path, applied.text);
+  if (poorResult && applied.mode === 'replaced') {
+    const choice = await vscode.window.showWarningMessage(
+      `No layout schema could be read, so the new AI context section would be empty. ${target.relativePath} already has a section. Replace it anyway?`,
+      { modal: true },
+      'Replace Anyway'
+    );
+    if (choice !== 'Replace Anyway') {
+      return undefined;
+    }
+  }
+
+  await writeFileIfUnchanged(target.path, applied.text, existing);
 
   if (insideWorkspace) {
     const isTracked = deps.isTracked ?? isTrackedByGit;

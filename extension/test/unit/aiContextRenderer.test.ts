@@ -9,7 +9,6 @@ import {
   wrapInMarkers,
   type AiContextInput
 } from '../../src/services/aiContextRenderer';
-import { redactString } from '../../src/utils/redact';
 
 const generatedAt = new Date('2026-10-18T12:00:00.000Z');
 
@@ -187,16 +186,19 @@ describe('renderAiContext', () => {
     expect(layoutBlock.fields).toEqual([{ name: 'a', type: 'text' }, { name: 'b' }, { name: 'c' }]);
   });
 
-  it('never writes anything but the connection name and database about the connection', () => {
-    // The renderer is given no address or credentials, so none can appear. This guards the
-    // input type: a future field that carried them would have to be added here on purpose.
-    const keys = Object.keys(input()).sort();
-    expect(keys).toEqual(['connectionName', 'database', 'generatedAt', 'layouts', 'scripts']);
-
-    const { content } = renderAiContext(input());
-    expect(content).not.toMatch(/https?:\/\//);
-    expect(content).not.toContain('@');
-    expect(content).toContain('server address, user name, credentials');
+  it('writes nothing about the connection beyond its name and database, whatever the caller passes', () => {
+    const hostileInput = {
+      ...input(),
+      serverUrl: 'https://secret-host.example.com:16000',
+      username: 'secret-user',
+      password: 'secret-password',
+      token: 'secret-token'
+    } as unknown as AiContextInput;
+    const { content } = renderAiContext(hostileInput);
+    for (const secret of ['secret-host', 'secret-user', 'secret-password', 'secret-token', '16000', 'https://']) {
+      expect(content, secret).not.toContain(secret);
+    }
+    expect(content).toContain('Dev Server');
   });
 
   it('is deterministic for the same input', () => {
@@ -282,19 +284,100 @@ describe('renderAiContext', () => {
   });
 });
 
+describe('invisible letters', () => {
+  it.each(['\u3164', '\u115F', '\u1160', '\uFFA0', 'a\u3164b', '\u200B', '\u2060', '\u00AD', '\uFE0F'])(
+    'replaces a name containing %j',
+    (name) => {
+      expect(filterName(name).replaced).toBe(true);
+    }
+  );
+});
+
+describe('budget', () => {
+  function layouts(count: number, fields: number, prefix = 'Layout') {
+    return Array.from({ length: count }, (_, index) => ({
+      name: `${prefix} ${index}`,
+      fields: Array.from({ length: fields }, (_unused, fieldIndex) => ({ name: `Field ${fieldIndex}`, type: 'text' }))
+    }));
+  }
+
+  it('keeps all 3 picked layouts and trims the script list when 1,200 scripts are too many', () => {
+    const scripts = Array.from({ length: 1200 }, (_, index) => `Script number ${index}`);
+    const result = renderAiContext(input({ layouts: layouts(3, 20), scripts }));
+
+    expect(result.bytes).toBeLessThanOrEqual(20 * 1024);
+    expect(result.includedLayouts).toBe(3);
+    expect(result.omittedLayouts).toBe(0);
+    expect(result.includedScripts).toBeGreaterThan(0);
+    expect(result.includedScripts).toBeLessThan(1200);
+    expect(result.omittedScripts).toBe(1200 - result.includedScripts);
+    expect(result.content).toContain(`${result.omittedScripts} script names were left out`);
+    expect(result.content).not.toContain('selected layout');
+  });
+
+  it('skips a first layout that alone is too big and still includes the small ones after it', () => {
+    const huge = { name: 'Huge', fields: Array.from({ length: 3000 }, (_, index) => ({ name: `Field number ${index}` })) };
+    const result = renderAiContext(input({ layouts: [huge, ...layouts(3, 3, 'Small')], scripts: ['One'] }));
+
+    expect(result.bytes).toBeLessThanOrEqual(20 * 1024);
+    expect(result.includedLayouts).toBe(3);
+    expect(result.omittedLayouts).toBe(1);
+    expect(result.content).toContain('1 selected layout was left out because it did not fit');
+    const names = (jsonBlocks(result.content) as Array<{ layout?: string }>).map((block) => block.layout).filter(Boolean);
+    expect(names).toEqual(['Small 0', 'Small 1', 'Small 2']);
+  });
+
+  it('accepts exactly the budget and drops something at one byte less', () => {
+    const base = input({ layouts: layouts(4, 10), scripts: ['One', 'Two'] });
+    const full = renderAiContext(base);
+    expect(full.omittedLayouts + full.omittedScripts).toBe(0);
+
+    const atCap = renderAiContext({ ...base, budgetBytes: full.bytes });
+    expect(atCap.content).toBe(full.content);
+
+    const under = renderAiContext({ ...base, budgetBytes: full.bytes - 1 });
+    expect(under.bytes).toBeLessThanOrEqual(full.bytes - 1);
+    expect(under.omittedScripts + under.omittedLayouts).toBeGreaterThan(0);
+  });
+
+  it('decides by bytes: multi-byte names that fit by characters are dropped, ASCII ones of the same length fit', () => {
+    const make = (character: string) => [
+      { name: 'L', fields: Array.from({ length: 70 }, (_, index) => ({ name: `${character.repeat(30)}${index % 10}` })) }
+    ];
+    const ascii = renderAiContext(input({ layouts: make('a'), scripts: [], budgetBytes: 6 * 1024 }));
+    const wide = renderAiContext(input({ layouts: make('顧'), scripts: [], budgetBytes: 6 * 1024 }));
+
+    // Same number of characters, but 3 bytes each in UTF-8.
+    const unlimited = (character: string) =>
+      renderAiContext(input({ layouts: make(character), scripts: [], budgetBytes: 1_000_000 }));
+    expect(unlimited('a').content.length).toBe(unlimited('顧').content.length);
+    expect(unlimited('a').content.length).toBeLessThan(6 * 1024);
+    expect(unlimited('顧').bytes).toBeGreaterThan(6 * 1024);
+    expect(ascii.includedLayouts).toBe(1);
+    expect(wide.includedLayouts).toBe(0);
+    expect(wide.bytes).toBeLessThanOrEqual(6 * 1024);
+  });
+});
+
 describe('wrapInMarkers', () => {
   it('wraps content between the start and end markers', () => {
     expect(wrapInMarkers('body\n')).toBe(`${AI_CONTEXT_START_MARKER}\nbody\n${AI_CONTEXT_END_MARKER}\n`);
   });
 });
 
-describe('redactString on generated content (why the file is not passed through it)', () => {
-  it('would rewrite legitimate names that look like an authorization header', () => {
-    // Decision recorded in ADR-0004 phase 1: the content is built only from the allowlisted
-    // names and never sees credentials, so redactString is not applied; it would damage
-    // ordinary names such as "Basic Info".
-    const { content } = renderAiContext(input({ layouts: [{ name: 'Basic Info', fields: [{ name: 'Bearer Fields' }] }] }));
-    expect(redactString(content)).not.toBe(content);
-    expect(content).toContain('Basic Info');
+describe('legitimate names that resemble secrets', () => {
+  it('are written unchanged (the file is not passed through redactString)', () => {
+    const names = ['Basic Info', 'Bearer Fields', 'Session Token', 'Password Reset', 'API Key (old)'];
+    const result = renderAiContext(input({ layouts: [{ name: 'Basic Info', fields: names.map((name) => ({ name })) }], scripts: names }));
+    expect(result.replacedNames).toBe(0);
+    const [, layoutBlock, scriptBlock] = jsonBlocks(result.content) as [
+      unknown,
+      { layout: string; fields: Array<{ name: string }> },
+      { scripts: string[] }
+    ];
+    expect(layoutBlock.layout).toBe('Basic Info');
+    expect(layoutBlock.fields.map((field) => field.name)).toEqual(names);
+    expect(scriptBlock.scripts).toEqual(names);
+    expect(result.content).not.toContain('***');
   });
 });

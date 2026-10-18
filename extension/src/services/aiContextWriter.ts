@@ -26,9 +26,10 @@ export class MarkersMissingError extends Error {
  */
 export function applyMarkerSection(
   existing: string | undefined,
-  wrapped: string,
+  wrappedText: string,
   allowAppend: boolean
 ): { text: string; mode: SectionWriteMode } {
+  let wrapped = wrappedText;
   if (existing === undefined || existing.length === 0) {
     return { text: wrapped, mode: 'created' };
   }
@@ -39,8 +40,9 @@ export function applyMarkerSection(
     if (!allowAppend) {
       throw new MarkersMissingError();
     }
-    const separator = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n';
-    return { text: `${existing}${separator}${wrapped}`, mode: 'appended' };
+    const eol = detectEol(existing);
+    const separator = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? eol : `${eol}${eol}`;
+    return { text: `${existing}${separator}${toEol(wrapped, eol)}`, mode: 'appended' };
   }
 
   const startIndex = existing.indexOf(AI_CONTEXT_START_MARKER);
@@ -50,6 +52,8 @@ export function applyMarkerSection(
       'The file has a malformed filemaker-ai-context section (a missing, repeated or reversed marker). Fix or remove the markers and run the command again.'
     );
   }
+  const eol = detectEol(existing.slice(startIndex, endIndex));
+  wrapped = toEol(wrapped, eol === '\n' ? detectEol(existing) : eol);
 
   let tailStart = endIndex + AI_CONTEXT_END_MARKER.length;
   if (existing[tailStart] === '\r' && existing[tailStart + 1] === '\n') {
@@ -62,6 +66,16 @@ export function applyMarkerSection(
     text: `${existing.slice(0, startIndex)}${wrapped}${existing.slice(tailStart)}`,
     mode: 'replaced'
   };
+}
+
+/** The line ending of the first line break in `text` (`\n` when there is none). */
+function detectEol(text: string): '\n' | '\r\n' {
+  const index = text.indexOf('\n');
+  return index > 0 && text[index - 1] === '\r' ? '\r\n' : '\n';
+}
+
+function toEol(text: string, eol: '\n' | '\r\n'): string {
+  return eol === '\n' ? text : text.replace(/\r?\n/g, '\r\n');
 }
 
 function countOccurrences(text: string, needle: string): number {
@@ -98,19 +112,60 @@ export async function writeFileAtomic(targetPath: string, text: string): Promise
   }
 }
 
+export class UnsupportedEncodingError extends Error {
+  public constructor() {
+    super(
+      'The target file is not valid UTF-8 text (for example Latin-1 or UTF-16). It was not changed. Convert it to UTF-8 or choose another file.'
+    );
+    this.name = 'UnsupportedEncodingError';
+  }
+}
+
+/**
+ * Reads an existing file as strict UTF-8 (a BOM is kept as part of the text). Anything else,
+ * including UTF-16 and Latin-1 with accented letters, is refused: rewriting it as UTF-8 would
+ * corrupt the user's file. Returns undefined when there is no file.
+ */
 export async function readExistingFile(targetPath: string): Promise<string | undefined> {
+  let bytes: Buffer;
   try {
     const stats = await stat(targetPath);
     if (stats.size > MAX_EXISTING_FILE_BYTES) {
       throw new Error('The target file is too large to update (over 5 MB).');
     }
-    return await readFile(targetPath, 'utf8');
+    bytes = await readFile(targetPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return undefined;
     }
     throw error;
   }
+
+  if (bytes.includes(0)) {
+    throw new UnsupportedEncodingError();
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    throw new UnsupportedEncodingError();
+  }
+}
+
+/**
+ * Writes only if the file still holds what the caller last read (`expected`; undefined means
+ * it did not exist), so a prompt in between cannot let this overwrite an edit made meanwhile.
+ * A change between this check and the rename remains possible but is a very small window.
+ */
+export async function writeFileIfUnchanged(
+  targetPath: string,
+  text: string,
+  expected: string | undefined
+): Promise<void> {
+  const current = await readExistingFile(targetPath);
+  if (current !== expected) {
+    throw new Error('The target file changed while the command was running. Nothing was written; run the command again.');
+  }
+  await writeFileAtomic(targetPath, text);
 }
 
 /** True when git already tracks `absolutePath` in the repository at `directory`. */

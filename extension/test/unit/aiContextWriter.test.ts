@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, stat, readdir, realpath, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,7 +10,9 @@ import {
   gitignoreLine,
   MarkersMissingError,
   readExistingFile,
-  writeFileAtomic
+  UnsupportedEncodingError,
+  writeFileAtomic,
+  writeFileIfUnchanged
 } from '../../src/services/aiContextWriter';
 
 const section = wrapInMarkers('NEW CONTENT\n');
@@ -28,8 +30,21 @@ describe('applyMarkerSection', () => {
     const result = applyMarkerSection(`${before}${old}${after}`, section, false);
 
     expect(result.mode).toBe('replaced');
-    expect(result.text).toBe(`${before}${section}${after}`);
+    // The old section used LF in a CRLF file; the new one follows the file.
+    expect(result.text).toBe(`${before}${section.replace(/\n/g, '\r\n')}${after}`);
     expect(result.text).not.toContain('OLD');
+  });
+
+  it('keeps CRLF when the existing section uses CRLF, and leaves no bare LF in it', () => {
+    const old = `${AI_CONTEXT_START_MARKER}\r\nOLD\r\n${AI_CONTEXT_END_MARKER}\r\n`;
+    const result = applyMarkerSection(`# Top\r\n${old}tail\r\n`, section, false);
+    expect(result.text).toBe(`# Top\r\n${section.replace(/\n/g, '\r\n')}tail\r\n`);
+    expect(result.text.replace(/\r\n/g, '')).not.toContain('\n');
+  });
+
+  it('appends with the file line ending, and leaves an LF file alone', () => {
+    expect(applyMarkerSection('# Hi\r\n', section, true).text).toBe(`# Hi\r\n\r\n${section.replace(/\n/g, '\r\n')}`);
+    expect(applyMarkerSection('# Hi\n', section, true).text).not.toContain('\r');
   });
 
   it('replaces a section at the very end of the file without a trailing newline', () => {
@@ -102,6 +117,51 @@ describe('file writing', () => {
     expect(await readExistingFile(join(dir, 'missing.md'))).toBeUndefined();
     await writeFile(join(dir, 'big.md'), Buffer.alloc(5 * 1024 * 1024 + 1, 97));
     await expect(readExistingFile(join(dir, 'big.md'))).rejects.toThrow(/too large/);
+  });
+
+  it('refuses a Latin-1 file and leaves its bytes unchanged', async () => {
+    const target = join(dir, 'AGENTS.md');
+    const bytes = Buffer.from([0x43, 0x61, 0x66, 0xe9, 0x0a]); // "Café\n" in Latin-1
+    await writeFile(target, bytes);
+    await expect(readExistingFile(target)).rejects.toThrow(UnsupportedEncodingError);
+    expect((await readFile(target)).equals(bytes)).toBe(true);
+  });
+
+  it.each([
+    ['UTF-16 LE BOM', Buffer.from([0xff, 0xfe, 0x41, 0x00, 0x0a, 0x00])],
+    ['UTF-16 BE BOM', Buffer.from([0xfe, 0xff, 0x00, 0x41, 0x00, 0x0a])],
+    ['UTF-16 without BOM', Buffer.from([0x41, 0x00, 0x42, 0x00])]
+  ])('refuses %s and leaves it unchanged', async (_label, bytes) => {
+    const target = join(dir, 'x.md');
+    await writeFile(target, bytes);
+    await expect(readExistingFile(target)).rejects.toThrow(/not valid UTF-8/);
+    expect((await readFile(target)).equals(bytes)).toBe(true);
+  });
+
+  it('reads valid UTF-8, including accents and a BOM, exactly', async () => {
+    const target = join(dir, 'u.md');
+    await writeFile(target, '\uFEFFCafé 顧客\n');
+    expect(await readExistingFile(target)).toBe('\uFEFFCafé 顧客\n');
+  });
+
+  it('writeFileIfUnchanged refuses when the file changed since it was read', async () => {
+    const target = join(dir, 'ai.md');
+    await writeFile(target, 'one');
+    await writeFile(target, 'two');
+    await expect(writeFileIfUnchanged(target, 'new', 'one')).rejects.toThrow(/changed while/);
+    expect(await readFile(target, 'utf8')).toBe('two');
+    await writeFileIfUnchanged(target, 'new', 'two');
+    expect(await readFile(target, 'utf8')).toBe('new');
+    // A file that appeared after we saw none.
+    await expect(writeFileIfUnchanged(target, 'x', undefined)).rejects.toThrow(/changed while/);
+  });
+
+  it.skipIf(process.platform === 'win32')('keeps the mode of an existing file', async () => {
+    const target = join(dir, 'mode.md');
+    await writeFile(target, 'old');
+    await chmod(target, 0o600);
+    await writeFileAtomic(target, 'new');
+    expect((await stat(target)).mode & 0o777).toBe(0o600);
   });
 
   it('creates .gitignore, adds the line once, and keeps existing lines', async () => {

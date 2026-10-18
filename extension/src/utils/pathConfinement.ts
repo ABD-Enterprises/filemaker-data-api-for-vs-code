@@ -8,11 +8,13 @@ export class PathConfinementError extends Error {
   }
 }
 
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const WINDOWS_DRIVE_ABSOLUTE = /^[A-Za-z]:[\\/]/;
 
 /**
  * Checks the text of a configured path before it is resolved. Rejects: empty text, NUL,
- * `..` segments, `.git` segments, a colon anywhere except in the drive of a Windows absolute
+ * `..` segments, `.git` segments, control or invisible characters, a segment ending in a dot or space, a
+ * `~1` style short name, a reserved Windows device name, a colon anywhere except in the drive of a Windows absolute
  * path (`C:\x`; this also rules out drive-relative `C:x`), and a drive path on a system
  * without drives. Returns the trimmed text.
  */
@@ -33,7 +35,20 @@ export function validateConfiguredPath(raw: string, platform: NodeJS.Platform = 
     throw new PathConfinementError('The path contains a colon (drive-relative Windows paths are not allowed).');
   }
 
+  if (/\p{C}|\u2028|\u2029/u.test(text)) {
+    throw new PathConfinementError('The path contains a control or invisible character.');
+  }
+
   for (const segment of text.split(/[\\/]+/)) {
+    if (segment !== '' && segment !== '.' && segment !== '..' && /[. ]$/.test(segment)) {
+      throw new PathConfinementError('A part of the path ends with a dot or a space.');
+    }
+    if (/~\d/.test(segment)) {
+      throw new PathConfinementError('A part of the path looks like a Windows short name (for example GIT~1).');
+    }
+    if (WINDOWS_RESERVED_NAME.test(segment)) {
+      throw new PathConfinementError('A part of the path is a reserved device name.');
+    }
     if (segment === '..') {
       throw new PathConfinementError('The path contains "..".');
     }

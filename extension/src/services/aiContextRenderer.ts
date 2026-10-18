@@ -92,6 +92,12 @@ export function filterName(raw: unknown): NameFilterResult {
     return { text: AI_CONTEXT_NAME_PLACEHOLDER, replaced: true };
   }
 
+  // Invisible letters (U+3164, U+115F, U+1160, U+FFA0 ...) are letters to \p{L} but draw as
+  // nothing, so a name could look empty or hide text. Reject anything default-ignorable.
+  if (/\p{Default_Ignorable_Code_Point}/u.test(name)) {
+    return { text: AI_CONTEXT_NAME_PLACEHOLDER, replaced: true };
+  }
+
   for (const character of name) {
     if (!ALLOWED_NAME_CHARACTER.test(character)) {
       return { text: AI_CONTEXT_NAME_PLACEHOLDER, replaced: true };
@@ -123,7 +129,8 @@ class NameCounter {
 }
 
 interface Plan {
-  layoutCount: number;
+  /** Indexes into `input.layouts` of the layouts to write, in order. */
+  layouts: number[];
   scriptCount: number;
 }
 
@@ -133,7 +140,7 @@ function renderPlan(input: AiContextInput, plan: Plan): AiContextRenderResult {
   const connection = counter.name(input.connectionName);
   const database = counter.name(input.database);
 
-  for (const layout of input.layouts.slice(0, plan.layoutCount)) {
+  for (const layout of plan.layouts.map((index) => input.layouts[index] as AiContextLayout)) {
     const fields = layout.fields.map((field) => {
       const entry: { name: string; type?: string } = { name: counter.name(field.name) };
       const type = safeType(field.type);
@@ -151,7 +158,7 @@ function renderPlan(input: AiContextInput, plan: Plan): AiContextRenderResult {
     scriptBlock = jsonBlock({ scripts: scriptNames.map((name) => counter.name(name)) });
   }
 
-  const omittedLayouts = input.layouts.length - Math.min(plan.layoutCount, input.layouts.length);
+  const omittedLayouts = input.layouts.length - plan.layouts.length;
   const omittedScripts = (input.scripts?.length ?? 0) - scriptNames.length;
   const lines: string[] = [
     '# FileMaker database structure (generated)',
@@ -177,14 +184,14 @@ function renderPlan(input: AiContextInput, plan: Plan): AiContextRenderResult {
   }
   if (omittedLayouts > 0) {
     lines.push(
-      `Note: ${omittedLayouts} selected layout${omittedLayouts === 1 ? ' was' : 's were'} left out to keep this file within ${Math.round((input.budgetBytes ?? AI_CONTEXT_DEFAULT_BUDGET_BYTES) / 1024)} KB.`,
+      `Note: ${omittedLayouts} selected layout${omittedLayouts === 1 ? ' was' : 's were'} left out because ${omittedLayouts === 1 ? 'it' : 'they'} did not fit within ${Math.round((input.budgetBytes ?? AI_CONTEXT_DEFAULT_BUDGET_BYTES) / 1024)} KB.`,
       ''
     );
   }
   if (input.scripts === undefined) {
     lines.push('Scripts: the script list could not be read.', '');
   } else if (omittedScripts > 0) {
-    lines.push(`Note: ${omittedScripts} script name${omittedScripts === 1 ? ' was' : 's were'} left out to keep this file within the size limit.`, '');
+    lines.push(`Note: ${omittedScripts} script name${omittedScripts === 1 ? ' was' : 's were'} left out to keep this file within the size limit (script names are trimmed first, then layouts).`, '');
   }
 
   if (layoutBlocks.length > 0) {
@@ -214,39 +221,52 @@ function jsonBlock(value: unknown): string {
 }
 
 /**
- * Renders the context file. If the result is over the byte budget, whole layouts are dropped
- * from the end (last first) until it fits, then script names from the end. Deterministic: the
- * same input gives the same text.
+ * Renders the context file. If the result is over the byte budget, script names are trimmed
+ * first (from the end). Only when the layouts alone are over budget are layouts left out:
+ * they are added in order, and one that does not fit is skipped, so a huge first layout does
+ * not take the small ones after it down with it. Deterministic: the same input gives the
+ * same text.
  */
 export function renderAiContext(input: AiContextInput): AiContextRenderResult {
   const budget = input.budgetBytes ?? AI_CONTEXT_DEFAULT_BUDGET_BYTES;
-  const layouts = input.layouts;
   const bounded: AiContextInput = { ...input, budgetBytes: budget };
   const scriptTotal = input.scripts?.length ?? 0;
+  const all = input.layouts.map((_layout, index) => index);
+  const fits = (plan: Plan): boolean => renderPlan(bounded, plan).bytes <= budget;
 
-  let layoutCount = layouts.length;
-  let result = renderPlan(bounded, { layoutCount, scriptCount: scriptTotal });
-  while (result.bytes > budget && layoutCount > 0) {
-    layoutCount -= 1;
-    result = renderPlan(bounded, { layoutCount, scriptCount: scriptTotal });
+  if (fits({ layouts: all, scriptCount: scriptTotal })) {
+    return renderPlan(bounded, { layouts: all, scriptCount: scriptTotal });
   }
 
-  // Still too big with no layouts: shrink the script list (binary search keeps this cheap).
-  if (result.bytes > budget && scriptTotal > 0) {
-    let low = 0;
-    let high = scriptTotal;
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-      if (renderPlan(bounded, { layoutCount: 0, scriptCount: middle }).bytes <= budget) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
+  // Trim scripts first; every picked layout stays if it can.
+  if (fits({ layouts: all, scriptCount: 0 })) {
+    return renderPlan(bounded, { layouts: all, scriptCount: largestFitting(scriptTotal, (count) => fits({ layouts: all, scriptCount: count })) });
+  }
+
+  // The layouts alone are too big: keep the ones that fit, in order, then fill with scripts.
+  const kept: number[] = [];
+  for (const index of all) {
+    if (fits({ layouts: [...kept, index], scriptCount: 0 })) {
+      kept.push(index);
     }
-    result = renderPlan(bounded, { layoutCount: 0, scriptCount: low });
   }
+  const scriptCount = largestFitting(scriptTotal, (count) => fits({ layouts: kept, scriptCount: count }));
+  return renderPlan(bounded, { layouts: kept, scriptCount });
+}
 
-  return result;
+/** The largest n in [0, total] with `fitsCount(n)`, assuming it holds for 0 and is monotonic. */
+function largestFitting(total: number, fitsCount: (count: number) => boolean): number {
+  let low = 0;
+  let high = total;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (fitsCount(middle)) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
 }
 
 /** Wraps rendered content in the markers that let a later run replace only this section. */

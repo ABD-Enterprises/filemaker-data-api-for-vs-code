@@ -27,7 +27,19 @@ describe('validateConfiguredPath', () => {
     ['drive-relative', 'D:folder\\x.md'],
     ['drive-relative bare', 'C:x.md'],
     ['colon in name', 'a:b.md'],
-    ['second colon after drive', 'C:\\a:b']
+    ['second colon after drive', 'C:\\a:b'],
+    ['newline', 'a\nb.md'],
+    ['control character', 'a\u0007b.md'],
+    ['line separator', 'a\u2028b.md'],
+    ['bidi control', 'a\u202Eb.md'],
+    ['trailing dot', 'docs/ai.'],
+    ['trailing space in a folder', 'docs /ai.md'],
+    ['short name', 'GIT~1/config'],
+    ['short name file', 'docs/AGENTS~1.MD'],
+    ['reserved device', 'docs/CON'],
+    ['reserved device with extension', 'docs/nul.md'],
+    ['reserved COM1', 'COM1.txt'],
+    ['reserved LPT9 folder', 'lpt9/x.md']
   ])('rejects %s', (_label, value) => {
     expect(() => validateConfiguredPath(value, 'win32')).toThrow(PathConfinementError);
   });
