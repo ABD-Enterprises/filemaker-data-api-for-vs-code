@@ -73,7 +73,7 @@ describe('redact: places a secret used to slip through', () => {
   });
 
   it('stays fast on long hostile input', () => {
-    for (const piece of ['&token', '?sig', '"token', '/sessions/', 'a=']) {
+    for (const piece of ['&token', '?sig', '"token', '/sessions/', 'a=', 'a.', 'a-', 'a:', 'a://', 'a@']) {
       const input = piece.repeat(60_000);
       const start = Date.now();
       redactString(input);

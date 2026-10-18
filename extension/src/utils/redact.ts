@@ -15,7 +15,7 @@ const JSON_PAIR_PATTERN =
 const SESSION_PATH_PATTERN = /(?<!\/layouts)(\/sessions\/)(?!\{token\})[^/\s?#"'`]+/gi;
 
 /** `https://user:password@host` or `https://token@host` */
-const URL_USERINFO_PATTERN = /(\b[a-z][a-z0-9+.-]*:\/\/)[^/\s?#]*@/gi;
+const URL_USERINFO_PATTERN = /(\b[a-z][a-z0-9+.-]{0,15}:\/\/)[^/\s?#]*@/gi;
 
 export function redactString(input: string): string {
   return input
