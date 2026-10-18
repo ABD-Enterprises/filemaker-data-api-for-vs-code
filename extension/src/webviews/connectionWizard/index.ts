@@ -13,12 +13,21 @@ import {
   validateServerUrl
 } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
+import { FMClientError } from '../../services/errors';
 import { validateCaBundleFile } from '../../utils/tlsProfile';
+import { reviewAndTrustCertificate } from '../../services/certificateTrust';
+import { describeNetworkFailure } from '../../utils/networkErrors';
 import {
   loadConnectionProfileTemplate,
   PROFILE_TEMPLATE_LOCKED_FIELDS,
   PROFILE_TEMPLATE_RELATIVE_PATH
 } from '../../services/profileTemplate';
+
+interface CertificateState {
+  pin?: { sha256: string; allowExpired: boolean };
+  /** The older setting that skips every certificate check. Kept readable; replaced by a pin. */
+  legacy: boolean;
+}
 
 export type ConnectionWizardTestPolicy = 'off' | 'warn' | 'block';
 
@@ -40,8 +49,6 @@ interface WizardFormData {
   proxyApiKey?: string;
   /** Path to a PEM file of extra trusted CA certificates. Empty means none. */
   caBundlePath?: string;
-  /** Accept any certificate for this connection (insecure). Asks for confirmation. */
-  allowSelfSigned?: boolean;
 }
 
 const MAX_FORM_FIELD_LENGTH = 4096;
@@ -72,7 +79,6 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
   const proxyApiKey = text('proxyApiKey', false);
   const caBundlePath = text('caBundlePath', false);
   const authMode = value.authMode;
-  const rawSelfSigned = value.allowSelfSigned;
 
   if (
     name === null ||
@@ -85,7 +91,6 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
     proxyEndpoint === null ||
     proxyApiKey === null ||
     caBundlePath === null ||
-    (rawSelfSigned !== undefined && typeof rawSelfSigned !== 'boolean') ||
     (authMode !== 'direct' && authMode !== 'proxy') ||
     name === undefined ||
     serverUrl === undefined ||
@@ -107,8 +112,7 @@ function parseFormData(payload: unknown): WizardFormData | undefined {
     password,
     proxyEndpoint,
     proxyApiKey,
-    caBundlePath,
-    allowSelfSigned: rawSelfSigned === true
+    caBundlePath
   };
 }
 
@@ -129,8 +133,12 @@ export class ConnectionWizardPanel {
   private editingProfile: ConnectionProfile | undefined;
   /** Origins that came from the workspace's profile template, not from the user. */
   private templateOrigins = new Set<string>();
-  /** https origins for which the user already accepted "allow self-signed" in this panel. */
-  private insecureConfirmedOrigins = new Set<string>();
+  /**
+   * The certificate trust of the profile being edited, as the user has left it. It starts from the
+   * saved profile and changes only through the trust dialog (never from the form fields, a template
+   * or a file): a pinned certificate, and the older "skip all checks" flag.
+   */
+  private certState: CertificateState = { legacy: false };
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -215,6 +223,24 @@ export class ConnectionWizardPanel {
         await this.handleSave(data);
         break;
       }
+      case 'reviewCertificate':
+      case 'convertLegacyCertificate': {
+        const data = parseFormData(record.payload);
+        if (!data) {
+          await this.panel.webview.postMessage({ type: 'saveError', message: 'The form data was not valid.' });
+          return;
+        }
+        await this.handleReviewCertificate(data);
+        break;
+      }
+      case 'forgetCertificate':
+        this.certState = { legacy: this.certState.legacy };
+        await this.sendCertificateState();
+        break;
+      case 'stopSkippingCertificateChecks':
+        this.certState = { pin: this.certState.pin, legacy: false };
+        await this.sendCertificateState();
+        break;
       case 'testConnection': {
         const data = parseFormData(record.payload);
         if (!data) {
@@ -238,13 +264,26 @@ export class ConnectionWizardPanel {
 
   private async sendLoadProfile(): Promise<void> {
     this.templateOrigins.clear();
+    this.certState = this.editingProfile
+      ? {
+          pin: this.editingProfile.pinnedCertSha256
+            ? {
+                sha256: this.editingProfile.pinnedCertSha256,
+                allowExpired: this.editingProfile.pinnedCertAllowExpired === true
+              }
+            : undefined,
+          legacy: this.editingProfile.allowSelfSigned === true
+        }
+      : { legacy: false };
     if (this.editingProfile) {
       await this.panel.webview.postMessage({
         type: 'loadProfile',
         payload: this.editingProfile
       });
+      await this.sendCertificateState();
       return;
     }
+    await this.sendCertificateState();
 
     const result = await loadConnectionProfileTemplate();
     if (result.warning) {
@@ -320,7 +359,7 @@ export class ConnectionWizardPanel {
         return;
       }
 
-      const tls = await this.resolveTlsSettings(data, [target, serverValidation.value]);
+      const tls = await this.resolveTlsSettings(data);
       if (!tls.ok) {
         await this.panel.webview.postMessage({ type: 'saveError', message: tls.message });
         return;
@@ -353,12 +392,7 @@ export class ConnectionWizardPanel {
         apiBasePath: data.apiBasePath.trim(),
         apiVersionPath: data.apiVersionPath.trim()
       };
-      if (tls.caBundlePath) {
-        profile.caBundlePath = tls.caBundlePath;
-      }
-      if (tls.allowSelfSigned) {
-        profile.allowSelfSigned = true;
-      }
+      Object.assign(profile, tls.profileFields);
       // Editing must not silently drop what AI tools were allowed to do, unless the profile now
       // points at a different server, user, database or API path (then the earlier choice no
       // longer applies and access goes back to none).
@@ -550,75 +584,81 @@ export class ConnectionWizardPanel {
   }
 
   /**
-   * Checks the certificate options from the form. The custom CA file must be a real PEM
-   * certificate file. "Allow self-signed" is insecure, so enabling it asks once in a modal
-   * naming the address (not again for the same address, whether on this profile already or
-   * confirmed earlier in this panel). It only applies to https addresses (on an http:// address the form says so instead of ignoring the box). These two values
-   * come from this form alone: neither the workspace's profile template nor any setting
-   * can carry them.
+   * The certificate settings a saved or tested profile gets: the CA file typed in the form (checked
+   * to be a real certificate file) and the trust decisions kept in `certState`. Those decisions come
+   * only from the trust dialog, never from the form, a workspace template or a file.
    */
   private async resolveTlsSettings(
-    data: WizardFormData,
-    targets: Array<string | undefined>
+    data: WizardFormData
   ): Promise<
-    | { ok: true; caBundlePath?: string; allowSelfSigned: boolean }
+    | { ok: true; profileFields: Partial<ConnectionProfile> }
     | { ok: false; message: string }
   > {
-    let caBundlePath: string | undefined;
+    const profileFields: Partial<ConnectionProfile> = {};
     if (data.caBundlePath && data.caBundlePath.trim().length > 0) {
       const validation = await validateCaBundleFile(data.caBundlePath);
       if (!validation.ok) {
         return { ok: false, message: validation.error ?? 'Invalid CA certificate file.' };
       }
-      caBundlePath = validation.value;
+      profileFields.caBundlePath = validation.value;
     }
-
-    const httpsOrigins = [
-      ...new Set(
-        targets
-          .filter((target): target is string => Boolean(target) && target!.startsWith('https:'))
-          .map((target) => originOf(target))
-          .filter((origin): origin is string => Boolean(origin))
-      )
-    ];
-    if (data.allowSelfSigned === true && httpsOrigins.length === 0) {
-      return {
-        ok: false,
-        message:
-          '"Allow self-signed certificate" only applies to https:// addresses. Untick it, or use an https:// server address.'
-      };
-    }
-    if (data.allowSelfSigned !== true) {
-      return { ok: true, caBundlePath, allowSelfSigned: false };
-    }
-
-    const editing = this.editingProfile;
-    const savedOrigins = new Set(
-      editing?.allowSelfSigned === true
-        ? [originOf(editing.serverUrl), originOf(editing.proxyEndpoint)].filter((origin): origin is string =>
-            Boolean(origin)
-          )
-        : []
-    );
-    const unconfirmed = httpsOrigins.filter(
-      (origin) => !savedOrigins.has(origin) && !this.insecureConfirmedOrigins.has(origin)
-    );
-    if (unconfirmed.length > 0) {
-      const answer = await vscode.window.showWarningMessage(
-        `Accept any certificate from ${unconfirmed.join(' and ')}?\n\nThis turns off certificate checking for this connection. Anyone on the network between you and the server could pretend to be it and read your password and data. Prefer "Custom CA certificate file", and only continue on a network you control.`,
-        { modal: true },
-        'Allow insecure connection'
-      );
-      if (answer !== 'Allow insecure connection') {
-        return { ok: false, message: 'Not saved: you did not confirm accepting self-signed certificates.' };
+    if (this.certState.pin) {
+      profileFields.pinnedCertSha256 = this.certState.pin.sha256;
+      if (this.certState.pin.allowExpired) {
+        profileFields.pinnedCertAllowExpired = true;
       }
-      unconfirmed.forEach((origin) => this.insecureConfirmedOrigins.add(origin));
     }
-
-    return { ok: true, caBundlePath, allowSelfSigned: true };
+    if (this.certState.legacy) {
+      profileFields.allowSelfSigned = true;
+    }
+    return { ok: true, profileFields };
   }
 
-  private async handleTestConnection(data: WizardFormData): Promise<void> {
+  private async sendCertificateState(): Promise<void> {
+    await this.panel.webview.postMessage({
+      type: 'certificateState',
+      payload: {
+        pin: this.certState.pin,
+        legacy: this.certState.legacy
+      }
+    });
+  }
+
+  /**
+   * "Review server certificate…" (and "Convert to a pinned certificate…"): read what the server
+   * presents, show it, and on acceptance pin it for this connection.
+   */
+  private async handleReviewCertificate(data: WizardFormData): Promise<void> {
+    const serverValidation = validateServerUrl(data.serverUrl);
+    const proxyValidation = data.authMode === 'proxy' ? validateServerUrl(data.proxyEndpoint ?? '', 'Proxy endpoint') : undefined;
+    const target = data.authMode === 'proxy' ? proxyValidation : serverValidation;
+    if (!target?.ok || !target.value) {
+      await this.panel.webview.postMessage({ type: 'saveError', message: target?.error ?? 'Enter a valid server address first.' });
+      return;
+    }
+    if (!/^https:/i.test(target.value)) {
+      await this.panel.webview.postMessage({
+        type: 'saveError',
+        message: 'Certificates only apply to https:// addresses.'
+      });
+      return;
+    }
+    const decision = await reviewAndTrustCertificate(
+      {
+        name: data.name || 'this connection',
+        authMode: data.authMode,
+        serverUrl: serverValidation.value ?? target.value,
+        proxyEndpoint: proxyValidation?.value
+      },
+      { previousSha256: this.certState.pin?.sha256 }
+    );
+    if (decision) {
+      this.certState = { pin: { sha256: decision.sha256, allowExpired: decision.allowExpired }, legacy: false };
+      await this.sendCertificateState();
+    }
+  }
+
+  private async handleTestConnection(data: WizardFormData, offeredTrust = false): Promise<void> {
     const timeoutMs = vscode.workspace
       .getConfiguration('filemaker')
       .get<number>('requestTimeoutMs', 15_000);
@@ -652,7 +692,7 @@ export class ConnectionWizardPanel {
         throw new Error('Test cancelled: you did not confirm the server address.');
       }
 
-      const tls = await this.resolveTlsSettings(data, [target, serverValidation.value]);
+      const tls = await this.resolveTlsSettings(data);
       if (!tls.ok) {
         throw new Error(tls.message);
       }
@@ -666,12 +706,7 @@ export class ConnectionWizardPanel {
         apiBasePath: data.apiBasePath.trim(),
         apiVersionPath: data.apiVersionPath.trim()
       };
-      if (tls.caBundlePath) {
-        tempProfile.caBundlePath = tls.caBundlePath;
-      }
-      if (tls.allowSelfSigned) {
-        tempProfile.allowSelfSigned = true;
-      }
+      Object.assign(tempProfile, tls.profileFields);
 
       await this.postTestProgress('Preparing credentials…');
       const typedSecret = data.authMode === 'direct' ? data.password : data.proxyApiKey;
@@ -707,17 +742,60 @@ export class ConnectionWizardPanel {
         await this.secretStore.setProxyApiKey(testId, secret);
       }
 
-      await this.postTestProgress('Opening session…');
-      await this.fmClient.createSession(tempProfile);
+      // Test Connection is a ladder, so the message says which rung failed: reach the Data API
+      // (TLS, name, port, a web page in the way), list the hosted databases, then sign in.
+      let rung = 'sign-in';
+      let hosted: string[] | undefined;
+      let product = '';
+      try {
+        if (data.authMode === 'direct') {
+          rung = 'server';
+          await this.postTestProgress('Step 1 of 3: reaching the Data API (TLS and product info)…');
+          const info = await this.fmClient.getProductInfo(tempProfile);
+          product = [info.name, info.version].filter(Boolean).join(' ');
+
+          rung = 'databases';
+          await this.postTestProgress('Step 2 of 3: listing the hosted databases…');
+          hosted = await this.fmClient.listHostedDatabases(tempProfile);
+        }
+
+        rung = 'sign-in';
+        await this.postTestProgress(data.authMode === 'direct' ? 'Step 3 of 3: signing in…' : 'Opening session…');
+        // A test is the user asking for a sign-in, so it goes ahead even if automatic ones are paused.
+        await this.fmClient.createSession(tempProfile, { userInitiated: true });
+      } catch (error) {
+        throw this.explainTestFailure(error, rung, hosted);
+      }
 
       await this.postTestProgress('Cleaning up…');
       await this.fmClient.deleteSession(tempProfile);
 
+      const notes: string[] = [];
+      if (hosted && !hosted.some((name) => name.toLowerCase() === tempProfile.database.toLowerCase())) {
+        notes.push(`The server does not list a database called "${tempProfile.database}" (it lists: ${hosted.join(', ') || 'none'}), although sign-in worked.`);
+      }
       await this.panel.webview.postMessage({
         type: 'testSuccess',
-        message: 'Connection successful. Session opened and closed cleanly.'
+        message: ['Connection successful. Session opened and closed cleanly.', product ? `Server: ${product}.` : '', ...notes]
+          .filter(Boolean)
+          .join(' ')
       });
     } catch (error) {
+      // A certificate problem is the one failure the user can sensibly decide on here: offer to
+      // review the certificate and, if they accept it, run the test again with it trusted.
+      const networkCode = error instanceof FMClientError ? error.networkCode : undefined;
+      if (!offeredTrust && networkCode && describeNetworkFailure(networkCode)?.trustable) {
+        const decision = await reviewAndTrustCertificate(
+          { name: data.name || 'this connection', authMode: data.authMode, serverUrl: data.serverUrl, proxyEndpoint: data.proxyEndpoint },
+          { networkCode, previousSha256: this.certState.pin?.sha256 }
+        );
+        if (decision) {
+          this.certState = { pin: { sha256: decision.sha256, allowExpired: decision.allowExpired }, legacy: false };
+          await this.sendCertificateState();
+          await this.handleTestConnection(data, true);
+          return;
+        }
+      }
       await this.panel.webview.postMessage({
         type: 'testError',
         message: toUserErrorMessage(error, 'Connection test failed.')
@@ -731,6 +809,32 @@ export class ConnectionWizardPanel {
         this.logger.warn('Could not remove temporary test credentials.', { error });
       }
     }
+  }
+
+  /** Says which rung of the Test Connection ladder failed, and lists the hosted databases when the name looks wrong. */
+  private explainTestFailure(error: unknown, rung: string, hosted: string[] | undefined): unknown {
+    if (!(error instanceof FMClientError)) {
+      return error;
+    }
+    const where =
+      rung === 'server'
+        ? 'Could not reach the Data API'
+        : rung === 'databases'
+          ? 'Could not list the hosted databases'
+          : 'Reached the server, but sign-in failed';
+    const listing =
+      rung === 'sign-in' && error.fmCategory === 'config' && hosted && hosted.length > 0
+        ? ` The server lists these databases: ${hosted.join(', ')}.`
+        : '';
+    return new FMClientError(`${where}: ${error.message}${listing}`, {
+      status: error.status,
+      code: error.code,
+      networkCode: error.networkCode,
+      fmCategory: error.fmCategory,
+      kind: error.kind,
+      isRetryable: error.isRetryable,
+      details: error.details
+    });
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
@@ -840,12 +944,22 @@ export class ConnectionWizardPanel {
                  placeholder="/path/to/company-ca.pem" />
           <div id="caBundlePath-hint" class="hint">Optional. Absolute path to a PEM file with the certificate authority that signed your server's certificate. It is added to the system's trusted certificates, so public servers still work. This is the safe way to trust a private server.</div>
         </div>
-        <div class="field insecure-field">
-          <label class="checkbox-label" for="allowSelfSigned">
-            <input id="allowSelfSigned" type="checkbox" aria-describedby="allowSelfSigned-hint" />
-            Allow self-signed certificate (insecure)
-          </label>
-          <div id="allowSelfSigned-hint" class="hint warning-hint">Warning: this turns off certificate checking for this connection, so anyone on the network could impersonate the server and read your password and data. Use it only on a network you control; you will be asked to confirm. It applies to this profile only.</div>
+        <div class="field">
+          <label>Trusted server certificate</label>
+          <div id="certificateStatus" class="hint" role="status">No certificate has been trusted by hand. The server's certificate is checked the normal way.</div>
+          <div class="inline-actions">
+            <button type="button" id="reviewCertBtn" class="secondary">Review server certificate…</button>
+            <button type="button" id="forgetCertBtn" class="secondary hidden">Forget trusted certificate</button>
+          </div>
+          <div class="hint">For a private or self-signed server without a CA file: shows who the certificate is for, its dates and its SHA-256 fingerprint, and trusts exactly that one certificate if you agree. If the server later presents a different one, the connection is refused until you review it again. Test Connection offers this when it meets a certificate problem.</div>
+        </div>
+        <div id="legacyTlsWarning" class="field legacy-tls-warning hidden" role="alert">
+          <strong>⚠ This connection skips ALL certificate checks.</strong>
+          <div class="hint warning-hint">An older setting turned certificate checking off for this profile, so expired, wrong-host or forged certificates are all accepted. Replace it with a pinned certificate.</div>
+          <div class="inline-actions">
+            <button type="button" id="convertCertBtn" class="primary">Convert to a pinned certificate…</button>
+            <button type="button" id="stopSkippingBtn" class="secondary">Check certificates normally</button>
+          </div>
         </div>
       </details>
     </div>

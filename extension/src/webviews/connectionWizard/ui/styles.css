@@ -393,3 +393,20 @@ h1 {
 .warning-hint {
   color: var(--vscode-editorWarning-foreground, #cca700);
 }
+
+.inline-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.legacy-tls-warning {
+  border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.hidden {
+  display: none !important;
+}

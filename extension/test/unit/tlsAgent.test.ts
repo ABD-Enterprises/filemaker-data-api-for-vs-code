@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 import { FMClientError } from '../../src/services/errors';
 import { createHttpsAgentForProfile } from '../../src/services/tlsAgent';
+import { DAY, makeCertificate, newKeyPair } from '../helpers/x509';
+
+const realPem = (cn: string): string =>
+  makeCertificate({ subjectCn: cn, notBefore: new Date(Date.now() - DAY), notAfter: new Date(Date.now() + DAY), subjectKey: newKeyPair() }).pem;
 
 describe('createHttpsAgentForProfile', () => {
   it('disables certificate verification when allowSelfSigned is true', () => {
@@ -17,7 +21,7 @@ describe('createHttpsAgentForProfile', () => {
   it('loads a PEM CA bundle when caBundlePath is set', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-ca-'));
     const caPath = join(root, 'ca.pem');
-    const pem = '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n';
+    const pem = realPem('test');
     await writeFile(caPath, pem, 'utf8');
 
     const agent = createHttpsAgentForProfile({ caBundlePath: caPath });
@@ -33,20 +37,21 @@ describe('createHttpsAgentForProfile', () => {
   it('notices an edited CA file instead of reusing the agent cached for its path', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-ca-'));
     const caPath = join(root, 'ca.pem');
-    await writeFile(caPath, '-----BEGIN CERTIFICATE-----\nONE\n-----END CERTIFICATE-----\n', 'utf8');
+    await writeFile(caPath, realPem('one'), 'utf8');
     const first = createHttpsAgentForProfile({ caBundlePath: caPath });
     expect(createHttpsAgentForProfile({ caBundlePath: caPath })).toBe(first);
 
-    await writeFile(caPath, '-----BEGIN CERTIFICATE-----\nTWO-IS-LONGER\n-----END CERTIFICATE-----\n', 'utf8');
+    const longer = `${realPem('two-is-longer')}${realPem('and-another')}`;
+    await writeFile(caPath, longer, 'utf8');
     const second = createHttpsAgentForProfile({ caBundlePath: caPath });
     expect(second).not.toBe(first);
-    expect((second.options.ca as string[]).at(-1)).toContain('TWO-IS-LONGER');
+    expect((second.options.ca as string[]).at(-1)).toBe(longer);
   });
 
   it('loads a CA bundle while disabling verification when both TLS overrides are set', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-ca-'));
     const caPath = join(root, 'combined-ca.pem');
-    const pem = '-----BEGIN CERTIFICATE-----\nCOMBINED\n-----END CERTIFICATE-----\n';
+    const pem = realPem('combined');
     await writeFile(caPath, pem, 'utf8');
 
     const agent = createHttpsAgentForProfile({ allowSelfSigned: true, caBundlePath: caPath });
@@ -73,5 +78,24 @@ describe('createHttpsAgentForProfile', () => {
 
     expect(agent.options.rejectUnauthorized).toBe(true);
     expect(agent.options.ca).toBeUndefined();
+  });
+
+  it('says a CA file without a certificate is not a certificate file (instead of a misleading verify error)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fm-ca-'));
+    const notPem = join(root, 'notes.pem');
+    await writeFile(notPem, 'this is not a certificate', 'utf8');
+    const broken = join(root, 'broken.pem');
+    await writeFile(broken, '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n', 'utf8');
+
+    for (const file of [notPem, broken]) {
+      let caught: FMClientError | undefined;
+      try {
+        createHttpsAgentForProfile({ caBundlePath: file });
+      } catch (error) {
+        caught = error as FMClientError;
+      }
+      expect(caught?.code).toBe('TLS_CA_BUNDLE_INVALID');
+      expect(caught?.message).toMatch(/does not contain a certificate/);
+    }
   });
 });

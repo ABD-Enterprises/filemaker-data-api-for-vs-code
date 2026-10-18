@@ -6,7 +6,7 @@ import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FMClient } from '../../src/services/fmClient';
-import { FMClientError } from '../../src/services/errors';
+import type { FMClientError } from '../../src/services/errors';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
 import { describeNetworkFailure, extractNetworkCode } from '../../src/utils/networkErrors';

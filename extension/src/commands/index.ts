@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
 import { FMClientError } from '../services/errors';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
@@ -223,6 +224,33 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       };
 
       await runConnect();
+    }),
+
+    // Behind the "Trust this certificate…" / "Review and re-trust" button on error toasts: shows the
+    // certificate the server presents now and, if the user agrees, pins it for this profile.
+    vscode.commands.registerCommand('filemakerDataApiTools.trustServerCertificate', async (arg: unknown) => {
+      const profile = await resolveProfileFromArg(arg, profileStore, true);
+      if (!profile) {
+        return;
+      }
+      const networkCode = (arg as { networkCode?: string } | undefined)?.networkCode;
+      const decision = await reviewAndTrustCertificate(profile, {
+        networkCode,
+        previousSha256: profile.pinnedCertSha256
+      });
+      if (!decision) {
+        return;
+      }
+      await profileStore.upsertProfile(withPinnedCertificate(profile, decision));
+      fmClient.clearAuthPause(profile.id);
+      refreshExplorer();
+      const connect = await vscode.window.showInformationMessage(
+        `Certificate trusted for "${profile.name}". Connect now?`,
+        'Connect'
+      );
+      if (connect === 'Connect') {
+        await vscode.commands.executeCommand('filemakerDataApiTools.connect', { profileId: profile.id });
+      }
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.openConnectionMenu', async () => {

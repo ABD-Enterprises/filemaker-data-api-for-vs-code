@@ -95,6 +95,14 @@ interface AuthPause {
   stamp: string;
 }
 
+/** What the extension knows about a connection right now, from its most recent requests. */
+export interface SessionHealth {
+  state: 'connecting' | 'connected' | 'auth-failed' | 'certificate' | 'unreachable';
+  /** The error message behind a failed state (already safe to show). */
+  message?: string;
+  at: number;
+}
+
 const DEFAULT_LAYOUT_TTL_MS = 60_000;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SESSION_MAX_AGE_MS = 14 * 60 * 1000; // 14 minutes; FM Data API tokens expire at 15
@@ -142,6 +150,8 @@ export class FMClient {
   private readonly layoutMetadataEtags = new Map<string, string>();
   private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
+  private readonly health = new Map<string, SessionHealth>();
+  private readonly healthListeners = new Set<(profileId: string, health: SessionHealth | undefined) => void>();
   /**
    * Profiles whose stored credentials FileMaker rejected (210, 211, 212, 213, 214). Automatic
    * sign-ins stop for them: trying again with the same password cannot work and repeated failures
@@ -216,6 +226,9 @@ export class FMClient {
         endpoint: 'POST /sessions'
       },
       async (trace) => {
+        if (this.health.get(profile.id)?.state !== 'connected') {
+          this.setHealth(profile.id, { state: 'connecting', at: this.now() });
+        }
         if (isProxyProfile(profile)) {
           const token = await this.proxyClient.createSession(profile, control?.signal);
           const normalizedToken = token ?? 'proxy-session';
@@ -972,6 +985,80 @@ export class FMClient {
     );
   }
 
+  /**
+   * Step one of Test Connection: `GET /fmi/data/<version>/productInfo` needs no account and no
+   * database, so it separates "cannot reach the Data API" (TLS, DNS, port, a web page, Data API
+   * off) from everything about the account. Returns the product name and version.
+   */
+  public async getProductInfo(
+    profile: ConnectionProfile,
+    control?: ClientRequestControl
+  ): Promise<{ name?: string; version?: string }> {
+    const envelope = await this.requestServerLevel<{ productInfo?: Record<string, unknown> }>(
+      profile,
+      '/productInfo',
+      control,
+      'Failed to reach the FileMaker Data API.'
+    );
+    const info = envelope.response.productInfo ?? {};
+    return {
+      name: typeof info.name === 'string' ? info.name : undefined,
+      version: typeof info.version === 'string' ? info.version : undefined
+    };
+  }
+
+  /**
+   * Step two: `GET /fmi/data/<version>/databases`. Without credentials FileMaker lists the hosted
+   * databases unless "Filter Databases in Client Applications" is on, in which case it answers
+   * 401 and the list is unavailable until sign-in (returned as `undefined`).
+   */
+  public async listHostedDatabases(
+    profile: ConnectionProfile,
+    control?: ClientRequestControl
+  ): Promise<string[] | undefined> {
+    try {
+      const envelope = await this.requestServerLevel<{ databases?: Array<{ name?: unknown }> }>(
+        profile,
+        '/databases',
+        control,
+        'Failed to list the hosted databases.'
+      );
+      return (envelope.response.databases ?? [])
+        .map((entry) => (typeof entry?.name === 'string' ? entry.name : undefined))
+        .filter((name): name is string => Boolean(name));
+    } catch (error) {
+      if (error instanceof FMClientError && (error.status === 401 || error.status === 403)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private async requestServerLevel<TResponse extends Record<string, unknown>>(
+    profile: ConnectionProfile,
+    path: string,
+    control: ClientRequestControl | undefined,
+    fallbackMessage: string
+  ): Promise<DataApiEnvelope<TResponse>> {
+    const base = profile.serverUrl.replace(/\/+$/, '');
+    const basePath = this.normalizePath(profile.apiBasePath ?? '/fmi/data');
+    const version = (profile.apiVersionPath ?? 'vLatest').replace(/^\/+|\/+$/g, '');
+    try {
+      const response = await this.httpClient.request<unknown>({
+        method: 'GET',
+        url: `${base}${basePath}/${version}${path}`,
+        headers: { Accept: 'application/json' },
+        signal: control?.signal,
+        timeout: this.timeoutMs,
+        maxRedirects: 0,
+        httpsAgent: createHttpsAgentForProfile(profile)
+      });
+      return parseDataApiEnvelope<TResponse>(response);
+    } catch (error) {
+      throw toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }));
+    }
+  }
+
   public invalidateProfileCache(profileId: string): void {
     for (const key of this.layoutCache.keys()) {
       if (cacheKeyMatchesProfile(key, profileId)) {
@@ -990,6 +1077,56 @@ export class FMClient {
         this.layoutMetadataEtags.delete(key);
       }
     }
+  }
+
+  /** The last known health of a profile's connection, or undefined before any request this session. */
+  public getHealth(profileId: string): SessionHealth | undefined {
+    return this.health.get(profileId);
+  }
+
+  /** Calls `listener` whenever a profile's health changes. Returns a function that stops it. */
+  public onHealthChange(listener: (profileId: string, health: SessionHealth | undefined) => void): () => void {
+    this.healthListeners.add(listener);
+    return () => this.healthListeners.delete(listener);
+  }
+
+  private setHealth(profileId: string, next: SessionHealth | undefined): void {
+    const before = this.health.get(profileId);
+    if (next) {
+      this.health.set(profileId, next);
+    } else {
+      this.health.delete(profileId);
+    }
+    if (before?.state !== next?.state || before?.message !== next?.message) {
+      for (const listener of this.healthListeners) {
+        try {
+          listener(profileId, next);
+        } catch (error) {
+          this.logger.warn('A health listener failed.', { error });
+        }
+      }
+    }
+  }
+
+  /** What a failed request says about the connection; FileMaker business errors say it is fine. */
+  private healthAfterFailure(error: unknown): SessionHealth {
+    const at = this.now();
+    if (error instanceof FMClientError) {
+      if (error.kind === 'certificate') {
+        return { state: 'certificate', message: error.message, at };
+      }
+      if (error.fmCategory === 'credentials' || error.kind === 'auth' && error.fmCategory !== 'privilege') {
+        return { state: 'auth-failed', message: error.message, at };
+      }
+      if (error.networkCode || error.kind === 'network' || error.kind === 'timeout') {
+        return { state: 'unreachable', message: error.message, at };
+      }
+      if (error.code === 'NOT_DATA_API_RESPONSE' || (error.status === 404 && error.code === undefined)) {
+        return { state: 'unreachable', message: error.message, at };
+      }
+    }
+    // An answer from FileMaker (a missing layout, a refused write) proves the connection works.
+    return { state: 'connected', at };
   }
 
   /** Ends a pause on automatic sign-ins now (the credentials were just edited). */
@@ -1331,6 +1468,11 @@ export class FMClient {
 
     try {
       const result = await execute(trace);
+      if (context.operation === 'deleteSession') {
+        this.setHealth(context.profileId, undefined);
+      } else {
+        this.setHealth(context.profileId, { state: 'connected', at: this.now() });
+      }
       this.logger.debug('FileMaker request completed.', {
         requestId: trace.requestId,
         operation: context.operation,
@@ -1359,6 +1501,9 @@ export class FMClient {
       });
       return result;
     } catch (error) {
+      if (context.operation !== 'deleteSession') {
+        this.setHealth(context.profileId, this.healthAfterFailure(error));
+      }
       this.logger.warn('FileMaker request failed.', {
         requestId: trace.requestId,
         operation: context.operation,

@@ -117,7 +117,23 @@ export async function showErrorWithDetails(
     error: normalized
   });
 
-  const actionButtons = selectErrorActions(normalized, options?.actions);
+  // Any surface that can name the profile gets the certificate review for free.
+  const actions = options?.actions
+    ? {
+        ...options.actions,
+        trustCertificate:
+          options.actions.trustCertificate ??
+          (options.actions.profileId
+            ? async () => {
+                await vscode.commands.executeCommand('filemakerDataApiTools.trustServerCertificate', {
+                  profileId: options.actions?.profileId,
+                  networkCode: normalized.networkCode
+                });
+              }
+            : undefined)
+      }
+    : undefined;
+  const actionButtons = selectErrorActions(normalized, actions);
   const allButtons = [...actionButtons, DETAILS_ACTION, COPY_REPORT_ACTION];
 
   const selection = await vscode.window.showErrorMessage(
@@ -125,9 +141,9 @@ export async function showErrorWithDetails(
     ...allButtons
   );
 
-  if (selection === RETRY_ACTION && options?.actions?.retry) {
+  if (selection === RETRY_ACTION && actions?.retry) {
     try {
-      await options.actions.retry();
+      await actions.retry();
     } catch (retryError) {
       options?.logger?.error('Retry action failed.', { error: retryError });
     }
@@ -135,10 +151,10 @@ export async function showErrorWithDetails(
   }
   if (
     (selection === TRUST_CERTIFICATE_ACTION || selection === RETRUST_CERTIFICATE_ACTION) &&
-    options?.actions?.trustCertificate
+    actions?.trustCertificate
   ) {
     try {
-      await options.actions.trustCertificate();
+      await actions.trustCertificate();
     } catch (trustError) {
       options?.logger?.error('Trust certificate action failed.', { error: trustError });
     }

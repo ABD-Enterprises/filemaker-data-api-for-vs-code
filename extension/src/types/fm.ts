@@ -21,6 +21,13 @@ export interface ConnectionProfile {
   proxyEndpoint?: string;
   allowSelfSigned?: boolean;
   caBundlePath?: string;
+  /**
+   * SHA-256 fingerprint (64 lower-case hex digits) of the one server certificate the user chose to
+   * trust for this connection. Set only through the trust dialog; never from a template or import.
+   */
+  pinnedCertSha256?: string;
+  /** The user accepted a pinned certificate that is expired or not yet valid. */
+  pinnedCertAllowExpired?: boolean;
   /** What AI tools may do through this profile (ADR-0004). Missing means "none". */
   aiAccess?: AiAccess;
 }

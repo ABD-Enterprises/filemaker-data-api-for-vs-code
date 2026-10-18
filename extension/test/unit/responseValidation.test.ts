@@ -5,7 +5,7 @@ import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { FMClient } from '../../src/services/fmClient';
-import { FMClientError } from '../../src/services/errors';
+import type { FMClientError } from '../../src/services/errors';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
 import { InMemorySecretStorage } from './mocks';
@@ -217,5 +217,51 @@ describe('responses that are not the Data API, redirects, and business errors on
     expect(created.scriptErrors).toEqual([{ phase: 'prerequest', code: '104' }]);
     const deleted = await fm.deleteRecord(profile, 'Contacts', '1');
     expect(deleted.scriptErrors).toBeUndefined();
+  });
+
+  describe('Test Connection ladder calls (no account needed)', () => {
+    it('reads the product and version from productInfo without a login', async () => {
+      const server = await serve((_request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(ok({ productInfo: { name: 'FileMaker Server', version: '21.1.1' } }));
+      });
+      const { fm, profile } = await client(server.url);
+      expect(await fm.getProductInfo(profile)).toEqual({ name: 'FileMaker Server', version: '21.1.1' });
+      expect(server.requests).toEqual(['GET /fmi/data/vLatest/productInfo']);
+    });
+
+    it('lists hosted databases, and returns undefined when the server wants a sign-in first', async () => {
+      const open = await serve((_request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(ok({ databases: [{ name: 'Sales' }, { name: 'HR' }] }));
+      });
+      const first = await client(open.url);
+      expect(await first.fm.listHostedDatabases(first.profile)).toEqual(['Sales', 'HR']);
+      expect(open.requests).toEqual(['GET /fmi/data/vLatest/databases']);
+
+      const filtered = await serve((_request, response) => {
+        response.statusCode = 401;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(fmError('212'));
+      });
+      const second = await client(filtered.url);
+      expect(await second.fm.listHostedDatabases(second.profile)).toBeUndefined();
+    });
+
+    it('a web page or a 404 at the Data API address is explained at the first rung', async () => {
+      const page = await serve((_request, response) => {
+        response.setHeader('Content-Type', 'text/html');
+        response.end('<html>Welcome</html>');
+      });
+      const first = await client(page.url);
+      await expect(first.fm.getProductInfo(first.profile)).rejects.toThrow(/did not return Data API JSON/);
+
+      const missing = await serve((_request, response) => {
+        response.statusCode = 404;
+        response.end('<html>Not Found</html>');
+      });
+      const second = await client(missing.url);
+      await expect(second.fm.getProductInfo(second.profile)).rejects.toThrow(/Data API is enabled/);
+    });
   });
 });
