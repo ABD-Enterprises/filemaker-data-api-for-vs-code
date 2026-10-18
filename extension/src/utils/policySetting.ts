@@ -15,14 +15,32 @@ export type ConfigurationReader = Pick<vscode.WorkspaceConfiguration, 'get'> &
  * @param restrictedValue the value that means "restricted" (`true` for offline mode,
  *   `false` for an `enabled` switch).
  */
-export function readRestrictedSetting(
+export interface RestrictedReading {
+  /** The value in effect. */
+  value: boolean;
+  /** The user's own value, or the default when the user set none. */
+  baseline: boolean;
+  baselineFrom: 'user' | 'default';
+  /** What the workspace (or its folder) holds, if anything. */
+  workspace: boolean | undefined;
+  /** The workspace value is the restricted one, so it counts. */
+  workspaceCounted: boolean;
+}
+
+/**
+ * The reading behind {@link readRestrictedSetting}, with the pieces it was made from. The
+ * Effective Settings view explains from this same result, so the explanation cannot drift from
+ * the rule.
+ */
+export function inspectRestrictedSetting(
   configuration: Pick<vscode.WorkspaceConfiguration, 'get'> & Partial<Pick<vscode.WorkspaceConfiguration, 'inspect'>>,
   key: string,
   defaultValue: boolean,
   restrictedValue: boolean
-): boolean {
+): RestrictedReading {
   if (typeof configuration.inspect !== 'function') {
-    return configuration.get<boolean>(key, defaultValue);
+    const value = configuration.get<boolean>(key, defaultValue);
+    return { value, baseline: value, baselineFrom: 'default', workspace: undefined, workspaceCounted: false };
   }
 
   const inspected = configuration.inspect<boolean>(key) as
@@ -32,18 +50,38 @@ export function readRestrictedSetting(
       })
     | undefined;
   if (!inspected) {
-    return defaultValue;
+    return {
+      value: defaultValue,
+      baseline: defaultValue,
+      baselineFrom: 'default',
+      workspace: undefined,
+      workspaceCounted: false
+    };
   }
 
-  const baseline =
+  const userValue =
     (inspected.globalValue as boolean | undefined) ??
     inspected.globalRemoteValue ??
-    inspected.globalLocalValue ??
-    (inspected.defaultValue as boolean | undefined) ??
-    defaultValue;
+    inspected.globalLocalValue;
+  const baseline = userValue ?? (inspected.defaultValue as boolean | undefined) ?? defaultValue;
   const workspace = (inspected.workspaceFolderValue ?? inspected.workspaceValue) as boolean | undefined;
 
-  return baseline === restrictedValue || workspace === restrictedValue ? restrictedValue : baseline;
+  return {
+    value: baseline === restrictedValue || workspace === restrictedValue ? restrictedValue : baseline,
+    baseline,
+    baselineFrom: userValue === undefined ? 'default' : 'user',
+    workspace,
+    workspaceCounted: workspace === restrictedValue
+  };
+}
+
+export function readRestrictedSetting(
+  configuration: Pick<vscode.WorkspaceConfiguration, 'get'> & Partial<Pick<vscode.WorkspaceConfiguration, 'inspect'>>,
+  key: string,
+  defaultValue: boolean,
+  restrictedValue: boolean
+): boolean {
+  return inspectRestrictedSetting(configuration, key, defaultValue, restrictedValue).value;
 }
 
 /** `filemaker.offline.mode`: a workspace may switch it on, never off. */

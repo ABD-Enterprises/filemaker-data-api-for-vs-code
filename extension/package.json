@@ -195,6 +195,11 @@
         "category": "FileMaker"
       },
       {
+        "command": "filemakerDataApiTools.showEffectiveSettings",
+        "title": "Show Effective Settings",
+        "category": "FileMaker"
+      },
+      {
         "command": "filemakerDataApiTools.addConnectionProfile",
         "title": "Add Connection Profile",
         "category": "FileMaker"
@@ -997,19 +1002,22 @@
             "default": 15000,
             "minimum": 1000,
             "maximum": 120000,
-            "description": "HTTP timeout in milliseconds for FileMaker Data API requests. Replaces the deprecated `filemakerDataApiTools.requestTimeoutMs`.",
+            "description": "Per workspace. HTTP timeout in milliseconds for FileMaker Data API requests. Replaces the deprecated filemakerDataApiTools.requestTimeoutMs.",
+            "markdownDescription": "**Per workspace.** HTTP timeout in milliseconds for FileMaker Data API requests. Replaces the deprecated `filemakerDataApiTools.requestTimeoutMs`.",
             "order": 0
           },
           "filemaker.defaultApiBasePath": {
             "type": "string",
             "default": "/fmi/data",
-            "description": "Default API base path used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiBasePath`.",
+            "description": "Per workspace. Default API base path used when a profile does not override it. Replaces the deprecated filemakerDataApiTools.defaultApiBasePath.",
+            "markdownDescription": "**Per workspace.** Default API base path used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiBasePath`.",
             "order": 1
           },
           "filemaker.defaultApiVersionPath": {
             "type": "string",
             "default": "vLatest",
-            "description": "Default FileMaker Data API version segment used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiVersionPath`.",
+            "description": "Per workspace. Default FileMaker Data API version segment used when a profile does not override it. Replaces the deprecated filemakerDataApiTools.defaultApiVersionPath.",
+            "markdownDescription": "**Per workspace.** Default FileMaker Data API version segment used when a profile does not override it. Replaces the deprecated `filemakerDataApiTools.defaultApiVersionPath`.",
             "order": 2
           },
           "filemaker.connect.maxRetries": {
@@ -1017,7 +1025,8 @@
             "default": 3,
             "minimum": 0,
             "maximum": 10,
-            "description": "Number of retries the FileMaker connect command performs on transient login failures (network errors, 5xx). 0 disables retry.",
+            "description": "Per workspace. Number of retries the FileMaker connect command performs on transient login failures (network errors, 5xx). 0 disables retry.",
+            "markdownDescription": "**Per workspace.** Number of retries the FileMaker connect command performs on transient login failures (network errors, 5xx). 0 disables retry.",
             "order": 3
           },
           "filemaker.connect.backoffInitialMs": {
@@ -1025,7 +1034,8 @@
             "default": 1000,
             "minimum": 100,
             "maximum": 60000,
-            "description": "Initial delay (ms) before the first retry of a failed connect.",
+            "description": "Per workspace. Initial delay (ms) before the first retry of a failed connect.",
+            "markdownDescription": "**Per workspace.** Initial delay (ms) before the first retry of a failed connect.",
             "order": 4
           },
           "filemaker.connect.backoffMaxMs": {
@@ -1033,7 +1043,8 @@
             "default": 30000,
             "minimum": 1000,
             "maximum": 300000,
-            "description": "Maximum delay (ms) the connect backoff will wait between retries.",
+            "description": "Per workspace. Maximum delay (ms) the connect backoff will wait between retries.",
+            "markdownDescription": "**Per workspace.** Maximum delay (ms) the connect backoff will wait between retries.",
             "order": 5
           },
           "filemaker.connect.backoffMultiplier": {
@@ -1041,7 +1052,8 @@
             "default": 2,
             "minimum": 1,
             "maximum": 10,
-            "description": "Exponential multiplier applied to the connect backoff delay between retries.",
+            "description": "Per workspace. Exponential multiplier applied to the connect backoff delay between retries.",
+            "markdownDescription": "**Per workspace.** Exponential multiplier applied to the connect backoff delay between retries.",
             "order": 6
           },
           "filemaker.connectionWizard.requireTestBeforeSave": {
@@ -1057,7 +1069,8 @@
               "Disable Save until Test Connection has succeeded on the current values."
             ],
             "default": "warn",
-            "description": "Whether the connection wizard requires a successful Test Connection before Save. 'off' = no requirement; 'warn' = save with confirmation when untested or edits since last test; 'block' = save disabled until a successful test on the current values.",
+            "description": "Per workspace. Whether the connection wizard requires a successful Test Connection before Save. 'off' = no requirement; 'warn' = save with confirmation when untested or edits since last test; 'block' = save disabled until a successful test on the current values.",
+            "markdownDescription": "**Per workspace.** Whether the connection wizard requires a successful Test Connection before Save. 'off' = no requirement; 'warn' = save with confirmation when untested or edits since last test; 'block' = save disabled until a successful test on the current values.",
             "order": 7
           },
           "filemaker.session.maxAgeMinutes": {
@@ -1065,7 +1078,8 @@
             "default": 14,
             "minimum": 1,
             "maximum": 30,
-            "description": "Treat the FileMaker Data API session token as expired after this many minutes from issuance. Default 14 (FM tokens nominally expire at 15).",
+            "description": "Per workspace. Treat the FileMaker Data API session token as expired after this many minutes from issuance. Default 14 (FM tokens nominally expire at 15).",
+            "markdownDescription": "**Per workspace.** Treat the FileMaker Data API session token as expired after this many minutes from issuance. Default 14 (FM tokens nominally expire at 15).",
             "order": 8
           },
           "filemaker.session.refreshLeadSeconds": {
@@ -1073,7 +1087,8 @@
             "default": 30,
             "minimum": 0,
             "maximum": 300,
-            "description": "Refresh the session token proactively when this many seconds remain before nominal expiry. Set to 0 to disable proactive refresh and rely on 401-retry only.",
+            "description": "Per workspace. Refresh the session token proactively when this many seconds remain before nominal expiry. Set to 0 to disable proactive refresh and rely on 401-retry only.",
+            "markdownDescription": "**Per workspace.** Refresh the session token proactively when this many seconds remain before nominal expiry. Set to 0 to disable proactive refresh and rely on 401-retry only.",
             "order": 9
           },
           "filemaker.secrets.fallback": {
@@ -1089,8 +1104,9 @@
               "Do not store secrets at all; enter credentials each time (development only)."
             ],
             "default": "vscode-only",
-            "description": "What to do when VS Code SecretStorage is unavailable. The default propagates the error. 'workspace-state' keeps an obfuscated copy of secrets in workspace state for headless or remote-agent setups; it is obfuscation keyed from this machine's id, not protection against local access. 'disabled' skips secret persistence entirely (development only). Read from user settings only.",
             "scope": "application",
+            "description": "User settings only. What to do when VS Code SecretStorage is unavailable. The default propagates the error. 'workspace-state' keeps an obfuscated copy of secrets in workspace state for headless or remote-agent setups; it is obfuscation keyed from this machine's id, not protection against local access. 'disabled' skips secret persistence entirely (development only). Read from user settings only.",
+            "markdownDescription": "**User settings only.** What to do when VS Code SecretStorage is unavailable. The default propagates the error. 'workspace-state' keeps an obfuscated copy of secrets in workspace state for headless or remote-agent setups; it is obfuscation keyed from this machine's id, not protection against local access. 'disabled' skips secret persistence entirely (development only). Read from user settings only.",
             "order": 10
           }
         }
@@ -1107,24 +1123,27 @@
               "global"
             ],
             "enumDescriptions": [
-              "Saved queries belong to the current workspace.",
-              "Saved queries are shared across all workspaces."
+              "workspace: stored by VS Code for this workspace on this computer; not in your project files",
+              "global: available in every workspace on this computer (per machine in a remote window)"
             ],
             "default": "workspace",
-            "description": "Scope used to store saved queries.",
+            "description": "Per workspace. Where saved queries are kept: workspace stores them for this workspace on this computer (by VS Code, not in your project files; other workspaces do not see them), global makes them available in every workspace on this computer (on each machine separately in a remote window). Changing this does not move queries you already saved. The stored values stay workspace and global.",
+            "markdownDescription": "**Per workspace.** Where saved queries are kept: `workspace` stores them for this workspace on this computer (by VS Code, not in your project files; other workspaces do not see them), `global` makes them available in every workspace on this computer (on each machine separately in a remote window). Changing this does not move queries you already saved. The stored values stay `workspace` and `global`.",
             "order": 0
           },
           "filemaker.history.maxEntries": {
             "type": "number",
             "default": 10,
             "minimum": 1,
-            "description": "Maximum number of request history entries stored per workspace.",
+            "description": "Per workspace. Maximum number of request history entries stored per workspace.",
+            "markdownDescription": "**Per workspace.** Maximum number of request history entries stored per workspace.",
             "order": 1
           },
           "filemaker.snippets.includeAuthByDefault": {
             "type": "boolean",
             "default": false,
-            "description": "Whether generated curl/fetch snippets include authorization headers by default.",
+            "description": "Per workspace. Whether generated curl/fetch snippets include authorization headers by default.",
+            "markdownDescription": "**Per workspace.** Whether generated curl/fetch snippets include authorization headers by default.",
             "order": 2
           }
         }
@@ -1137,28 +1156,31 @@
           "filemaker.features.scriptRunner.enabled": {
             "type": "boolean",
             "default": true,
-            "description": "Enable Script Runner UI and script execution features.",
+            "description": "Workspace can only make this stricter. Enable Script Runner UI and script execution features. A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Enable Script Runner UI and script execution features. A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 0
           },
           "filemaker.scripts.parameterBuilder.enabled": {
             "type": "boolean",
             "default": true,
-            "description": "Enable the Script Runner JSON parameter builder.",
+            "description": "Per workspace. Enable the Script Runner JSON parameter builder.",
+            "markdownDescription": "**Per workspace.** Enable the Script Runner JSON parameter builder.",
             "order": 1
           },
           "filemaker.export.neutralizeFormulas": {
             "type": "boolean",
             "default": true,
             "scope": "application",
-            "description": "Protect spreadsheets: put an apostrophe in front of CSV cells and copied table cells that start with =, +, -, @, tab or carriage return. User settings only.",
-            "markdownDescription": "Protect spreadsheets from formulas hidden in data. A cell whose text starts with `=`, `+`, `-`, `@`, a tab or a carriage return is run as a formula by Excel, Sheets and Numbers (for example `=HYPERLINK(...)` can send data to another site), so CSV exports and **Copy as table** put an apostrophe in front of it. Plain numbers and phone numbers are left alone. Turn this off only if you need the exact text and never open the files in a spreadsheet. Importing a file always takes the apostrophe back off, whichever way this is set. Read from your **user** settings only; a workspace cannot turn it off.",
+            "description": "User settings only. Protect spreadsheets from formulas hidden in data. A cell whose text starts with =, +, -, @, a tab or a carriage return is run as a formula by Excel, Sheets and Numbers (for example =HYPERLINK(...) can send data to another site), so CSV exports and Copy as table put an apostrophe in front of it. Plain numbers and phone numbers are left alone. Turn this off only if you need the exact text and never open the files in a spreadsheet. Importing a file always takes the apostrophe back off, whichever way this is set. Read from your user settings only; a workspace cannot turn it off.",
+            "markdownDescription": "**User settings only.** Protect spreadsheets from formulas hidden in data. A cell whose text starts with `=`, `+`, `-`, `@`, a tab or a carriage return is run as a formula by Excel, Sheets and Numbers (for example `=HYPERLINK(...)` can send data to another site), so CSV exports and **Copy as table** put an apostrophe in front of it. Plain numbers and phone numbers are left alone. Turn this off only if you need the exact text and never open the files in a spreadsheet. Importing a file always takes the apostrophe back off, whichever way this is set. Read from your **user** settings only; a workspace cannot turn it off.",
             "order": 10
           },
           "filemaker.batch.maxRecords": {
             "type": "number",
             "default": 10000,
             "minimum": 1,
-            "description": "Safety cap for batch export record count.",
+            "description": "Per workspace. Safety cap for batch export record count.",
+            "markdownDescription": "**Per workspace.** Safety cap for batch export record count.",
             "order": 2
           },
           "filemaker.batch.concurrency": {
@@ -1166,19 +1188,22 @@
             "default": 4,
             "minimum": 1,
             "maximum": 10,
-            "description": "Maximum concurrent write operations for batch update execution.",
+            "description": "Per workspace. Maximum concurrent write operations for batch update execution.",
+            "markdownDescription": "**Per workspace.** Maximum concurrent write operations for batch update execution.",
             "order": 3
           },
           "filemaker.batch.dryRunDefault": {
             "type": "boolean",
             "default": true,
-            "description": "Default dry-run mode for batch updates.",
+            "description": "Per workspace. Default dry-run mode for batch updates.",
+            "markdownDescription": "**Per workspace.** Default dry-run mode for batch updates.",
             "order": 4
           },
           "filemaker.features.recordEdit.enabled": {
             "type": "boolean",
             "default": true,
-            "description": "Enable record editor write-back features.",
+            "description": "Workspace can only make this stricter. Enable record editor write-back features. A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Enable record editor write-back features. A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 5
           },
           "filemaker.containerUploadMaxBytes": {
@@ -1186,13 +1211,15 @@
             "default": 104857600,
             "minimum": 1,
             "maximum": 2147483647,
-            "description": "Maximum file size, in bytes, allowed by FileMaker: Upload to Container. Default is 100 MB.",
+            "description": "Per workspace. Maximum file size, in bytes, allowed by FileMaker: Upload to Container. Default is 100 MB.",
+            "markdownDescription": "**Per workspace.** Maximum file size, in bytes, allowed by FileMaker: Upload to Container. Default is 100 MB.",
             "order": 6
           },
           "filemaker.features.batch.enabled": {
             "type": "boolean",
             "default": true,
-            "description": "Enable batch export/update features (auto-disabled in untrusted workspaces).",
+            "description": "Workspace can only make this stricter. Enable batch export/update features (auto-disabled in untrusted workspaces). A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Enable batch export/update features (auto-disabled in untrusted workspaces). A workspace can only turn this off, never on. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 7
           },
           "filemaker.performance.mode": {
@@ -1206,7 +1233,8 @@
               "Larger pages and adaptive concurrency for big exports; batch exports are written as JSON Lines."
             ],
             "default": "standard",
-            "description": "High-scale mode optimizes batch/export workflows for large datasets.",
+            "description": "Per workspace. High-scale mode optimizes batch/export workflows for large datasets.",
+            "markdownDescription": "**Per workspace.** High-scale mode optimizes batch/export workflows for large datasets.",
             "order": 8
           }
         }
@@ -1220,13 +1248,15 @@
             "type": "number",
             "default": 300,
             "minimum": 10,
-            "description": "Schema metadata cache TTL in seconds.",
+            "description": "Per workspace. Schema metadata cache TTL in seconds.",
+            "markdownDescription": "**Per workspace.** Schema metadata cache TTL in seconds.",
             "order": 0
           },
           "filemaker.schema.metadataEnabled": {
             "type": "boolean",
             "default": true,
-            "description": "Enable layout metadata lookups for schema/field browsing.",
+            "description": "Per workspace. Enable layout metadata lookups for schema/field browsing.",
+            "markdownDescription": "**Per workspace.** Enable layout metadata lookups for schema/field browsing.",
             "order": 1
           },
           "filemaker.schema.snapshots.storage": {
@@ -1236,11 +1266,12 @@
               "workspaceFiles"
             ],
             "enumDescriptions": [
-              "Keep snapshots in VS Code workspace state (not visible in the repository).",
-              "Write snapshots as files under .vscode/filemaker/snapshots in the workspace folder, so they can be committed. Needs a trusted workspace."
+              "workspaceState: kept inside VS Code for this project, not in the repository",
+              "workspaceFiles: written to .vscode/filemaker/snapshots in the project so they can be committed (trusted workspace only)"
             ],
             "default": "workspaceFiles",
-            "description": "Storage backend for schema snapshots. In untrusted workspaces, workspaceState is used automatically.",
+            "description": "Per workspace. Where schema snapshots are kept: workspaceFiles writes them as files under .vscode/filemaker/snapshots in the project so they can be committed (needs a trusted workspace); workspaceState keeps them inside VS Code, out of the repository. An untrusted workspace always uses workspaceState.",
+            "markdownDescription": "**Per workspace.** Where schema snapshots are kept: `workspaceFiles` writes them as files under `.vscode/filemaker/snapshots` in the project so they can be committed (needs a trusted workspace); `workspaceState` keeps them inside VS Code, out of the repository. An untrusted workspace always uses `workspaceState`.",
             "order": 2
           },
           "filemaker.schema.snapshots.maxPerLayout": {
@@ -1248,19 +1279,22 @@
             "default": 20,
             "minimum": 1,
             "maximum": 100,
-            "description": "Maximum number of schema snapshots to retain per layout. Oldest snapshots are pruned automatically.",
+            "description": "Per workspace. Maximum number of schema snapshots to retain per layout. Oldest snapshots are pruned automatically.",
+            "markdownDescription": "**Per workspace.** Maximum number of schema snapshots to retain per layout. Oldest snapshots are pruned automatically.",
             "order": 3
           },
           "filemaker.schema.diagnostics.enabled": {
             "type": "boolean",
             "default": false,
-            "description": "Publish schema diff changes to the Problems panel when diffing against latest snapshot.",
+            "description": "Per workspace. Publish schema diff changes to the Problems panel when diffing against latest snapshot.",
+            "markdownDescription": "**Per workspace.** Publish schema diff changes to the Problems panel when diffing against latest snapshot.",
             "order": 4
           },
           "filemaker.schema.hashAlgorithm": {
             "type": "string",
             "default": "sha256",
-            "description": "Hash algorithm used for schema metadata fingerprinting.",
+            "description": "Per workspace. Hash algorithm used for schema metadata fingerprinting.",
+            "markdownDescription": "**Per workspace.** Hash algorithm used for schema metadata fingerprinting.",
             "order": 5
           }
         }
@@ -1273,7 +1307,8 @@
           "filemaker.typegen.outputDir": {
             "type": "string",
             "default": "filemaker-types",
-            "description": "Workspace output folder for generated TypeScript layout types.",
+            "description": "Per workspace. Folder inside the project where Generate Types for Layout writes TypeScript files. It is relative to the project folder; a leading / is dropped, and a path containing .. is replaced by the default filemaker-types.",
+            "markdownDescription": "**Per workspace.** Folder inside the project where **Generate Types for Layout** writes TypeScript files. It is relative to the project folder; a leading `/` is dropped, and a path containing `..` is replaced by the default `filemaker-types`.",
             "order": 0
           }
         }
@@ -1288,7 +1323,8 @@
             "default": 20,
             "minimum": 1,
             "maximum": 1000,
-            "description": "Sustained requests-per-second cap on the local FM bridge server. Throttled requests get HTTP 429 with Retry-After. Default 20.",
+            "description": "Per workspace. Sustained requests-per-second cap on the local FM bridge server. Throttled requests get HTTP 429 with Retry-After. Default 20.",
+            "markdownDescription": "**Per workspace.** Sustained requests-per-second cap on the local FM bridge server. Throttled requests get HTTP 429 with Retry-After. Default 20.",
             "order": 0
           },
           "filemaker.fmWeb.bridge.rateLimitBurst": {
@@ -1296,7 +1332,8 @@
             "default": 60,
             "minimum": 1,
             "maximum": 10000,
-            "description": "Burst capacity for the bridge token bucket — max requests permitted in a single instant. Default 60.",
+            "description": "Per workspace. Burst capacity for the bridge token bucket — max requests permitted in a single instant. Default 60.",
+            "markdownDescription": "**Per workspace.** Burst capacity for the bridge token bucket — max requests permitted in a single instant. Default 60.",
             "order": 1
           },
           "filemaker.fmWeb.bridge.requestBudget": {
@@ -1304,7 +1341,8 @@
             "default": 10000,
             "minimum": 100,
             "maximum": 10000000,
-            "description": "Hard cap on total bridge requests per session token. After exhaustion, restart the bridge to reset. Default 10000.",
+            "description": "Per workspace. Hard cap on total bridge requests per session token. After exhaustion, restart the bridge to reset. Default 10000.",
+            "markdownDescription": "**Per workspace.** Hard cap on total bridge requests per session token. After exhaustion, restart the bridge to reset. Default 10000.",
             "order": 2
           }
         }
@@ -1317,14 +1355,16 @@
           "filemaker.offline.mode": {
             "type": "boolean",
             "default": false,
-            "description": "Use cached metadata only and disable write operations.",
+            "description": "Workspace can only make this stricter. Use cached metadata only and disable write operations. A workspace can only turn this on, never off. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Use cached metadata only and disable write operations. A workspace can only turn this on, never off. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 0
           },
           "filemaker.offline.staleCacheWarnHours": {
             "type": "number",
             "default": 24,
             "minimum": 0,
-            "description": "Hours after which the schema metadata cache is considered stale. The status bar shows a warning and a one-time toast is emitted. Set to 0 to disable the stale-cache warning.",
+            "description": "Per workspace. Hours after which the schema metadata cache is considered stale. The status bar shows a warning and a one-time toast is emitted. Set to 0 to disable the stale-cache warning.",
+            "markdownDescription": "**Per workspace.** Hours after which the schema metadata cache is considered stale. The status bar shows a warning and a one-time toast is emitted. Set to 0 to disable the stale-cache warning.",
             "order": 1
           }
         }
@@ -1337,7 +1377,8 @@
           "filemaker.enterprise.mode": {
             "type": "boolean",
             "default": false,
-            "description": "Enable enterprise governance controls and role-based feature gating.",
+            "description": "Workspace can only make this stricter. Enable enterprise governance controls and role-based feature gating. A workspace can only turn this on, never off. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Enable enterprise governance controls and role-based feature gating. A workspace can only turn this on, never off. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 0
           },
           "filemaker.enterprise.role": {
@@ -1353,7 +1394,8 @@
               "Everything is allowed."
             ],
             "default": "developer",
-            "description": "Enterprise role used for feature access control. Applies when enterprise mode (filemaker.enterprise.mode) is on.",
+            "description": "Workspace can only make this stricter. Enterprise role used for feature access control. Applies when enterprise mode (filemaker.enterprise.mode) is on. A workspace can only lower the role, never raise it above yours. A workspace value that would loosen your User value is ignored; run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Enterprise role used for feature access control. Applies when enterprise mode (filemaker.enterprise.mode) is on. A workspace can only lower the role, never raise it above yours. A workspace value that would loosen your User value is ignored; run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 1
           }
         }
@@ -1379,7 +1421,8 @@
             ],
             "default": "info",
             "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.logging.level#` instead.",
-            "description": "Minimum log level written to the FileMaker Data API Tools output channel.",
+            "description": "Per workspace. Minimum log level written to the FileMaker Data API Tools output channel.",
+            "markdownDescription": "**Per workspace.** Minimum log level written to the FileMaker Data API Tools output channel.",
             "order": 0
           },
           "filemakerDataApiTools.requestTimeoutMs": {
@@ -1387,27 +1430,31 @@
             "default": 15000,
             "minimum": 1000,
             "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.requestTimeoutMs#` instead.",
-            "description": "HTTP timeout in milliseconds for FileMaker Data API requests.",
+            "description": "Per workspace. HTTP timeout in milliseconds for FileMaker Data API requests.",
+            "markdownDescription": "**Per workspace.** HTTP timeout in milliseconds for FileMaker Data API requests.",
             "order": 1
           },
           "filemakerDataApiTools.defaultApiBasePath": {
             "type": "string",
             "default": "/fmi/data",
             "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.defaultApiBasePath#` instead.",
-            "description": "Default API base path used when a profile does not override it.",
+            "description": "Per workspace. Default API base path used when a profile does not override it.",
+            "markdownDescription": "**Per workspace.** Default API base path used when a profile does not override it.",
             "order": 2
           },
           "filemakerDataApiTools.defaultApiVersionPath": {
             "type": "string",
             "default": "vLatest",
             "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.defaultApiVersionPath#` instead.",
-            "description": "Default FileMaker Data API version segment used when a profile does not override it.",
+            "description": "Per workspace. Default FileMaker Data API version segment used when a profile does not override it.",
+            "markdownDescription": "**Per workspace.** Default FileMaker Data API version segment used when a profile does not override it.",
             "order": 3
           },
           "filemaker.advanced.powerUserMode": {
             "type": "boolean",
             "default": false,
-            "markdownDescription": "Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
+            "description": "Per workspace. Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
+            "markdownDescription": "**Per workspace.** Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
             "order": 4
           },
           "filemaker.logging.level": {
@@ -1425,7 +1472,8 @@
               "Errors only."
             ],
             "default": "info",
-            "description": "Minimum logging level for FileMaker Data API Tools output.",
+            "description": "Per workspace. Minimum logging level for FileMaker Data API Tools output.",
+            "markdownDescription": "**Per workspace.** Minimum logging level for FileMaker Data API Tools output.",
             "order": 5
           }
         }
@@ -1439,28 +1487,32 @@
             "type": "string",
             "default": "",
             "scope": "application",
-            "markdownDescription": "Where **FileMaker: Write AI Context** writes its file. Empty (the default) writes to the extension's storage folder, outside any repository. A relative path is resolved against the first workspace folder; the file must stay inside the workspace or the extension storage folder (no `..`, no symbolic links, no `.git`). If the file already exists, only the section between `<!-- filemaker-ai-context:start -->` and `<!-- filemaker-ai-context:end -->` is replaced. This setting is read from your user settings only; a workspace or dev container cannot set it.",
+            "description": "User settings only. Where FileMaker: Write AI Context writes its file. Empty (the default) writes to the extension's storage folder, outside any repository. A relative path is resolved against the first workspace folder; the file must stay inside the workspace or the extension storage folder (no .., no symbolic links, no .git). If the file already exists, only the section between <!-- filemaker-ai-context:start --> and <!-- filemaker-ai-context:end --> is replaced. This setting is read from your user settings only; a workspace or dev container cannot set it.",
+            "markdownDescription": "**User settings only.** Where **FileMaker: Write AI Context** writes its file. Empty (the default) writes to the extension's storage folder, outside any repository. A relative path is resolved against the first workspace folder; the file must stay inside the workspace or the extension storage folder (no `..`, no symbolic links, no `.git`). If the file already exists, only the section between `<!-- filemaker-ai-context:start -->` and `<!-- filemaker-ai-context:end -->` is replaced. This setting is read from your user settings only; a workspace or dev container cannot set it.",
             "order": 1
           },
           "filemaker.ai.enabled": {
             "scope": "application",
             "type": "boolean",
             "default": false,
-            "markdownDescription": "Let AI tools in VS Code (language-model tools such as Copilot agent mode) use the connection in `filemaker.ai.connection`. Off by default. Read from your user settings only. **What a tool reads goes to the AI model provider you use.** See the README section \"AI tools\".",
+            "description": "User settings only. Let AI tools in VS Code (language-model tools such as Copilot agent mode) use the connection in filemaker.ai.connection. Off by default. Read from your user settings only. What a tool reads goes to the AI model provider you use. See the README section \"AI tools\".",
+            "markdownDescription": "**User settings only.** Let AI tools in VS Code (language-model tools such as Copilot agent mode) use the connection in `filemaker.ai.connection`. Off by default. Read from your user settings only. **What a tool reads goes to the AI model provider you use.** See the README section \"AI tools\".",
             "order": 2
           },
           "filemaker.ai.allowWrites": {
             "scope": "application",
             "type": "boolean",
             "default": false,
-            "markdownDescription": "Offer tools that create, edit and delete one record at a time. Every change asks you first in a dialog that cannot be set to always allow. The connection also needs AI access \"write\". User settings only.",
+            "description": "User settings only. Offer tools that create, edit and delete one record at a time. Every change asks you first in a dialog that cannot be set to always allow. The connection also needs AI access \"write\". User settings only.",
+            "markdownDescription": "**User settings only.** Offer tools that create, edit and delete one record at a time. Every change asks you first in a dialog that cannot be set to always allow. The connection also needs AI access \"write\". User settings only.",
             "order": 3
           },
           "filemaker.ai.allowScripts": {
             "scope": "application",
             "type": "boolean",
             "default": false,
-            "markdownDescription": "Offer the tool that runs FileMaker scripts, limited to `filemaker.ai.scriptAllowlist`. Every run asks you first. User settings only.",
+            "description": "User settings only. Offer the tool that runs FileMaker scripts, limited to filemaker.ai.scriptAllowlist. Every run asks you first. User settings only.",
+            "markdownDescription": "**User settings only.** Offer the tool that runs FileMaker scripts, limited to `filemaker.ai.scriptAllowlist`. Every run asks you first. User settings only.",
             "order": 4
           },
           "filemaker.ai.scriptAllowlist": {
@@ -1473,7 +1525,8 @@
                 "type": "string"
               }
             },
-            "markdownDescription": "Scripts AI tools may run, by connection profile id: `{\"<profile id>\": [\"Script Name\"]}`. Exact names. Empty by default. User settings only.",
+            "description": "User settings only. Scripts AI tools may run, by connection profile id: {\"<profile id>\": [\"Script Name\"]}. Exact names. Empty by default. User settings only.",
+            "markdownDescription": "**User settings only.** Scripts AI tools may run, by connection profile id: `{\"<profile id>\": [\"Script Name\"]}`. Exact names. Empty by default. User settings only.",
             "order": 5
           },
           "filemaker.ai.readableLayouts": {
@@ -1486,7 +1539,8 @@
                 "type": "string"
               }
             },
-            "markdownDescription": "Layouts AI tools may read without asking, by connection profile id: `{\"<profile id>\": [\"Layout Name\"]}`. Any other layout asks once per session. User settings only.",
+            "description": "User settings only. Layouts AI tools may read without asking, by connection profile id: {\"<profile id>\": [\"Layout Name\"]}. Any other layout asks once per session. User settings only.",
+            "markdownDescription": "**User settings only.** Layouts AI tools may read without asking, by connection profile id: `{\"<profile id>\": [\"Layout Name\"]}`. Any other layout asks once per session. User settings only.",
             "order": 6
           },
           "filemaker.ai.hiddenFields": {
@@ -1495,27 +1549,31 @@
             "items": {
               "type": "string"
             },
-            "markdownDescription": "Field names AI tools never see, by name (case-insensitive, with or without a `Table::` prefix, on every layout). Best effort: it does not stop disclosure through a calculation, a summary field or a script. A FileMaker account with a restricted privilege set is the real control. A workspace can add names here but not remove yours.",
+            "description": "Workspace can only make this stricter. Field names AI tools never see, by name (case-insensitive, with or without a Table:: prefix, on every layout). Best effort: it does not stop disclosure through a calculation, a summary field or a script. A FileMaker account with a restricted privilege set is the real control. A workspace can add names here but not remove yours. Run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** Field names AI tools never see, by name (case-insensitive, with or without a `Table::` prefix, on every layout). Best effort: it does not stop disclosure through a calculation, a summary field or a script. A FileMaker account with a restricted privilege set is the real control. A workspace can add names here but not remove yours. Run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 7
           },
           "filemaker.ai.connection": {
             "scope": "application",
             "type": "string",
             "default": "",
-            "markdownDescription": "Profile id of the connection AI tools use. Set it with **FileMaker: Set AI Access for Connection**. A project file cannot choose it. User settings only.",
+            "description": "User settings only. Profile id of the connection AI tools use. Set it with FileMaker: Set AI Access for Connection. A project file cannot choose it. User settings only.",
+            "markdownDescription": "**User settings only.** Profile id of the connection AI tools use. Set it with **FileMaker: Set AI Access for Connection**. A project file cannot choose it. User settings only.",
             "order": 8
           },
           "filemaker.features.ai.enabled": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs `filemaker.ai.enabled` in your user settings.",
+            "description": "Workspace can only make this stricter. A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs filemaker.ai.enabled in your user settings. Run FileMaker: Show Effective Settings to see what is in effect.",
+            "markdownDescription": "**Workspace can only make this stricter.** A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs `filemaker.ai.enabled` in your user settings. Run **FileMaker: Show Effective Settings** to see what is in effect.",
             "order": 9
           },
           "filemaker.ai.externalServer.enabled": {
             "type": "boolean",
             "default": false,
             "scope": "application",
-            "markdownDescription": "Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools** and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "description": "User settings only. Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. This setting never starts the server. The server runs only in a window where you run FileMaker: Start/Stop AI Server for External Tools and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other filemaker.ai.* settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "markdownDescription": "**User settings only.** Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools** and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
             "order": 10
           }
         }
