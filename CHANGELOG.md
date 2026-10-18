@@ -44,6 +44,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Add a catalogue of FileMaker failure modes (`docs/FILEMAKER_FAILURE_MODES.md`): TLS and network, authentication, privilege-set effects and server quirks, what the extension shows for each, a ranked gap list, mock-server scenarios to add, and a troubleshooting-by-symptom section for the user guide. Documentation only.
 - Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
 - Job aid for the Marketplace publishing token, with the 2026-12-01 PAT retirement noted.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
