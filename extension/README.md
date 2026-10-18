@@ -103,6 +103,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 | `FileMaker: Batch Update from CSV/JSON` | Update many records, dry run first |
 | `FileMaker: Write AI Context` | Write layout, field and script names for AI tools |
 | `FileMaker: About / Show Version` | Show the extension, build and VS Code versions; copy them for a bug report |
+| `FileMaker: Show Effective Settings` | See which User or Workspace value is in effect and why a workspace value is ignored |
 | `FileMaker: Show Diagnostics` | Open a redacted report for bug reports |
 
 ## Security and privacy

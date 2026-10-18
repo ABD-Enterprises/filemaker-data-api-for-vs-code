@@ -30,6 +30,7 @@ import { activationLogLine, registerAboutCommand } from './about/aboutCommand';
 import { getRuntimeVersion, setRuntimeVersion } from './about/runtimeVersion';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
 import { registerTypeGenCommands } from './commands/typeGen';
+import { registerEffectiveSettings } from './settings/effectiveSettings';
 import type { BatchService } from './services/batchService';
 import type { FMClient } from './services/fmClient';
 import { HistoryStore } from './services/historyStore';
@@ -365,6 +366,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   await environmentSetStore.ensureSeeded(roleGuard.getDefaultEnvironmentSetSeeds());
   await pluginRegistry.reload();
+  context.subscriptions.push(...registerEffectiveSettings({ context, roleGuard, settingsService }));
 
   const fmExplorerProvider = new FMExplorerProvider(
     profileStore,
