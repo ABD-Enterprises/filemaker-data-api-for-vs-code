@@ -521,6 +521,16 @@
         "command": "filemakerDataApiTools.newAiSession",
         "title": "Start New AI Session",
         "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.toggleAiServer",
+        "title": "Start/Stop AI Server for External Tools",
+        "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.copyAiMcpConfig",
+        "title": "Copy MCP Config for Claude Code / Cursor",
+        "category": "FileMaker"
       }
     ],
     "menus": {
@@ -965,6 +975,14 @@
         {
           "command": "filemakerDataApiTools.newAiSession",
           "when": "filemaker.ai.active"
+        },
+        {
+          "command": "filemakerDataApiTools.toggleAiServer",
+          "when": "filemaker.hasProfiles"
+        },
+        {
+          "command": "filemakerDataApiTools.copyAiMcpConfig",
+          "when": "filemaker.hasProfiles"
         }
       ]
     },
@@ -1484,6 +1502,13 @@
             "default": true,
             "markdownDescription": "A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs `filemaker.ai.enabled` in your user settings.",
             "order": 9
+          },
+          "filemaker.ai.externalServer.enabled": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools** and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "order": 10
           }
         }
       }
@@ -1706,7 +1731,7 @@
       {
         "name": "fm_edit_record",
         "displayName": "Edit FileMaker Record",
-        "modelDescription": "Changes fields of ONE record (at most 10 fields, each value at most 300 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.",
+        "modelDescription": "Changes fields of ONE record (at most 10 fields, each value at most 200 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). The whole approval dialog must fit in 4,000 characters (escaping makes some characters longer); a write that would not fit is refused. A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.",
         "userDescription": "Changes fields of one record after you approve each change.",
         "toolReferenceName": "fmEditRecord",
         "canBeReferencedInPrompt": true,
@@ -1734,7 +1759,7 @@
               "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 300
+                "maxLength": 200
               }
             },
             "description": {
@@ -1758,7 +1783,7 @@
       {
         "name": "fm_create_record",
         "displayName": "Create FileMaker Record",
-        "modelDescription": "Creates ONE record (at most 10 fields, each value at most 300 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
+        "modelDescription": "Creates ONE record (at most 10 fields, each value at most 200 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
         "userDescription": "Creates one record after you approve it.",
         "toolReferenceName": "fmCreateRecord",
         "canBeReferencedInPrompt": true,
@@ -1781,7 +1806,7 @@
               "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 300
+                "maxLength": 200
               }
             },
             "description": {
@@ -1897,7 +1922,7 @@
     "copy:webviews": "shx mkdir -p dist/webviews/queryBuilder/ui dist/webviews/recordViewer/ui dist/webviews/scriptRunner/ui dist/webviews/schemaDiff/ui dist/webviews/recordEditor/ui dist/webviews/connectionWizard/ui dist/webviews/layoutMode/ui && shx cp -r src/webviews/queryBuilder/ui/* dist/webviews/queryBuilder/ui && shx cp -r src/webviews/recordViewer/ui/* dist/webviews/recordViewer/ui && shx cp -r src/webviews/scriptRunner/ui/* dist/webviews/scriptRunner/ui && shx cp -r src/webviews/schemaDiff/ui/* dist/webviews/schemaDiff/ui && shx cp -r src/webviews/recordEditor/ui/* dist/webviews/recordEditor/ui && shx cp -r src/webviews/connectionWizard/ui/* dist/webviews/connectionWizard/ui && shx cp -r src/webviews/layoutMode/ui/* dist/webviews/layoutMode/ui && sh -c 'if [ -d ../designer-ui/dist ]; then shx cp -r ../designer-ui/dist/* dist/webviews/layoutMode/ui; fi'",
     "notices": "node ./scripts/generate-third-party-notices.mjs",
     "notices:check": "node ./scripts/generate-third-party-notices.mjs --check",
-    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run copy:webviews && npm run notices",
+    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews",
     "watch": "tsc -w -p .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,js,json,md,css,html}\"",
@@ -1910,7 +1935,8 @@
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p tsconfig.vitest.json --noEmit",
     "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
-    "package:check": "npm run notices:check && npm run package:vsix"
+    "package:check": "npm run notices:check && npm run package:vsix",
+    "bundle:ai-mcp-shim": "node ./scripts/bundle.mjs aiMcpShim"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -1918,6 +1944,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "^26.0.0",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",

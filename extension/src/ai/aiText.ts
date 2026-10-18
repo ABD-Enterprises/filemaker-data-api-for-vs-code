@@ -4,6 +4,17 @@ import { filterName } from '../services/aiContextRenderer';
 export const HIDDEN_MARKER = '[hidden]';
 export const REDACTION_MARKER = '***';
 export const OMITTED_NAME = '[name omitted]';
+export const SERVER_MARKER = '[server]';
+export const URL_OMITTED_MARKER = '[container or server URL omitted]';
+export const CONTAINER_MARKER = '[container field omitted]';
+/** Text the tools put in place of something they hid; a write may not contain any of it. */
+export const PLACEHOLDER_MARKERS: readonly string[] = [
+  '***',
+  HIDDEN_MARKER,
+  SERVER_MARKER,
+  URL_OMITTED_MARKER,
+  CONTAINER_MARKER
+];
 
 /**
  * Makes untrusted text safe to put on one line of a dialog or log: capped to `max`

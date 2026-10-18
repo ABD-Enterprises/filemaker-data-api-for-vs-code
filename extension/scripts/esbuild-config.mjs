@@ -30,5 +30,13 @@ export const extensionBundles = {
     ...common,
     entryPoints: [path.join(extensionDir, 'src/services/schemaDiffWorker.ts')],
     outfile: path.join(extensionDir, 'dist/schemaDiffWorker.js')
+  },
+  // Stand-alone stdio shim launched by MCP clients (#381); keeps its own target, no vscode.
+  aiMcpShim: {
+    ...common,
+    keepNames: false,
+    target: 'node18',
+    entryPoints: [path.join(extensionDir, 'src/ai/mcp/shim.ts')],
+    outfile: path.join(extensionDir, 'dist/aiMcpShim.js')
   }
 };
