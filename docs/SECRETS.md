@@ -7,7 +7,7 @@ expires, and how to rotate it.
 
 | Secret name | Purpose | Required for | Source | Default expiry |
 |---|---|---|---|---|
-| `VSCE_PAT` | Publish to VS Code Marketplace | Tag-triggered `publish` job (environment `marketplace`) in `.github/workflows/ci.yml` | Azure DevOps Personal Access Token (Marketplace → Manage scope, "All accessible organizations") | 1 year |
+| _(none)_ | Marketplace publishing uses Microsoft Entra ID (OIDC), not a token | Tag-triggered `publish` job (environment `marketplace`) | Environment variables `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` (identifiers, not secrets); setup in `docs/JOB_AID_ENTRA_PUBLISHING.md` | n/a |
 | `OVSX_PAT` (planned, #160) | Publish to Open VSX Registry | Open VSX `ovsx publish` step in CI | Open VSX user → Settings → New Token | 1 year |
 | `ANTHROPIC_API_KEY` (optional) | Claude Code cloud agent (PAYG path) | `.github/workflows/claude-code-agent.yml` Run Claude Code step, only when `CLAUDE_CODE_OAUTH_TOKEN` is unset | https://console.anthropic.com/settings/keys | No expiry (revoke manually) |
 | `CLAUDE_CODE_OAUTH_TOKEN` (preferred) | Claude Code cloud agent (subscription path) | Same workflow step as above | `claude setup-token` locally | 1 year |
@@ -17,7 +17,6 @@ expires, and how to rotate it.
 
 | Secret | Owner | Owner's Microsoft / Anthropic / GitHub account |
 |---|---|---|
-| `VSCE_PAT` | Primary maintainer | alan@abdenterprises.com (Microsoft) → `abdenterprises.visualstudio.com` Azure DevOps org |
 | `OVSX_PAT` | Primary maintainer | (set when #160 lands) |
 | `ANTHROPIC_API_KEY` | Primary maintainer | Anthropic account tied to the maintainer's email |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Primary maintainer | Claude Max subscription on the same account |

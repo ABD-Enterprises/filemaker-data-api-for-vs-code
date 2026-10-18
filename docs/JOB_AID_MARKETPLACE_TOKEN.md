@@ -1,4 +1,6 @@
-# Job aid: give the release pipeline a Marketplace token
+# Job aid: give the release pipeline a Marketplace token (superseded)
+
+> **Superseded.** The release pipeline now signs in with Microsoft Entra ID and no longer reads `VSCE_PAT`. Use [JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md). This page is kept for the manual-upload note and the retirement background.
 
 **When:** before the next `v*` release tag. Without it the `publish` job fails at the last step.
 **Time:** about 10 minutes. **Who:** the publisher owner (needs admin on the repo).
