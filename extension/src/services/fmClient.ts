@@ -33,7 +33,7 @@ import { redactString } from '../utils/redact';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
-import { createHttpsAgentForProfile } from './tlsAgent';
+import { httpsTransportFor } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
@@ -1060,7 +1060,7 @@ export class FMClient {
         signal: control?.signal,
         timeout: this.timeoutMs,
         maxRedirects: 0,
-        httpsAgent: createHttpsAgentForProfile(profile)
+        ...httpsTransportFor(profile, `${base}${basePath}/${version}${path}`)
       });
       return parseDataApiEnvelope<TResponse>(response);
     } catch (error) {
@@ -1318,7 +1318,7 @@ export class FMClient {
         // The Data API never redirects. Following one could send a login to another server or drop
         // the request body; a redirect is reported as an error that says where it pointed.
         maxRedirects: 0,
-        httpsAgent: createHttpsAgentForProfile(profile)
+        ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path))
       };
 
       const response = await this.httpClient.request<unknown>(config);
@@ -1380,7 +1380,7 @@ export class FMClient {
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
         maxRedirects: 0,
-        httpsAgent: createHttpsAgentForProfile(profile),
+        ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path)),
         validateStatus: (status) => (status >= 200 && status < 300) || status === 304
       };
 
@@ -1440,7 +1440,7 @@ export class FMClient {
       signal: request.signal,
       timeout: this.timeoutMs,
       maxRedirects: 0,
-      httpsAgent: createHttpsAgentForProfile(profile)
+      ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path))
     };
 
     const response = await this.httpClient.request<unknown>(config);

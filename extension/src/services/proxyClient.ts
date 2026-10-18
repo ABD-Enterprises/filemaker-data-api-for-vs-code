@@ -18,7 +18,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { getFileMakerErrorInfo } from '../utils/fileMakerCodes';
 import { normalizeError } from '../utils/normalizeError';
 import { redactValue } from '../utils/redact';
-import { createHttpsAgentForProfile } from './tlsAgent';
+import { httpsTransportFor } from './tlsAgent';
 
 /**
  * What a proxy answers. On failure (`ok: false`, with HTTP status 200 or an error status) the proxy
@@ -319,7 +319,7 @@ export class ProxyClient {
           headers,
           signal,
           maxRedirects: 0,
-          httpsAgent: createHttpsAgentForProfile(profile)
+          ...httpsTransportFor(profile, endpoint)
         }
       );
 

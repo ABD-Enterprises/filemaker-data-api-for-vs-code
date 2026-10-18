@@ -218,11 +218,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     fmClientLoad ??= Promise.all([import('./services/fmClient'), import('./services/tlsAgent')])
-      .then(([{ FMClient }, { setSystemCertificatePolicy }]) => {
+      .then(([{ FMClient }, { setSystemCertificatePolicy, warmSystemCertificates }]) => {
         // Trust the operating system's certificates as VS Code does, unless http.systemCertificates is off.
         setSystemCertificatePolicy(() =>
           vscode.workspace.getConfiguration('http').get<boolean>('systemCertificates', true)
         );
+        warmSystemCertificates();
         loadedFmClient = new FMClient(
           secretStore,
           logger,

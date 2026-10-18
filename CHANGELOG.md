@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- System roots = Node default (incl. NODE_EXTRA_CA_CERTS) + system store; warmed in the background, 10 min TTL.
 - Wizard shows a test failure once with the trust button; plain-words message for FileMaker Server's default certificate; pinning tested with that certificate shape.
 - Claris ID / FileMaker Cloud hint on rejected sign-in; user guide 404 and setting-name fixes.
 - Proxy error envelope with fmCode/status (documented), HTML replies reported, no redirects.
@@ -89,6 +90,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Pinned certificates fail closed behind an HTTP proxy (refused with a clear message; agent no longer advertises rejectUnauthorized:false); CA-file/default/legacy behaviour through a proxy tested.
 - Per-profile pause on automatic sign-ins after credential rejection (210-214), cleared by credential change or explicit Connect/Test; backoff for 956; parallel requests share one login.
 - Delete Record requires the recordEdit setting and the enterprise recordEdit guard, like the bridge and AI tools.
 - Make `filemaker.secrets.fallback` application-scoped and `filemaker.typegen.outputDir` restricted in untrusted workspaces.
