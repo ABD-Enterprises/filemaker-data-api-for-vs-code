@@ -1,51 +1,34 @@
 # VSIX bundle size budget
 
-The CI `Enforce VSIX size budget` step (in `.github/workflows/ci.yml`)
-hard-caps the packaged VSIX. Current budget: **5 MiB**.
+The CI step `Enforce VSIX size budget` (in `.github/workflows/ci.yml`) caps the packaged VSIX. Current budget: **5 MiB** (`VSIX_BUDGET_BYTES`).
 
-## Rationale
+## Why
 
-Marketplace download speed matters most on constrained networks (mobile
-tethers, corporate proxies, locked-down VPNs). The hard cap prevents
-accidental bloat — e.g., committing `node_modules`, leaving a 100 MB
-debug payload in the bundle, or adding a binary asset by mistake.
+Marketplace download speed matters most on constrained networks (mobile tethers, corporate proxies, VPNs). The cap prevents accidental bloat: committing `node_modules`, leaving a large debug payload in the bundle, or adding a binary asset by mistake.
 
-The cap is set generously: at v1.1.0, the actual VSIX is ~1.0 MB. The 5
-MiB ceiling is **5x current** so legitimate growth (source maps, new
-features, webview assets) doesn't trip the gate before there's a real
-discussion to have.
+The cap is generous. At v1.1.0 the VSIX was about 1.0 MB, with inline source maps about 1.7 MB, so 5 MiB leaves room for legitimate growth (new features, webview assets) without tripping the gate before there is a real discussion to have.
 
 ## Raising the cap
 
-If a legitimate need pushes the VSIX over the budget, raise the cap in
-its own PR with a one-line rationale in the commit message:
+If a legitimate need pushes the VSIX over the budget, raise `VSIX_BUDGET_BYTES` in its own pull request with a one-line reason in the commit message, for example:
 
 ```
 ci(budget): raise VSIX cap to 8 MiB
 
-Adding the layout designer webview adds ~3 MB of React + monaco assets;
-trimming to fit under 5 MiB would require code-splitting work tracked
-in #172. Raise the cap explicitly for this release; tighten back after
-#172 lands.
+The layout designer webview adds about 3 MB of assets; trimming to fit
+under 5 MiB needs code splitting. Raise the cap for this release and
+tighten it again after the split.
 ```
 
-The cap living in the workflow file means it's reviewable like any
-other code change — no silent drift.
+The cap lives in the workflow file, so it is reviewed like any other change. Update this page with the new number.
 
-## Trimming the bundle (alternative)
+## Trimming first
 
-Before raising, ask whether the size is unavoidable:
+Before raising it, ask whether the size is avoidable:
 
-- `dist/extension.js` source maps add ~60% — switch from `--sourcemap=inline`
-  to `--sourcemap=external` and exclude `.map` from VSIX via
-  `.vscodeignore`.
-- Webview bundles can lazy-load chunks (see #172).
-- Large vendored dependencies are candidates for `--external:` flags.
-- Verify nothing is sneaking in via `.vscodeignore` misses (`vsce ls --tree`).
+- Source maps add about 60%. Switching from `--sourcemap=inline` to external maps and excluding `.map` files with `.vscodeignore` removes them (see "Source maps" in [RELEASE.md](./RELEASE.md)).
+- Webview bundles can load chunks lazily.
+- Large vendored dependencies are candidates for esbuild `--external`.
+- Look for files `.vscodeignore` misses: `npx @vscode/vsce ls --tree` from `extension/`.
 
-## Related
-
-- Issue #178 — production source maps (the largest single growth driver)
-- Issue #172 — webview code-splitting
-- `npm run package:check` runs the same packaging path locally so the
-  size impact of a change is visible before pushing.
+`npm run package:check` runs the same packaging path locally, so the size effect of a change is visible before you push. The VSIX also ships everything under `extension/docs/`, so keep documentation lean.

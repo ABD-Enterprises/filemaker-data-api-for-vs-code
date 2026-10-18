@@ -1,10 +1,10 @@
 # Job aid: set up token-free publishing with Microsoft Entra ID
 
-**Why:** Azure DevOps personal access tokens (what `vsce` used) stop working on **1 December 2026**. This setup lets GitHub publish to the Marketplace with a short-lived sign-in instead, so there is no token to create, store or renew.
+**Why:** Azure DevOps personal access tokens (what `vsce` used) stop working on **1 December 2026**. Microsoft is retiring the "global" kind (created with **All accessible organizations**), and recommends Microsoft Entra ID instead ([announcement](https://devblogs.microsoft.com/devops/retirement-of-global-personal-access-tokens-in-azure-devops/), [VS Code publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)). This setup lets GitHub publish to the Marketplace with a short-lived sign-in instead, so there is no token to create, store or renew. The release pipeline no longer reads `VSCE_PAT`; if a `VSCE_PAT` secret still exists on the `marketplace` environment or the repository, delete it.
 **Time:** about 20 minutes, once. **Cost:** free (managed identities and federated credentials have no charge).
 **Checked against current docs on 2026-10-18.** Where a step could not be confirmed from Microsoft's documentation it is marked **(unconfirmed)**; the first real publish is the test.
 
-If anything here fails, you can still release by uploading the `.vsix` by hand at <https://marketplace.visualstudio.com/manage>. Nothing in this setup blocks that.
+If anything here fails, you can still release by uploading the `.vsix` by hand at <https://marketplace.visualstudio.com/manage>; the steps (and the GitHub release command) are in [RELEASE.md](./RELEASE.md#manual-publish-fallback). Nothing in this setup blocks that, and it keeps working after 1 December 2026.
 
 ## What you need
 

@@ -1,58 +1,58 @@
 ---
 name: "QA: Smoke test"
-about: Manual first-time-user smoke test run. Tick boxes as you go.
-title: "v1.1.0 QA: smoke test — <YOUR_INITIALS> <DATE>"
+about: Manual release smoke test run. Tick boxes as you go.
+title: "vX.Y.Z QA: smoke test — <YOUR_INITIALS> <DATE>"
 labels: ["qa", "smoke-test"]
 assignees: []
 ---
 
-> Run the full test plan from [extension/docs/QA/SMOKE_TEST_v1_1_0.md](../blob/main/extension/docs/QA/SMOKE_TEST_v1_1_0.md). Tick boxes here as you go.
+> Run the checks in [extension/docs/QA/SMOKE_TEST.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/QA/SMOKE_TEST.md). Tick boxes here as you go.
 >
-> Replace the placeholders in the title with your initials and the date (e.g. `v1.1.0 QA: smoke test — AD 2026-05-22`).
+> Replace the placeholders in the title with the version, your initials and the date (e.g. `v1.4.0 QA: smoke test — AD 2026-10-20`).
 
 ## Environment
 
+- Extension version: _e.g. 1.4.0_
 - VS Code version: _e.g. 1.96.2_
-- macOS version: _e.g. 14.5 (Sonoma)_
+- Operating system: _e.g. macOS 15 / Windows 11 / Ubuntu 24.04_
 - Installation method: _Marketplace / VSIX_
-- FileMaker Server tested: _e.g. fm.example.com — FMS 21.0_
+- Server: _real FileMaker Server (version) / mock Data API_
 - Test account has `fmrest` privilege: _Yes / No_
 
-## Core scenarios (release blockers)
+## Release-blocking checks
 
-- [ ] **SC-01** Install from Marketplace
-- [ ] **SC-02** First-run Getting Started walkthrough auto-opens
-- [ ] **SC-03** Activity bar icon visible
-- [ ] **SC-04** Welcome view shows when no profiles exist
-- [ ] **SC-05** Add Connection Profile wizard opens with focus + correct sections
-- [ ] **SC-06** Wizard form responds to input + mode toggle
-- [ ] **SC-07** Test Connection — failure path (bogus server)
-- [ ] **SC-08** Test Connection — success path (real server)
-- [ ] **SC-09** Save profile + persistent status bar item appears
-- [ ] **SC-10** Status bar survives Reload Window
-- [ ] **SC-11** Run Find (JSON) via command palette returns data
-- [ ] **SC-12** Query Builder webview round-trips a query
-- [ ] **SC-13** Error toast surfaces Retry / Edit Profile / Open Settings / Show Details
-- [ ] **SC-14** Disconnect updates the status bar
+- [ ] **1** Install, version and publisher
+- [ ] **2** First run: walkthrough and welcome view
+- [ ] **3** Command Palette with no profile
+- [ ] **4** Wizard failure path
+- [ ] **5** Wizard success path, Connect Now, status bar
+- [ ] **6** Secrets not in settings or logs; password re-asked after address change
+- [ ] **7** Explorer: layouts, fields, value lists
+- [ ] **8** Query Builder: run, page, sort, CSV, empty result
+- [ ] **9** Record Editor: save and edit-conflict refusal
+- [ ] **10** Batch export and batch update dry run
+- [ ] **11** Schema snapshot and diff
+- [ ] **12** Disconnect, reconnect, session expiry
 
-## Secondary scenarios (regression coverage)
+## Further checks
 
-- [ ] **SC-15** Accessibility — aria-required, aria-describedby, visible `*`
-- [ ] **SC-16** Command palette gating — no profile-required commands when zero profiles
-- [ ] **SC-17** Untrusted workspace banner shows; write commands restricted
-- [ ] **SC-18** Walkthrough screenshots load (no broken images)
-- [ ] **SC-19** Deprecated `filemakerDataApiTools.*` settings honored with one-time toast
-- [ ] **SC-20** Uninstall removes all UI surfaces
+- [ ] **13** Generated files
+- [ ] **14** Reload window
+- [ ] **15** Untrusted workspace
+- [ ] **16** New prompts (plugins, FM Web preview)
+- [ ] **17** AI is off by default; Write AI Context
+- [ ] **18** User guide opens
+- [ ] **19** Uninstall
 
 ## Result
 
-- [ ] **PASS** — all core scenarios green
-- [ ] **FAIL** — at least one core scenario red (open follow-up issues + link below)
+- [ ] **PASS**: all release-blocking checks green
+- [ ] **FAIL**: at least one release-blocking check red (open follow-up issues and link them below)
 
 ## Failures / notes
 
 <details>
-<summary>Attach screenshots, paste Output panel logs, Dev Tools console output, etc.</summary>
+<summary>Attach screenshots, Output panel logs or the Show Diagnostics report</summary>
 
 _Paste here._
 

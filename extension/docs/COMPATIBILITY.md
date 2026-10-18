@@ -23,6 +23,7 @@ No supported version is currently documented as known-broken. If you find a vers
 | Value lists | Value list discovery depends on FileMaker layout metadata returned by the Data API. Layout-specific or privilege-filtered value lists may differ by account. |
 | Scripts | Script listing and execution depend on the account's privileges and the script being available to the selected layout/database context. |
 | OAuth / SSO | Direct mode currently uses FileMaker username/password credentials stored in VS Code SecretStorage. OAuth or SSO-specific flows are not implemented; use a compatible proxy if your organization requires custom identity handling. |
+| Self-signed or private-CA certificates | There is no setting for them. The server certificate must be trusted by your operating system, or VS Code must be started with `NODE_EXTRA_CA_CERTS` pointing at the CA file. See Troubleshooting in the [User Guide](./USER_GUIDE.md#troubleshooting). |
 | Linux-hosted FileMaker Server | Expected to work when the standard Data API endpoint is enabled and reachable. Validate SSL certificates, firewall rules, and container URL reachability. |
 
 ## Version Selection Guidance
@@ -30,7 +31,7 @@ No supported version is currently documented as known-broken. If you find a vers
 - Leave **API Base Path** set to `/fmi/data` unless your proxy or server deployment requires a custom route.
 - Leave **API Version** set to `vLatest` unless you need to pin behavior for a specific server version.
 - Test each saved profile after changing server version, credentials, proxy settings, SSL certificates, or firewall rules.
-- Run the release smoke test against at least one representative server before rolling the extension out to a team.
+- Run the [smoke test](./QA/SMOKE_TEST.md) against at least one representative server before rolling the extension out to a team.
 
 ## Reporting Gaps
 

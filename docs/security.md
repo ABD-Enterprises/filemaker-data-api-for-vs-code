@@ -1,7 +1,23 @@
 # Security and Trust Model
 
 This document captures the trust boundaries inside the FileMaker Data API
-Tools extension and what each boundary protects (or doesn't).
+Tools extension and what each boundary protects (or doesn't). To report a
+vulnerability, see the [security policy](../SECURITY.md). For where data is
+stored and for how long, see [DATA_HANDLING.md](./DATA_HANDLING.md).
+
+## Principles
+
+- **Secrets stay in the host.** Passwords, API keys and session tokens are read
+  only by the extension host's client code. Webviews never receive them and
+  never call FileMaker directly.
+- **A repository is untrusted input.** Settings, templates, plugin folders,
+  layout files and generated runtime folders can arrive with a clone. They may
+  make the extension stricter, never looser, and anything that runs code or
+  sends credentials needs the user's confirmation.
+- **Confirm what is risky, in the host.** Dialogs are built by the extension,
+  not by a webview, a plugin or an AI tool.
+- **No telemetry.** The extension talks only to the configured FileMaker
+  server or proxy.
 
 ## Connection profiles
 
@@ -107,6 +123,77 @@ were the trusted runtime. The token is held only in the extension
 host's memory and is not written to disk; rate limiting bounds the
 blast radius if it is exfiltrated.
 
+## Workspace trust and restrict-only policy
+
+- In an untrusted workspace the extension limits itself to reading: browsing,
+  metadata and finds. Writing files, record edit, create and delete, container
+  upload, batch update, plugins, the FM Web preview and AI tools need a trusted
+  workspace. `capabilities.untrustedWorkspaces` in `package.json` lists the
+  settings that are ignored in an untrusted workspace.
+- Enterprise mode, the enterprise role, offline mode and the
+  `filemaker.features.*.enabled` switches are **restrict-only** for workspace
+  settings and `.vscode/filemaker.config.json`: a repository may turn
+  enterprise mode on, lower the role, turn offline mode on or a feature off,
+  and may never do the reverse. The baseline is the user's own setting.
+- The `filemaker.ai.*` settings that widen access are read from user settings
+  only, including in dev containers and Codespaces.
+
+## Confirmations
+
+The extension asks before it: saves a record (listing the changed fields),
+deletes a record, executes a batch update, runs workspace plugins, starts the
+FM Web preview (`npm install`, `npm run dev`), runs a Layout Mode `runScript`
+behavior, sends credentials to an address that came from a workspace profile
+template or to a remote `http://` address, switches AI tools back on, and for
+every AI write, delete or script run.
+
+## Plugins
+
+Workspace plugins run with the extension's access (saved connections and
+sessions). They are loaded only in a trusted workspace, only when enterprise
+policy allows `pluginInstall`, and only after the user approves the exact
+content of the plugin folder (SHA-256 of every file, remembered per workspace).
+A folder with a symbolic link or more than 500 files is refused. Anything a
+plugin imports from outside its folder is not covered by the hash.
+
+## Logs and redaction
+
+Logs, request history, metrics, error details and copied snippets pass through
+one redaction function. It hides authorization headers, session tokens
+(including in request paths such as `DELETE /sessions/<token>`), token-like
+query parameters, JSON keys whose names contain `token`, `secret`, `password`,
+`session` or `apiKey`, and user names and passwords inside URLs. Request
+history keeps metadata, not record bodies.
+
+## AI features
+
+AI features are off by default and are designed on the assumption that the
+model may be steered by text it reads (database values, layout and field names,
+files in a cloned repository). The controls live in the extension host, in one
+tool core, and do not rely on the model behaving. The full design and threat
+model are in [ADR-0004](./ADR/ADR-0004-ai-integration.md).
+
+- Switches that widen access are user-scope only. A connection must be chosen
+  by the user and set to `read` or `write`. Write and script tools are not
+  offered until `filemaker.ai.allowWrites` / `allowScripts` is set.
+- Layout reads need per-session approval. Results are capped (records per call
+  and per session, calls per minute, bytes), container fields and server
+  addresses are left out, and secrets are redacted.
+- Every write is confirmed by the user in a dialog the extension builds from a
+  fresh read of the record; it cannot be set to "always allow". Delete needs the
+  record id typed. Scripts must be on a user-scope allowlist.
+- A kill switch in the status bar turns everything off. Activity is logged
+  outside the workspace without field values.
+- The **Write AI Context** file contains structure only (names), is filtered to
+  an allowlist of characters, and is written outside the repository by default.
+
+What it cannot do: once data is in a model's context it can leave through the
+model provider and through any shell, web or git tool the same agent has.
+Hidden-field filtering is by name and does not stop disclosure through a
+calculation, a summary field or a script result. A dedicated FileMaker account
+with a read-only privilege set is the only control that does not depend on the
+model or on the user. See also the [AI section of DATA_HANDLING.md](./DATA_HANDLING.md#ai-tools).
+
 ## What the extension does *not* protect against
 
 - **Malicious local processes** on the same machine that can read
@@ -120,6 +207,4 @@ blast radius if it is exfiltrated.
 
 ## Reporting security issues
 
-If you find a vulnerability, please file a private security advisory
-on the GitHub repository rather than a public issue. Include a
-proof-of-concept where possible.
+Do not open a public issue. Follow the [security policy](../SECURITY.md).

@@ -42,8 +42,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
-- Job aid for the Marketplace publishing token, with the 2026-12-01 PAT retirement noted.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
 - Release pipeline: separate publish (environment-gated, tag-on-main and version checks, no `npm ci` with the token) and release jobs; untrack the session lock file.
 - Add a mock FileMaker Data API (`npm run mock:server`) and an end-to-end client check against it (`npm run mock:check`); neither is shipped in the VSIX.

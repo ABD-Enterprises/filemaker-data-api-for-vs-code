@@ -72,6 +72,42 @@ Generated API documentation for `src/services` and `src/types` is published at [
   - plugin contracts and registry
   - safe API exposure (no direct secret access)
 
+### Policy and Trust
+
+- `src/utils/policySetting.ts`
+  - reads on/off settings a repository may only make stricter (offline mode, `features.*.enabled`)
+- `src/utils/userScopeSetting.ts`
+  - reads settings from the user's own scope only (the widening `filemaker.ai.*` settings)
+- `src/enterprise/roleGuard.ts`
+  - restrict-only enterprise mode and role; `.vscode/filemaker.config.json` can only tighten
+- `src/utils/pathConfinement.ts`, `src/utils/safeText.ts`, `src/utils/nameSanitize.ts`
+  - keep database and repository text out of paths and generated code
+
+### AI Tools
+
+- `src/ai/aiToolService.ts`
+  - the one tool core: policy, layout consent, caps, hidden-field filter, host-built write dialogs, script allowlist, redaction, audit
+  - transports are thin and add no policy
+- `src/ai/aiRegistration.ts`
+  - registers VS Code language-model tools for what the core currently offers; status model
+- `src/ai/aiToolDefinitions.ts`, `aiSchema.ts`, `aiSettings.ts`, `aiAudit.ts`, `fileMakerErrors.ts`
+  - tool schemas, input validation, settings reader, activity log, error table
+- `src/services/aiContextRenderer.ts`, `src/services/aiContextWriter.ts`, `src/commands/aiContext.ts`
+  - **Write AI Context**: allowlist rendering and marker-section file writes
+- `src/commands/aiTools.ts`
+  - status bar kill switch, **Set AI Access**, **Show AI Activity**, **Start New AI Session**
+
+The design and threat model are in [ADR-0004](../docs/ADR/ADR-0004-ai-integration.md).
+
+### FM Web
+
+- `src/services/fmWebProjectService.ts`, `fmWebRuntimeGenerator.ts`, `fmBridgeServer.ts`, `bridgeRateLimiter.ts`
+  - project folder, runtime generation, localhost bridge
+- `src/webviews/layoutMode/*`, `src/fmweb/layoutSchema.ts`
+  - Layout Mode designer host and the layout schema
+
+See [docs/FM_WEB.md](./docs/FM_WEB.md).
+
 ### Webview Layer
 
 - `src/webviews/**/index.ts`

@@ -13,7 +13,9 @@ and compliance review.
 | Schema snapshots | Captured layout metadata, field metadata, script metadata, snapshot summaries | VS Code `workspaceState` by default; optionally `.vscode/filemaker/snapshots/` when workspace-file storage is configured and the workspace is trusted | JSON | Not encrypted by the extension. Schema metadata can reveal internal names and should be treated as internal project data. | Retained until explicitly pruned by the configured max snapshots per layout, deleted with workspace state, or removed with the workspace files. |
 | Saved queries | Query name, profile id, database, layout, find JSON, sort JSON, limits, timestamps | VS Code `workspaceState` or `globalState`, selected by `filemaker.savedQueries.scope` | JSON | Not encrypted by the extension. | Retained until the user deletes the query, imports over it, deletes the related profile, or VS Code removes the selected state scope. |
 | Cache | Runtime schema/layout metadata cache, in-flight request state | Extension host memory only | JavaScript objects | Not persisted. No at-rest encryption is applied because the data is not written to disk by the extension. | Cleared on extension host reload, process exit, profile invalidation, or TTL expiry. Schema cache TTL is bounded by `filemaker.schema.cacheTtlSeconds` and defaults to 300 seconds. |
-| Audit logs | Future durable audit trail for extension actions, if added | No durable audit-log file exists today. Current diagnostics and request history use bounded VS Code `workspaceState`; output-channel messages are transient IDE logs. | JSON for bounded history and metrics; future audit logs should declare their file format when implemented | Current bounded history and metrics are not encrypted by the extension. Future appended audit logs should make encryption and redaction behavior explicit before release. | Current history and metrics are bounded and overwritten by max-entry settings. Future audit logs should define retention, rotation, deletion, and optional encryption before shipping. |
+| Offline metadata cache | Layout metadata (field names, types, value lists) the extension read while online, so it can be browsed in offline mode | `.vscode/filemaker/offline-metadata/` in the workspace (trusted workspaces only), with an `index.json` | JSON | Not encrypted by the extension. Reveals internal names; do not commit to a public repository. | Refreshed by **FileMaker: Refresh Offline Metadata Cache** and whenever metadata is read online; the index keeps at most 1,000 items. Deleted with the workspace files. |
+| Plugin approvals | Which workspace plugin folders you approved (workspace path and SHA-256 of the folder contents) | VS Code `globalState` | JSON | Not encrypted; contains no secrets. | Kept until VS Code removes extension global state. A changed folder is asked about again. |
+| Audit logs | AI tool activity: tool, connection, layout, record ids, outcome, whether you confirmed | `ai-audit.log` in the extension's global storage folder (outside the workspace) | Text lines | Not encrypted. Field values are not logged. Model-supplied text is escaped and length-limited. | Capped at 256 KB; reads and refusals are dropped before write entries. Shown by **FileMaker: Show AI Activity**. There is no other durable audit-log file: request history and metrics are bounded VS Code `workspaceState`, and output-channel messages are transient IDE logs. |
 
 ## Data Flow
 
@@ -35,6 +37,8 @@ Extension host services
         |
         +--> Runtime caches ----------------> extension host memory only
         |
+        +--> Offline metadata --------------> .vscode/filemaker/offline-metadata/
+        |
         +--> Direct/proxy API requests -----> configured FileMaker Data API
                                                or configured proxy endpoint
 ```
@@ -49,6 +53,8 @@ Extension host services
   schema snapshots.
 - Workspace-file schema snapshots live in `.vscode/filemaker/snapshots/` and
   should be deleted from the workspace when the project no longer needs them.
+- Offline metadata cache files live in `.vscode/filemaker/offline-metadata/` and are deleted with the workspace files.
+- The AI activity log and generated AI context file (default location) live in the extension's storage folder; removing the extension's global storage removes them.
 - In-memory caches do not survive extension host restart or VS Code reload.
 
 ## Security Notes
