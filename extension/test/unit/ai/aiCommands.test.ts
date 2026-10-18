@@ -64,27 +64,37 @@ describe('AI commands', () => {
   });
 
   it('does not set the kill switch while AI is not enabled, so enabling AI later is not blocked', async () => {
-    const configuration = (enabled: boolean) =>
-      ({
-        get: vi.fn((_k: string, d?: unknown) => d),
-        inspect: vi.fn((key: string) => (key === 'ai.enabled' ? { globalValue: enabled } : key === 'ai.connection' ? { globalValue: 'p1' } : undefined)),
-        update
-      }) as never;
-
-    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(configuration(false));
+    (h as unknown as { settings: { enabled: boolean } }).settings.enabled = false;
     vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce(undefined as never);
     await command('filemakerDataApiTools.toggleAiKillSwitch')();
 
     expect(h.service.isKilled()).toBe(false);
-    expect(vi.mocked(vscode.window.showInformationMessage).mock.calls.at(-1)?.[0]).toMatch(/nothing to switch off/);
+    expect(vi.mocked(vscode.window.showInformationMessage).mock.calls.at(-1)?.[0]).toMatch(/nothing to switch off.*filemaker\.ai\.enabled/);
 
     // The user then turns AI on: tools work at once, with no modal to switch them back on.
-    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(configuration(true));
+    (h as unknown as { settings: { enabled: boolean } }).settings.enabled = true;
     await expect(h.service.invoke('fm_list_layouts', {})).resolves.toBeDefined();
     vi.mocked(vscode.window.showWarningMessage).mockClear();
     await command('filemakerDataApiTools.toggleAiKillSwitch')();
     expect(h.service.isKilled()).toBe(true);
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['offline mode', (state: typeof h.state) => (state.offline = true), /Offline mode/],
+    ['an untrusted workspace', (state: typeof h.state) => (state.trusted = false), /untrusted workspace/],
+    ['enterprise policy', (state: typeof h.state) => state.denyFeatures.add('ai'), /ai is disabled by policy/],
+    ['a features switch', (state: typeof h.state) => (state.featureSwitch = false), /filemaker\.features\.ai\.enabled/]
+  ])('names the true cause when AI is off because of %s', async (_label, apply, expected) => {
+    apply(h.state);
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce(undefined as never);
+    await command('filemakerDataApiTools.toggleAiKillSwitch')();
+
+    const [message, ...actions] = vi.mocked(vscode.window.showInformationMessage).mock.calls.at(-1) ?? [];
+    expect(String(message)).toMatch(expected);
+    expect(String(message)).not.toMatch(/Turn them on with filemaker\.ai\.enabled/);
+    expect(actions).toEqual([]); // opening the AI settings would not help
+    expect(h.service.isKilled()).toBe(false);
   });
 
   it('a new session resets counters and approvals only after the user confirms', async () => {

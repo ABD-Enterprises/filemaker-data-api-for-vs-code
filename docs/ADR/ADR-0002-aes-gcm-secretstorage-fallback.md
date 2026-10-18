@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Accepted. **Amended 2026-10-18:** the fallback is obfuscation, not encryption at rest. The key is
+derived from the VS Code machine id, which is not a secret, so anyone who can read the workspace
+state on the machine can recompute it. The text below is kept as the original decision; read
+"encrypt" as "obfuscate". User-facing text no longer calls the fallback encrypted.
 
 ## Context
 

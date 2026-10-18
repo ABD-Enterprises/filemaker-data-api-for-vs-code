@@ -141,19 +141,19 @@ describe('Connection wizard TLS options', () => {
     expect(moved.upsertProfile).not.toHaveBeenCalled();
   });
 
-  it('leaves the option off when the box is unchecked, and ignores it for plain http addresses', async () => {
+  it('leaves the option off when the box is unchecked', async () => {
     const off = await setup();
     await off.fire({ type: 'save', payload: { ...form } });
     expect(off.saved()?.allowSelfSigned).toBeUndefined();
     expect(modalCalls()).toHaveLength(0);
+  });
 
+  it('tells the user the option does not apply to an http address instead of silently dropping it', async () => {
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Continue anyway' as never);
     const http = await setup();
-    await http.fire({
-      type: 'save',
-      payload: { ...form, serverUrl: 'http://localhost:8080', allowSelfSigned: true }
-    });
-    expect(http.saved()?.allowSelfSigned).toBeUndefined();
+    await http.fire({ type: 'save', payload: { ...form, serverUrl: 'http://localhost:8080', allowSelfSigned: true } });
+    expect(lastError(http.posted)).toMatch(/only applies to https/);
+    expect(http.upsertProfile).not.toHaveBeenCalled();
   });
 
   it('rejects a form whose allowSelfSigned is not a boolean', async () => {
@@ -196,6 +196,17 @@ describe('Connection wizard TLS options', () => {
     const h = await setup({ ...saved, aiAccess: 'read' });
     await h.fire({ type: 'save', payload: { ...form } });
     expect(h.saved()).toMatchObject({ aiAccess: 'read' });
+  });
+
+  it.each([
+    ['database', { database: 'Other' }],
+    ['API base path', { apiBasePath: '/fmi/other' }],
+    ['API version', { apiVersionPath: 'v1' }]
+  ])('resets AI access to none when only the %s changes', async (_label, change) => {
+    const h = await setup({ ...saved, aiAccess: 'write' });
+    await h.fire({ type: 'save', payload: { ...form, ...change } });
+    expect(h.saved()).toBeDefined();
+    expect(h.saved()?.aiAccess).toBeUndefined();
   });
 
   it('exposes the options in the form: a labelled CA field, a warned checkbox, and no template hook', async () => {

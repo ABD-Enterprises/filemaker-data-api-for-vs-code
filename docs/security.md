@@ -9,7 +9,7 @@ A connection profile contains a server URL, database name, auth mode,
 and either a username (direct auth) or a proxy endpoint (proxy auth).
 Passwords, session tokens, and proxy API keys are stored separately in
 `SecretStore`, which prefers VS Code's `SecretStorage` (OS keychain)
-and falls back to an encrypted Memento when SecretStorage is
+and falls back to an obfuscated Memento (not protection against local access) when SecretStorage is
 unavailable. See `filemaker.secrets.fallback` setting.
 
 ## Direct mode

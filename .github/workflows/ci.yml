@@ -102,6 +102,19 @@ jobs:
           name: extension-vsix
           path: artifacts/*.vsix
 
+      # The shipped bundles are minified and carry no source map; the external maps from this very
+      # build are kept as a release asset so a user-reported stack trace can be symbolicated.
+      - name: Collect source maps
+        run: |
+          mkdir -p artifacts/maps
+          (cd extension/dist && tar -czf "../../artifacts/maps/sourcemaps-${GITHUB_REF_NAME}.tgz" ./*.map)
+
+      - name: Upload source maps Artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: extension-sourcemaps
+          path: artifacts/maps/*.tgz
+
   # Marketplace publishing is its own job so that nothing from the project's dependency tree runs
   # where the Azure login exists, and so that the repository write scope is not present. It runs
   # only for a tag that points at a commit on main whose version matches the tag, and it waits for
@@ -150,6 +163,12 @@ jobs:
         with:
           name: extension-vsix
           path: artifacts
+
+      - name: Download source maps Artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: extension-sourcemaps
+          path: artifacts/maps
 
       # Project dependencies and their install scripts never run in this job. vsce comes from its
       # own minimal lockfile (tools/publish), installed without lifecycle scripts, before the
@@ -232,7 +251,7 @@ jobs:
         run: |
           VSIX_PATH="$(echo artifacts/*.vsix)"
           tools/release-notes.sh "$GITHUB_REF_NAME" \
-            | "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" \
+            | "$RUNNER_TEMP/gh-cli/bin/gh" release create "$GITHUB_REF_NAME" "$VSIX_PATH" artifacts/maps/*.tgz \
                 --title "$GITHUB_REF_NAME" \
                 --notes-file -
         env:

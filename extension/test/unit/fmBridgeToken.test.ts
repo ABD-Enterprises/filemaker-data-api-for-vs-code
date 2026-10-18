@@ -84,6 +84,28 @@ describe('FM Web preview bridge token (real server, real preview client)', () =>
     }
   });
 
+  it('rejects tokens of the wrong length, the right length, and none, without erroring', async () => {
+    const { server, findRecords } = makeServer();
+    const { baseUrl } = await server.ensureStarted();
+    try {
+      const real = server.getSessionToken() as string;
+      const post = (token?: string) =>
+        fetch(`${baseUrl}/find`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'X-FM-Bridge-Token': token } : {}) },
+          body: JSON.stringify({ layout: 'L', query: [{ a: 1 }] })
+        });
+      expect((await post()).status).toBe(403);
+      expect((await post('short')).status).toBe(403);
+      expect((await post('x'.repeat(real.length))).status).toBe(403);
+      expect((await post(`${real}0`)).status).toBe(403);
+      expect(findRecords).not.toHaveBeenCalled();
+      expect((await post(real)).status).toBe(200);
+    } finally {
+      await server.stop();
+    }
+  });
+
   it('never logs the token', async () => {
     const { server } = makeServer();
     await server.ensureStarted();

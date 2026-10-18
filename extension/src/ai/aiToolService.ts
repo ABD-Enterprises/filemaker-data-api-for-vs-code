@@ -252,6 +252,14 @@ export class AiToolService {
     return features.every((feature) => this.deps.featureGuard(feature).allowed);
   }
 
+  /**
+   * Why every tool is unavailable right now (settings, policy, trust, offline mode), or
+   * undefined when none of those applies. The kill switch is not counted.
+   */
+  public unavailableReason(): string | undefined {
+    return this.killed ? undefined : this.baseRefusal();
+  }
+
   /** Reasons that block every tool; undefined when none applies. */
   private baseRefusal(): string | undefined {
     if (this.killed) {

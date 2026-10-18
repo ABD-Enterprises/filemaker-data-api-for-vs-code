@@ -18,23 +18,17 @@ Follow semver, interpreted for a VS Code extension:
 
 ## Source maps
 
-Production VSIX ships **inline source maps** (via
-`esbuild --sourcemap=inline` in the `bundle:extension` script). Trade-off:
-the VSIX grows from ~1.0 MB to ~1.7 MB (+60%). The benefit is that any
-user-reported stack trace points at real source file:line positions
-without us having to publish or fetch separate .map files.
+The shipped bundles (`dist/extension.js`, the schema-diff worker and the MCP shim) are minified
+and carry **no source map**. `scripts/esbuild-config.mjs` writes an *external* map next to each
+bundle (`dist/*.js.map`), and `.vscodeignore` keeps `dist/**/*.map` out of the VSIX. The Layout
+Mode UI is built minified with no map at all.
 
-If size becomes a real concern (e.g., for Marketplace download speed in
-constrained networks), switch to external maps and exclude them from the
-VSIX:
-
-```diff
-- "bundle:extension": "esbuild ... --sourcemap=inline --outfile=dist/extension.js"
-+ "bundle:extension": "esbuild ... --sourcemap=external --outfile=dist/extension.js"
-```
-
-Then add `dist/extension.js.map` to a separate release artifact and add it
-to `.vscodeignore`. Update this section when you do.
+The tagged `package` job in `.github/workflows/ci.yml` collects the maps from the very build that
+produced the VSIX into `sourcemaps-<tag>.tgz`, and the `release` job attaches it to the GitHub
+release next to the VSIX. To symbolicate a stack trace from a user report, download that asset
+for the same tag, unpack it, and point your tool (for example `source-map-support` or a browser
+devtools "add source map") at `dist/extension.js.map`. A map only matches the exact build it
+came from, so always use the asset from the tag the user reported.
 
 ## Cut a release
 

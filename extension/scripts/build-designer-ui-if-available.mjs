@@ -34,6 +34,17 @@ if (missingModules.length > 0) {
   process.exit(0);
 }
 
+// designer-ui imports the workspace package @fmweb/shared by its built entry (shared/dist). When
+// the dependencies are installed but shared has not been built, say that, not "run npm ci".
+const sharedDir = path.resolve(designerDir, '..', 'shared');
+if (!existsSync(path.join(sharedDir, 'dist', 'index.js'))) {
+  console.error(
+    '[extension build] The shared package has not been built (shared/dist is missing), so the designer-ui bundle cannot resolve @fmweb/shared. ' +
+      'Run "npm run build -w shared" (or "npm run build" at the repository root, which builds shared first), then build the extension again.'
+  );
+  process.exit(1);
+}
+
 try {
   // npm.cmd on Windows; shell:false would not find it there.
   execFileSync('npm', ['run', 'build'], { cwd: designerDir, stdio: 'inherit', shell: process.platform === 'win32' });
@@ -41,8 +52,7 @@ try {
   // The dependencies are installed, so a failure here is a real build problem. Say what to try,
   // and fail: a release must not silently ship the fallback UI.
   console.error(
-    '[extension build] The designer-ui bundle failed to build. Run "npm ci" at the repository root ' +
-      '(it links the @fmweb/shared workspace package), then "npm run build -w designer-ui" to see the error.'
+    '[extension build] The designer-ui bundle failed to build. Run "npm run build -w designer-ui" at the repository root to see the error.'
   );
   process.exit(1);
 }

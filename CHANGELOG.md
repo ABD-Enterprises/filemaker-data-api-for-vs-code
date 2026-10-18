@@ -33,13 +33,14 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Wizard: http+self-signed message, custom CA extends system roots, TLS agent keyed by file stamp, database/API path change resets aiAccess; kill-switch message names the true cause.
 - FM Web preview: clear 'unavailable in this installation' error instead of the old fallback app; version-marked managed runtime files refreshed in already generated apps; env file written without following symlinks.
 - Implement Create Record in the Record Editor (field list, validation, confirmation, new record ID) with unit tests and an end-to-end test against the mock FileMaker server.
 - Describe the workspace-state secret fallback as obfuscation, not encryption, in the warning toast, setting text and code comments.
 - Fix 404 homepage/author URL; declare virtualWorkspaces unsupported; mention AI tools in the untrusted-workspace description; add enumDescriptions to seven enum settings; add the Claris trademark statement to the README.
 - Allow `..` inside snapshot/offline-cache index file names (layout `Q1..Q2`) while still rejecting traversal; traversal corpus added.
 - AI kill-switch status item does nothing (with guidance) when AI is not enabled, instead of silently setting the switch.
-- Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on.
+- Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on; a workspace `offline.mode: true` can no longer be cleared by the command (edit the workspace file).
 - Batch CSV import ignores the `recordId`/`modId` meta columns so an exported file re-imports cleanly; round-trip test added.
 - FM Web preview: write the bridge URL and session token to the generated runtime's gitignored `.env.local`, send `X-FM-Bridge-Token` from the runtime client (and call `fetch` unbound), and apply `features.recordEdit.enabled` and the enterprise `recordEdit` guard to bridge edit/create/delete.
 - AI tools follow-ups (#380): 4,000-character dialog budget, placeholder markers refused in writes, host-only server scrub, session generation counter for the quota, wider post-dialog re-check.
@@ -54,6 +55,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.
 - Untrack artifacts/*.log and gitignore them.
 - Ship generated `THIRD_PARTY_NOTICES.txt` (checked in CI via `package:check` and a unit test); exclude lint config, build scripts, QA docs and ARCHITECTURE.md from the VSIX.
 - Production-minify the extension, worker and Layout Mode UI bundles; no inline or shipped source maps; clear designer-ui build failure message.

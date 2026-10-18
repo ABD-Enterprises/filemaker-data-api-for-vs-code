@@ -11,7 +11,7 @@ accidental bloat — e.g., committing `node_modules`, leaving a 100 MB
 debug payload in the bundle, or adding a binary asset by mistake.
 
 The cap is set generously: at v1.1.0, the actual VSIX is ~1.0 MB. The 5
-MiB ceiling is **5x current** so legitimate growth (source maps, new
+MiB ceiling is **5x current** so legitimate growth (new
 features, webview assets) doesn't trip the gate before there's a real
 discussion to have.
 
@@ -36,16 +36,16 @@ other code change — no silent drift.
 
 Before raising, ask whether the size is unavoidable:
 
-- `dist/extension.js` source maps add ~60% — switch from `--sourcemap=inline`
-  to `--sourcemap=external` and exclude `.map` from VSIX via
-  `.vscodeignore`.
+- Source maps are already external and excluded from the VSIX (`dist/**/*.map` in
+  `.vscodeignore`); they are published as a release asset instead (see `docs/RELEASE.md`).
+  If the VSIX grows, check that no `.map` file slipped into `vsce ls`.
 - Webview bundles can lazy-load chunks (see #172).
 - Large vendored dependencies are candidates for `--external:` flags.
 - Verify nothing is sneaking in via `.vscodeignore` misses (`vsce ls --tree`).
 
 ## Related
 
-- Issue #178 — production source maps (the largest single growth driver)
+- Issue #178 — production source maps (now external; the largest single growth driver before)
 - Issue #172 — webview code-splitting
 - `npm run package:check` runs the same packaging path locally so the
   size impact of a change is visible before pushing.

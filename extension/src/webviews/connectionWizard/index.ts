@@ -360,8 +360,13 @@ export class ConnectionWizardPanel {
         profile.allowSelfSigned = true;
       }
       // Editing must not silently drop what AI tools were allowed to do, unless the profile now
-      // points at a different server or user (then the earlier choice no longer applies).
-      if (this.editingProfile?.aiAccess && !bindingChanged) {
+      // points at a different server, user, database or API path (then the earlier choice no
+      // longer applies and access goes back to none).
+      if (
+        this.editingProfile?.aiAccess &&
+        !bindingChanged &&
+        !this.dataTargetChanged(this.editingProfile, profile)
+      ) {
         profile.aiAccess = this.editingProfile.aiAccess;
       }
 
@@ -480,6 +485,16 @@ export class ConnectionWizardPanel {
     );
   }
 
+  /** The database or API path (not only the address and user) decides what AI tools could reach. */
+  private dataTargetChanged(before: ConnectionProfile, after: ConnectionProfile): boolean {
+    const norm = (value: string | undefined, fallback: string): string => (value ?? '').trim() || fallback;
+    return (
+      before.database.trim() !== after.database.trim() ||
+      norm(before.apiBasePath, '/fmi/data') !== norm(after.apiBasePath, '/fmi/data') ||
+      norm(before.apiVersionPath, 'vLatest') !== norm(after.apiVersionPath, 'vLatest')
+    );
+  }
+
   private async isKnownOrigin(origin: string): Promise<boolean> {
     const profiles = await this.profileStore.listProfiles();
     return profiles.some(
@@ -536,7 +551,7 @@ export class ConnectionWizardPanel {
    * Checks the certificate options from the form. The custom CA file must be a real PEM
    * certificate file. "Allow self-signed" is insecure, so enabling it asks once in a modal
    * naming the address (not again for the same address, whether on this profile already or
-   * confirmed earlier in this panel). It only applies to https addresses. These two values
+   * confirmed earlier in this panel). It only applies to https addresses (on an http:// address the form says so instead of ignoring the box). These two values
    * come from this form alone: neither the workspace's profile template nor any setting
    * can carry them.
    */
@@ -564,7 +579,14 @@ export class ConnectionWizardPanel {
           .filter((origin): origin is string => Boolean(origin))
       )
     ];
-    if (data.allowSelfSigned !== true || httpsOrigins.length === 0) {
+    if (data.allowSelfSigned === true && httpsOrigins.length === 0) {
+      return {
+        ok: false,
+        message:
+          '"Allow self-signed certificate" only applies to https:// addresses. Untick it, or use an https:// server address.'
+      };
+    }
+    if (data.allowSelfSigned !== true) {
       return { ok: true, caBundlePath, allowSelfSigned: false };
     }
 
@@ -814,7 +836,7 @@ export class ConnectionWizardPanel {
           <input id="caBundlePath" type="text" autocomplete="off"
                  aria-describedby="caBundlePath-hint"
                  placeholder="/path/to/company-ca.pem" />
-          <div id="caBundlePath-hint" class="hint">Optional. Absolute path to a PEM file with the certificate authority that signed your server's certificate. This is the safe way to trust a private server.</div>
+          <div id="caBundlePath-hint" class="hint">Optional. Absolute path to a PEM file with the certificate authority that signed your server's certificate. It is added to the system's trusted certificates, so public servers still work. This is the safe way to trust a private server.</div>
         </div>
         <div class="field insecure-field">
           <label class="checkbox-label" for="allowSelfSigned">
