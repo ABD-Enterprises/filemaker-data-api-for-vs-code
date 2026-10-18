@@ -44,8 +44,8 @@ describe('redact: places a secret used to slip through', () => {
   });
 
   it('redacts access tokens and similar query parameters', () => {
-    const text = redactString('GET /x?access_token=abc&page=2&sessionToken=def&api_key=ghi&sig=jkl');
-    expect(text).toBe('GET /x?access_token=***&page=2&sessionToken=***&api_key=***&sig=***');
+    const text = redactString('GET /x?access_token=abc&page=2&sessionToken=def&api_key=ghi&signature=jkl');
+    expect(text).toBe('GET /x?access_token=***&page=2&sessionToken=***&api_key=***&signature=***');
   });
 
   it('redacts secret JSON keys whatever their prefix or suffix', () => {
@@ -53,6 +53,32 @@ describe('redact: places a secret used to slip through', () => {
     const text = redactString(json);
     expect(text).not.toMatch(/tok1|tok2|"k"|"s"/);
     expect(text).toContain('"name":"ok"');
+  });
+
+  it('does not over-redact ordinary names', () => {
+    expect(redactString('GET /x?design=1&author=2&assignee=3')).toBe('GET /x?design=1&author=2&assignee=3');
+    expect(redactString('GET /layouts/sessions/records/1')).toBe('GET /layouts/sessions/records/1');
+    expect(redactString('http://[::1]:8080?email=a@b.com')).toBe('http://[::1]:8080?email=a@b.com');
+  });
+
+  it('redacts a form body that starts with the secret, number values and cookies', () => {
+    expect(redactString('password=S&user=bob')).toBe('password=***&user=bob');
+    expect(redactString('{"password": 123456, "n": 1}')).toBe('{"password": "***", "n": 1}');
+    expect(redactHeaders({ Cookie: 'a=b', 'X-Ok': '1' })).toEqual({ Cookie: '***', 'X-Ok': '1' });
+  });
+
+  it('redacts a token or a password containing @ in a URL', () => {
+    expect(redactString('https://ghp_abc123@github.com/x')).toBe('https://***@github.com/x');
+    expect(redactString('https://user:p@ss@host/x')).toBe('https://***@host/x');
+  });
+
+  it('stays fast on long hostile input', () => {
+    for (const piece of ['&token', '?sig', '"token', '/sessions/', 'a=']) {
+      const input = piece.repeat(60_000);
+      const start = Date.now();
+      redactString(input);
+      expect(Date.now() - start).toBeLessThan(500);
+    }
   });
 
   it('redacts credentials embedded in a URL', () => {
