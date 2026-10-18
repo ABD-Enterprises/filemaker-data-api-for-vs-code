@@ -9,8 +9,17 @@ Turn layout metadata into code you can use in your own project:
 - **FileMaker: Generate Snippets for Layout** adds editor snippets for common
   find and get-record calls.
 
-Files go to the folder set in `filemaker.typegen.outputDir`. Run
-**FileMaker: Open Generated Types Folder** to jump there.
+Where the files go:
+
+- Layout types: `layouts/<name>.ts` inside the folder set in
+  `filemaker.typegen.outputDir` (default `filemaker-types`). Run
+  **FileMaker: Open Generated Types Folder** to jump there. A layout name with
+  spaces or punctuation gets a short hash in its file name.
+- The typed client: the folder you choose when you run the command
+  (`types.ts`, `client.ts` and a `README.md`).
+- Snippets: `snippets/filemaker-data-api.code-snippets` in your workspace.
+
+Generating files needs a trusted workspace.
 
 Regenerate after a schema change, and pair it with a schema snapshot diff to see
 exactly which fields moved.

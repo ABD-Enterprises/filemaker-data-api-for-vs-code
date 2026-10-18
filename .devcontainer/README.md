@@ -11,9 +11,10 @@ main**. Codespaces provisions the container, installs the extension
 from the Marketplace, and opens VS Code in your browser. From there:
 
 1. Run **FileMaker: Add Connection Profile** (extension preinstalled).
-2. Point it at any reachable FileMaker Server you have access to, or
-   the public demo sandbox once it's online (issue #168).
-3. Run **FileMaker: Connect** → query.
+2. Point it at a FileMaker Server you can reach, or at the mock Data API
+   (`npm run mock:server -w extension`, then `http://127.0.0.1:18080`; see
+   [CONTRIBUTING.md](../extension/CONTRIBUTING.md)).
+3. Run **FileMaker: Connect**, then query.
 
 Total time from "Create codespace" to "querying FileMaker": **~60
 seconds** on Codespaces' default 2-core machine.
@@ -38,13 +39,11 @@ monorepo workspaces are ready for `npm test`, `npm run build`, etc.
 
 ## What's NOT preinstalled
 
-- A FileMaker Server. You supply your own server URL + credentials at
-  profile-creation time. The demo sandbox (#168) will replace this
-  requirement when it's online.
-- A model CLI credential (e.g. `codex --login`) if you intend to run the
-  ORC ticket loop from inside the container. Governance for this repo is
-  ORC (see `CLAUDE.md` / `AGENTS.md`); the loop runs via the ORC engine,
-  not a per-repo GitHub Actions agent.
+- A FileMaker Server. You supply your own server URL and credentials when
+  you create a profile, or use the mock Data API.
+- AI access. The `filemaker.ai.*` settings are read from user settings only,
+  so a container or Codespace cannot switch AI tools on for you. See the
+  [User Guide](../extension/docs/USER_GUIDE.md#using-ai-with-filemaker).
 
 ## Updating the container
 

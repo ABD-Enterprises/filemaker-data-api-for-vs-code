@@ -1,102 +1,55 @@
 # Maintainers
 
-This project's bus factor is the riskiest part of its long-term health.
-This doc names who's responsible for what, the succession plan, and how
-a handoff actually works in practice.
+Who is responsible for what, and how a handoff works. This project's bus factor is the riskiest part of its long-term health.
 
 ## Current maintainers
 
 | Role | Name | GitHub | Responsibility |
-|---|---|---|---|
-| **Primary** | Alan Deffenderfer | [@deffenda](https://github.com/deffenda) | Release cuts, Marketplace publish, security response, roadmap |
-| **Secondary** | _(open)_ | _(open)_ | Backup release path, triage when primary unavailable, PR review |
+| --- | --- | --- | --- |
+| Primary | Alan Deffenderfer | [@deffenda](https://github.com/deffenda) | Releases, Marketplace publishing, security response, roadmap |
+| Secondary | _(open)_ | _(open)_ | Backup release path, triage when the primary is unavailable, review |
 
-**Wanted: a secondary maintainer.** If you're a FileMaker developer using
-this extension regularly and would like to help keep it healthy, see the
-"Becoming a secondary maintainer" section below.
+A secondary maintainer is wanted. If you use the extension regularly and want to help, see "Becoming a secondary maintainer" below.
 
 ## Responsibilities
 
 ### Primary maintainer
 
-- Cuts releases per the cadence policy
-  ([release runbook](./RELEASE.md), filed in issue #140)
-- Holds the VS Code Marketplace publisher credentials (the `SureForgeTech`
-  publisher on https://marketplace.visualstudio.com)
-- Holds the Azure DevOps account that owns the publisher
-- Holds the Open VSX publisher (once issue #160 lands)
-- First responder to security reports (see [SECURITY.md](../extension/SECURITY.md))
-- Approves PRs from the cloud agent (Codex / Claude Code) per the
-  separation-of-duties rule in `CLAUDE.md`
-- Owns the Marketplace publisher and its Entra identity (see [SECRETS.md](./SECRETS.md))
+- Cuts releases following [RELEASE.md](./RELEASE.md) and the [cadence](./RELEASE_CADENCE.md), including the non-code checklist (docs, upgrade notes, listing, announcement, monitoring).
+- Owns the **SureForgeTech** publisher on the VS Code Marketplace and its Microsoft Entra publishing identity ([JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md), [SECRETS.md](./SECRETS.md)).
+- Approves the `marketplace` environment deployment for each release.
+- First responder to security reports ([SECURITY.md](../SECURITY.md)).
+- Triages issues (templates ask for versions and logs) and keeps [CHANGELOG](../extension/CHANGELOG.md) and [UPGRADE](../extension/UPGRADE.md) honest.
 
 ### Secondary maintainer
 
-- Can publish a release if the primary is unavailable >7 days
-- Can sign off on PRs from cloud agents in the primary's absence
-- Reviews + triages incoming bug reports / feature requests during the
-  primary's vacation / outages
-- Is a second owner of the Marketplace publisher, so a single account compromise
-  doesn't lose publish rights
+- Can publish a release if the primary is unavailable for more than 7 days.
+- Reviews and triages while the primary is away.
+- Is a second owner of the Marketplace publisher and of the `marketplace` environment's required reviewers, so one lost account does not lose the ability to publish.
 
-## Succession path
+## Succession
 
-If the primary maintainer needs to step back permanently:
+If the primary maintainer needs to step back for good:
 
-1. **Announce in GitHub Discussions** (Announcements category, once #134
-   enables Discussions) with a 30-day notice window.
-2. **Transfer the Marketplace publisher** ownership to the secondary OR
-   create a new publisher under the secondary's account and re-publish
-   the next release under the new publisher (users on the old version
-   keep it, new installs come from the new publisher — document the
-   migration in CHANGELOG).
-3. **Update CODEOWNERS, FUNDING.yml, repo About, and this doc** with
-   the new primary.
-4. **Hand off the `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
-   / `PRS_PAT`** repo secrets — primary regenerates them under their
-   accounts; old ones revoked.
-5. **Old primary remains in CONTRIBUTORS** but no longer holds publish
-   credentials.
+1. Announce it in the repository (an issue and the README) with a 30-day notice.
+2. Transfer or share ownership of the Marketplace publisher with the secondary, and add them as a reviewer of the `marketplace` environment. If a new publisher must be created, publish the next release under it and say so in the changelog; users on the old version keep it, new installs come from the new publisher.
+3. Update `CODEOWNERS`, `.github/FUNDING.yml`, `.well-known/security.txt`, [SECURITY.md](../SECURITY.md), the Marketplace `homepage` and this page.
+4. Repeat the Entra setup under the new owner's account and replace `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`.
+5. The old primary no longer holds publish credentials.
 
-If the primary becomes **suddenly unavailable** (hospitalization,
-medical emergency, etc.):
-
-- The secondary maintains read-only awareness via the audit trail of
-  cloud-agent PRs + the project's GitHub Discussions.
-- The secondary has standing authority to merge PRs that have green CI
-  and Gemini approval, including releases up to a patch version.
-- Minor and major releases wait for the primary's return OR a documented
-  30-day no-contact period before the secondary cuts them.
-- The "emergency handoff" rules above kick in only after 30 days of
-  no-contact AND a community vote in GitHub Discussions confirming the
-  succession.
+If the primary becomes suddenly unavailable, the secondary keeps issues and pull requests moving, may merge pull requests that pass `build-test`, and may cut patch releases. Minor and major releases wait for the primary, or for 30 days without contact.
 
 ## Becoming a secondary maintainer
 
-Steps a candidate takes:
+1. Open an issue introducing yourself: where you use the extension and why you want to help.
+2. Show engagement: two or three meaningful pull requests over about 30 days (not only typo fixes).
+3. The primary reviews engagement quality, alignment with the project and available time.
+4. On agreement the primary opens a pull request adding you to the table above and grants repository write access.
 
-1. Open a GitHub Discussion (Ideas category, once #134 lands) introducing
-   yourself — name, where you use this extension, why you want to help.
-2. Demonstrate engagement: submit 2-3 meaningful PRs (not just typo fixes)
-   over a 30-day period.
-3. The primary reviews engagement quality + alignment with the project's
-   goals + sustainable bandwidth.
-4. On agreement, the primary opens a PR adding the candidate to the
-   "Current maintainers" table here and grants them:
-   - Repo write access (for label management + PR merges)
-   - A documented place in the FUNDING.yml split (if/when sponsorship
-     income exceeds a documented threshold)
-   - Backup secret store access (timing TBD; depends on candidate's
-     OPSEC readiness)
+Maintainer rights are hard to take back, so this is intentionally slow.
 
-This is intentionally a slow process. Maintainer rights propagate forever;
-revoking them is socially expensive. Better to take 60 days getting it
-right than to grant in a week and regret it.
+## Other pages
 
-## Out of scope for this doc
-
-- Day-to-day contribution rules: see [CONTRIBUTING.md](../extension/CONTRIBUTING.md)
-- Security reporting: see [SECURITY.md](../extension/SECURITY.md)
-- Funding model: see [FUNDING.md](./FUNDING.md)
-- Code of Conduct enforcement contact: see CODE_OF_CONDUCT.md
-  (filed in issue #133)
+- Contributing: [CONTRIBUTING.md](../extension/CONTRIBUTING.md)
+- Security reporting: [SECURITY.md](../SECURITY.md)
+- Code of Conduct: [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)

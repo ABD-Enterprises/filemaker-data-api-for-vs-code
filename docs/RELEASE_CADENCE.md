@@ -1,6 +1,6 @@
 # Release Cadence
 
-This policy defines how FileMaker Data API Tools batches changes into patch, minor, major, pre-release, and security releases.
+This policy defines how FileMaker Data API Tools batches changes into patch, minor, major and security releases. The step-by-step process, including the non-code checklist, is in [RELEASE.md](./RELEASE.md).
 
 ## 1. SemVer Interpretation
 
@@ -32,27 +32,22 @@ Security fixes should be shipped on the latest stable line as a patch release. B
 
 If a backport is approved, document the supported version range in release notes.
 
-## 4. Pre-Release Channel Usage
+## 4. Pre-Release Channel
 
-Use a pre-release channel for changes that need early adopter validation before stable release:
+There is no pre-release channel today. The CI publish job publishes stable versions only, and the Marketplace does not accept semver suffixes such as `1.5.0-pre.1`: a pre-release is an ordinary version number published with `vsce publish --pre-release`, and Microsoft recommends odd minor numbers for pre-releases and even ones for stable. This project uses consecutive minor numbers (1.2, 1.3, 1.4), so a pre-release would need a written decision on the version scheme and a manual publish.
 
-- risky webview or activation changes,
-- new Data API workflows with broad surface area,
-- performance changes that need real-world feedback,
-- fixes for users who opt in before the next stable release.
-
-Do not use pre-release builds for security fixes that stable users need immediately. Ship those as stable patch releases.
-
-Pre-release builds should use explicit pre-release versions such as `1.2.0-pre.1` and should not be promoted to stable without normal validation.
+If one is ever used, it is for changes that need early adopter validation (risky webview or activation changes, broad new Data API workflows, performance work). Security fixes that stable users need always ship as stable patch releases.
 
 ## 5. Breaking Change Communication
 
 Breaking changes must be communicated before and during release:
 
-- Add migration steps to `extension/UPGRADE.md`.
+- Add migration steps to `extension/UPGRADE.md`, and update the [User Guide](../extension/docs/USER_GUIDE.md).
 - Call out the breaking change in `extension/CHANGELOG.md`.
 - Include upgrade notes in the PR and release notes.
 - Keep deprecated settings or commands working for at least one minor release when practical.
 - Provide a rollback or downgrade note when a breaking change can interrupt production workflows.
 
-If a release runbook exists in `docs/RELEASE.md`, keep this cadence policy and that runbook consistent.
+## 6. Announcement and follow-up
+
+A release is announced when it changes what users see. A patch that only fixes a defect needs the GitHub release notes. A minor or major release also gets upgrade notes, an updated user guide and a short community post. Watch issues and Marketplace reviews for a week after every release; see the checklist in [RELEASE.md](./RELEASE.md).
