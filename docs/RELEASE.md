@@ -56,6 +56,7 @@ Branch from green `main`: `git switch -c release/vX.Y.Z origin/main`.
 - [ ] **Walkthroughs (non-code).** The Getting Started steps in `extension/docs/walkthroughs/` still match the screens.
 - [ ] **Security and data handling (non-code).** [docs/security.md](./security.md) and [docs/DATA_HANDLING.md](./DATA_HANDLING.md) describe what the release stores, sends and asks. Check what changed against the list: new settings that widen access, new files written, new network calls, new prompts, new secrets.
 - [ ] **Marketplace listing (non-code).** In `extension/package.json`: description, `keywords`, `categories`, `icon`, `homepage`, `bugs`. In the README: screenshots in `extension/docs/marketplace/` still show the product and the files exist (the listing loads them from `main` on GitHub, so do not rename or delete one later). Nothing in the listing may describe a feature that is off by default without saying so, or one that is not in this release.
+- [ ] **Failure-mode catalogue (non-code).** If error handling or connection behavior changed, update the status table in [FILEMAKER_FAILURE_MODES.md](./FILEMAKER_FAILURE_MODES.md) and the guide's Troubleshooting section, and say which rows still need a real-server check.
 - [ ] **Compatibility.** [extension/docs/COMPATIBILITY.md](../extension/docs/COMPATIBILITY.md) lists the server versions you actually tested.
 - [ ] **Third-party notices.** If dependencies changed, run `npm run notices -w extension` and commit `extension/THIRD_PARTY_NOTICES.txt` (it ships in the VSIX; `package:check` fails when it is out of date).
 - [ ] **Dependencies.** `npm audit --omit=dev --audit-level=high` is clean (CI enforces it). Review the Dependabot pull requests that would otherwise land right after the release ([dependency policy](./CI.md)).
@@ -88,6 +89,7 @@ Do this against the release branch (the content that will be tagged), not after 
 
 - [ ] The Marketplace page shows the new version and the new changelog (it can take up to about 10 minutes): `npx @vscode/vsce show SureForgeTech.filemaker-data-api-tools`, or the [listing](https://marketplace.visualstudio.com/items?itemName=SureForgeTech.filemaker-data-api-tools).
 - [ ] The README on the listing renders, images load, and links work (click them; they are rewritten to GitHub URLs when the VSIX is built).
+- [ ] **FileMaker: About / Show Version** in the published build shows the version you released.
 - [ ] In a clean VS Code profile, install from the Marketplace, check `code --list-extensions --show-versions`, connect, run one find, and open **FileMaker: Open User Guide**.
 - [ ] Update from the previous version in a profile that has the old version installed: profiles and settings survive, and the new prompts behave as the upgrade notes say.
 - [ ] The GitHub release has the VSIX and `sourcemaps-vX.Y.Z.tgz` attached. Keep the tarball: it is the only way to read a stack trace from the minified bundle.

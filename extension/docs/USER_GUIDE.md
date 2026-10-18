@@ -38,12 +38,24 @@ This is the shortest path from nothing to a first query. Each step links to the 
 
 1. **Install.** In VS Code open the Extensions view (`Cmd+Shift+X` / `Ctrl+Shift+X`), search for **FileMaker Data API Tools** (publisher SureForgeTech) and select **Install**.
 2. **Open a folder** (File > Open Folder...). Saved queries, schema snapshots, generated types and the offline cache are stored in the folder, so open one even if you only want to try a find. When VS Code asks whether you trust the authors of the folder, choose **Yes, I trust the authors** (see [Trusted workspace and Restricted Mode](#trusted-workspace-and-restricted-mode)).
-3. **Check the server side.** You need the Data API enabled, an HTTPS address with a certificate your computer trusts, and an account whose privilege set has the `fmrest` extended privilege ([how](#before-you-start)).
-4. **Create a profile.** Run **FileMaker: Add Connection Profile**. Choose **Direct**, enter a name, the server URL (`https://fm.example.com`), the database name (without `.fmp12`), the account and the password. Select **Test Connection**; when the badge is green select **Save Profile**.
+3. **Check the server side.** You need the Data API enabled, an HTTPS address, and an account whose privilege set has the `fmrest` extended privilege ([how](#before-you-start)). If the server still uses FileMaker's default certificate, expect one extra step in the next item ([details](#first-connection-to-a-server-with-filemakers-default-certificate)).
+4. **Create a profile.** Run **FileMaker: Add Connection Profile**. Choose **Direct**, enter a name, the server URL (`https://fm.example.com`), the database name (without `.fmp12`), the account and the password. Select **Test Connection**. If a dialog asks whether to trust the server's certificate, read it (see [Certificates](#certificates)) and decide. When the badge is green select **Save Profile**.
 5. **Connect.** Select **Connect Now** in the notification that appears after saving (or run **FileMaker: Connect**). The sidebar fills with layouts.
 6. **Run your first find.** Right-click a layout and choose **Open Query Builder**, add a condition and select **Run**.
 
-Something failed? Start with [Troubleshooting](#troubleshooting): the first row covers certificate errors, the most common first-run problem.
+Something failed? Start with [Troubleshooting](#troubleshooting): the first rows cover certificate errors, the most common first-run problem. Test Connection tells you which step failed.
+
+### First connection to a server with FileMaker's default certificate
+
+A new FileMaker Server uses a built-in certificate until the administrator installs another one. Your computer does not trust it, so the first Test Connection stops at the certificate. This is expected and takes three clicks:
+
+1. Select **Test Connection** in the wizard. The extension reads the certificate before it sends anything, then shows a dialog titled **Trust this certificate for "<profile name>"?** The explanation says that this server uses a certificate that is not trusted because FileMaker Server's default certificate is self-signed.
+2. Look at the certificate in the dialog. For the default certificate you should see a **Subject** naming `Claris Self Signed Certificate (Not for Production Use)`, an **Issuer** naming `Claris Root Authority`, **Names: (none listed)**, the validity dates and a **SHA-256** fingerprint. If the Subject and Issuer are something else, or you did not expect a certificate warning, stop and ask your administrator. If it matches, compare the SHA-256 with the one your administrator gives you (or the certificate in the Admin Console), and select **Trust this certificate**. The test then runs again by itself.
+3. When the badge is green, select **Save Profile**. The fingerprint is stored in the profile, so later connections need no click.
+
+Why the trust dialog and not a CA file: the default certificate has no host names in it, so no certificate authority file can make it match the server's address on its own. Trusting that one certificate is the working option. The extension accepts exactly this certificate for this connection and refuses a different one later.
+
+**For production, do not rely on this.** The default certificate is labelled "Not for Production Use". Install a certificate from a public certificate authority, plus the intermediate certificate, in FileMaker Server's Admin Console (Configuration > SSL Certificate), then restart the server as the console says. After that every computer trusts the server with no dialog; remove the pinned certificate by editing the profile and choosing **Forget trusted certificate**.
 
 ---
 
@@ -52,7 +64,7 @@ Something failed? Start with [Troubleshooting](#troubleshooting): the first row 
 You need:
 
 - A **FileMaker Server** (or FileMaker Cloud) with the **FileMaker Data API** enabled. On Server this is in the Admin Console under Connectors.
-- A server address your computer can reach over **HTTPS**, with a **certificate your computer trusts**. If your server uses a certificate from a private authority or a self-signed one, the connection wizard has a **Certificates (advanced)** section for it (see [Certificates](#certificates-private-authority-or-self-signed)).
+- A server address your computer can reach over **HTTPS**, with a **certificate your computer trusts**. If your server uses FileMaker's default certificate, a company authority's certificate or a self-signed one, the connection wizard can trust it (see [Certificates](#certificates)); a certificate from a public authority needs nothing.
 - A **FileMaker account** whose privilege set has the **`fmrest`** extended privilege (called "Access via FileMaker Data API"). To grant it, open the database in FileMaker Pro, choose File > Manage > Security, edit the account's privilege set, open **Extended Privileges**, and tick `fmrest`. Without it the sign-in fails and can look like a wrong password.
 - **VS Code 1.96 or newer.**
 - **A folder open in VS Code** for anything that is saved: saved queries, schema snapshots, type generation, the offline cache and the AI context copy.
@@ -81,7 +93,10 @@ New:
 - **Edit-conflict protection in the Record Editor.** If someone else changes a record after you opened it, your save is refused instead of overwriting their change. The editor shows which fields changed and keeps your edits. See [Edit a record](#edit-a-record).
 - **Empty results are not errors.** A find that matches nothing now returns an empty result. Before, it showed an error, and a batch export could fail on its last request.
 - **Create Record works.** The Record Editor's create mode lists the layout's fields, has a **Create Record** button with a confirmation, and shows the new record's ID.
-- **Certificates in the wizard.** A **Certificates (advanced)** section accepts a custom CA file, or (insecure, per profile, confirmed once) a self-signed certificate. See [Certificates](#certificates-private-authority-or-self-signed).
+- **Trust a private or self-signed server without switching checks off.** The wizard shows the server's certificate (who it is for, its dates and SHA-256 fingerprint) and, if you agree, trusts exactly that certificate for the connection. A different certificate later is refused. See [Certificates](#certificates).
+- **Test Connection names the failing step** (reaching the Data API, listing the databases, signing in), and the status bar shows the connection's real state. Connection errors say what happened and what to do. See [Troubleshooting](#troubleshooting).
+- **Show Effective Settings** and clearer User versus Workspace settings (three badges). See [User settings vs Workspace settings](#user-settings-vs-workspace-settings-in-plain-words).
+- **About / Show Version** shows the version and build, with **Copy for bug report**. See [Which version am I running?](#which-version-am-i-running).
 - **One session renewal.** When a session expires while several requests run, they now share one renewal instead of each opening a new FileMaker session.
 
 Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
@@ -93,6 +108,9 @@ Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 - CSV exports and **Copy results as table** put a leading apostrophe (`'`) in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, so a spreadsheet does not run it as a formula. `filemaker.export.neutralizeFormulas` (user settings) turns that off. A CSV export can be edited and imported back.
 - The FM Web live preview is not in the Marketplace build; it needs the repository. Layout Mode is unchanged.
 - Generated type files for layouts with spaces or punctuation in the name get a new file name (with a short hash). Delete the old files.
+- Failed sign-ins no longer repeat by themselves: after FileMaker rejects the saved account or password the extension pauses automatic sign-ins until you edit the connection, or run **Connect** or **Test Connection**.
+- Redirects are not followed, and a reply that is not the Data API (a web page) gets its own error message.
+- A batch update carries on past records your account cannot change and stops only when the account cannot do updates at all.
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
 - A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
 
@@ -141,14 +159,29 @@ The password, proxy API key and session token are stored in VS Code SecretStorag
 
 Server addresses with a user name or password inside them (`https://user:pass@host`) are rejected.
 
-### Certificates (private authority or self-signed)
+### Certificates
 
-FileMaker Server often uses a certificate from a company authority or a self-signed one. The wizard's **Certificates (advanced)** section (under the server fields) has two ways to trust it, both stored per profile and both for `https://` addresses only:
+The extension checks the server's TLS certificate the normal way: it must be signed by an authority your computer trusts, be current, and match the name in the Server URL. Your computer's trust list is Node's built-in public list, plus (where your VS Code's Node can read it, Node 22.15 or newer) the operating system's certificate store, plus anything in the `NODE_EXTRA_CA_CERTS` environment variable. The operating system store is read in the background after start-up and again every ten minutes; set VS Code's `http.systemCertificates` to `false` to opt out. A certificate from a public authority needs nothing from you.
 
-- **Custom CA certificate file.** The absolute path to a PEM file with the certificate of the authority that signed your server's certificate. It is added to the certificates your computer already trusts (the built-in public list and, where VS Code can read it, your operating system's store), not substituted for them, so public servers keep working. If you renew or edit the file, the next connection uses the new content without restarting VS Code. This is the preferred option.
-- **Trust this server's certificate (pinning).** When Test Connection (or a connection error) meets a certificate problem, **Trust this certificate…** shows who the certificate is for, its dates, its SHA-256 fingerprint and why it was refused. If you recognise the fingerprint (compare it with the one in the Admin Console, or ask the administrator) and accept, the extension trusts exactly that one certificate for this connection, nothing else. If the server later presents a different certificate, or this one expires, the connection is refused and you can choose **Review and re-trust**. You can also start the review yourself with **Review server certificate…**, and forget it with **Forget trusted certificate**.
+For a server whose certificate your computer does not trust there are two choices, both set in the connection wizard and stored per profile (never from a profile template or a workspace file, and only for `https://` addresses):
 
-Older profiles that had **Allow self-signed certificate** turned on keep working, but that setting skips every certificate check, so the profile list and the status bar show a warning and the extension offers once to convert it to a pinned certificate. Neither option can come from a profile template or any workspace file; you set them yourself in the wizard. The wizard's **Test Connection** shows which step failed: reaching the Data API, listing the hosted databases, or signing in.
+- **Trust this certificate (pinning).** Select **Test Connection**; when it meets a certificate problem the extension reads the certificate (it sends nothing to the server first) and shows **Trust this certificate for "<profile>"?** with: why it was refused, the **Server**, **Subject**, **Issuer**, **Names**, **Valid** dates and the **SHA-256** fingerprint. Only continue if you recognise the fingerprint; compare it with your administrator's or the Admin Console. If you accept, the extension trusts exactly that one certificate for this connection (host-name and issuer checks are skipped for it only) and the test runs again. The fingerprint is saved in the profile when you select **Save Profile**. If you decline, the red message stays with a **Trust this certificate…** button so you can reopen the dialog. You can also open it with **Review server certificate…** and remove the pin with **Forget trusted certificate**, both under **Certificates (advanced)**. On an error message for a saved connection the same button appears.
+  - A pinned certificate that has **expired** (or is not yet valid) is refused, unless you accepted that explicitly in the dialog (the button then reads **Trust anyway, although it is not valid**).
+  - If the server later presents a **different certificate** (renewed or replaced, or something else answering), the connection fails hard with a message that the certificate is not the one you trusted, and the button reads **Review and re-trust**. Do that only if your administrator renewed the certificate.
+  - A pinned connection is made **directly, never through an HTTP proxy**. If a proxy applies to the server address on your computer (`HTTPS_PROXY` or `ALL_PROXY`, minus `NO_PROXY`), the extension refuses before sending anything: "A proxy is configured on this computer ... and a trusted (pinned) server certificate cannot be checked through a proxy". Fix it by adding the server's host name to `NO_PROXY` (and restarting VS Code so it sees the change), or remove the proxy setting. The review dialog notes that it connects directly.
+- **Custom CA certificate file.** Under **Certificates (advanced)**, the absolute path to a PEM file with the certificate of the authority that signed your server's certificate (and any intermediate). It is added to the certificates your computer already trusts, so public servers keep working, and an edited or renewed file is used on the next connection. This is the right choice for a company authority whose certificate names the server. **It does not help with FileMaker's default certificate** (no host names), and a profile that has a pinned certificate ignores the CA file.
+
+Profiles that had the older **Allow self-signed certificate** setting keep working, but that setting skipped every certificate check. The profile list and the status bar show a warning (`no TLS checks`), the wizard shows **This connection skips ALL certificate checks**, and the extension offers once to convert it: **Convert to pinned certificate** (it shows the certificate dialog first), or in the wizard **Convert to a pinned certificate…** or **Check certificates normally**. The wizard no longer has a checkbox for it; trust the certificate by fingerprint instead, and set a CA file only in the wizard.
+
+### Test Connection, step by step
+
+**Test Connection** in direct mode is a ladder and tells you which step failed:
+
+1. **Step 1 of 3: reaching the Data API.** TLS (the certificate), the name and port, and `/productInfo`, which needs no account. A failure here reads "Could not reach the Data API: ..." followed by the cause. On success the message names the server product and version.
+2. **Step 2 of 3: listing the hosted databases.** "Could not list the hosted databases: ..." on failure. If sign-in later fails because the database name is wrong, the message lists the names the server hosts. (A server that answers 401 or 403 to the database list, because it filters the list until you sign in, is skipped, not treated as a failure.)
+3. **Step 3 of 3: signing in.** "Reached the server, but sign-in failed: ..." on failure.
+
+In proxy mode the test opens a session through the proxy. A failed test shows its reason once, in the message under the badge. A test is you asking for a sign-in, so it goes ahead even while automatic sign-ins are paused.
 
 ### Profile templates for a team
 
@@ -189,6 +222,12 @@ Press `Escape` in any picker or input box to cancel the command.
 ### Sessions
 
 FileMaker Data API tokens expire after about 15 minutes of inactivity. The extension renews the token about 30 seconds early (`filemaker.session.refreshLeadSeconds`) and treats a token as expired after 14 minutes (`filemaker.session.maxAgeMinutes`). If a request is still rejected as unauthorized, it signs in again once and retries, and reports an error only if that fails too.
+
+**Failed sign-ins pause.** If FileMaker rejects the saved account or password (error 210, 211, 212, 213 or 214), the extension stops signing in on its own for that connection, so that repeated failures cannot lock the account. Every action then reports "Sign-in is paused" with the error code. (Error 214, too many login attempts, can be a temporary lockout: wait before trying again.) To resume, edit the connection and save a corrected account or password, or run **FileMaker: Connect** or **Test Connection**. If the server has no free Data API sessions (error 956), automatic sign-ins wait 30 seconds, then 60, and so on up to 5 minutes.
+
+**Status bar.** The `FileMaker: <profile>` item shows the real state of the last request: it only says the profile is active until a request has been made ("the connection has not been checked"), then a spinning icon while connecting, a plug when connected, `sign-in failed`, `certificate problem` or `unreachable`. A profile that still skips all certificate checks (the older setting) carries a warning marker. A gateway error (502, 503, 504) shows `unreachable`; a cancelled request leaves the last state.
+
+**Not the Data API.** If a web page, firewall block page, empty reply or cut-off reply comes back instead of FileMaker's JSON, you get "The server did not return Data API JSON" with the HTTP status and content type. Redirects are not followed (the Data API never redirects); the message says where the server pointed.
 
 ---
 
@@ -269,6 +308,8 @@ Only changed fields are sent. **Discard Changes** reverts the form.
 
 **If someone else changed the record:** the editor sends the version of the record you loaded. If the record changed on the server since then, FileMaker refuses the edit (error 306) and nothing is written. The editor then shows which fields changed since you loaded the record, which of them you also edited, and keeps your edits in the form. Select **Reload record (discard my edits)** to load the current version, then make your change again. Batch update does not have this check.
 
+If the layout runs a script on save and that script reports an error, the error is shown next to the success message (the record was saved). The same applies to create and delete.
+
 If a save works but the editor cannot re-read the record afterwards, it says so and asks you to select **Load** before editing again.
 
 ### Create a record
@@ -318,6 +359,8 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
    - **CSV**: a header row with a `recordId` column and one column per field. Empty cells are skipped (a CSV cannot clear a field).
    - **JSON**: an array of `{ "recordId": "123", "fieldData": { "Field": "value" } }` entries (`recordId` is a string).
 3. Choose **Dry-run only (recommended)** or **Execute updates now**. A dry run shows a sample of what would be sent and sends nothing. Executing asks for a final confirmation first.
+
+A record your account cannot change because of a record-level access rule (error 200) fails that record only, with its reason in the failure list, and the job carries on. The job stops once, with FileMaker's reason and the number of records not attempted, only for errors that mean the account cannot do updates at all (9, 205, 207, or rejected credentials). Batch update does not retry FileMaker's own errors; it retries only connection and gateway problems, a locked record (301) and 429 or 503 answers, waiting for the server's `Retry-After`.
 
 Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. Keep an export from before the update. It can restore old values only for layouts without related, calculation, summary or container fields, and only after you delete those columns (see above).
 
@@ -571,7 +614,7 @@ Limits worth knowing. In **Restricted Mode** VS Code hides workspace values of t
 
 ## Settings reference
 
-Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **User** tab is selected for the user-only settings (or see [Opening your user settings](#opening-your-user-settings)). Not sure which value wins? Run **FileMaker: Show Effective Settings**. In the table, **Where** says where a value is read from:
+Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **User** tab is selected for the user-only settings (or see [Opening your user settings](#opening-your-user-settings)). Not sure which value wins? Run **FileMaker: Show Effective Settings**. In the table, **Badge** is the same label that starts each setting's description in the Settings editor (see [User settings vs Workspace settings](#user-settings-vs-workspace-settings-in-plain-words)):
 
 - **User or workspace**: either; a workspace value applies only to that workspace.
 - **User only**: read from your user settings only. A workspace or dev container value is ignored.
@@ -581,107 +624,107 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 **Connection**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.requestTimeoutMs` | `15000` | User or workspace | Timeout for each Data API request, in milliseconds. |
-| `filemaker.defaultApiBasePath` | `"/fmi/data"` | User or workspace | API path used when a profile does not set one. |
-| `filemaker.defaultApiVersionPath` | `"vLatest"` | User or workspace | Data API version segment used when a profile does not set one. |
-| `filemaker.connect.maxRetries` | `3` | User or workspace | Retries of a failed sign-in on network or server errors. 0 turns retry off. |
-| `filemaker.connect.backoffInitialMs` | `1000` | User or workspace | Delay before the first sign-in retry, in milliseconds. |
-| `filemaker.connect.backoffMaxMs` | `30000` | User or workspace | Longest delay between sign-in retries, in milliseconds. |
-| `filemaker.connect.backoffMultiplier` | `2` | User or workspace | Factor by which the retry delay grows. |
-| `filemaker.connectionWizard.requireTestBeforeSave` | `"warn"` | User or workspace | `off`, `warn` or `block`: whether saving a profile needs a successful Test Connection. |
-| `filemaker.session.maxAgeMinutes` | `14` | User or workspace | Treat a session token as expired this many minutes after it was issued. |
-| `filemaker.session.refreshLeadSeconds` | `30` | User or workspace | Renew the token this many seconds before it expires. 0 turns early renewal off. |
-| `filemaker.secrets.fallback` | `"vscode-only"` | User only | What to do when VS Code SecretStorage is unavailable: `vscode-only` (error), `workspace-state` (obfuscated copy keyed from the machine id; not protection against anyone with local access to VS Code state), `disabled` (do not store secrets; development only). |
+| `filemaker.requestTimeoutMs` | `15000` | Per workspace | Timeout for each Data API request, in milliseconds. |
+| `filemaker.defaultApiBasePath` | `"/fmi/data"` | Per workspace | API path used when a profile does not set one. |
+| `filemaker.defaultApiVersionPath` | `"vLatest"` | Per workspace | Data API version segment used when a profile does not set one. |
+| `filemaker.connect.maxRetries` | `3` | Per workspace | Retries of a failed sign-in on network or server errors. 0 turns retry off. |
+| `filemaker.connect.backoffInitialMs` | `1000` | Per workspace | Delay before the first sign-in retry, in milliseconds. |
+| `filemaker.connect.backoffMaxMs` | `30000` | Per workspace | Longest delay between sign-in retries, in milliseconds. |
+| `filemaker.connect.backoffMultiplier` | `2` | Per workspace | Factor by which the retry delay grows. |
+| `filemaker.connectionWizard.requireTestBeforeSave` | `"warn"` | Per workspace | `off`, `warn` or `block`: whether saving a profile needs a successful Test Connection. |
+| `filemaker.session.maxAgeMinutes` | `14` | Per workspace | Treat a session token as expired this many minutes after it was issued. |
+| `filemaker.session.refreshLeadSeconds` | `30` | Per workspace | Renew the token this many seconds before it expires. 0 turns early renewal off. |
+| `filemaker.secrets.fallback` | `"vscode-only"` | User settings only | What to do when VS Code SecretStorage is unavailable: `vscode-only` (error), `workspace-state` (obfuscated copy keyed from the machine id; not protection against anyone with local access to VS Code state), `disabled` (do not store secrets; development only). |
 
 **Queries and History**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.savedQueries.scope` | `"workspace"` | User or workspace | Where saved queries are kept: `workspace` (this workspace on this computer, not in your project files) or `global` (every workspace on this computer). |
-| `filemaker.history.maxEntries` | `10` | User or workspace | Request history entries kept per workspace. |
-| `filemaker.snippets.includeAuthByDefault` | `false` | User or workspace | Include authorization headers in Copy as curl and Copy as fetch(). |
+| `filemaker.savedQueries.scope` | `"workspace"` | Per workspace | Where saved queries are kept: `workspace` or `global`. |
+| `filemaker.history.maxEntries` | `10` | Per workspace | Request history entries kept per workspace. |
+| `filemaker.snippets.includeAuthByDefault` | `false` | Per workspace | Include authorization headers in Copy as curl and Copy as fetch(). |
 
 **Records, Scripts, and Batch**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.features.scriptRunner.enabled` | `true` | Workspace can only make it stricter (T) | Turns the Script Runner off when false. |
-| `filemaker.scripts.parameterBuilder.enabled` | `true` | User or workspace | Shows the JSON parameter builder in the Script Runner. |
-| `filemaker.export.neutralizeFormulas` | `true` | User only | Put an apostrophe in front of CSV cells and Copy results as table cells that start with `=`, `+`, `-`, `@`, tab or carriage return. Turn off only if you need the raw text. |
-| `filemaker.batch.maxRecords` | `10000` | User or workspace (T) | Most records a batch export fetches. |
-| `filemaker.batch.concurrency` | `4` | User or workspace (T) | Requests sent at a time by a batch update (1 to 10). |
-| `filemaker.batch.dryRunDefault` | `true` | User or workspace (T) | Default mode shown for batch updates. |
-| `filemaker.features.recordEdit.enabled` | `true` | Workspace can only make it stricter (T) | Turns the Record Editor write-back and container upload off when false. |
-| `filemaker.containerUploadMaxBytes` | `104857600` | User or workspace | Largest file Upload to Container accepts, in bytes (default 100 MB). |
-| `filemaker.features.batch.enabled` | `true` | Workspace can only make it stricter (T) | Turns batch export and update off when false. |
-| `filemaker.performance.mode` | `"standard"` | User or workspace | `standard` or `high-scale`. High-scale writes batch exports as JSONL. |
+| `filemaker.features.scriptRunner.enabled` | `true` | Workspace can only make this stricter; ignored until you trust the folder | Turns the Script Runner off when false. |
+| `filemaker.scripts.parameterBuilder.enabled` | `true` | Per workspace | Shows the JSON parameter builder in the Script Runner. |
+| `filemaker.export.neutralizeFormulas` | `true` | User settings only | Put an apostrophe in front of CSV cells and Copy results as table cells that start with `=`, `+`, `-`, `@`, tab or carriage return. Turn off only if you need the raw text. |
+| `filemaker.batch.maxRecords` | `10000` | Per workspace; ignored until you trust the folder | Most records a batch export fetches. |
+| `filemaker.batch.concurrency` | `4` | Per workspace; ignored until you trust the folder | Requests sent at a time by a batch update (1 to 10). |
+| `filemaker.batch.dryRunDefault` | `true` | Per workspace; ignored until you trust the folder | Default mode shown for batch updates. |
+| `filemaker.features.recordEdit.enabled` | `true` | Workspace can only make this stricter; ignored until you trust the folder | Turns the Record Editor write-back and container upload off when false. |
+| `filemaker.containerUploadMaxBytes` | `104857600` | Per workspace | Largest file Upload to Container accepts, in bytes (default 100 MB). |
+| `filemaker.features.batch.enabled` | `true` | Workspace can only make this stricter; ignored until you trust the folder | Turns batch export and update off when false. |
+| `filemaker.performance.mode` | `"standard"` | Per workspace | `standard` or `high-scale`. High-scale writes batch exports as JSONL. |
 
 **Schema**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.schema.cacheTtlSeconds` | `300` | User or workspace | How long layout metadata is cached, in seconds. |
-| `filemaker.schema.metadataEnabled` | `true` | User or workspace | Looks up layout metadata for the sidebar, inspector and editors. |
-| `filemaker.schema.snapshots.storage` | `"workspaceFiles"` | User or workspace | `workspaceFiles` (`.vscode/filemaker/snapshots/`) or `workspaceState`. An untrusted workspace always uses `workspaceState`. |
-| `filemaker.schema.snapshots.maxPerLayout` | `20` | User or workspace | Snapshots kept per layout; the oldest are removed. |
-| `filemaker.schema.diagnostics.enabled` | `false` | User or workspace | Lists snapshot differences in the Problems panel. |
-| `filemaker.schema.hashAlgorithm` | `"sha256"` | User or workspace | Hash used to fingerprint schema metadata. |
+| `filemaker.schema.cacheTtlSeconds` | `300` | Per workspace | How long layout metadata is cached, in seconds. |
+| `filemaker.schema.metadataEnabled` | `true` | Per workspace | Looks up layout metadata for the sidebar, inspector and editors. |
+| `filemaker.schema.snapshots.storage` | `"workspaceFiles"` | Per workspace | `workspaceFiles` (`.vscode/filemaker/snapshots/`) or `workspaceState`. An untrusted workspace always uses `workspaceState`. |
+| `filemaker.schema.snapshots.maxPerLayout` | `20` | Per workspace | Snapshots kept per layout; the oldest are removed. |
+| `filemaker.schema.diagnostics.enabled` | `false` | Per workspace | Lists snapshot differences in the Problems panel. |
+| `filemaker.schema.hashAlgorithm` | `"sha256"` | Per workspace | Hash used to fingerprint schema metadata. |
 
 **Code Generation**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.typegen.outputDir` | `"filemaker-types"` | User or workspace (T) | Workspace folder for generated types (a relative path inside the workspace; a leading `/` is dropped and a path with `..` falls back to the default). |
+| `filemaker.typegen.outputDir` | `"filemaker-types"` | Per workspace; ignored until you trust the folder | Workspace folder for generated types (a relative path inside the workspace). |
 
 **FM Web Projects**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.fmWeb.bridge.rateLimitPerSecond` | `20` | User or workspace | Sustained requests per second the FM Web bridge accepts. Extra requests get HTTP 429. |
-| `filemaker.fmWeb.bridge.rateLimitBurst` | `60` | User or workspace | Largest burst the FM Web bridge accepts at once. |
-| `filemaker.fmWeb.bridge.requestBudget` | `10000` | User or workspace | Total requests per bridge session; restart the bridge to reset. |
+| `filemaker.fmWeb.bridge.rateLimitPerSecond` | `20` | Per workspace | Sustained requests per second the FM Web bridge accepts. Extra requests get HTTP 429. |
+| `filemaker.fmWeb.bridge.rateLimitBurst` | `60` | Per workspace | Largest burst the FM Web bridge accepts at once. |
+| `filemaker.fmWeb.bridge.requestBudget` | `10000` | Per workspace | Total requests per bridge session; restart the bridge to reset. |
 
 **Offline Mode**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.offline.mode` | `false` | Workspace can only make it stricter (T) | Use cached metadata and block writes. |
-| `filemaker.offline.staleCacheWarnHours` | `24` | User or workspace | Warn when the offline cache is older than this many hours. 0 turns the warning off. |
+| `filemaker.offline.mode` | `false` | Workspace can only make this stricter; ignored until you trust the folder | Use cached metadata and block writes. |
+| `filemaker.offline.staleCacheWarnHours` | `24` | Per workspace | Warn when the offline cache is older than this many hours. 0 turns the warning off. |
 
 **Enterprise**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.enterprise.mode` | `false` | Workspace can only make it stricter (T) | Turns on role-based limits. |
-| `filemaker.enterprise.role` | `"developer"` | Workspace can only make it stricter (T) | `viewer`, `developer` or `admin`. |
+| `filemaker.enterprise.mode` | `false` | Workspace can only make this stricter; ignored until you trust the folder | Turns on role-based limits. |
+| `filemaker.enterprise.role` | `"developer"` | Workspace can only make this stricter; ignored until you trust the folder | `viewer`, `developer` or `admin`. |
 
 **Advanced**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemakerDataApiTools.logLevel` | `"info"` | User or workspace | Old name of `filemaker.logging.level`. |
-| `filemakerDataApiTools.requestTimeoutMs` | `15000` | User or workspace | Old name of `filemaker.requestTimeoutMs`. |
-| `filemakerDataApiTools.defaultApiBasePath` | `"/fmi/data"` | User or workspace | Old name of `filemaker.defaultApiBasePath`. |
-| `filemakerDataApiTools.defaultApiVersionPath` | `"vLatest"` | User or workspace | Old name of `filemaker.defaultApiVersionPath`. |
-| `filemaker.advanced.powerUserMode` | `false` | User or workspace | Shows jobs, history, diagnostics dashboard, circuit breaker and plugin commands in the Command Palette. |
-| `filemaker.logging.level` | `"info"` | User or workspace | Log level for the Output channel: `debug`, `info`, `warn`, `error`. |
+| `filemakerDataApiTools.logLevel` | `"info"` | Per workspace | Old name of `filemaker.logging.level`. |
+| `filemakerDataApiTools.requestTimeoutMs` | `15000` | Per workspace | Old name of `filemaker.requestTimeoutMs`. |
+| `filemakerDataApiTools.defaultApiBasePath` | `"/fmi/data"` | Per workspace | Old name of `filemaker.defaultApiBasePath`. |
+| `filemakerDataApiTools.defaultApiVersionPath` | `"vLatest"` | Per workspace | Old name of `filemaker.defaultApiVersionPath`. |
+| `filemaker.advanced.powerUserMode` | `false` | Per workspace | Shows jobs, history, diagnostics dashboard, circuit breaker and plugin commands in the Command Palette. |
+| `filemaker.logging.level` | `"info"` | Per workspace | Log level for the Output channel: `debug`, `info`, `warn`, `error`. |
 
 **AI Tools**
 
-| Setting | Default | Where | What it does |
+| Setting | Default | Badge | What it does |
 | --- | --- | --- | --- |
-| `filemaker.ai.contextPath` | `""` | User only | File that Write AI Context writes. Empty means the extension storage folder. |
-| `filemaker.ai.enabled` | `false` | User only | Lets AI tools in VS Code use the connection in `filemaker.ai.connection`. |
-| `filemaker.ai.allowWrites` | `false` | User only | Offers the tools that create, edit and delete one record. Needs connection access Write. |
-| `filemaker.ai.allowScripts` | `false` | User only | Offers the tool that runs scripts from the allowlist. |
-| `filemaker.ai.scriptAllowlist` | `{}` | User only | Scripts AI tools may run, by profile id: `{"<profile id>": ["Script Name"]}`. |
-| `filemaker.ai.readableLayouts` | `{}` | User only | Layouts AI tools may read without asking, by profile id. |
-| `filemaker.ai.hiddenFields` | `[]` | Workspace can only add names | Field names AI tools never see. A workspace can add names, not remove yours. |
-| `filemaker.ai.connection` | `""` | User only | Profile id AI tools use. Set it with Set AI Access for Connection. |
-| `filemaker.features.ai.enabled` | `true` | Workspace can only make it stricter (T) | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
-| `filemaker.ai.externalServer.enabled` | `false` | User only | Permission for MCP clients (Claude Code, Cursor) to use the AI tools through a local server. It never starts the server; you start it in a window with Start/Stop AI Server for External Tools. |
+| `filemaker.ai.contextPath` | `""` | User settings only | File that Write AI Context writes. Empty means the extension storage folder. |
+| `filemaker.ai.enabled` | `false` | User settings only | Lets AI tools in VS Code use the connection in `filemaker.ai.connection`. |
+| `filemaker.ai.allowWrites` | `false` | User settings only | Offers the tools that create, edit and delete one record. Needs connection access Write. |
+| `filemaker.ai.allowScripts` | `false` | User settings only | Offers the tool that runs scripts from the allowlist. |
+| `filemaker.ai.scriptAllowlist` | `{}` | User settings only | Scripts AI tools may run, by profile id: `{"<profile id>": ["Script Name"]}`. |
+| `filemaker.ai.readableLayouts` | `{}` | User settings only | Layouts AI tools may read without asking, by profile id. |
+| `filemaker.ai.hiddenFields` | `[]` | Workspace can only make this stricter | Field names AI tools never see. A workspace can add names, not remove yours. |
+| `filemaker.ai.connection` | `""` | User settings only | Profile id AI tools use. Set it with Set AI Access for Connection. |
+| `filemaker.features.ai.enabled` | `true` | Workspace can only make this stricter; ignored until you trust the folder | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
+| `filemaker.ai.externalServer.enabled` | `false` | User settings only | Permission for MCP clients (Claude Code, Cursor) to use the AI tools through a local server. It never starts the server; you start it in a window with Start/Stop AI Server for External Tools. |
 
 Old names: `filemakerDataApiTools.logLevel`, `.requestTimeoutMs`, `.defaultApiBasePath` and `.defaultApiVersionPath` still work but are replaced by `filemaker.logging.level`, `filemaker.requestTimeoutMs`, `filemaker.defaultApiBasePath` and `filemaker.defaultApiVersionPath`. A more specific value wins whichever name it uses. The extension offers a one-click migration.
 
@@ -695,6 +738,7 @@ Old names: `filemakerDataApiTools.logLevel`, `.requestTimeoutMs`, `.defaultApiBa
 - **Prompts before risky actions.** You are asked before: saving a record (lists the changed fields), deleting a record, running a batch update, running workspace plugins, starting the FM Web preview (`npm install`, `npm run dev`), running a script from a Layout Mode button, switching AI tools back on, every AI write, and sending credentials to a template-supplied address or a remote `http://` address.
 - **Secrets stay in the keychain.** Passwords, API keys and session tokens are kept in VS Code SecretStorage and never shown in webviews.
 - **Redaction.** Logs, request history, error details and copied snippets hide authorization headers, session tokens (including in request paths), token-like query parameters and JSON keys (anything containing `token`, `secret`, `password`, `session` or `apiKey`), and passwords inside URLs. Copy as curl and Copy as fetch() leave out authorization unless you opt in.
+- **Certificates.** The server certificate is always checked. You can trust one specific certificate by its fingerprint (never from a workspace file); a different certificate later is a hard failure, and nothing is sent to a server before its certificate is checked.
 - **Repositories cannot loosen your policy.** Workspace settings and `.vscode/filemaker.config.json` can only restrict enterprise mode, roles, offline mode and feature switches.
 - **No telemetry.** The extension sends nothing to its authors. It talks only to your FileMaker server (or your proxy).
 - **Local files that hold schema.** Snapshots, the offline cache, generated types and the AI context file contain layout and field names. Do not commit them to a public repository.
@@ -705,41 +749,78 @@ For the full picture, see [docs/security.md](https://github.com/SureForgeTech/fi
 
 ## Troubleshooting
 
-The most common first-run failure is a **certificate error** (the first row of the table below). If you see "self-signed certificate" or "unable to verify the first certificate", start there.
+Connection errors name the step that failed and what to do. The most common first-run failure is a **certificate error** (the first rows of the first table). A fuller catalogue of what can go wrong between VS Code and FileMaker, with what to ask your administrator, is in the [FileMaker failure-mode catalogue](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/FILEMAKER_FAILURE_MODES.md) (section 8 is "Troubleshooting by symptom").
 
 ### Where to look first
 
+- **The message itself.** Read it to the end: it says what happened and what to change. Notifications offer **Retry** only where trying again can help (not for certificates, privilege problems or FileMaker's own errors), **Edit Profile** only for rejected credentials or a wrong database name, **Trust this certificate…** or **Review and re-trust** for a certificate you may decide on, **Open Settings** for timeouts, and **Details…**. The details document shows the failing endpoint and the retry chain, redacted, and is safe to paste into a bug report.
+- **Test Connection** (in the connection wizard) tells you which step failed: reaching the Data API, listing the databases, or signing in. See [Test Connection, step by step](#test-connection-step-by-step).
+- **Status bar:** the `FileMaker: <profile>` item says `sign-in failed`, `certificate problem` or `unreachable` after a failed request; its tooltip repeats the reason.
 - **Output panel:** View > Output, then choose **FileMaker Data API Tools** in the dropdown. Set `filemaker.logging.level` to `debug` for more detail. Secrets are redacted.
-- **Error notifications** offer **Retry** (when a retry can help), **Edit Profile**, **Open Settings** and **Details…**. The details document shows the failing endpoint and the retry chain, redacted, and is safe to paste into a bug report.
-- **FileMaker: Show Diagnostics** opens a report with your VS Code and extension versions, operating system, active profile (no secrets), settings and recent log lines. Attach it to bug reports.
+- **FileMaker: Show Diagnostics** opens a report with your VS Code and extension versions, operating system, active profile (no secrets), settings and recent log lines. Attach it to bug reports. **FileMaker: Show Effective Settings** shows which settings are really in effect.
 
-### Common problems
+### Connecting: certificates and network
 
-| Problem | What to try |
+| What you see | What it means and what to do |
 | --- | --- |
-| Certificate error ("self-signed certificate", "unable to verify the first certificate") | The server's certificate is not trusted by your computer. Best: in the connection wizard open **Certificates (advanced)** and set **Custom CA certificate file** to the PEM file of the authority that signed it. If you cannot, use **Trust this certificate…** from Test Connection and check the fingerprint with your administrator. Expired, not-yet-valid and wrong-name certificates get their own messages; for an expired or not-yet-valid one first check your computer's date and time. See [Certificates](#certificates-private-authority-or-self-signed). Installing the authority into your operating system's trust store also works. |
-| "Connection refused", timeout, or no response | Check the server URL, VPN and firewall. The Data API must be enabled on the server. Raise `filemaker.requestTimeoutMs` for a slow server. |
-| Sign-in fails with HTTP 401 or FileMaker error 212 | Wrong user name or password, or the account's privilege set lacks the `fmrest` extended privilege. Edit the profile, type the password again, and test. A missing `fmrest` privilege can look the same as a wrong password. |
-| "Session expired" or error 952 | The Data API token timed out. The extension renews it and retries once on its own. If it keeps happening, disconnect and connect again, and check that nothing else is signing the same account out. |
-| Error 956 (too many sessions) | The server reached its Data API session limit. Wait for idle sessions to expire, or ask the administrator to raise the limit. |
-| HTTP 401 versus "no records" | They are different. **HTTP 401 means sign-in failed or the session was rejected.** FileMaker reports "no records match" as FileMaker error code 401 (sent with HTTP 404 or 500), and the extension shows it as an empty result. If a find unexpectedly returns nothing, check the criteria and the account's record access. |
-| HTTP 403 | The account cannot use that layout, script or table. Check the privilege set. |
-| HTTP 404 (no FileMaker error code) | Nothing answered at that address: check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled in the Admin Console (Connectors). A 404 that carries a FileMaker error code, or HTTP 405/501, means the server does not offer metadata for that layout; run **FileMaker: Refresh Schema Cache** or check the layout name. |
-| "Sign-in is paused" | FileMaker rejected the saved account or password (error 210-214), so the extension stopped signing in by itself to avoid locking the account. Edit the connection, or run **Connect**. |
-| "The server did not return Data API JSON" | A web page, firewall, proxy or sign-in page answered instead of FileMaker Server. Check the Server URL and base path. |
-| Rejected sign-in on a FileMaker Cloud host | FileMaker Cloud signs in with a Claris ID token, which this extension does not support yet. |
+| "This server uses a certificate that is not trusted: FileMaker Server's default certificate is self-signed" | The server still has FileMaker's built-in certificate. In the wizard the **Trust this certificate** dialog appears by itself; see [First connection to a server with FileMaker's default certificate](#first-connection-to-a-server-with-filemakers-default-certificate). A CA file alone will not fix this one (the certificate has no host names), although the message still mentions one. For production install a certificate from a public authority. |
+| "This server's certificate is not trusted by this computer. The certificate chain could not be verified ..." (`unable to verify the first certificate`) | The authority is not trusted here, or the server does not send its intermediate certificate (a common cause). Ask the administrator to install the full certificate chain, or set the company's CA file under **Certificates (advanced)**, or trust this one certificate. See [Certificates](#certificates). |
+| "The certificate of <host> is self-signed, and this computer does not trust it" | Use **Trust this certificate…** after checking the fingerprint, or ask for a certificate from a public authority. |
+| "The certificate of <host> lists no host names" | The certificate has no names, so it can never match. Trust that one certificate (the button is offered), or ask for one issued for the server's name. |
+| "The certificate of <host> was not issued for that name" | You connected with a name or IP address the certificate does not list. Use a name from the certificate, or ask the administrator which name it was issued for. |
+| "The security certificate of <host> has expired" / "is not valid yet" | First check your computer's date and time. If the clock is right, the server's certificate needs renewing (Admin Console > Configuration > SSL Certificate). |
+| "The certificate of <host> has been revoked" | Ask your administrator to install a new certificate. |
+| "... is not the one you trusted for this connection" (button **Review and re-trust**) | The server presented a different certificate than the one pinned. If your administrator renewed it, review the new fingerprint and re-trust; otherwise do not continue. |
+| "The certificate you trusted for <host> has expired" | Ask the administrator to renew it, then review and re-trust. |
+| "A proxy is configured on this computer (HTTPS_PROXY or similar), and a trusted (pinned) server certificate cannot be checked through a proxy" | A pinned connection is direct only. Add the server's host name to `NO_PROXY` (then restart VS Code), remove the proxy setting, or forget the pinned certificate and use a CA file. |
+| "The CA file ... does not contain a certificate" / "Unable to read TLS CA bundle at ..." | The CA path is wrong, unreadable, or not a PEM file with `-----BEGIN CERTIFICATE-----` blocks (a public certificate, not a key). |
+| "only offers old TLS versions" / "no TLS version or cipher is shared" | The server or proxy needs TLS 1.2 or newer. Ask the administrator. The extension will not lower its minimum. |
+| "<host> does not speak https on that port" | Wrong port, or a plain-http service. Check the Server URL and port. |
+| "The connection to <host> was closed. The server may only accept https" | You used `http://` against an HTTPS-only server. Use `https://`. |
+| "Nothing is listening on <host:port>" | Wrong port, or FileMaker Server or the Data API is not running. |
+| "The name <host> could not be found" / "could not be looked up right now" | Misspelt host name, or the VPN is not connected / DNS is not answering. |
+| "Connecting to <host> timed out" / "no network route" | A firewall is dropping the traffic, the server is unreachable, or your VPN is down. Raise `filemaker.requestTimeoutMs` only for a slow (not unreachable) server. |
+| "The server closed the connection ... before answering" | The server restarted, or a firewall or proxy dropped the connection. Try again; if it keeps happening, ask the administrator. |
+| "The server did not return Data API JSON (...; HTTP n, content type)" | A web page, firewall, proxy or sign-in page answered instead of FileMaker Server, or the reply was empty or cut off. Open the Server URL in a browser; check the base path and version and that the Data API is enabled. |
+| "The server redirected the request" | The Data API never redirects. Use the final address as the Server URL (check `http` vs `https`, and any sign-in page in front of the server). Redirects are not followed. |
+| HTTP 404 (no FileMaker error code) | Nothing answered at that address: check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled (Admin Console > Connectors). A 404 that carries a FileMaker error code, or HTTP 405 or 501, means the server does not offer that feature (for example metadata); run **FileMaker: Refresh Schema Cache** or check the layout name. |
+| HTTP 502, 503, 504 | A gateway could not reach FileMaker Server or it did not answer in time. The server may be restarting or overloaded; try again shortly. The status bar shows `unreachable`. |
+| HTTP 429 | The server or gateway asked for a pause. The extension reads `Retry-After`; wait, and avoid large exports at busy times. |
+| HTTP 403 | The server or a gateway refused the request: the account may lack the privilege, or a firewall blocked it. Ask the administrator; editing the connection will not help. |
+
+### Signing in
+
+| What you see | What it means and what to do |
+| --- | --- |
+| "Reached the server, but sign-in failed: ... [212] Invalid user account and/or password" | Wrong account name or password (the account name is not case sensitive; the password is), or the account's privilege set lacks the `fmrest` extended privilege, which can look the same. Edit the connection, type the password again, **Test Connection**. If the message lists the databases the server hosts, compare the database name. |
+| "Sign-in is paused: FileMaker rejected the saved credentials (error 210-214) ..." | The extension stopped signing in by itself so repeated failures cannot lock the account. Fix the account or password (210 inactive, 211 expired: change it in FileMaker Pro, 212 wrong, 213 the account does not exist, 214 too many attempts: wait first), then edit the connection and save, or run **Connect** or **Test Connection**. |
+| Error 956 (no free Data API sessions) | The server reached its Data API session limit. Automatic sign-ins wait 30 seconds, then longer (up to 5 minutes). Ask the administrator to disconnect idle clients (Admin Console, Connectors > FileMaker Data API tab). Use **Connect** to try now. |
+| Error 1703, or a rejected sign-in on a FileMaker Cloud host | FileMaker Cloud signs in with a Claris ID token, which this extension does not support yet, so an account and password cannot work there even if correct. The same code on another server can mean external authentication. |
+| Error 802, or "unable to open file" | The file is closed or not hosted, or the account's privilege set lacks the `fmrest` extended privilege for it. Check the database name; ask the administrator. Connect does not retry this error. |
+| "Session expired" or error 952 | The Data API token timed out. The extension renews it and retries once on its own. If it keeps happening, disconnect and connect again. |
+| "Secret storage unavailable" | VS Code could not reach the OS keychain (common on Linux without a keyring, and in some remote windows). Install and unlock a keyring, or set `filemaker.secrets.fallback` (user settings). |
+| The wizard asks for the password again | You changed the server address, proxy address or user name. This is intended. |
+
+### Data, privileges and batch jobs
+
+| What you see | What it means and what to do |
+| --- | --- |
+| A find returns nothing | FileMaker reports "no records match" as error code 401 (sent with HTTP 404 or 500, whatever the HTTP status), and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
+| Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
 | Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |
-| Error 301 (record in use) | Another user or process has the record open. Try again later. |
-| Errors 500 to 511 on save | The value failed the field's validation (date, range, unique, value list and so on). Change the value. |
-| Proxy returns errors | Test the proxy endpoint outside VS Code. In proxy mode the proxy must keep the Data API request and response shapes, and the API key must be accepted. |
-| Layouts or fields are missing in the sidebar | Select **Refresh Connections**, then **Refresh Schema Cache**. In offline mode, only cached layouts show. |
-| Commands are greyed out or missing | You may be in an untrusted workspace, in offline mode, or limited by the enterprise role. The warning names the reason. Some commands appear only after you add a profile. |
-| "Secret storage unavailable" | VS Code could not reach the OS keychain (common on Linux without a keyring, and in some remote windows). Install and unlock a keyring, or set `filemaker.secrets.fallback`. |
-| The wizard asks for the password again | You changed the server address, proxy address or user name. This is intended. |
+| Error 301 (record in use) | Another user or a script has the record open. Try again shortly. |
+| Errors 500 to 511 on save | The value failed the field's validation (date, range, unique, value list and so on). |
+| A save worked but a script error is shown | The layout ran a script that reported an error. The record was saved; the message names the script phase and the FileMaker error. |
+| Batch update: "stopped" with FileMaker's reason and a number not attempted | The account cannot do updates at all (error 9, 205, 207) or its credentials were rejected. Records already updated stay updated. |
+| Batch update: some records failed with error 200 | A record-level access rule hides those records from your account. They are listed with the reason; the job carried on with the rest. |
+| Layouts or fields are missing in the sidebar | Select **Refresh Connections**, then **Refresh Schema Cache**. Your privilege set may show only some layouts. In offline mode only cached layouts show. |
+| Commands are greyed out or missing | You may be in an untrusted workspace, in offline mode, or limited by the enterprise role. The message names the reason. Some commands appear only after you add a profile. |
+| Proxy returns errors | Test the proxy endpoint outside VS Code. In proxy mode the proxy must keep the Data API request and response shapes. A proxy that returns `fmCode` and `status` in its error reply gets the same messages as a direct connection; one that does not gets the generic proxy message. Redirects are not followed. |
 | A generated file has an unexpected name | See [file names](#generate-types-a-client-and-snippets). |
 | CSV cells start with an apostrophe | See [apostrophes in CSV files](#batch-export-and-batch-update). |
 | `AI: off` in the status bar | AI tools are off by default. See [Using AI with FileMaker](#using-ai-with-filemaker). |
+| A setting seems to do nothing | A workspace value may be ignored. Run **FileMaker: Show Effective Settings**. |
 
 ### Which version am I running?
 

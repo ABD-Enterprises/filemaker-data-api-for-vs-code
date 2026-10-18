@@ -74,6 +74,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Docs: reconcile the user guide, upgrade notes, smoke test and failure-mode catalogue with certificate pinning, the settings view and About / Show Version.
 - Note: the self-signed checkbox was never released; legacy field is still read.
 - Documentation pass: rewritten user guide, READMEs and release docs (with a non-code release checklist, upgrade notes for 1.4 and a manual-publish fallback), one security policy, a short release smoke test, and removal of stale docs.
 - Attach source maps to releases; docs describe external maps and obfuscation; clearer designer-ui build message; constant-time bridge token compare.

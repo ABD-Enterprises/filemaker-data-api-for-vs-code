@@ -38,6 +38,22 @@ requests. The trust boundary is the user's FileMaker credentials and
 the TLS connection to the server. There is no third party in the
 request path.
 
+### Server certificates
+
+The server certificate is verified the normal way against Node's trusted
+list, the operating system's store (where VS Code's Node can read it) and
+`NODE_EXTRA_CA_CERTS`, plus an optional per-profile CA file. A user can
+instead trust one specific certificate by its SHA-256 fingerprint
+("pinning"): the connection then accepts exactly that certificate (host name
+and issuer checks are skipped for it only), refuses it when it has expired
+unless the user accepted that, and fails hard with a re-trust prompt when
+the server presents a different one. Nothing is sent to the server before
+its certificate is checked. A pinned connection is never made through an
+HTTP proxy (the request is refused before anything is sent when an
+environment proxy applies). The pin is stored in the profile
+(`pinnedCertSha256`), is never read from a workspace template or file, and
+is not a secret. Redirects are not followed.
+
 ## Proxy mode
 
 When `authMode = 'proxy'`, the extension posts every action to a
