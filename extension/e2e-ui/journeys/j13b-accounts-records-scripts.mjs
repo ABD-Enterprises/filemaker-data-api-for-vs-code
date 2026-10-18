@@ -206,7 +206,7 @@ export async function run(ctx) {
         wv = await openEditor(s, 'Mock Quality', 'Products', pid);
         await fault({ name, path: '/records' });
         const before = (await mock.log()).filter((l) => l.method === 'PATCH').length;
-        await field(wv, 'Description').fill(`edit during ${name}`);
+        await field(wv, 'Name').fill(`edit during ${name}`);
         const { st } = await saveEdit(s, wv);
         const tries = (await mock.log()).filter((l) => l.method === 'PATCH').length - before;
         await clear();
@@ -224,7 +224,7 @@ export async function run(ctx) {
     async () => {
       wv = await openEditor(s, 'Mock Quality', 'Products', pid);
       await fault({ name: 'script-error-after-edit', path: '/records', count: 1 });
-      await field(wv, 'Description').fill('edit with a failing trigger');
+      await field(wv, 'Name').fill('edit with a failing trigger');
       const { st, toasts } = await saveEdit(s, wv);
       await clear();
       if (!/script/i.test(st + JSON.stringify(toasts)))

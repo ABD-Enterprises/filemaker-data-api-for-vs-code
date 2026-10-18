@@ -1,4 +1,4 @@
-// Journey 12: install the published 1.3.0 from the Marketplace, set things up, upgrade to the build under test
+// Journey 12: install the published version from the Marketplace, set things up, upgrade to the build under test
 // (a copy of the VSIX with a higher version number, so VS Code treats it as an update), uninstall and reinstall.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -36,7 +36,10 @@ export async function run(ctx) {
   const u = new Session({ report, vscode, name: 'upgrade' });
   (ctx.cleanups ??= []).push(() => u.dispose());
   u.journey = J;
-  const newer = bumpVsix(vsix, '1.4.0');
+  // The build under test with its patch number raised, so it is higher than whatever the Marketplace has.
+  const [maj, min, pat] = ctx.version.split('.').map(Number);
+  const newerVersion = `${maj}.${min}.${pat + 1}`;
+  const newer = bumpVsix(vsix, newerVersion);
   (ctx.extraRoots ??= []).push(newer);
 
   let published;
@@ -64,7 +67,10 @@ export async function run(ctx) {
         /filemaker-data-api-tools/i.test(e.id)
       );
       assert(ext && ext.version, 'the published extension is not running');
-      assert(ext.version !== '1.4.0', `expected the published older build, running ${ext.version}`);
+      assert(
+        ext.version !== newerVersion,
+        `expected the published older build, running ${ext.version}`
+      );
       return `running ${ext.id} ${ext.version}`;
     }
   );
@@ -77,7 +83,7 @@ export async function run(ctx) {
     async () => {
       const out = u.installVsix(newer, { force: true });
       const list = u.listExtensions().filter((e) => /filemaker-data-api-tools/i.test(e));
-      assert(list.length === 1 && /1\.4\.0/.test(list[0]), list.join(', '));
+      assert(list.length === 1 && list[0].includes(newerVersion), list.join(', '));
       return `${out} | now: ${list.join(', ')}`;
     }
   );
@@ -90,7 +96,7 @@ export async function run(ctx) {
       const ext = (await u.helper('extensions')).find((e) =>
         /filemaker-data-api-tools/i.test(e.id)
       );
-      assert(ext.version === '1.4.0', `running ${ext.version}`);
+      assert(ext.version === newerVersion, `running ${ext.version}`);
       assert(
         (await u.waitCmdListed('FileMaker: Connect', 8000)) >= 0,
         'Connect not offered: profiles lost after the upgrade'
