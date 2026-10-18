@@ -6,7 +6,7 @@ import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { RecordEditService } from '../../services/recordEditService';
 import type { SchemaService } from '../../services/schemaService';
-import type { ConnectionProfile, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
+import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 
@@ -43,6 +43,7 @@ export class RecordEditorPanel {
 
   private pendingDefaults: RecordEditorOpenOptions | undefined;
   private loadedRecord: { profileId: string; layout: string; record: FileMakerRecord } | undefined;
+  private saving = false;
   private fieldsByLayout = new Map<string, FileMakerFieldMetadata[]>();
 
   private constructor(
@@ -191,6 +192,11 @@ export class RecordEditorPanel {
   }
 
   private async loadRecord(payload: LoadRecordPayload): Promise<void> {
+    if (this.saving) {
+      await this.postError('A save is in progress. Load the record again when it finishes.');
+      return;
+    }
+
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
       await this.postError('Selected profile was not found.');
@@ -255,9 +261,30 @@ export class RecordEditorPanel {
       return;
     }
 
+    if (this.saving) {
+      await this.postError('A save is already in progress.');
+      return;
+    }
+
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
       await this.postError('Selected profile was not found.');
+      return;
+    }
+
+    // The save is checked against the record as it was loaded, using the host's own copy
+    // (not anything the webview sends). If the form no longer matches that record, an
+    // edit could go out unchecked, so refuse and ask for a reload instead.
+    const loaded = this.loadedRecord;
+    if (
+      !loaded ||
+      loaded.profileId !== payload.profileId ||
+      loaded.layout !== payload.layout ||
+      String(loaded.record.recordId) !== payload.recordId
+    ) {
+      await this.postError(
+        'The record in the form is not the one that was loaded, so the save cannot check whether someone else changed it. Click Load, then make your changes again.'
+      );
       return;
     }
 
@@ -281,46 +308,62 @@ export class RecordEditorPanel {
     }
 
     // Send the modification id of the record as it was loaded, so FileMaker refuses the
-    // edit (error 306) if someone else changed the record in the meantime. It comes from
-    // the host's own copy of the loaded record, not from the webview.
-    const loaded = this.loadedRecord;
-    const modId =
-      loaded &&
-      loaded.profileId === payload.profileId &&
-      loaded.layout === payload.layout &&
-      String(loaded.record.recordId) === payload.recordId
-        ? loaded.record.modId
-        : undefined;
+    // edit (error 306) if someone else changed the record in the meantime.
+    const modId = loaded.record.modId;
 
+    this.saving = true;
     try {
-      const saveResult = await this.recordEditService.saveRecord(
-        profile,
-        payload.layout,
-        payload.recordId,
-        payload.originalFieldData,
-        payload.draftFieldData,
-        modId !== undefined ? { modId } : undefined
-      );
-      const refreshedRecord = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
-      this.loadedRecord = {
-        profileId: payload.profileId,
-        layout: payload.layout,
-        record: refreshedRecord
-      };
-
-      await this.panel.webview.postMessage({
-        type: 'recordSaved',
-        payload: {
-          saveResult,
-          record: refreshedRecord
+      let saveResult: EditRecordResult;
+      try {
+        saveResult = await this.recordEditService.saveRecord(
+          profile,
+          payload.layout,
+          payload.recordId,
+          payload.originalFieldData,
+          payload.draftFieldData,
+          modId !== undefined ? { modId } : undefined
+        );
+      } catch (error) {
+        if (isRecordModifiedConflict(error)) {
+          await this.reportSaveConflict(profile, payload, preview.changedFields);
+          return;
         }
-      });
-    } catch (error) {
-      if (isRecordModifiedConflict(error)) {
-        await this.reportSaveConflict(profile, payload, preview.changedFields);
+        await this.postError(formatError(error));
         return;
       }
-      await this.postError(formatError(error));
+
+      try {
+        const refreshedRecord = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
+        this.loadedRecord = {
+          profileId: payload.profileId,
+          layout: payload.layout,
+          record: refreshedRecord
+        };
+
+        await this.panel.webview.postMessage({
+          type: 'recordSaved',
+          payload: {
+            saveResult,
+            record: refreshedRecord
+          }
+        });
+      } catch (error) {
+        // The edit went through, so the modId held for this record is out of date. Drop it:
+        // the next save is refused until the record is loaded again, instead of showing a
+        // false "changed by someone else" conflict about the user's own write.
+        this.loadedRecord = undefined;
+        this.logger.warn('Record saved, but re-reading it failed.', {
+          error,
+          profileId: payload.profileId,
+          layout: payload.layout,
+          recordId: payload.recordId
+        });
+        await this.postError(
+          `The change was saved, but the record could not be re-read (${formatError(error)}). Click Load before editing it again.`
+        );
+      }
+    } finally {
+      this.saving = false;
     }
   }
 

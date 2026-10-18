@@ -101,7 +101,10 @@ window.addEventListener('message', (event) => {
   }
 });
 
+layoutSelect.addEventListener('change', hideConflict);
+
 profileSelect.addEventListener('change', () => {
+  hideConflict();
   loadLayouts(profileSelect.value);
 });
 
