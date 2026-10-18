@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Invalidate the schema cache on new sign-in/sign-out/profile save.
 - Batch: retry only transient failures (honour Retry-After), no breaker trips on business errors, stop on privilege/credential errors with a reason; truncated only when more rows exist.
 - Connect retries only transient failures (decided once where the error is built); no retry of 500/802 or certificate errors.
 - Validate the Data API envelope in one place (HTML/empty/array/truncated/redirect), maxRedirects 0 with a clear redirect message, messages[0].code on 2xx, scriptError reported with writes, no-records by code (404 or 500), bare 404 no longer cached as unsupported.

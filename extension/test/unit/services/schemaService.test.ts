@@ -109,6 +109,31 @@ describe('SchemaService.getLayoutSchema', () => {
     expect(second.fromCache).toBe(true);
   });
 
+  it('drops its cache when the client says the profile changed (new sign-in, other account, profile edit)', async () => {
+    let invalidate: ((profileId: string) => void) | undefined;
+    const getLayoutMetadata = vi.fn().mockResolvedValue(metadataWith([{ name: 'a' }]));
+    const fmClient = {
+      getLayoutMetadata,
+      onProfileInvalidated: (listener: (profileId: string) => void) => {
+        invalidate = listener;
+        return () => undefined;
+      }
+    } as unknown as FMClient;
+    const svc = new SchemaService(fmClient, createLogger());
+
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(1);
+
+    invalidate?.('some-other-profile');
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(1); // another profile's change does not matter
+
+    invalidate?.(profile().id);
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
+  });
+
   it('does not cache unexpected errors (rethrows so caller can react)', async () => {
     const getLayoutMetadata = vi
       .fn()

@@ -187,6 +187,18 @@ describe('failed sign-ins do not repeat on their own', () => {
     expect(r.loginPosts()).toBe(3);
   });
 
+  it('tells cache owners when a new sign-in or a sign-out changes what the account can see', async () => {
+    const r = await rig();
+    r.acceptPassword('stored-password');
+    const seen: string[] = [];
+    r.fm.onProfileInvalidated((id) => seen.push(id));
+    await r.fm.createSession(r.profile, { userInitiated: true });
+    expect(seen).toContain('p1');
+    seen.length = 0;
+    await r.fm.deleteSession(r.profile);
+    expect(seen).toContain('p1');
+  });
+
   it('Connect retries only what a retry can fix', () => {
     const e = (options: ConstructorParameters<typeof FMClientError>[1]) => new FMClientError('x', options);
     expect(isRetryableConnectError(e({ isRetryable: true, networkCode: 'ECONNREFUSED' }))).toBe(true);

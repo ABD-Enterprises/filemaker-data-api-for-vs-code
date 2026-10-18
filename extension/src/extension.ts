@@ -61,7 +61,8 @@ type HealthListener = Parameters<FMClient['onHealthChange']>[0];
 function createLazyFmClient(
   loadClient: () => Promise<FMClient>,
   getLoadedClient: () => FMClient | undefined,
-  healthListeners: Set<HealthListener>
+  healthListeners: Set<HealthListener>,
+  invalidationListeners: Set<(profileId: string) => void>
 ): FMClient {
   return new Proxy({} as FMClient, {
     get(_target, property) {
@@ -81,6 +82,13 @@ function createLazyFmClient(
 
       if (property === 'clearAuthPause') {
         return (profileId: string): void => getLoadedClient()?.clearAuthPause(profileId);
+      }
+
+      if (property === 'onProfileInvalidated') {
+        return (listener: (profileId: string) => void) => {
+          invalidationListeners.add(listener);
+          return () => invalidationListeners.delete(listener);
+        };
       }
 
       if (property === 'onHealthChange') {
@@ -203,6 +211,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let loadedFmClient: FMClient | undefined;
   let fmClientLoad: Promise<FMClient> | undefined;
   const healthListeners = new Set<HealthListener>();
+  const invalidationListeners = new Set<(profileId: string) => void>();
   const loadFmClient = (): Promise<FMClient> => {
     if (loadedFmClient) {
       return Promise.resolve(loadedFmClient);
@@ -227,6 +236,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             refreshLeadMs: settingsService.getSessionRefreshLeadMs()
           })
         );
+        loadedFmClient.onProfileInvalidated((profileId) => {
+          for (const listener of invalidationListeners) {
+            listener(profileId);
+          }
+        });
         loadedFmClient.onHealthChange((profileId, health) => {
           for (const listener of healthListeners) {
             listener(profileId, health);
@@ -241,7 +255,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     return fmClientLoad;
   };
-  const fmClient = createLazyFmClient(loadFmClient, () => loadedFmClient, healthListeners);
+  const fmClient = createLazyFmClient(loadFmClient, () => loadedFmClient, healthListeners, invalidationListeners);
 
   let loadedCircuitBreakerRegistry: CircuitBreakerRegistry | undefined;
   let circuitBreakerRegistryLoad: Promise<CircuitBreakerRegistry> | undefined;

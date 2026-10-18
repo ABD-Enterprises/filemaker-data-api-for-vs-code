@@ -419,6 +419,8 @@ export class ConnectionWizardPanel {
       await this.profileStore.upsertProfile(profile);
       // New credentials deserve a fresh start: end any pause on automatic sign-ins.
       this.fmClient.clearAuthPause?.(profile.id);
+      // A changed account or server may see different layouts and fields: drop what was cached.
+      this.fmClient.invalidateProfileCache?.(profile.id);
 
       if (data.authMode === 'direct') {
         if (data.password && data.password.length > 0) {

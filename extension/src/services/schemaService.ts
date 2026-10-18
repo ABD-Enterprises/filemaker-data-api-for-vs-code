@@ -28,6 +28,9 @@ export class SchemaService {
     this.getCacheTtlMs = options?.getCacheTtlMs ?? (() => 300_000);
     this.isMetadataEnabled = options?.isMetadataEnabled ?? (() => true);
     this.offlineModeService = options?.offlineModeService;
+    // The account decides which layouts and fields are visible, so whatever drops the client's
+    // caches for a profile (a new sign-in, a sign-out, a profile edit) drops these too.
+    fmClient.onProfileInvalidated?.((profileId) => this.invalidateProfile(profileId));
   }
 
   private readonly offlineModeService: OfflineModeService | undefined;

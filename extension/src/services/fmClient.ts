@@ -151,6 +151,7 @@ export class FMClient {
   private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
   private readonly health = new Map<string, SessionHealth>();
+  private readonly invalidationListeners = new Set<(profileId: string) => void>();
   private readonly healthListeners = new Set<(profileId: string, health: SessionHealth | undefined) => void>();
   /**
    * Profiles whose stored credentials FileMaker rejected (210, 211, 212, 213, 214). Automatic
@@ -1059,7 +1060,24 @@ export class FMClient {
     }
   }
 
+  /**
+   * Calls `listener` whenever the cached data of a profile is dropped: a new sign-in (the account may
+   * have changed, and with it the layouts and fields it can see), a sign-out, or a profile edit.
+   * Other caches built on this client (the schema cache) use it to drop theirs too.
+   */
+  public onProfileInvalidated(listener: (profileId: string) => void): () => void {
+    this.invalidationListeners.add(listener);
+    return () => this.invalidationListeners.delete(listener);
+  }
+
   public invalidateProfileCache(profileId: string): void {
+    for (const listener of this.invalidationListeners) {
+      try {
+        listener(profileId);
+      } catch (error) {
+        this.logger.warn('A cache invalidation listener failed.', { error });
+      }
+    }
     for (const key of this.layoutCache.keys()) {
       if (cacheKeyMatchesProfile(key, profileId)) {
         this.layoutCache.delete(key);
