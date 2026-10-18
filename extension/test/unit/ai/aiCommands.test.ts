@@ -162,6 +162,6 @@ describe('AI commands', () => {
   });
 
   it('keeps the audit log in extension storage, not the workspace', () => {
-    expect(auditLogPath('/home/me/.vscode/globalStorage/x')).toBe('/home/me/.vscode/globalStorage/x/ai-audit.log');
+    expect(auditLogPath('/home/me/.vscode/globalStorage/x')).toBe(join('/home/me/.vscode/globalStorage/x', 'ai-audit.log'));
   });
 });

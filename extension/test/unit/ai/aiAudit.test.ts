@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -71,7 +71,11 @@ describe('AuditLog', () => {
   });
 
   it('never throws when the folder cannot be written', async () => {
-    const log = new AuditLog(join('/dev/null', 'x', 'audit.log'));
+    // A regular file where the folder should be: creating the folder fails on every platform
+    // (`/dev/null/x` only fails on Unix; on Windows it is just another folder name).
+    const blocker = join(dir, 'blocker');
+    await writeFile(blocker, 'x');
+    const log = new AuditLog(join(blocker, 'x', 'audit.log'));
     await expect(log.record({ tool: 'a', connection: 'c', outcome: 'ok', confirmed: null })).resolves.toBeUndefined();
     expect(await log.read()).toBe('');
   });

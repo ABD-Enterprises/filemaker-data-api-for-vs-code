@@ -131,6 +131,17 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: node .dbg/dbg.mjs
+      - run: npm ci
+      - run: npm run build
+        continue-on-error: true
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm run typecheck
+        continue-on-error: true
+      - run: npm run test:coverage
+        continue-on-error: true
+      - run: npm run package:check
+        continue-on-error: true
 
   package:
     if: startsWith(github.ref, 'refs/tags/v')
