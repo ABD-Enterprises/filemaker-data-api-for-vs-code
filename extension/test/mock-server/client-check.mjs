@@ -21,7 +21,7 @@ const check = (name, ok, detail) => results.push({ name, ok, detail });
 const logger = { debug() {}, info() {}, warn() {}, error() {} };
 
 let base = '';
-const admin = async (route) => (await fetch(base + route)).json();
+const admin = async (route, method = 'GET') => (await fetch(base + route, { method })).json();
 const sessionPosts = async () => (await admin('/__admin/log')).sessionPosts;
 const errorText = async (action) => {
   try {
@@ -50,9 +50,12 @@ async function startMock() {
     stdio: ['ignore', 'pipe', 'inherit']
   });
   base = `http://127.0.0.1:${port}`;
+  // Never leave the server behind, however this process ends.
+  process.on('exit', () => child.kill());
+  process.once('SIGTERM', () => process.exit(143));
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
-      await admin('/__admin/reset');
+      await admin('/__admin/reset', 'POST');
       return child;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -134,12 +137,12 @@ async function runChecks() {
   check('sort descending', amounts.every((value, index) => index === 0 || amounts[index - 1] >= value), amounts);
 
   // Session expiry: one renewal, even for parallel requests.
-  await admin('/__admin/expire');
+  await admin('/__admin/expire', 'POST');
   let before = await sessionPosts();
   const afterExpiry = await client.findRecords(profile, 'Invoices', { query: [{ Status: 'Open' }] }).then((r) => r.data.length, (e) => String(e.message));
   check('an expired session is renewed once and the request succeeds', typeof afterExpiry === 'number' && (await sessionPosts()) === before + 1, afterExpiry);
 
-  await admin('/__admin/expire');
+  await admin('/__admin/expire', 'POST');
   before = await sessionPosts();
   const parallel = await Promise.all([1, 2, 3, 4, 5].map((limit) => client.findRecords(profile, 'Invoices', { query: [{ Status: 'Open' }], limit }).then(() => 'ok', (e) => String(e.message))));
   check('five parallel requests after expiry open one session', parallel.every((r) => r === 'ok') && (await sessionPosts()) - before === 1, { parallel, opened: (await sessionPosts()) - before });

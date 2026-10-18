@@ -6,13 +6,14 @@
 // Point a connection profile at it with serverUrl http://127.0.0.1:18080, database "Sales",
 // username "tester", password "testpass1" (test values; the server accepts nothing else).
 // Layouts: Contacts (157 records) and Invoices (12). Fault injection and inspection:
-//   GET /__admin/expire   forget every session token (next request gets HTTP 401 / code 952)
-//   GET /__admin/reset    clear the request log and restore the fixture data
-//   GET /__admin/log      requests seen so far and the number of POST /sessions
+//   POST /__admin/expire  forget every session token (next request gets HTTP 401 / code 952)
+//   POST /__admin/reset   clear the request log and restore the fixture data
+//   GET  /__admin/log     last 1000 requests and the number of POST /sessions
+// Requests whose Host is not 127.0.0.1 or localhost are refused (403).
 //
 // It mirrors the Claris Data API response shapes and error codes the extension relies on:
 // a find with no matches (or an offset past the last match) is HTTP 404 + code 401, a bad
-// token is HTTP 401 + code 952, a stale modId on an edit is HTTP 500 + code 306, offsets are
+// token is HTTP 401 + code 952, a stale modId on an edit or a missing record is HTTP 500 + code 306 / 101, offsets are
 // 1-based. Find semantics are simplified (== exact or prefix with a trailing *, *"phrase",
 // < > <= >=, a...b, = empty, * not empty, plain value matches a word prefix, backslash escapes)
 // and are an approximation of FileMaker, not a specification. It listens on 127.0.0.1 only.
@@ -139,23 +140,41 @@ function send(res, status, body, headers = {}) {
   res.end(text);
 }
 
+const MAX_BODY_BYTES = 5 * 1024 * 1024;
+const MAX_LOG_ENTRIES = 1000;
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
 async function readBody(req) {
   const chunks = [];
-  for await (const c of req) chunks.push(c);
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > MAX_BODY_BYTES) { req.destroy(); throw new Error('request body too large'); }
+    chunks.push(c);
+  }
   const t = Buffer.concat(chunks).toString('utf8');
-  try { return t ? JSON.parse(t) : {}; } catch { return {}; }
+  try { const parsed = t ? JSON.parse(t) : {}; return isPlainObject(parsed) ? parsed : {}; } catch { return {}; }
 }
 
-const server = http.createServer(async (req, res) => {
+async function handle(req, res) {
+  // Only answer requests addressed to this machine, so a web page that rebinds DNS to
+  // 127.0.0.1 cannot drive the server.
+  const hostName = (req.headers.host ?? '').replace(/:\d+$/, '');
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(hostName)) return send(res, 403, msg(0, 'Forbidden host'));
+
   const url = new URL(req.url, 'http://x');
   const path = url.pathname;
   const body = ['POST', 'PATCH', 'PUT'].includes(req.method) ? await readBody(req) : {};
   state.log.push({ method: req.method, path: path.replace(base, ''), query: url.search, body: Object.keys(body).length ? body : undefined });
+  if (state.log.length > MAX_LOG_ENTRIES) state.log.shift();
 
   if (path.startsWith('/__admin/')) {
     if (path === '/__admin/log') return send(res, 200, { log: state.log, sessionPosts: state.sessionPosts });
-    if (path === '/__admin/reset') { state.log.length = 0; state.sessionPosts = 0; seed(); return send(res, 200, {}); }
-    if (path === '/__admin/expire') { state.tokens.clear(); return send(res, 200, {}); }
+    if (path === '/__admin/reset' || path === '/__admin/expire') {
+      if (req.method !== 'POST') return send(res, 405, msg(0, 'Use POST'));
+      if (path === '/__admin/reset') { state.log.length = 0; state.sessionPosts = 0; seed(); } else { state.tokens.clear(); }
+      return send(res, 200, {});
+    }
     return send(res, 404, {});
   }
   if (!path.startsWith(base)) return send(res, 404, msg(105, 'Database is missing'));
@@ -188,7 +207,7 @@ const server = http.createServer(async (req, res) => {
   if (tail === '' && req.method === 'GET') return send(res, 200, ok({ fieldMetaData: meta(layout), portalMetaData: {}, valueLists: [] }));
 
   if (tail === '/_find' && req.method === 'POST') {
-    if (!Array.isArray(body.query)) return send(res, 500, msg(960, 'Find query is invalid'));
+    if (!Array.isArray(body.query) || !body.query.every(isPlainObject)) return send(res, 500, msg(960, 'Find query is invalid'));
     let found = runFind(rows, body.query);
     for (const s of [...(body.sort ?? [])].reverse()) {
       const dir = s.sortOrder === 'descend' ? -1 : 1;
@@ -215,7 +234,7 @@ const server = http.createServer(async (req, res) => {
   const rec = tail.match(/^\/records\/([^/]+)$/);
   if (rec) {
     const row = rows.find((r) => r.recordId === rec[1]);
-    if (!row) return send(res, 404, msg(101, 'Record is missing'));
+    if (!row) return send(res, 500, msg(101, 'Record is missing'));
     if (req.method === 'GET') return send(res, 200, ok({ data: [row], dataInfo: { database: DB, layout, table: layout, totalRecordCount: rows.length, foundCount: 1, returnedCount: 1 } }));
     if (req.method === 'PATCH') {
       if (body.modId !== undefined && String(body.modId) !== row.modId) return send(res, 500, msg(306, 'Record modification ID does not match'));
@@ -230,6 +249,16 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, ok({ scriptResult: `ran ${decodeURIComponent(script[1])} param=${url.searchParams.get('script.param') ?? ''}`, scriptError: '0' }));
   }
   return send(res, 404, msg(102, 'Not found in mock'));
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    await handle(req, res);
+  } catch (error) {
+    // A malformed request must not take the mock down.
+    if (!res.headersSent) send(res, 500, msg(1, `Mock server error: ${error.message}`));
+    else res.end();
+  }
 });
 
 const port = Number(process.env.PORT ?? 18080);
