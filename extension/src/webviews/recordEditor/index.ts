@@ -205,16 +205,20 @@ export class RecordEditorPanel {
 
     try {
       const record = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
-      this.loadedRecord = {
-        profileId: payload.profileId,
-        layout: payload.layout,
-        record
-      };
 
       const schema = await this.schemaService.getFields(profile, payload.layout);
       if (schema.supported) {
         this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
       }
+
+      // Only now, once nothing more can fail, does the host's copy (and the modId saves are
+      // checked against) change. Updating it earlier could pair a new modId with the page's
+      // older draft after a failed load, letting a save overwrite someone else's change.
+      this.loadedRecord = {
+        profileId: payload.profileId,
+        layout: payload.layout,
+        record
+      };
 
       await this.panel.webview.postMessage({
         type: 'recordLoaded',
@@ -280,7 +284,7 @@ export class RecordEditorPanel {
       !loaded ||
       loaded.profileId !== payload.profileId ||
       loaded.layout !== payload.layout ||
-      String(loaded.record.recordId) !== payload.recordId
+      !sameRecordId(loaded.record.recordId, payload.recordId)
     ) {
       await this.postError(
         'The record in the form is not the one that was loaded, so the save cannot check whether someone else changed it. Click Load, then make your changes again.'
@@ -304,6 +308,12 @@ export class RecordEditorPanel {
       await this.panel.webview.postMessage({
         type: 'saveCancelled'
       });
+      return;
+    }
+
+    // The dialog above is a gap in which another save could have started.
+    if (this.saving) {
+      await this.postError('A save is already in progress.');
       return;
     }
 
@@ -646,6 +656,15 @@ function parseDraftPayload(raw: unknown, loadOnly = false): DraftPayload | undef
     originalFieldData: payload.originalFieldData as Record<string, unknown>,
     draftFieldData: payload.draftFieldData as Record<string, unknown>
   };
+}
+
+/** Record ids are numbers, so "07" and "7" name the same record. */
+function sameRecordId(left: unknown, right: unknown): boolean {
+  const normalize = (value: unknown): string => {
+    const text = String(value).trim();
+    return /^\d+$/.test(text) ? String(Number(text)) : text;
+  };
+  return normalize(left) === normalize(right);
 }
 
 function formatError(error: unknown): string {

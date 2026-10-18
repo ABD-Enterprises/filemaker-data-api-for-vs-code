@@ -55,7 +55,8 @@ function openEditor(editRecord: ReturnType<typeof vi.fn>, currentRecord = loaded
     getProfile: vi.fn(async () => profile),
     getActiveProfileId: vi.fn(() => profile.id)
   };
-  const schemaService = { getFields: vi.fn(async () => ({ supported: false, fields: [] })) };
+  const getFields = vi.fn(async () => ({ supported: false, fields: [] }));
+  const schemaService = { getFields };
   const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
 
   RecordEditorPanel.createOrShow(
@@ -71,7 +72,7 @@ function openEditor(editRecord: ReturnType<typeof vi.fn>, currentRecord = loaded
     await new Promise((resolve) => setTimeout(resolve, 0));
   };
 
-  return { send, posted, fmClient };
+  return { send, posted, fmClient, getFields };
 }
 
 const target = { profileId: 'p1', layout: 'Contacts', recordId: '7' };
@@ -259,5 +260,31 @@ describe('Record Editor save conflicts', () => {
     finishSave({ recordId: '7', modId: '4' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(editor.posted.map((message) => message.type)).toContain('recordSaved');
+  });
+
+  it('keeps checking saves against the previous record when a reload fails after reading it', async () => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '5' });
+    const newer = { recordId: '7', modId: '4', fieldData: { ...loadedRecord.fieldData, Email: 'new@example.com' } };
+    const editor = openEditor(editRecord, newer);
+
+    await editor.send({ type: 'loadRecord', payload: target });
+    editor.getFields.mockRejectedValueOnce(new Error('metadata unavailable'));
+    await editor.send({ type: 'loadRecord', payload: target });
+    await editor.send({ type: 'saveRecord', payload: draft });
+
+    // The page still holds the first draft, so the save must carry the first modId ('3'),
+    // not the newer one the failed reload had read.
+    expect(editRecord).toHaveBeenCalledTimes(1);
+    expect((editRecord.mock.calls[0]?.[5] as { modId: string }).modId).toBe('3');
+  });
+
+  it('treats a record id with leading zeros as the same record', async () => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
+    const editor = openEditor(editRecord);
+
+    await editor.send({ type: 'loadRecord', payload: { ...target, recordId: '07' } });
+    await editor.send({ type: 'saveRecord', payload: { ...draft, recordId: '07' } });
+
+    expect(editRecord).toHaveBeenCalledTimes(1);
   });
 });
