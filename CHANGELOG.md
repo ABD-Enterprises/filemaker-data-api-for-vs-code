@@ -31,6 +31,7 @@ PR title prefix matches the highest-tier label added:
 - Mid-response connection drops are reported clearly instead of as (HTTP 200).
 - Refresh Schema Cache re-reads the layout list.
 - Layout names are no longer trimmed; spacing/case variants stay distinct.
+- The Record Editor no longer hides the fact that fields are missing. A note above the field list says that fields your account cannot access are not shown, and when the layout lists fields that the record has no value for it says how many and names them (up to five).
 
 ### [INTERNAL]
 

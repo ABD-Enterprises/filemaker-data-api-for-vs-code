@@ -643,6 +643,7 @@ export class RecordEditorPanel {
 
     <section class="panel">
       <h2>Field Data</h2>
+      <p id="hiddenNote" class="status hidden" role="note"></p>
       <div id="fieldEditor"></div>
       <h3>Patch Preview</h3>
       <pre id="patchPreview" class="raw"></pre>
