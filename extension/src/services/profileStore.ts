@@ -99,19 +99,27 @@ function normalizeProfile(value: unknown): ConnectionProfile | undefined {
   }
 
   try {
-    return validateConnectionProfile(value as ConnectionProfile);
+    // Reading is lenient about a user name or password in the address: a profile saved
+    // that way before it was rejected must stay visible so it can be fixed, not vanish
+    // (and be dropped for good the next time the list is written back).
+    return validateConnectionProfile(value as ConnectionProfile, { allowCredentialsInUrl: true });
   } catch {
     return undefined;
   }
 }
 
-function validateConnectionProfile(profile: ConnectionProfile): ConnectionProfile {
+function validateConnectionProfile(
+  profile: ConnectionProfile,
+  options: { allowCredentialsInUrl?: boolean } = {}
+): ConnectionProfile {
   const idValidation = validateProfileId(profile.id);
   if (!idValidation.ok || !idValidation.value) {
     throw new FMClientError(idValidation.error ?? 'Profile ID is invalid.');
   }
 
-  const serverUrlValidation = validateServerUrl(profile.serverUrl);
+  const serverUrlValidation = validateServerUrl(profile.serverUrl, 'Server URL', {
+    allowCredentials: options.allowCredentialsInUrl
+  });
   if (!serverUrlValidation.ok || !serverUrlValidation.value) {
     throw new FMClientError(serverUrlValidation.error ?? 'Server URL is invalid.');
   }

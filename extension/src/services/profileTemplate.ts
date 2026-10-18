@@ -4,12 +4,9 @@ import type { AuthMode } from '../types/fm';
 import { validateDatabaseName, validateServerUrl } from '../utils/jsonValidate';
 
 export const PROFILE_TEMPLATE_RELATIVE_PATH = '.filemaker/profile-template.json';
-export const PROFILE_TEMPLATE_LOCKED_FIELDS = [
-  'serverUrl',
-  'database',
-  'apiBasePath',
-  'apiVersionPath'
-] as const;
+// The server address (serverUrl, proxyEndpoint) is deliberately never locked: workspace
+// content must not stop the user from seeing and changing where their credentials go.
+export const PROFILE_TEMPLATE_LOCKED_FIELDS = ['database', 'apiBasePath', 'apiVersionPath'] as const;
 
 export type ProfileTemplateLockedField = (typeof PROFILE_TEMPLATE_LOCKED_FIELDS)[number];
 
@@ -62,6 +59,14 @@ export async function loadConnectionProfileTemplate(): Promise<ProfileTemplateLo
 
   try {
     const bytes = await vscode.workspace.fs.readFile(uri);
+    if (!vscode.workspace.isTrusted) {
+      // A template names the server the user's credentials will go to, so a file that
+      // arrived with a cloned repository is not used until the user trusts the workspace.
+      return {
+        sourcePath: PROFILE_TEMPLATE_RELATIVE_PATH,
+        warning: `${PROFILE_TEMPLATE_RELATIVE_PATH} was ignored because this workspace is not trusted. Trust the workspace to use it, or enter the details manually.`
+      };
+    }
     return parseConnectionProfileTemplate(
       Buffer.from(bytes).toString('utf8'),
       PROFILE_TEMPLATE_RELATIVE_PATH
@@ -173,6 +178,17 @@ export function parseConnectionProfileTemplate(
       };
     }
     template.serverUrl = validation.value;
+  }
+
+  if (template.proxyEndpoint) {
+    const validation = validateServerUrl(template.proxyEndpoint, 'proxyEndpoint');
+    if (!validation.ok) {
+      return {
+        sourcePath,
+        warning: `${sourcePath} has an invalid proxyEndpoint. Continue manually or fix the template.`
+      };
+    }
+    template.proxyEndpoint = validation.value;
   }
 
   if (template.database) {

@@ -277,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyTemplateState(payload) {
     clearTemplateState();
-    showTemplateBanner();
+    showTemplateBanner(Array.isArray(payload && payload.hosts) ? payload.hosts : []);
 
     const lockedFields = Array.isArray(payload && payload.lockedFields)
       ? payload.lockedFields
@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     templateLockedFields.clear();
   }
 
-  function showTemplateBanner() {
+  function showTemplateBanner(hosts) {
     let banner = document.getElementById('profileTemplateBanner');
     if (!banner) {
       banner = document.createElement('div');
@@ -309,7 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
         form.insertBefore(banner, form.firstChild);
       }
     }
-    banner.textContent = 'Using template from .filemaker/profile-template.json';
+    // The workspace file chose this address, not you. Name it so it can be checked.
+    banner.textContent =
+      'Using template from .filemaker/profile-template.json.' +
+      (hosts.length > 0
+        ? ' It points at ' + hosts.join(', ') + '. Check that this is your server before entering a password.'
+        : '');
     banner.style.display = '';
   }
 

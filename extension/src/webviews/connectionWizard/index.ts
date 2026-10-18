@@ -8,13 +8,15 @@ import type { ConnectionProfile } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { toRecord } from '../common/messageValidation';
 import {
+  isUnencryptedRemoteUrl,
   validateDatabaseName,
   validateServerUrl
 } from '../../utils/jsonValidate';
 import { toUserErrorMessage } from '../../utils/errorUx';
 import {
   loadConnectionProfileTemplate,
-  PROFILE_TEMPLATE_LOCKED_FIELDS
+  PROFILE_TEMPLATE_LOCKED_FIELDS,
+  PROFILE_TEMPLATE_RELATIVE_PATH
 } from '../../services/profileTemplate';
 
 export type ConnectionWizardTestPolicy = 'off' | 'warn' | 'block';
@@ -37,15 +39,74 @@ interface WizardFormData {
   proxyApiKey?: string;
 }
 
-type IncomingMessage =
-  | { type: 'ready' }
-  | { type: 'save'; payload: WizardFormData }
-  | { type: 'testConnection'; payload: WizardFormData };
+const MAX_FORM_FIELD_LENGTH = 4096;
+
+/** Checks the shape of a form sent by the page; the host never trusts it. */
+function parseFormData(payload: unknown): WizardFormData | undefined {
+  const value = toRecord(payload);
+  if (!value) {
+    return undefined;
+  }
+
+  const text = (field: string, required: boolean): string | undefined | null => {
+    const raw = value[field];
+    if (raw === undefined || raw === null) {
+      return required ? null : undefined;
+    }
+    return typeof raw === 'string' && raw.length <= MAX_FORM_FIELD_LENGTH ? raw : null;
+  };
+
+  const name = text('name', true);
+  const serverUrl = text('serverUrl', true);
+  const database = text('database', true);
+  const apiBasePath = text('apiBasePath', true);
+  const apiVersionPath = text('apiVersionPath', true);
+  const username = text('username', false);
+  const password = text('password', false);
+  const proxyEndpoint = text('proxyEndpoint', false);
+  const proxyApiKey = text('proxyApiKey', false);
+  const authMode = value.authMode;
+
+  if (
+    name === null ||
+    serverUrl === null ||
+    database === null ||
+    apiBasePath === null ||
+    apiVersionPath === null ||
+    username === null ||
+    password === null ||
+    proxyEndpoint === null ||
+    proxyApiKey === null ||
+    (authMode !== 'direct' && authMode !== 'proxy') ||
+    name === undefined ||
+    serverUrl === undefined ||
+    database === undefined ||
+    apiBasePath === undefined ||
+    apiVersionPath === undefined
+  ) {
+    return undefined;
+  }
+
+  return { name, authMode, serverUrl, database, apiBasePath, apiVersionPath, username, password, proxyEndpoint, proxyApiKey };
+}
+
+function originOf(url: string | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
 
 export class ConnectionWizardPanel {
   private static currentPanel: ConnectionWizardPanel | undefined;
 
   private editingProfile: ConnectionProfile | undefined;
+  /** Origins that came from the workspace's profile template, not from the user. */
+  private templateOrigins = new Set<string>();
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -116,27 +177,30 @@ export class ConnectionWizardPanel {
       return;
     }
 
-    const type = record.type;
-
-    if (type === 'save' || type === 'testConnection') {
-      const payload = record.payload;
-      if (!payload || typeof payload !== 'object') {
-        return;
-      }
-    }
-
-    const incoming = record as unknown as IncomingMessage;
-
-    switch (incoming.type) {
+    switch (record.type) {
       case 'ready':
         await this.sendInit();
         await this.sendLoadProfile();
         break;
-      case 'save':
-        await this.handleSave(incoming.payload);
+      case 'save': {
+        const data = parseFormData(record.payload);
+        if (!data) {
+          await this.panel.webview.postMessage({ type: 'saveError', message: 'The form data was not valid.' });
+          return;
+        }
+        await this.handleSave(data);
         break;
-      case 'testConnection':
-        await this.handleTestConnection(incoming.payload);
+      }
+      case 'testConnection': {
+        const data = parseFormData(record.payload);
+        if (!data) {
+          await this.panel.webview.postMessage({ type: 'testError', message: 'The form data was not valid.' });
+          return;
+        }
+        await this.handleTestConnection(data);
+        break;
+      }
+      default:
         break;
     }
   }
@@ -149,6 +213,7 @@ export class ConnectionWizardPanel {
   }
 
   private async sendLoadProfile(): Promise<void> {
+    this.templateOrigins.clear();
     if (this.editingProfile) {
       await this.panel.webview.postMessage({
         type: 'loadProfile',
@@ -171,11 +236,17 @@ export class ConnectionWizardPanel {
     }
 
     if (result.template) {
+      for (const origin of [originOf(result.template.serverUrl), originOf(result.template.proxyEndpoint)]) {
+        if (origin) {
+          this.templateOrigins.add(origin);
+        }
+      }
       await this.panel.webview.postMessage({
         type: 'loadTemplate',
         payload: {
           template: result.template,
           sourcePath: result.sourcePath,
+          hosts: [...this.templateOrigins],
           lockedFields: result.template.locked ? PROFILE_TEMPLATE_LOCKED_FIELDS : []
         }
       });
@@ -202,6 +273,47 @@ export class ConnectionWizardPanel {
         return;
       }
 
+      let proxyEndpoint: string | undefined;
+      if (data.authMode === 'proxy') {
+        const proxyValidation = validateServerUrl(data.proxyEndpoint ?? '', 'Proxy endpoint');
+        if (!proxyValidation.ok) {
+          await this.panel.webview.postMessage({
+            type: 'saveError',
+            message: proxyValidation.error ?? 'Invalid proxy endpoint.'
+          });
+          return;
+        }
+        proxyEndpoint = proxyValidation.value;
+      }
+
+      // In proxy mode the key goes to the proxy, which then talks to serverUrl: check both.
+      const target = data.authMode === 'proxy' ? proxyEndpoint : serverValidation.value;
+      if (!(await this.confirmCredentialTargets([target, serverValidation.value]))) {
+        await this.panel.webview.postMessage({
+          type: 'saveError',
+          message: 'Not saved: you did not confirm the server address.'
+        });
+        return;
+      }
+
+      const typedSecret = data.authMode === 'direct' ? data.password : data.proxyApiKey;
+      const bindingChanged = this.credentialBindingChanged(
+        data.authMode,
+        data.authMode === 'direct' ? serverValidation.value : proxyEndpoint,
+        data.username,
+        serverValidation.value
+      );
+      if (bindingChanged && !(typedSecret && typedSecret.length > 0)) {
+        await this.panel.webview.postMessage({
+          type: 'saveError',
+          message:
+            data.authMode === 'direct'
+              ? 'The server address or user name changed. Enter the password again so the saved one is not sent to a different server.'
+              : 'The proxy address changed. Enter the proxy API key again so the saved one is not sent to a different server.'
+        });
+        return;
+      }
+
       const profile: ConnectionProfile = {
         id: this.editingProfile?.id ?? crypto.randomUUID(),
         name: data.name.trim(),
@@ -215,7 +327,13 @@ export class ConnectionWizardPanel {
       if (data.authMode === 'direct') {
         profile.username = data.username?.trim();
       } else {
-        profile.proxyEndpoint = data.proxyEndpoint?.trim();
+        profile.proxyEndpoint = proxyEndpoint;
+      }
+
+      if (bindingChanged) {
+        // A session token belongs to the server it was issued by. Drop it before the profile
+        // points somewhere else, so no request can pair the old token with the new address.
+        await this.secretStore.deleteSessionToken(profile.id);
       }
 
       await this.profileStore.upsertProfile(profile);
@@ -286,36 +404,169 @@ export class ConnectionWizardPanel {
     await this.panel.webview.postMessage({ type: 'testProgress', phase });
   }
 
+  /**
+   * True when the saved credentials of the profile being edited would now go to a different
+   * server or user than the ones they were saved for.
+   */
+  private credentialBindingChanged(
+    authMode: 'direct' | 'proxy',
+    target: string | undefined,
+    username: string | undefined,
+    backend: string | undefined
+  ): boolean {
+    const editing = this.editingProfile;
+    if (!editing) {
+      return false;
+    }
+
+    const before = {
+      authMode: editing.authMode,
+      origin: originOf(editing.authMode === 'proxy' ? editing.proxyEndpoint : editing.serverUrl),
+      backend: originOf(editing.serverUrl),
+      username: editing.authMode === 'direct' ? (editing.username ?? '').trim() : ''
+    };
+    const after = {
+      authMode,
+      origin: originOf(target),
+      backend: originOf(backend),
+      username: authMode === 'direct' ? (username ?? '').trim() : ''
+    };
+    return (
+      before.authMode !== after.authMode ||
+      before.origin !== after.origin ||
+      before.backend !== after.backend ||
+      before.username !== after.username
+    );
+  }
+
+  private async isKnownOrigin(origin: string): Promise<boolean> {
+    const profiles = await this.profileStore.listProfiles();
+    return profiles.some(
+      (profile) => originOf(profile.serverUrl) === origin || originOf(profile.proxyEndpoint) === origin
+    );
+  }
+
+  /**
+   * Credentials are about to be stored for, or sent to, this address. Ask first when the
+   * address came from the workspace rather than from the user, or when it is a remote
+   * http:// address that would carry them unencrypted.
+   */
+  private async confirmCredentialTargets(targets: Array<string | undefined>): Promise<boolean> {
+    for (const target of new Set(targets)) {
+      if (!(await this.confirmCredentialTarget(target))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private async confirmCredentialTarget(target: string | undefined): Promise<boolean> {
+    const origin = originOf(target);
+    if (!target || !origin) {
+      return true;
+    }
+
+    if (this.templateOrigins.has(origin) && !(await this.isKnownOrigin(origin))) {
+      const answer = await vscode.window.showWarningMessage(
+        `Your credentials would go to ${origin}.\n\nThis address came from the workspace file ${PROFILE_TEMPLATE_RELATIVE_PATH}, not from you. Only continue if you trust this server.`,
+        { modal: true },
+        'Continue'
+      );
+      if (answer !== 'Continue') {
+        return false;
+      }
+    }
+
+    if (isUnencryptedRemoteUrl(target)) {
+      const answer = await vscode.window.showWarningMessage(
+        `${origin} uses unencrypted http://.\n\nYour password or API key would be sent in clear text and could be read on the network.`,
+        { modal: true },
+        'Continue anyway'
+      );
+      if (answer !== 'Continue anyway') {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   private async handleTestConnection(data: WizardFormData): Promise<void> {
     const timeoutMs = vscode.workspace
       .getConfiguration('filemaker')
       .get<number>('requestTimeoutMs', 15_000);
     await this.panel.webview.postMessage({ type: 'testStarted', timeoutMs });
 
+    // The test runs under a throwaway id with throwaway secrets, so it can never
+    // read, overwrite or clear what is saved for a real profile.
+    const testId = `test-connection-${crypto.randomUUID()}`;
+
     try {
+      const serverValidation = validateServerUrl(data.serverUrl);
+      if (!serverValidation.ok) {
+        throw new Error(serverValidation.error ?? 'Invalid server URL.');
+      }
+      const dbValidation = validateDatabaseName(data.database);
+      if (!dbValidation.ok) {
+        throw new Error(dbValidation.error ?? 'Invalid database name.');
+      }
+
+      let proxyEndpoint: string | undefined;
+      if (data.authMode === 'proxy') {
+        const proxyValidation = validateServerUrl(data.proxyEndpoint ?? '', 'Proxy endpoint');
+        if (!proxyValidation.ok) {
+          throw new Error(proxyValidation.error ?? 'Invalid proxy endpoint.');
+        }
+        proxyEndpoint = proxyValidation.value;
+      }
+
+      const target = data.authMode === 'proxy' ? proxyEndpoint : serverValidation.value;
+      if (!(await this.confirmCredentialTargets([target, serverValidation.value]))) {
+        throw new Error('Test cancelled: you did not confirm the server address.');
+      }
+
       const tempProfile: ConnectionProfile = {
-        id: this.editingProfile?.id ?? 'test-connection',
+        id: testId,
         name: data.name.trim(),
         authMode: data.authMode,
-        serverUrl: data.serverUrl.trim(),
-        database: data.database.trim(),
+        serverUrl: serverValidation.value!,
+        database: dbValidation.value!,
         apiBasePath: data.apiBasePath.trim(),
         apiVersionPath: data.apiVersionPath.trim()
       };
 
       await this.postTestProgress('Preparing credentials…');
+      const typedSecret = data.authMode === 'direct' ? data.password : data.proxyApiKey;
+      const bindingChanged = this.credentialBindingChanged(
+        data.authMode,
+        target,
+        data.username,
+        serverValidation.value
+      );
+      let secret = typedSecret && typedSecret.length > 0 ? typedSecret : undefined;
+      if (!secret && this.editingProfile && !bindingChanged) {
+        // Unchanged server and user: the saved secret may be used for the test.
+        secret =
+          data.authMode === 'direct'
+            ? await this.secretStore.getPassword(this.editingProfile.id)
+            : await this.secretStore.getProxyApiKey(this.editingProfile.id);
+      }
+      if (!secret) {
+        throw new Error(
+          bindingChanged
+            ? 'The server address or user changed. Enter the password (or API key) again to test it.'
+            : data.authMode === 'direct'
+              ? 'Enter a password to test the connection.'
+              : 'Enter the proxy API key to test the connection.'
+        );
+      }
+
       if (data.authMode === 'direct') {
         tempProfile.username = data.username?.trim();
-
-        if (data.password && data.password.length > 0) {
-          await this.secretStore.setPassword(tempProfile.id, data.password);
-        }
+        await this.secretStore.setPassword(testId, secret);
       } else {
-        tempProfile.proxyEndpoint = data.proxyEndpoint?.trim();
-
-        if (data.proxyApiKey && data.proxyApiKey.length > 0) {
-          await this.secretStore.setProxyApiKey(tempProfile.id, data.proxyApiKey);
-        }
+        tempProfile.proxyEndpoint = proxyEndpoint;
+        await this.secretStore.setProxyApiKey(testId, secret);
       }
 
       await this.postTestProgress('Opening session…');
@@ -333,6 +584,14 @@ export class ConnectionWizardPanel {
         type: 'testError',
         message: toUserErrorMessage(error, 'Connection test failed.')
       });
+    } finally {
+      try {
+        await this.secretStore.deletePassword(testId);
+        await this.secretStore.deleteProxyApiKey(testId);
+        await this.secretStore.deleteSessionToken(testId);
+      } catch (error) {
+        this.logger.warn('Could not remove temporary test credentials.', { error });
+      }
     }
   }
 

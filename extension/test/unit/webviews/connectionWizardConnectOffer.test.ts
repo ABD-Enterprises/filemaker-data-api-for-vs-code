@@ -186,7 +186,9 @@ describe('Connection wizard profile templates', () => {
         username: 'developer',
         locked: true
       },
-      lockedFields: ['serverUrl', 'database', 'apiBasePath', 'apiVersionPath']
+      // The server address is never locked: workspace content must not stop the user changing it.
+      lockedFields: ['database', 'apiBasePath', 'apiVersionPath'],
+      hosts: ['https://fm-dev.example.com']
     });
   });
 
