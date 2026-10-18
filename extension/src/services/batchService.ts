@@ -18,6 +18,7 @@ import type {
   PerformanceMode
 } from '../types/fm';
 import { createCsvStreamWriter } from '../utils/csvStreamWriter';
+import { restoreFormulaText } from '../utils/exportCsv';
 import { createJsonlWriter } from '../utils/jsonlWriter';
 
 interface BatchServiceOptions {
@@ -305,7 +306,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
     return [];
   }
 
-  const headers = rows[0];
+  const headers = rows[0]?.map(restoreFormulaText);
   if (!headers) {
     return [];
   }
@@ -333,7 +334,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
         return;
       }
 
-      fieldData[header] = parsePossibleJsonValue(value);
+      fieldData[header] = parsePossibleJsonValue(restoreFormulaText(value));
     });
 
     entries.push({

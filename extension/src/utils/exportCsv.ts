@@ -2,9 +2,29 @@ export interface CsvExportOptions {
   columns?: string[];
   includeHeader?: boolean;
   lineEnding?: '\n' | '\r\n';
+  /** Defuse text that a spreadsheet would run as a formula. On by default. */
+  neutralizeFormulas?: boolean;
 }
 
-export function escapeCsvValue(value: unknown): string {
+const PLAIN_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+/** Signed numbers and phone numbers such as `-1,234.5` or `+1 (555) 123-4567`. */
+const NUMBER_OR_PHONE = /^[-+][\d\s().,/-]*\d[\d\s().,/-]*$/;
+
+/**
+ * Spreadsheets run a cell that starts with `=`, `+`, `-`, `@`, tab or carriage return as a
+ * formula (`=HYPERLINK(...)`, `+cmd|...`). Text from a database can start that way, so it is
+ * prefixed with an apostrophe, which spreadsheets treat as "this is text". Plain numbers such
+ * as `-5` are left alone.
+ */
+function neutralizeFormula(text: string): string {
+  if (!/^'*[=+\-@\t\r]/.test(text) || PLAIN_NUMBER.test(text) || NUMBER_OR_PHONE.test(text)) {
+    return text;
+  }
+
+  return `'${text}`;
+}
+
+export function escapeCsvValue(value: unknown, options?: { neutralizeFormulas?: boolean }): string {
   if (value === undefined || value === null) {
     return '';
   }
@@ -21,6 +41,10 @@ export function escapeCsvValue(value: unknown): string {
     } catch {
       normalized = String(value);
     }
+  }
+
+  if (typeof value === 'string' && options?.neutralizeFormulas !== false) {
+    normalized = neutralizeFormula(normalized);
   }
 
   const escaped = normalized.replace(/"/g, '""');
@@ -50,12 +74,17 @@ export function recordsToCsv(
   const lines: string[] = [];
 
   if (includeHeader) {
-    lines.push(columns.map((column) => escapeCsvValue(column)).join(','));
+    lines.push(columns.map((column) => escapeCsvValue(column, options)).join(','));
   }
 
   for (const row of rows) {
-    lines.push(columns.map((column) => escapeCsvValue(row[column])).join(','));
+    lines.push(columns.map((column) => escapeCsvValue(row[column], options)).join(','));
   }
 
   return lines.join(lineEnding);
+}
+
+/** Reverses `neutralizeFormula` when reading back a file this extension exported. */
+export function restoreFormulaText(text: string): string {
+  return /^'+[=+\-@\t\r]/.test(text) ? text.slice(1) : text;
 }
