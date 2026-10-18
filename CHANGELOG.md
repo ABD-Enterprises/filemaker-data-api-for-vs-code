@@ -31,6 +31,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- AI kill-switch status item does nothing (with guidance) when AI is not enabled, instead of silently setting the switch.
 - Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on.
 - Batch CSV import ignores the `recordId`/`modId` meta columns (case-insensitive) so an exported file re-imports cleanly; round-trip test added.
 - FM Web preview: write the bridge URL and session token to the generated runtime's gitignored `.env.local`, send `X-FM-Bridge-Token` from the runtime client (and call `fetch` unbound), and apply `features.recordEdit.enabled` and the enterprise `recordEdit` guard to bridge edit/create/delete.

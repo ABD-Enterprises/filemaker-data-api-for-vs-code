@@ -63,6 +63,30 @@ describe('AI commands', () => {
     await expect(h.service.invoke('fm_list_layouts', {})).resolves.toBeDefined();
   });
 
+  it('does not set the kill switch while AI is not enabled, so enabling AI later is not blocked', async () => {
+    const configuration = (enabled: boolean) =>
+      ({
+        get: vi.fn((_k: string, d?: unknown) => d),
+        inspect: vi.fn((key: string) => (key === 'ai.enabled' ? { globalValue: enabled } : key === 'ai.connection' ? { globalValue: 'p1' } : undefined)),
+        update
+      }) as never;
+
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(configuration(false));
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce(undefined as never);
+    await command('filemakerDataApiTools.toggleAiKillSwitch')();
+
+    expect(h.service.isKilled()).toBe(false);
+    expect(vi.mocked(vscode.window.showInformationMessage).mock.calls.at(-1)?.[0]).toMatch(/nothing to switch off/);
+
+    // The user then turns AI on: tools work at once, with no modal to switch them back on.
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue(configuration(true));
+    await expect(h.service.invoke('fm_list_layouts', {})).resolves.toBeDefined();
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    await command('filemakerDataApiTools.toggleAiKillSwitch')();
+    expect(h.service.isKilled()).toBe(true);
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+  });
+
   it('a new session resets counters and approvals only after the user confirms', async () => {
     await h.service.invoke('fm_describe_layout', { layout: 'Contacts' });
     await h.service.invoke('fm_get_record', { layout: 'Contacts', recordId: '1' });

@@ -72,6 +72,19 @@ export function registerAiToolCommands(deps: Deps & { statusBar: AiStatusBar }):
         }
         deps.service.setKilled(false);
       } else {
+        // Nothing to switch off when AI is not on: setting the switch here would leave the
+        // tools off later, after the user enables AI, until another click and a modal.
+        const settings = readAiSettings(vscode.workspace.getConfiguration('filemaker'));
+        if (!settings.enabled || deps.service.listTools().length === 0) {
+          const choice = await vscode.window.showInformationMessage(
+            'AI tools are not on, so there is nothing to switch off. Turn them on with filemaker.ai.enabled in your user settings and choose a connection with "FileMaker: Set AI Access for Connection".',
+            'Open AI Settings'
+          );
+          if (choice === 'Open AI Settings') {
+            await vscode.commands.executeCommand('workbench.action.openSettings', 'filemaker.ai');
+          }
+          return;
+        }
         deps.service.setKilled(true);
       }
       deps.controller.refresh();
