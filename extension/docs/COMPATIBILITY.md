@@ -9,7 +9,7 @@ This extension talks to FileMaker through the FileMaker Data API. A server is co
 | FileMaker Server 19.x | `/fmi/data` | Supported, not continuously tested | Expected to work for core Data API workflows. Validate against your exact patch level before production use. |
 | FileMaker Server 20.x | `/fmi/data` | Supported, not continuously tested | Expected to work for core Data API workflows. Validate scripts, container downloads, and value lists in your environment. |
 | FileMaker Server 21.x | `/fmi/data` | Supported | Primary target for current extension behavior and release smoke testing. |
-| FileMaker Cloud | `/fmi/data` | Untested | Expected to work when the Data API endpoint is reachable over HTTPS and credentials are accepted by FileMaker Cloud. Validate authentication and network policy before relying on it. |
+| FileMaker Cloud | `/fmi/data` | Untested | Unverified. The extension has no Claris ID login; whether a Cloud tenant accepts an account name and password on the Data API is not confirmed (ask Claris or your administrator). Validate authentication and network policy before relying on it. |
 | Custom proxy in front of FileMaker Server | Proxy-defined, upstream usually `/fmi/data` | Supported when compatible | Proxy mode expects the proxy to preserve FileMaker Data API request/response semantics and redact credentials from logs. |
 
 No supported version is currently documented as known-broken. If you find a version-specific failure, open a bug report with the FileMaker Server version, operating system, deployment type, and Output panel logs.
