@@ -286,8 +286,9 @@ export class ConnectionWizardPanel {
         proxyEndpoint = proxyValidation.value;
       }
 
+      // In proxy mode the key goes to the proxy, which then talks to serverUrl: check both.
       const target = data.authMode === 'proxy' ? proxyEndpoint : serverValidation.value;
-      if (!(await this.confirmCredentialTarget(target))) {
+      if (!(await this.confirmCredentialTargets([target, serverValidation.value]))) {
         await this.panel.webview.postMessage({
           type: 'saveError',
           message: 'Not saved: you did not confirm the server address.'
@@ -299,7 +300,8 @@ export class ConnectionWizardPanel {
       const bindingChanged = this.credentialBindingChanged(
         data.authMode,
         data.authMode === 'direct' ? serverValidation.value : proxyEndpoint,
-        data.username
+        data.username,
+        serverValidation.value
       );
       if (bindingChanged && !(typedSecret && typedSecret.length > 0)) {
         await this.panel.webview.postMessage({
@@ -328,12 +330,13 @@ export class ConnectionWizardPanel {
         profile.proxyEndpoint = proxyEndpoint;
       }
 
-      await this.profileStore.upsertProfile(profile);
-
       if (bindingChanged) {
-        // A session token belongs to the server it was issued by.
+        // A session token belongs to the server it was issued by. Drop it before the profile
+        // points somewhere else, so no request can pair the old token with the new address.
         await this.secretStore.deleteSessionToken(profile.id);
       }
+
+      await this.profileStore.upsertProfile(profile);
 
       if (data.authMode === 'direct') {
         if (data.password && data.password.length > 0) {
@@ -408,7 +411,8 @@ export class ConnectionWizardPanel {
   private credentialBindingChanged(
     authMode: 'direct' | 'proxy',
     target: string | undefined,
-    username: string | undefined
+    username: string | undefined,
+    backend: string | undefined
   ): boolean {
     const editing = this.editingProfile;
     if (!editing) {
@@ -418,14 +422,21 @@ export class ConnectionWizardPanel {
     const before = {
       authMode: editing.authMode,
       origin: originOf(editing.authMode === 'proxy' ? editing.proxyEndpoint : editing.serverUrl),
+      backend: originOf(editing.serverUrl),
       username: editing.authMode === 'direct' ? (editing.username ?? '').trim() : ''
     };
     const after = {
       authMode,
       origin: originOf(target),
+      backend: originOf(backend),
       username: authMode === 'direct' ? (username ?? '').trim() : ''
     };
-    return before.authMode !== after.authMode || before.origin !== after.origin || before.username !== after.username;
+    return (
+      before.authMode !== after.authMode ||
+      before.origin !== after.origin ||
+      before.backend !== after.backend ||
+      before.username !== after.username
+    );
   }
 
   private async isKnownOrigin(origin: string): Promise<boolean> {
@@ -440,6 +451,15 @@ export class ConnectionWizardPanel {
    * address came from the workspace rather than from the user, or when it is a remote
    * http:// address that would carry them unencrypted.
    */
+  private async confirmCredentialTargets(targets: Array<string | undefined>): Promise<boolean> {
+    for (const target of new Set(targets)) {
+      if (!(await this.confirmCredentialTarget(target))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private async confirmCredentialTarget(target: string | undefined): Promise<boolean> {
     const origin = originOf(target);
     if (!target || !origin) {
@@ -501,7 +521,7 @@ export class ConnectionWizardPanel {
       }
 
       const target = data.authMode === 'proxy' ? proxyEndpoint : serverValidation.value;
-      if (!(await this.confirmCredentialTarget(target))) {
+      if (!(await this.confirmCredentialTargets([target, serverValidation.value]))) {
         throw new Error('Test cancelled: you did not confirm the server address.');
       }
 
@@ -520,7 +540,8 @@ export class ConnectionWizardPanel {
       const bindingChanged = this.credentialBindingChanged(
         data.authMode,
         target,
-        data.username
+        data.username,
+        serverValidation.value
       );
       let secret = typedSecret && typedSecret.length > 0 ? typedSecret : undefined;
       if (!secret && this.editingProfile && !bindingChanged) {

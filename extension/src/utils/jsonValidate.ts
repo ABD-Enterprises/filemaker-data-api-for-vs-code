@@ -80,7 +80,11 @@ export function parseOptionalNonNegativeInteger(value: string | undefined, label
   return parsed;
 }
 
-export function validateServerUrl(value: string, label = 'Server URL'): JsonValidationResult<string> {
+export function validateServerUrl(
+  value: string,
+  label = 'Server URL',
+  options: { allowCredentials?: boolean } = {}
+): JsonValidationResult<string> {
   const trimmed = value.trim();
   if (!trimmed) {
     return {
@@ -98,7 +102,7 @@ export function validateServerUrl(value: string, label = 'Server URL'): JsonVali
       };
     }
 
-    if (parsed.username || parsed.password) {
+    if ((parsed.username || parsed.password) && !options.allowCredentials) {
       return {
         ok: false,
         error: `${label} must not contain a username or password. Enter them in their own fields.`

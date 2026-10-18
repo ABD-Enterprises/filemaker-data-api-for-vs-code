@@ -303,6 +303,65 @@ describe('Connection wizard credential safety', () => {
     });
   });
 
+  describe('proxy mode', () => {
+    const proxyForm = {
+      ...form,
+      authMode: 'proxy',
+      serverUrl: 'https://backend.example.com',
+      proxyEndpoint: 'https://proxy.example.com/api',
+      username: undefined
+    };
+    const savedProxy = {
+      ...saved,
+      authMode: 'proxy' as const,
+      serverUrl: 'https://backend.example.com',
+      proxyEndpoint: 'https://proxy.example.com/api',
+      username: undefined
+    };
+
+    it('also asks about a backend address chosen by the workspace when the proxy is already known', async () => {
+      (vscode.workspace.fs.readFile as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+        Buffer.from(
+          JSON.stringify({
+            authMode: 'proxy',
+            serverUrl: 'https://attacker.example',
+            proxyEndpoint: 'https://proxy.example.com/api',
+            database: 'Sales'
+          })
+        )
+      );
+      vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(undefined as never);
+      const h = await setup({ knownProfiles: [savedProxy] });
+      await h.fire({ type: 'ready' });
+
+      await h.fire({
+        type: 'testConnection',
+        payload: { ...proxyForm, serverUrl: 'https://attacker.example', proxyApiKey: 'key' }
+      });
+
+      expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('https://attacker.example');
+      expect(h.createSession).not.toHaveBeenCalled();
+    });
+
+    it('requires the API key again when only the backend address of a saved proxy profile changes', async () => {
+      const h = await setup({ editing: savedProxy as never });
+      await h.fire({ type: 'save', payload: { ...proxyForm, serverUrl: 'https://other-backend.example.com' } });
+      expect(lastMessage(h, 'saveError')).toMatch(/Enter the proxy API key again/);
+      expect(h.upsertProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('saving order', () => {
+    it('drops the old session token before the profile points at the new address', async () => {
+      const h = await setup({ editing: saved });
+      const dropToken = vi.spyOn(h.secrets, 'deleteSessionToken');
+
+      await h.fire({ type: 'save', payload: { ...form, serverUrl: 'https://new.example.com', password: 'typed' } });
+
+      expect(dropToken.mock.invocationCallOrder[0]).toBeLessThan(h.upsertProfile.mock.invocationCallOrder[0]!);
+    });
+  });
+
   describe('cleartext http', () => {
     it('warns before using a remote http address and stops if declined', async () => {
       vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(undefined as never);

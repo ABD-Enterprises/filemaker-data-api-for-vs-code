@@ -103,6 +103,22 @@ describe('ProfileStore', () => {
     expect(profiles[0]?.id).toBe('valid-profile');
   });
 
+  it('keeps a profile saved with a user name in its address visible, but will not save one', async () => {
+    const globalState = new InMemoryMemento();
+    const workspaceState = new InMemoryMemento();
+    const store = new ProfileStore(globalState as never, workspaceState as never);
+    const legacy = { ...createProfile('legacy'), serverUrl: 'https://admin:pw@fm.example.com' };
+    await globalState.update('filemakerDataApiTools.profiles', [legacy]);
+
+    // Still listed, so it can be fixed, and not lost when the list is written back.
+    expect((await store.listProfiles()).map((profile) => profile.id)).toEqual(['legacy']);
+    await store.upsertProfile(createProfile('another'));
+    expect((await store.listProfiles()).map((profile) => profile.id).sort()).toEqual(['another', 'legacy']);
+
+    // A new save with credentials in the address is refused.
+    await expect(store.upsertProfile(legacy)).rejects.toThrow(/must not contain a username or password/);
+  });
+
   it('persists TLS override fields with normalized profile metadata', async () => {
     const globalState = new InMemoryMemento();
     const workspaceState = new InMemoryMemento();
