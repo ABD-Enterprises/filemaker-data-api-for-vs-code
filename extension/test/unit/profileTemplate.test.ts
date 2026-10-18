@@ -12,6 +12,24 @@ describe('parseConnectionProfileTemplate', () => {
     vi.clearAllMocks();
   });
 
+  it.each(['allowSelfSigned', 'caBundlePath'])(
+    'ignores a template that tries to set the TLS option %s',
+    (field) => {
+      const result = parseConnectionProfileTemplate(
+        JSON.stringify({
+          name: 'Team Dev',
+          authMode: 'direct',
+          serverUrl: 'https://fm-dev.example.com',
+          database: 'TeamApp',
+          [field]: field === 'allowSelfSigned' ? true : '/tmp/evil-ca.pem'
+        })
+      );
+
+      expect(result.template).toBeUndefined();
+      expect(result.warning).toMatch(/unsupported fields/);
+    }
+  );
+
   it('normalizes allowed non-credential template fields', () => {
     const result = parseConnectionProfileTemplate(
       JSON.stringify({

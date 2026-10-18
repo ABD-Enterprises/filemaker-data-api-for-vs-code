@@ -11,7 +11,7 @@ Pushing a tag named `vX.Y.Z` starts the **CI** workflow (`.github/workflows/ci.y
 1. **build-test**: install, audit, lint, typecheck, tests with coverage, build, package check and the VSIX size budget. This is the required check on `main` as well.
 2. **package**: builds the VSIX and uploads it as the run artifact `extension-vsix`.
 3. **publish**: waits for approval of the **`marketplace`** environment (a required reviewer). It then checks that the tag points at a commit on `main` and that the tag equals `v` plus the version in `extension/package.json`. It installs `vsce` from the pinned lockfile in `tools/publish`, signs in to Azure with a short-lived GitHub OIDC token (Microsoft Entra ID, no stored token) and runs `vsce publish --azure-credential`.
-4. **release**: only after publish succeeds, creates the GitHub release with the VSIX attached and notes taken from `extension/CHANGELOG.md` by `tools/release-notes.sh`.
+4. **release**: only after publish succeeds, creates the GitHub release with the VSIX and the source maps tarball (`sourcemaps-<tag>.tgz`) attached and notes taken from `extension/CHANGELOG.md` by `tools/release-notes.sh`.
 
 Tags matching `v*` are protected by a repository ruleset (creation, update and deletion are limited to repository admins). Create the tag as an admin, from `main`.
 
@@ -57,6 +57,7 @@ Branch from green `main`: `git switch -c release/vX.Y.Z origin/main`.
 - [ ] **Security and data handling (non-code).** [docs/security.md](./security.md) and [docs/DATA_HANDLING.md](./DATA_HANDLING.md) describe what the release stores, sends and asks. Check what changed against the list: new settings that widen access, new files written, new network calls, new prompts, new secrets.
 - [ ] **Marketplace listing (non-code).** In `extension/package.json`: description, `keywords`, `categories`, `icon`, `homepage`, `bugs`. In the README: screenshots in `extension/docs/marketplace/` still show the product and the files exist (the listing loads them from `main` on GitHub, so do not rename or delete one later). Nothing in the listing may describe a feature that is off by default without saying so, or one that is not in this release.
 - [ ] **Compatibility.** [extension/docs/COMPATIBILITY.md](../extension/docs/COMPATIBILITY.md) lists the server versions you actually tested.
+- [ ] **Third-party notices.** If dependencies changed, run `npm run notices -w extension` and commit `extension/THIRD_PARTY_NOTICES.txt` (it ships in the VSIX; `package:check` fails when it is out of date).
 - [ ] **Dependencies.** `npm audit --omit=dev --audit-level=high` is clean (CI enforces it). Review the Dependabot pull requests that would otherwise land right after the release ([dependency policy](./CI.md)).
 - [ ] Push the branch and open the pull request titled `[patch] Release X.Y.Z` (or the tier that matches). Mark it draft or hold the merge: verify first (next section), then merge.
 
@@ -81,7 +82,7 @@ Do this against the release branch (the content that will be tagged), not after 
   ```
   The tag must point at the commit whose `package.json` says `X.Y.Z`; the publish job refuses anything else.
 - [ ] Watch the run. When **publish** waits, open the run, choose **Review deployments**, tick **marketplace** and approve. (If the Entra setup is not done, publish by hand instead; see below.)
-- [ ] **release** creates the GitHub release with the VSIX and the changelog text. Open it and read it.
+- [ ] **release** creates the GitHub release with the VSIX, `sourcemaps-vX.Y.Z.tgz` and the changelog text. Open it and read it.
 
 ### 5. Verify after publishing
 
@@ -89,7 +90,7 @@ Do this against the release branch (the content that will be tagged), not after 
 - [ ] The README on the listing renders, images load, and links work (click them; they are rewritten to GitHub URLs when the VSIX is built).
 - [ ] In a clean VS Code profile, install from the Marketplace, check `code --list-extensions --show-versions`, connect, run one find, and open **FileMaker: Open User Guide**.
 - [ ] Update from the previous version in a profile that has the old version installed: profiles and settings survive, and the new prompts behave as the upgrade notes say.
-- [ ] The GitHub release has the VSIX attached.
+- [ ] The GitHub release has the VSIX and `sourcemaps-vX.Y.Z.tgz` attached. Keep the tarball: it is the only way to read a stack trace from the minified bundle.
 
 ### 6. Announce, support and monitor
 
@@ -103,12 +104,12 @@ Do this against the release branch (the content that will be tagged), not after 
 
 Use this when Entra publishing is not set up or the publish job failed after the tag was pushed.
 
-1. In the tag's CI run, download the `extension-vsix` artifact from the **package** job (or build it: `npm ci && npm run package:vsix`, which writes `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`). Check that the file name carries the version you expect.
+1. In the tag's CI run, download the `extension-vsix` and `extension-sourcemaps` artifacts from the **package** job (or build the VSIX: `npm ci && npm run package:vsix`, which writes `artifacts/filemaker-data-api-tools-X.Y.Z.vsix`). Check that the file name carries the version you expect.
 2. Open <https://marketplace.visualstudio.com/manage> as an owner of the **SureForgeTech** publisher, select the extension, and upload the `.vsix` there (follow the screenshot in Microsoft's [publishing guide](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)). Wait for verification.
 3. Create the GitHub release yourself, because the **release** job is skipped when publish does not succeed:
    ```bash
    tools/release-notes.sh vX.Y.Z \
-     | gh release create vX.Y.Z artifacts/filemaker-data-api-tools-X.Y.Z.vsix \
+     | gh release create vX.Y.Z artifacts/filemaker-data-api-tools-X.Y.Z.vsix artifacts/maps/sourcemaps-vX.Y.Z.tgz \
          --repo SureForgeTech/filemaker-data-api-for-vs-code --title vX.Y.Z --notes-file -
    ```
 4. Continue with step 5 of the checklist. Say in the pull request that the release was published by hand, and why.
@@ -119,4 +120,14 @@ The Marketplace does not accept semver suffixes such as `1.5.0-pre.1`. A pre-rel
 
 ## Source maps
 
-The production VSIX contains inline source maps (`esbuild --sourcemap=inline` in the `bundle:extension` script), so a stack trace from a user report points at real source lines. This makes the VSIX larger (about 1.7 MB instead of about 1.0 MB when it was measured at 1.1.0). If size becomes a problem, switch to external maps and exclude them from the VSIX in `.vscodeignore`, then update this section. The size cap is described in [CI.md](./CI.md).
+The shipped bundles (`dist/extension.js`, the schema-diff worker and the MCP shim) are minified
+and carry **no source map**. `scripts/esbuild-config.mjs` writes an *external* map next to each
+bundle (`dist/*.js.map`), and `.vscodeignore` keeps `dist/**/*.map` out of the VSIX. The Layout
+Mode UI is built minified with no map at all.
+
+The tagged `package` job in `.github/workflows/ci.yml` collects the maps from the very build that
+produced the VSIX into `sourcemaps-<tag>.tgz`, and the `release` job attaches it to the GitHub
+release next to the VSIX. To symbolicate a stack trace from a user report, download that asset
+for the same tag, unpack it, and point your tool (for example `source-map-support` or a browser
+devtools "add source map") at `dist/extension.js.map`. A map only matches the exact build it
+came from, so always use the asset from the tag the user reported.

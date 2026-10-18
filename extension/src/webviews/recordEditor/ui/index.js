@@ -16,6 +16,8 @@ function debounce(fn, ms) {
 }
 
 const state = {
+  // 'edit' loads and saves one record; 'create' lists a layout's fields and creates a new record.
+  mode: 'edit',
   profiles: [],
   activeProfileId: undefined,
   defaults: undefined,
@@ -32,6 +34,8 @@ const loadButton = document.getElementById('loadButton');
 const validateButton = document.getElementById('validateButton');
 const previewButton = document.getElementById('previewButton');
 const saveButton = document.getElementById('saveButton');
+const createButton = document.getElementById('createButton');
+const recordIdRow = document.getElementById('recordIdRow');
 const discardButton = document.getElementById('discardButton');
 const exportButton = document.getElementById('exportButton');
 const statusEl = document.getElementById('status');
@@ -87,6 +91,12 @@ window.addEventListener('message', (event) => {
     case 'recordSaved':
       applySaved(message.payload);
       break;
+    case 'layoutFields':
+      applyLayoutFields(message.payload);
+      break;
+    case 'recordCreated':
+      applyCreated(message.payload);
+      break;
     case 'saveCancelled':
       setStatus('Save cancelled.');
       break;
@@ -101,7 +111,10 @@ window.addEventListener('message', (event) => {
   }
 });
 
-layoutSelect.addEventListener('change', hideConflict);
+layoutSelect.addEventListener('change', () => {
+  hideConflict();
+  requestCreateFields();
+});
 
 profileSelect.addEventListener('change', () => {
   hideConflict();
@@ -162,10 +175,104 @@ exportButton.addEventListener('click', () => {
   vscode.postMessage({ type: 'exportRecord' });
 });
 
+createButton.addEventListener('click', () => {
+  const profileId = profileSelect.value;
+  const layout = layoutSelect.value;
+  if (!profileId || !layout) {
+    setStatus('Profile and layout are required.', true);
+    return;
+  }
+
+  const fieldData = {};
+  for (const [name, value] of Object.entries(state.draftFieldData)) {
+    if (value !== '' && value !== undefined && value !== null) {
+      fieldData[name] = value;
+    }
+  }
+  if (Object.keys(fieldData).length === 0) {
+    setStatus('Enter a value in at least one field to create a record.', true);
+    return;
+  }
+
+  debouncedMarkDirtyState.cancel();
+  vscode.postMessage({ type: 'createRecord', payload: { profileId, layout, fieldData } });
+  setStatus('Creating record...');
+});
+
+function applyMode() {
+  const creating = state.mode === 'create';
+  recordIdRow.classList.toggle('hidden', creating);
+  createButton.classList.toggle('hidden', !creating);
+  for (const button of [loadButton, previewButton, saveButton, discardButton, exportButton]) {
+    button.classList.toggle('hidden', creating);
+  }
+  if (recordEditorHeading) {
+    recordEditorHeading.textContent = creating ? 'New Record' : 'Field Data';
+  }
+  // The patch preview and raw JSON belong to editing an existing record.
+  patchPreview.parentElement.querySelectorAll('h3, pre').forEach((element) => element.classList.toggle('hidden', creating));
+  if (creating) {
+    // Nothing to load: show the (empty) form straight away.
+    revealRecordEditor();
+  }
+}
+
+function requestCreateFields() {
+  if (state.mode !== 'create' || !profileSelect.value || !layoutSelect.value) {
+    return;
+  }
+
+  vscode.postMessage({
+    type: 'loadLayoutFields',
+    payload: { profileId: profileSelect.value, layout: layoutSelect.value }
+  });
+  setStatus('Loading fields...');
+}
+
+function applyLayoutFields(payload) {
+  if (state.mode !== 'create' || !payload || !Array.isArray(payload.fields)) {
+    return;
+  }
+  if (payload.profileId !== profileSelect.value || payload.layout !== layoutSelect.value) {
+    return;
+  }
+
+  state.originalFieldData = {};
+  state.draftFieldData = {};
+  for (const field of payload.fields) {
+    if (field && typeof field.name === 'string') {
+      state.draftFieldData[field.name] = '';
+    }
+  }
+  fieldInputs.clear();
+  renderFieldEditor();
+  setStatus(
+    payload.metadataSupported
+      ? `Enter values for the new record, then click Create Record (${payload.fields.length} fields).`
+      : (payload.message || 'Field list is unavailable for this layout.'),
+    !payload.metadataSupported
+  );
+}
+
+function applyCreated(payload) {
+  if (!payload) {
+    return;
+  }
+
+  // Start the next record from an empty form and show the id of the one just created.
+  for (const name of Object.keys(state.draftFieldData)) {
+    state.draftFieldData[name] = '';
+  }
+  renderFieldEditor();
+  setStatus(`Record created on ${payload.layout}: record ID ${payload.recordId}${payload.modId ? ` (modId ${payload.modId})` : ''}.`);
+}
+
 function applyInit(payload) {
   state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
   state.activeProfileId = payload.activeProfileId;
   state.defaults = payload.defaults;
+  state.mode = payload.defaults && payload.defaults.mode === 'create' ? 'create' : 'edit';
+  applyMode();
 
   renderProfiles();
   setStatus('Ready.');
@@ -349,6 +456,7 @@ function renderLayouts(layouts, preferredLayout) {
   } else {
     layoutSelect.value = layouts[0];
   }
+  requestCreateFields();
 }
 
 function loadLayouts(profileId, preferredLayout) {
@@ -458,7 +566,8 @@ function markDirtyState() {
 function collectBasePayload() {
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
-  const recordId = recordIdInput.value.trim();
+  // A new record has no id yet; the host ignores it when validating a draft.
+  const recordId = state.mode === 'create' ? '(new)' : recordIdInput.value.trim();
 
   if (!profileId || !layout || !recordId) {
     setStatus('Profile, layout, and record ID are required.', true);

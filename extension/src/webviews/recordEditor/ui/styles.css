@@ -207,3 +207,7 @@ th {
 .conflict.hidden {
   display: none;
 }
+
+.hidden {
+  display: none !important;
+}

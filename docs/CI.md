@@ -18,7 +18,7 @@ Every job's runner comes from the repository variable `LINUX_RUNNER_LABELS` (a J
 
 Branch protection on `main` requires one status check, **`build-test`**, and no approving review. Nothing else is required today. Code scanning default setup is not configured on this repository, so there is no required scanning check.
 
-`build-test` runs, in order: `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), typecheck (`tsc --noEmit` per workspace, source and tests), `test:coverage` (Vitest, with coverage thresholds), build (esbuild bundle plus webview assets), package check (`vsce package`), and the VSIX size budget. To reproduce it locally:
+`build-test` runs, in order: `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), typecheck (`tsc --noEmit` per workspace, source and tests), `test:coverage` (Vitest, with coverage thresholds), build (esbuild bundle plus webview assets), package check (`npm run package:check`: it first verifies that `extension/THIRD_PARTY_NOTICES.txt` is current, then runs `vsce package`), and the VSIX size budget. To reproduce it locally:
 
 ```bash
 npm ci

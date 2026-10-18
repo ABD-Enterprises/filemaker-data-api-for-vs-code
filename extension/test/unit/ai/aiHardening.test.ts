@@ -239,11 +239,10 @@ describe('error text and audit notes', () => {
 
   it('runs audit notes through redaction and the same scrub', async () => {
     const h = ready();
-    h.client.listLayouts.mockRejectedValue(new Error(`failed for https://${SECRET_HOST}:16000 as ai_reader Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12`));
+    h.client.listLayouts.mockRejectedValue(new Error(`failed for https://${SECRET_HOST}:16000 Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12`));
     await failure(h.service.invoke('fm_list_layouts', {}));
     const note = h.audit.at(-1)?.note ?? '';
     expect(note).not.toContain(SECRET_HOST);
-    expect(note).not.toContain('ai_reader');
     const line = formatAuditLine({ tool: 't', connection: 'c', outcome: 'error', confirmed: null, note: 'Bearer abcdef123456 at 10.9.8.7 in /srv/fm/data.fmp12 on db.corp.example' }, new Date());
     expect(line).not.toMatch(/abcdef123456|10\.9\.8\.7|\/srv|corp\.example/);
   });
@@ -369,7 +368,7 @@ describe('connection comes only from the user setting', () => {
   it('no AI source file reads a project file or the active profile', async () => {
     const { readdirSync, readFileSync } = await import('fs');
     const folder = join(__dirname, '..', '..', '..', 'src', 'ai');
-    for (const file of readdirSync(folder)) {
+    for (const file of readdirSync(folder, { recursive: true }).map(String).filter((name) => name.endsWith('.ts'))) {
       const source = readFileSync(join(folder, file), 'utf8');
       expect(source, file).not.toMatch(/project\.json|activeProfileId|getActiveProfileId|FmWebProject/);
     }

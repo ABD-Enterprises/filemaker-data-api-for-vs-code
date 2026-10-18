@@ -21,10 +21,25 @@ export function registerOfflineCommands(deps: RegisterOfflineCommandsDeps): vsco
 
   return [
     vscode.commands.registerCommand('filemakerDataApiTools.toggleOfflineMode', async () => {
-      const enabled = await offlineModeService.toggleOfflineMode();
-      await roleGuard.applyContexts();
-      refreshExplorer();
-      vscode.window.showInformationMessage(`Offline mode ${enabled ? 'enabled' : 'disabled'}.`);
+      try {
+        const result = await offlineModeService.toggleOfflineMode();
+        await roleGuard.applyContexts();
+        refreshExplorer();
+        // Report the mode that is really in effect: a workspace setting can keep it on.
+        vscode.window.showInformationMessage(
+          result.effective
+            ? result.keptOnBy
+              ? `Offline mode is still on because of ${result.keptOnBy}. Your own setting is off; change it there to turn offline mode off.`
+              : 'Offline mode enabled.'
+            : 'Offline mode disabled.'
+        );
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to change offline mode.',
+          logger,
+          logMessage: 'Toggle offline mode failed.'
+        });
+      }
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.refreshOfflineCache', async (arg: unknown) => {

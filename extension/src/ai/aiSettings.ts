@@ -103,3 +103,8 @@ function readHiddenFields(configuration: Configuration): string[] {
 export function isAiFeatureSwitchOn(configuration: Configuration): boolean {
   return isFeatureEnabled(configuration, 'features.ai.enabled');
 }
+
+/** `filemaker.ai.externalServer.enabled`: lets MCP clients use the AI tools. User settings only. */
+export function isExternalServerEnabled(configuration: Configuration): boolean {
+  return readUserScopeValue(configuration, 'ai.externalServer.enabled', isBoolean) === true;
+}

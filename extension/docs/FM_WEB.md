@@ -47,17 +47,19 @@ The bridge (`fmBridgeServer`) is started by **FileMaker: Start FM Web Preview Se
 
 - binds to `127.0.0.1` on a random port and rejects non-loopback peers;
 - requires a trusted workspace;
-- requires a 256-bit per-session token in the `X-FM-Bridge-Token` header, generated when the bridge starts and discarded when it stops;
+- requires a 256-bit per-session token in the `X-FM-Bridge-Token` header, generated when the bridge starts and discarded when it stops, and compares it in constant time;
 - accepts only `localhost` and `127.0.0.1` origins and JSON `POST` requests to `/fm/*` with validated payloads;
 - caps the request body at 1 MB and applies a token-bucket rate limit and a per-session request budget (`filemaker.fmWeb.bridge.*` settings; throttled requests get HTTP 429 with `Retry-After`);
 - serves only the active connection and rejects a request that names another profile;
-- applies part of the user's policy: record changes (edit, create, delete) are refused in offline mode and when the enterprise role or `disabledFeatures` disallow `writeOperations`; script runs are refused in offline mode, when `filemaker.features.scriptRunner.enabled` is off, and when they disallow `scriptRunner`. It does not apply `filemaker.features.recordEdit.enabled`, the batch switch or workspace trust to those calls.
+- applies the user's own limits to changes: record changes (edit, create, delete) are refused in offline mode, when `filemaker.features.recordEdit.enabled` is off, and when the enterprise role or `disabledFeatures` disallow `writeOperations` or `recordEdit`; script runs are refused in offline mode, when `filemaker.features.scriptRunner.enabled` is off, and when they disallow `scriptRunner`.
 
-The bridge never returns secrets. Generated `.env.local` contains the bridge URL only. The runtime keeps record context and found-set IDs in session storage, not credentials.
+The bridge never returns secrets. The token is written to a private `.env.local` in the generated app (as `NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN`, together with the bridge URL), through a temporary file, and the write is refused if `.env.local` is a symbolic link; the generated client sends it in the header. Apps generated earlier get their managed runtime files (bridge client, data hook, layout client; marked `fmweb-managed: runtime template v2`) refreshed to the current template when they are unmodified or carry an older marker; an edited copy is left alone and named in a warning. The runtime keeps record context and found-set IDs in session storage, not credentials.
 
-Threats and mitigations in short: remote access (loopback binding and socket check), cross-site requests (origin allow-list, JSON only, token), untrusted workspace content (trust required; the preview asks before it runs `npm install` and `npm run dev`), credential leakage (secrets stay in `FMClient`), resource exhaustion (body cap, rate limit, budget). Any local process that obtains the token can use the bridge as the runtime does; the token lives only in extension host memory.
+Threats and mitigations in short: remote access (loopback binding and socket check), cross-site requests (origin allow-list, JSON only, token), untrusted workspace content (trust required; the preview asks before it runs `npm install` and `npm run dev`), credential leakage (secrets stay in `FMClient`), resource exhaustion (body cap, rate limit, budget). Any local process that obtains the token can use the bridge as the runtime does; the token lives in extension host memory and in the private `.env.local`.
 
-Known problem in this release: every data call from the generated preview is refused with HTTP 403. The runtime's bridge client (`runtime-next/lib/bridge-client.ts`) does not send `X-FM-Bridge-Token`, and the extension does not pass the token to the runtime. The user guide lists this as a known problem.
+## What the Marketplace build contains
+
+The Marketplace extension does not include the `runtime-next` and `shared` packages the preview app needs. In that installation **Start FM Web Preview Server** and **Generate FM Web Next.js App** stop with "The FM Web preview is not available in this installation" and point at the repository. Layout Mode, metadata sync and layout files work everywhere. Do not promise the preview to Marketplace users.
 
 ## Develop and test
 

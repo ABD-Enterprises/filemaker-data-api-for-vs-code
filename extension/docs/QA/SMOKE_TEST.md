@@ -35,7 +35,7 @@ Tick each one. A failure in checks 1 to 12 blocks the release.
 | 13 | Generated files | **Generate Types for Layout** writes a file under `filemaker-types/layouts/`. |
 | 14 | Reload | **Developer: Reload Window**: the status bar item and the Connections view come back. |
 | 15 | Untrusted workspace | In Restricted Mode, finds work; **Delete Record** and type generation are refused with a clear message. |
-| 16 | Prompts | A file in `.vscode/filemaker-plugins/` asks before it runs. **Start FM Web Preview Server** (after **Initialize FM Web Project**) asks before running `npm`. |
+| 16 | Prompts | A file in `.vscode/filemaker-plugins/` asks before it runs. **Start FM Web Preview Server** (after **Initialize FM Web Project**) asks before running `npm` when run from the repository; in a Marketplace build it reports that the preview is not available in this installation. |
 | 17 | AI default | The status bar shows `AI: off`. **Write AI Context** writes a file and offers to open it. With `filemaker.ai.enabled` off, no `fm_` tools are offered to the agent. |
 | 18 | User guide | **FileMaker: Open User Guide** opens the guide. |
 | 19 | Uninstall | Uninstalling removes the activity bar icon and the status bar items. |

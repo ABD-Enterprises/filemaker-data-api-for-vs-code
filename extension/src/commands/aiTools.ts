@@ -30,7 +30,10 @@ interface Deps {
 export class AiStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
 
-  public constructor(private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'>) {
+  public constructor(
+    private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'>,
+    private readonly mcp?: { isRunning(): boolean; connectionCount(): number }
+  ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
     this.item.command = KILL_SWITCH_COMMAND;
     this.item.show();
@@ -47,8 +50,10 @@ export class AiStatusBar implements vscode.Disposable {
       profile?.username,
       profile?.aiAccess
     );
-    this.item.text = model.text;
-    this.item.tooltip = model.tooltip;
+    const server = this.mcp?.isRunning() ? this.mcp.connectionCount() : undefined;
+    this.item.text = server === undefined ? model.text : `${model.text} \u00b7 MCP`;
+    this.item.tooltip =
+      server === undefined ? model.tooltip : `${model.tooltip}\nExternal tools (MCP) server: running, ${server} connection${server === 1 ? '' : 's'}.`;
   }
 
   public dispose(): void {
@@ -72,6 +77,25 @@ export function registerAiToolCommands(deps: Deps & { statusBar: AiStatusBar }):
         }
         deps.service.setKilled(false);
       } else {
+        // Nothing to switch off when AI is not on: setting the switch here would leave the
+        // tools off later, after the user enables AI, until another click and a modal.
+        const reason = deps.service.unavailableReason();
+        if (reason || deps.service.listTools().length === 0) {
+          // Name the true cause: turned off in settings, switched off by a policy switch,
+          // enterprise policy, an untrusted workspace, offline mode, or no connection enabled.
+          const settingsCause = reason?.includes('filemaker.ai.enabled') === true;
+          const detail =
+            reason ??
+            'No connection is enabled for AI. Choose one with "FileMaker: Set AI Access for Connection".';
+          const choice = await vscode.window.showInformationMessage(
+            `AI tools are not available, so there is nothing to switch off. ${detail}`,
+            ...(settingsCause ? ['Open AI Settings'] : [])
+          );
+          if (choice === 'Open AI Settings') {
+            await vscode.commands.executeCommand('workbench.action.openSettings', 'filemaker.ai');
+          }
+          return;
+        }
         deps.service.setKilled(true);
       }
       deps.controller.refresh();

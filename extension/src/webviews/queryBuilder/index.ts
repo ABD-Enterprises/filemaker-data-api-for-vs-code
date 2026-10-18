@@ -8,6 +8,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { SavedQueriesStore } from '../../services/savedQueriesStore';
 import type { ConnectionProfile, FindRecordsRequest, SavedQuery } from '../../types/fm';
 import { recordsToCsv } from '../../utils/exportCsv';
+import { isFormulaNeutralizationOn } from '../../utils/userScopeSetting';
 import { extractLayoutFieldNames } from '../../utils/layoutFields';
 import { parseFindJson, parseSortJson } from '../../utils/jsonValidate';
 import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
@@ -283,7 +284,8 @@ export class QueryBuilderPanel {
         savedQueries,
         defaults: this.pendingDefaults,
         includeAuthByDefault,
-        recordEditEnabled
+        recordEditEnabled,
+        neutralizeFormulas: isFormulaNeutralizationOn(filemakerConfig)
       }
     });
 
@@ -530,7 +532,9 @@ export class QueryBuilderPanel {
     }
 
     const rows = this.toCsvRows(this.lastResult);
-    const csv = recordsToCsv(rows);
+    const csv = recordsToCsv(rows, {
+      neutralizeFormulas: isFormulaNeutralizationOn(vscode.workspace.getConfiguration('filemaker'))
+    });
 
     const uri = await vscode.window.showSaveDialog({
       title: 'Export Query Results (CSV)',
@@ -916,6 +920,7 @@ export class QueryBuilderPanel {
       );
     const styleUri = uiUri('styles.css');
     const findFormUri = uiUri('findForm.js');
+    const cellTextUri = uiUri('cellText.js');
     const scriptUri = uiUri('index.js');
 
     const nonce = createNonce();
@@ -1049,6 +1054,7 @@ export class QueryBuilderPanel {
   </div>
 
   <script nonce="${nonce}" src="${findFormUri}"></script>
+  <script nonce="${nonce}" src="${cellTextUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

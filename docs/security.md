@@ -121,18 +121,23 @@ request with:
 
 The trust boundary is **the bridge token + localhost binding**. Any
 local process that obtains the token can call the bridge as if it
-were the trusted runtime. The token is held only in the extension
-host's memory and is not written to disk; rate limiting bounds the
+were the trusted runtime. The token lives in the extension host's
+memory and, so the preview app can send it, in the generated runtime's
+`.env.local` (`.fmweb/generated/runtime-next/.env.local`, owner-only,
+with a `.gitignore` beside it) as `NEXT_PUBLIC_FMWEB_BRIDGE_TOKEN`. That
+name means Next.js also puts it in the preview app's browser bundle, so
+treat the preview page like any other local client of the bridge. A new
+token is generated each time the bridge starts; rate limiting bounds the
 blast radius if it is exfiltrated.
 
 ## Workspace trust and restrict-only policy
 
 - In an untrusted workspace the extension limits itself mostly to reading:
-  browsing, metadata and finds. Record delete, container upload, batch export
-  and update, writing generated files, plugins, the FM Web commands and
-  preview, and AI tools need a trusted workspace. Record edit and create and
-  the Script Runner are not blocked by workspace trust today; they are limited
-  by offline mode, the feature switches and the enterprise role. `capabilities.untrustedWorkspaces` in `package.json` lists the
+  browsing, metadata and finds. Record edit, create and delete, container
+  upload, the Script Runner, batch export and update, writing generated
+  files, plugins, the FM Web commands and preview, and AI tools need a trusted
+  workspace. Trust is evaluated at each use, and an open record editor or
+  Script Runner refuses changes if trust is lost. `capabilities.untrustedWorkspaces` in `package.json` lists the
   settings that are ignored in an untrusted workspace.
 - Enterprise mode, the enterprise role, offline mode and the
   `filemaker.features.*.enabled` switches are **restrict-only** for workspace

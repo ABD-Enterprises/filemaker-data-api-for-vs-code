@@ -135,4 +135,18 @@ describe('extension manifest UX contract', () => {
     expect(properties['filemaker.ai.contextPath']?.scope).toBe('application');
     expect(properties['filemaker.ai.contextPath']?.default).toBe('');
   });
+
+  it('declares the external-tools commands and builds the MCP shim as part of the build', () => {
+    for (const name of ['toggleAiServer', 'copyAiMcpConfig']) {
+      expect(commandIds.has(id(name)), name).toBe(true);
+      expect(palette.get(id(name)), name).toBe('filemaker.hasProfiles');
+    }
+    const scripts = (JSON.parse(readFileSync(join(extensionRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts;
+    // The bundle itself is defined in scripts/esbuild-config.mjs.
+    expect(scripts['bundle:ai-mcp-shim']).toContain('bundle.mjs aiMcpShim');
+    const config = readFileSync(join(extensionRoot, 'scripts/esbuild-config.mjs'), 'utf8');
+    expect(config).toContain('src/ai/mcp/shim.ts');
+    expect(config).toContain('dist/aiMcpShim.js');
+    expect(scripts.build).toContain('bundle:ai-mcp-shim');
+  });
 });

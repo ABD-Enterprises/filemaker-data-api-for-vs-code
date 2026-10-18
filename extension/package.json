@@ -7,7 +7,7 @@
   "license": "MIT",
   "author": {
     "name": "ABD Enterprises",
-    "url": "https://abdenterprises.com?ref=vscode",
+    "url": "https://abdenterprises.com",
     "email": "registrar@abdenterprises.com"
   },
   "icon": "docs/marketplace/icon.png",
@@ -19,7 +19,7 @@
     "type": "git",
     "url": "https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.git"
   },
-  "homepage": "https://abdenterprises.com?ref=vscode",
+  "homepage": "https://abdenterprises.com",
   "bugs": {
     "url": "https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues"
   },
@@ -55,9 +55,13 @@
   ],
   "main": "./dist/extension.js",
   "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Generated types, schema snapshots, the offline cache, FM Web projects and AI context are written to files in the workspace folder on disk, which virtual workspaces (such as github.dev) do not provide."
+    },
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Reading layout metadata, browsing the FileMaker Explorer, and running Find queries work in untrusted workspaces. Write operations (record edit/create/delete, batch updates, type generation, FM Web project init) and enterprise environment comparisons require a trusted workspace. Trust the workspace via VS Code's banner to enable them.",
+      "description": "Reading layout metadata, browsing the FileMaker Explorer, and running Find queries work in untrusted workspaces. Editing, creating, deleting and uploading to records, the Script Runner, batch updates, type generation, FM Web project init, workspace plugins and enterprise environment comparisons require a trusted workspace, and the AI tools are not registered in an untrusted workspace. Trust the workspace via VS Code's banner to enable them.",
       "restrictedConfigurations": [
         "filemaker.features.batch.enabled",
         "filemaker.features.recordEdit.enabled",
@@ -68,7 +72,8 @@
         "filemaker.batch.concurrency",
         "filemaker.batch.dryRunDefault",
         "filemaker.offline.mode",
-        "filemaker.features.ai.enabled"
+        "filemaker.features.ai.enabled",
+        "filemaker.typegen.outputDir"
       ]
     }
   },
@@ -516,6 +521,16 @@
         "command": "filemakerDataApiTools.newAiSession",
         "title": "Start New AI Session",
         "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.toggleAiServer",
+        "title": "Start/Stop AI Server for External Tools",
+        "category": "FileMaker"
+      },
+      {
+        "command": "filemakerDataApiTools.copyAiMcpConfig",
+        "title": "Copy MCP Config for Claude Code / Cursor",
+        "category": "FileMaker"
       }
     ],
     "menus": {
@@ -960,6 +975,14 @@
         {
           "command": "filemakerDataApiTools.newAiSession",
           "when": "filemaker.ai.active"
+        },
+        {
+          "command": "filemakerDataApiTools.toggleAiServer",
+          "when": "filemaker.hasProfiles"
+        },
+        {
+          "command": "filemakerDataApiTools.copyAiMcpConfig",
+          "when": "filemaker.hasProfiles"
         }
       ]
     },
@@ -1028,6 +1051,11 @@
               "warn",
               "block"
             ],
+            "enumDescriptions": [
+              "Save without requiring a connection test.",
+              "Ask for confirmation to save when the connection has not been tested, or was edited after the last test.",
+              "Disable Save until Test Connection has succeeded on the current values."
+            ],
             "default": "warn",
             "description": "Whether the connection wizard requires a successful Test Connection before Save. 'off' = no requirement; 'warn' = save with confirmation when untested or edits since last test; 'block' = save disabled until a successful test on the current values.",
             "order": 7
@@ -1055,8 +1083,14 @@
               "workspace-state",
               "disabled"
             ],
+            "enumDescriptions": [
+              "No fallback: if VS Code SecretStorage fails, saving or reading a secret fails with an error (default).",
+              "Keep an obfuscated copy in workspace state, keyed from this machine's id. This is obfuscation, not protection against anyone who can read the workspace state on this machine; use it only where SecretStorage is unavailable (headless or remote agents).",
+              "Do not store secrets at all; enter credentials each time (development only)."
+            ],
             "default": "vscode-only",
-            "description": "Behavior when VS Code SecretStorage is unavailable. 'vscode-only' (default) propagates the error. 'workspace-state' encrypts secrets to workspace state for headless / remote-agent setups. 'disabled' skips secret persistence entirely (development only).",
+            "description": "What to do when VS Code SecretStorage is unavailable. The default propagates the error. 'workspace-state' keeps an obfuscated copy of secrets in workspace state for headless or remote-agent setups; it is obfuscation keyed from this machine's id, not protection against local access. 'disabled' skips secret persistence entirely (development only). Read from user settings only.",
+            "scope": "application",
             "order": 10
           }
         }
@@ -1071,6 +1105,10 @@
             "enum": [
               "workspace",
               "global"
+            ],
+            "enumDescriptions": [
+              "Saved queries belong to the current workspace.",
+              "Saved queries are shared across all workspaces."
             ],
             "default": "workspace",
             "description": "Scope used to store saved queries.",
@@ -1107,6 +1145,14 @@
             "default": true,
             "description": "Enable the Script Runner JSON parameter builder.",
             "order": 1
+          },
+          "filemaker.export.neutralizeFormulas": {
+            "type": "boolean",
+            "default": true,
+            "scope": "application",
+            "description": "Protect spreadsheets: put an apostrophe in front of CSV cells and copied table cells that start with =, +, -, @, tab or carriage return. User settings only.",
+            "markdownDescription": "Protect spreadsheets from formulas hidden in data. A cell whose text starts with `=`, `+`, `-`, `@`, a tab or a carriage return is run as a formula by Excel, Sheets and Numbers (for example `=HYPERLINK(...)` can send data to another site), so CSV exports and **Copy as table** put an apostrophe in front of it. Plain numbers and phone numbers are left alone. Turn this off only if you need the exact text and never open the files in a spreadsheet. Importing a file always takes the apostrophe back off, whichever way this is set. Read from your **user** settings only; a workspace cannot turn it off.",
+            "order": 10
           },
           "filemaker.batch.maxRecords": {
             "type": "number",
@@ -1155,6 +1201,10 @@
               "standard",
               "high-scale"
             ],
+            "enumDescriptions": [
+              "Default paging and concurrency.",
+              "Larger pages and adaptive concurrency for big exports; batch exports are written as JSON Lines."
+            ],
             "default": "standard",
             "description": "High-scale mode optimizes batch/export workflows for large datasets.",
             "order": 8
@@ -1184,6 +1234,10 @@
             "enum": [
               "workspaceState",
               "workspaceFiles"
+            ],
+            "enumDescriptions": [
+              "Keep snapshots in VS Code workspace state (not visible in the repository).",
+              "Write snapshots as files under .vscode/filemaker/snapshots in the workspace folder, so they can be committed. Needs a trusted workspace."
             ],
             "default": "workspaceFiles",
             "description": "Storage backend for schema snapshots. In untrusted workspaces, workspaceState is used automatically.",
@@ -1293,8 +1347,13 @@
               "developer",
               "admin"
             ],
+            "enumDescriptions": [
+              "Read-only: record editing, batch updates, scripts, environment export and plugin loading are blocked.",
+              "Everything except environment export and plugin loading.",
+              "Everything is allowed."
+            ],
             "default": "developer",
-            "description": "Enterprise role used for feature access control.",
+            "description": "Enterprise role used for feature access control. Applies when enterprise mode (filemaker.enterprise.mode) is on.",
             "order": 1
           }
         }
@@ -1311,6 +1370,12 @@
               "info",
               "warn",
               "error"
+            ],
+            "enumDescriptions": [
+              "Everything, including request details.",
+              "Normal operation messages and above.",
+              "Warnings and errors only.",
+              "Errors only."
             ],
             "default": "info",
             "markdownDeprecationMessage": "**Deprecated**: use `#filemaker.logging.level#` instead.",
@@ -1352,6 +1417,12 @@
               "info",
               "warn",
               "error"
+            ],
+            "enumDescriptions": [
+              "Everything, including request details.",
+              "Normal operation messages and above.",
+              "Warnings and errors only.",
+              "Errors only."
             ],
             "default": "info",
             "description": "Minimum logging level for FileMaker Data API Tools output.",
@@ -1439,6 +1510,13 @@
             "default": true,
             "markdownDescription": "A workspace or enterprise setting that can switch AI tools off. It cannot switch them on: that needs `filemaker.ai.enabled` in your user settings.",
             "order": 9
+          },
+          "filemaker.ai.externalServer.enabled": {
+            "type": "boolean",
+            "default": false,
+            "scope": "application",
+            "markdownDescription": "Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools** and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "order": 10
           }
         }
       }
@@ -1661,7 +1739,7 @@
       {
         "name": "fm_edit_record",
         "displayName": "Edit FileMaker Record",
-        "modelDescription": "Changes fields of ONE record (at most 10 fields, each value at most 300 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.",
+        "modelDescription": "Changes fields of ONE record (at most 10 fields, each value at most 200 characters; longer is refused). The user is shown every field name and new value in full, and the old value (cut with a count if long), and must approve every call; they may refuse. Fields must be on the layout itself (no related Table::Field, no portal or container fields). The whole approval dialog must fit in 4,000 characters (escaping makes some characters longer); a write that would not fit is refused. A call whose values already match the record writes nothing and asks nothing, but still reads one record against the quota. Use dryRun to preview.",
         "userDescription": "Changes fields of one record after you approve each change.",
         "toolReferenceName": "fmEditRecord",
         "canBeReferencedInPrompt": true,
@@ -1689,7 +1767,7 @@
               "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 300
+                "maxLength": 200
               }
             },
             "description": {
@@ -1713,7 +1791,7 @@
       {
         "name": "fm_create_record",
         "displayName": "Create FileMaker Record",
-        "modelDescription": "Creates ONE record (at most 10 fields, each value at most 300 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
+        "modelDescription": "Creates ONE record (at most 10 fields, each value at most 200 characters). The user is shown every field and value in full and must approve every call. Fields must be on the layout itself. Use dryRun to preview.",
         "userDescription": "Creates one record after you approve it.",
         "toolReferenceName": "fmCreateRecord",
         "canBeReferencedInPrompt": true,
@@ -1736,7 +1814,7 @@
               "maxProperties": 10,
               "additionalProperties": {
                 "type": "string",
-                "maxLength": 300
+                "maxLength": 200
               }
             },
             "description": {
@@ -1846,11 +1924,13 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "bundle:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=inline --outfile=dist/extension.js",
-    "bundle:schema-diff-worker": "esbuild src/services/schemaDiffWorker.ts --bundle --platform=node --format=cjs --external:vscode --sourcemap=inline --outfile=dist/schemaDiffWorker.js",
+    "bundle:extension": "node ./scripts/bundle.mjs extension",
+    "bundle:schema-diff-worker": "node ./scripts/bundle.mjs worker",
     "build:designer-ui": "node ./scripts/build-designer-ui-if-available.mjs",
     "copy:webviews": "shx mkdir -p dist/webviews/queryBuilder/ui dist/webviews/recordViewer/ui dist/webviews/scriptRunner/ui dist/webviews/schemaDiff/ui dist/webviews/recordEditor/ui dist/webviews/connectionWizard/ui dist/webviews/layoutMode/ui && shx cp -r src/webviews/queryBuilder/ui/* dist/webviews/queryBuilder/ui && shx cp -r src/webviews/recordViewer/ui/* dist/webviews/recordViewer/ui && shx cp -r src/webviews/scriptRunner/ui/* dist/webviews/scriptRunner/ui && shx cp -r src/webviews/schemaDiff/ui/* dist/webviews/schemaDiff/ui && shx cp -r src/webviews/recordEditor/ui/* dist/webviews/recordEditor/ui && shx cp -r src/webviews/connectionWizard/ui/* dist/webviews/connectionWizard/ui && shx cp -r src/webviews/layoutMode/ui/* dist/webviews/layoutMode/ui && sh -c 'if [ -d ../designer-ui/dist ]; then shx cp -r ../designer-ui/dist/* dist/webviews/layoutMode/ui; fi'",
-    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run copy:webviews",
+    "notices": "node ./scripts/generate-third-party-notices.mjs",
+    "notices:check": "node ./scripts/generate-third-party-notices.mjs --check",
+    "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews",
     "watch": "tsc -w -p .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,js,json,md,css,html}\"",
@@ -1863,7 +1943,8 @@
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p tsconfig.vitest.json --noEmit",
     "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
-    "package:check": "npm run package:vsix"
+    "package:check": "npm run notices:check && npm run package:vsix",
+    "bundle:ai-mcp-shim": "node ./scripts/bundle.mjs aiMcpShim"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -1871,6 +1952,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "^26.0.0",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",

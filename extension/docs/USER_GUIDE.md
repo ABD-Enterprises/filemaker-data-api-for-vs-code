@@ -51,7 +51,7 @@ Something failed? Start with [Troubleshooting](#troubleshooting): the first row 
 You need:
 
 - A **FileMaker Server** (or FileMaker Cloud) with the **FileMaker Data API** enabled. On Server this is in the Admin Console under Connectors.
-- A server address your computer can reach over **HTTPS**, with a **certificate your computer trusts**. The extension has no setting to accept a self-signed certificate: either use a certificate from a public or company authority, or install your authority's certificate into the operating system (see [Troubleshooting](#troubleshooting)).
+- A server address your computer can reach over **HTTPS**, with a **certificate your computer trusts**. If your server uses a certificate from a private authority or a self-signed one, the connection wizard has a **Certificates (advanced)** section for it (see [Certificates](#certificates-private-authority-or-self-signed)).
 - A **FileMaker account** whose privilege set has the **`fmrest`** extended privilege (called "Access via FileMaker Data API"). To grant it, open the database in FileMaker Pro, choose File > Manage > Security, edit the account's privilege set, open **Extended Privileges**, and tick `fmrest`. Without it the sign-in fails and can look like a wrong password.
 - **VS Code 1.96 or newer.**
 - **A folder open in VS Code** for anything that is saved: saved queries, schema snapshots, type generation, the offline cache and the AI context copy.
@@ -64,7 +64,7 @@ Use a dedicated account for this work, with only the access you need. A FileMake
 
 VS Code has a safety feature called Workspace Trust. When you open a folder you have not trusted, VS Code runs in **Restricted Mode** (a banner says so) and extensions must limit themselves. Choose **Yes, I trust the authors** in the banner or dialog when the folder is yours or comes from a source you trust. You can review it with **Workspaces: Manage Workspace Trust**.
 
-In an untrusted workspace this extension can browse, read metadata and run finds. It will not delete records, upload to containers, write generated files, run batch jobs, load plugins, start the FM Web preview, or register AI tools, and it ignores a `.filemaker/profile-template.json`. A trusted workspace is also not a free pass: the extension still asks before risky actions. See [Security behavior you will notice](#security-behavior-you-will-notice).
+In an untrusted workspace this extension can browse, read metadata and run finds. It will not edit, create or delete records, upload to containers, run scripts, write generated files, run batch jobs, load plugins, start the FM Web preview, or register AI tools, and it ignores a `.filemaker/profile-template.json`. Trust is checked each time, and a panel that is already open refuses changes if trust is lost. A trusted workspace is also not a free pass: the extension still asks before risky actions. See [Security behavior you will notice](#security-behavior-you-will-notice).
 
 ### Opening your user settings
 
@@ -79,19 +79,21 @@ New:
 - **Use AI with FileMaker, safely.** Off by default. **FileMaker: Write AI Context** writes a short description of your layouts, fields and script names for AI coding tools. AI tools in VS Code (agent mode) can list layouts, read records and, only if you allow it, change one record at a time or run scripts you approve. You approve every change. See [Using AI with FileMaker](#using-ai-with-filemaker).
 - **Edit-conflict protection in the Record Editor.** If someone else changes a record after you opened it, your save is refused instead of overwriting their change. The editor shows which fields changed and keeps your edits. See [Edit a record](#edit-a-record).
 - **Empty results are not errors.** A find that matches nothing now returns an empty result. Before, it showed an error, and a batch export could fail on its last request.
+- **Create Record works.** The Record Editor's create mode lists the layout's fields, has a **Create Record** button with a confirmation, and shows the new record's ID.
+- **Certificates in the wizard.** A **Certificates (advanced)** section accepts a custom CA file, or (insecure, per profile, confirmed once) a self-signed certificate. See [Certificates](#certificates-private-authority-or-self-signed).
 - **One session renewal.** When a session expires while several requests run, they now share one renewal instead of each opening a new FileMaker session.
 
 Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 
+- Editing, creating, deleting and uploading records and the Script Runner now need a trusted workspace, and **Delete Record** also needs record editing to be switched on.
 - A repository can no longer loosen your policy. Enterprise mode, the role, offline mode and the `filemaker.features.*.enabled` switches from a workspace can only make things stricter.
 - You are asked before the extension runs a workspace plugin, runs `npm install` for the FM Web preview, runs a Layout Mode script, or sends credentials to an address that came from the workspace or uses plain `http://`.
 - The connection wizard asks you to enter the password again when you change the server address, proxy address or user name. **Test Connection** no longer touches the saved profile's secrets.
-- CSV exports put a leading apostrophe (`'`) in front of text that starts with `=`, `+`, `-` or `@`, so a spreadsheet does not run it as a formula.
+- CSV exports and **Copy results as table** put a leading apostrophe (`'`) in front of text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, so a spreadsheet does not run it as a formula. `filemaker.export.neutralizeFormulas` (user settings) turns that off. A CSV export can be edited and imported back.
+- The FM Web live preview is not in the Marketplace build; it needs the repository. Layout Mode is unchanged.
 - Generated type files for layouts with spaces or punctuation in the name get a new file name (with a short hash). Delete the old files.
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
-- A status bar item `AI: off` is always shown, on the right. It is the AI kill switch: selecting it turns AI tools off even when they were never on, and you are asked before they can be turned on again.
-
----
+- A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
 
 ---
 
@@ -127,7 +129,7 @@ How strict the wizard is about testing is set by `filemaker.connectionWizard.req
 
 ### Where secrets go
 
-The password, proxy API key and session token are stored in VS Code SecretStorage, which uses your operating system's keychain. They are not written to settings, profiles, saved queries, snapshots or logs. If SecretStorage is not available (for example a Linux machine without a keyring), connecting fails with an error. `filemaker.secrets.fallback` lets you choose a fallback in VS Code workspace storage (`workspace-state`) for headless setups. That fallback is **obfuscated, not protected**: the key is derived from the machine ID, so anyone who can read your VS Code state on this machine can recover the secrets. Use it only when there is no keyring. The default is `vscode-only`.
+The password, proxy API key and session token are stored in VS Code SecretStorage, which uses your operating system's keychain. They are not written to settings, profiles, saved queries, snapshots or logs. If SecretStorage is not available (for example a Linux machine without a keyring), connecting fails with an error. `filemaker.secrets.fallback` lets you choose a fallback in VS Code workspace storage (`workspace-state`) for headless setups. That fallback is **obfuscated, not protected**: the key is derived from the machine ID, so anyone who can read your VS Code state on this machine can recover the secrets. Use it only when there is no keyring. This setting is read from your user settings only (a workspace value is ignored). The default is `vscode-only`.
 
 ### What the wizard asks you to confirm
 
@@ -137,6 +139,15 @@ The password, proxy API key and session token are stored in VS Code SecretStorag
 - **Test Connection** opens a throwaway session and closes it. It never changes the saved profile's secrets. For an unchanged server and user, leave the password empty to test with the saved one.
 
 Server addresses with a user name or password inside them (`https://user:pass@host`) are rejected.
+
+### Certificates (private authority or self-signed)
+
+FileMaker Server often uses a certificate from a company authority or a self-signed one. The wizard's **Certificates (advanced)** section (under the server fields) has two options, both stored per profile and both for `https://` addresses only:
+
+- **Custom CA certificate file.** The absolute path to a PEM file with the certificate of the authority that signed your server's certificate. It is added to your computer's trusted certificates, not substituted for them, so public servers keep working. If you renew or edit the file, the next connection uses the new content without restarting VS Code. This is the preferred option.
+- **Allow self-signed certificate (insecure).** Turns off certificate checking for this connection. Anyone on the network between you and the server could pretend to be it and read your password. The first time you save it for a server, a dialog asks you to confirm (**Allow insecure connection**). Use it only on a network you control.
+
+Neither option can come from a profile template or any workspace file; you set them yourself in the wizard. Ticking the self-signed option on an `http://` address does nothing and the wizard says so.
 
 ### Profile templates for a team
 
@@ -226,7 +237,7 @@ Results:
 
 - The table shows `Showing 1-100 of N found`. Use **Previous page** and **Next page**, and set **Records per page** and **Start at record** (the first record is 1).
 - Select a column heading to sort the current page. Double-click a row, or use **View** or **Edit**, to open that record.
-- Under the **Export** disclosure: **Copy results as table** copies text that pastes into a spreadsheet, and **Save results as CSV…**, **Save results as JSON…** and **Open results in editor** export the results on screen. **Save results as CSV…** puts an apostrophe in front of text that a spreadsheet would run as a formula; **Copy results as table** does **not** have that protection today, so do not paste copied results from an untrusted database into a spreadsheet without checking cells that start with `=`, `+`, `-` or `@`. For large exports use [batch export](#batch-export-and-batch-update).
+- Under the **Export** disclosure: **Copy results as table** copies text that pastes into a spreadsheet, and **Save results as CSV…**, **Save results as JSON…** and **Open results in editor** export the results on screen. Both **Save results as CSV…** and **Copy results as table** put an apostrophe in front of text that a spreadsheet would run as a formula (see [apostrophes in CSV files](#batch-export-and-batch-update)); `filemaker.export.neutralizeFormulas` turns that off. For large exports use [batch export](#batch-export-and-batch-update).
 - Under the **Copy request** disclosure: **Copy as curl** and **Copy as fetch()** copy the equivalent request. Authorization headers are left out unless you tick **Include auth header** (its starting value is `filemaker.snippets.includeAuthByDefault`).
 - A find that matches nothing shows an empty result, not an error.
 
@@ -261,13 +272,13 @@ If a save works but the editor cannot re-read the record afterwards, it says so 
 
 ### Create a record
 
-Run **FileMaker: Create Record** (or the plus icon on a layout). The Record Editor opens in create mode. Fill in the fields you want and select **Save**.
+Run **FileMaker: Create Record** (or the plus icon on a layout). The Record Editor opens in create mode with the layout's field list. Fill in the fields you want, select **Create Record**, and confirm the dialog ("Create a new record in layout ..."). The editor then shows the new record's ID.
 
 ### Delete a record
 
 Run **FileMaker: Delete Record**, choose a profile and layout, and enter the record ID. Because a mistyped ID deletes the wrong record, look the ID up first: run a find in the Query Builder and read the `recordId` of the row you mean. A dialog then asks you to confirm with **Delete**, naming the ID and the layout. Deleting cannot be undone.
 
-Editing, creating, deleting and uploading are blocked in offline mode and for the enterprise `viewer` role. Editing, creating and uploading respect `filemaker.features.recordEdit.enabled`. Deleting and uploading are also blocked in an untrusted workspace; editing and creating are not blocked there today.
+Editing, creating, deleting and uploading all need a trusted workspace (checked each time; an open editor refuses changes if trust is lost), are blocked in offline mode and for the enterprise `viewer` role, and respect `filemaker.features.recordEdit.enabled`. Deleting also needs the general write permission (`writeOperations`) in addition to record editing.
 
 ---
 
@@ -293,9 +304,11 @@ Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in 
 
 Large results are fetched page by page. The export stops at `filemaker.batch.maxRecords` records (default 10,000; the hard limit is 250,000). With `filemaker.performance.mode` set to `high-scale`, exports are always written as JSONL.
 
-**Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** in the Query Builder.
+**Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** and **Copy results as table** in the Query Builder.
 
-**Do not treat an export as a ready-made import file.** A CSV export has `recordId` and `modId` columns followed by your fields. Batch update reads every column other than `recordId` as a field, so a `modId` column is sent as a field called `modId`; delete that column before importing. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true` or a number) is sent as JSON, not as text. A JSONL export cannot be imported at all: batch update accepts `.csv` and `.json` only.
+**Editing and re-importing a CSV export.** A CSV export has `recordId` and `modId` columns followed by your fields. Batch update skips the `recordId` and `modId` columns as fields (using `recordId` to find each record), so you can edit an export and import it back. Empty cells are skipped. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true`, `null` or a number) is sent as JSON, not as text. A JSONL export cannot be imported: batch update accepts `.csv` and `.json` only.
+
+**Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 
 ### Update
 
@@ -305,7 +318,7 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
    - **JSON**: an array of `{ "recordId": "123", "fieldData": { "Field": "value" } }` entries (`recordId` is a string).
 3. Choose **Dry-run only (recommended)** or **Execute updates now**. A dry run shows a sample of what would be sent and sends nothing. Executing asks for a final confirmation first.
 
-Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. An export is a useful record of the old values, but as described above it cannot simply be imported back, so be prepared to write the reverse update yourself.
+Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. Keep an export from before the update: a CSV export can be edited and imported back to restore old values (see above).
 
 Batch update is blocked in offline mode, for the `viewer` role, and when `filemaker.features.batch.enabled` is off or the workspace is untrusted.
 
@@ -330,7 +343,7 @@ A snapshot records a layout's fields and metadata at a moment in time, so you ca
 2. Later, choose **Diff Against Latest Snapshot** on the layout, or **FileMaker: Diff Schema Snapshots** to compare any two.
 3. The **Schema Diff** panel shows added, removed and changed fields side by side or as a tree. **Export Diff JSON** saves it.
 
-Snapshots are stored in `.vscode/filemaker/snapshots/` in a trusted workspace (`filemaker.schema.snapshots.storage` = `workspaceFiles`, the default), or in VS Code workspace storage in an untrusted one. The newest 20 per layout are kept (`filemaker.schema.snapshots.maxPerLayout`). Treat the files as internal project data: they contain your layout and field names.
+Layout names that contain `..` (for example `Q1..Q2`) are supported in snapshots and the offline cache. Snapshots are stored in `.vscode/filemaker/snapshots/` in a trusted workspace (`filemaker.schema.snapshots.storage` = `workspaceFiles`, the default), or in VS Code workspace storage in an untrusted one. The newest 20 per layout are kept (`filemaker.schema.snapshots.maxPerLayout`). Treat the files as internal project data: they contain your layout and field names.
 
 With `filemaker.schema.diagnostics.enabled`, changes found by **Diff Against Latest Snapshot** are also listed in the Problems panel.
 
@@ -367,20 +380,17 @@ FM Web is an experimental workflow for designing web layouts that sit on top of 
 2. **FileMaker: Select Active Profile** and **FileMaker: Sync FM Web Project Metadata** copy layout, field and script metadata into `.fmweb/metadata`.
 3. **FileMaker: Open FM Web Layout Mode** opens the designer. Layouts are saved in `.fmweb/layouts`.
 4. **FileMaker: Generate FM Web Next.js App** and **FileMaker: Generate FM Web Layout Page** write the app to `.fmweb/generated`.
-5. **FileMaker: Start FM Web Preview Server** starts a local bridge (bound to `127.0.0.1`) and runs the app.
+5. **FileMaker: Start FM Web Preview Server** starts a local bridge (bound to `127.0.0.1`) and runs the app. **The preview needs the source repository.** The Marketplace extension does not include the preview app template, so in a Marketplace installation this command (and **Generate FM Web Next.js App**) stops with "The FM Web preview is not available in this installation". Layout Mode and metadata sync work everywhere. To use the preview, work from a clone of the repository (see [CONTRIBUTING.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CONTRIBUTING.md)).
 
 Confirmations you will see:
 
 - **Start FM Web Preview Server** shows the folder and asks before it runs `npm install` and `npm run dev` there. The folder's `package.json` can come from a repository, and npm runs the scripts it defines. Only continue if you trust it.
 - **A layout button that runs a script** (a `runScript` behavior) asks before it runs, naming the script, the parameter and the connection, and saying when the project file chose that connection. It also needs the script runner enabled, offline mode off and a policy that allows scripts.
 
-The bridge accepts requests only from your own computer, every request must carry a session token, and it serves only the active connection. Of your own limits it applies only some:
+The bridge accepts requests only from your own computer, it needs a trusted workspace, every request must carry a session token, and it serves only the active connection. The token is written to a private `.env.local` in the generated app and sent by the generated client; apps you generated earlier get their managed runtime files refreshed to the current template, and an app whose files you edited is left alone with a warning. Record changes and script runs follow your own limits:
 
-- Record changes (edit, create, delete) are refused in offline mode and when the enterprise role or `disabledFeatures` disallow `writeOperations`.
+- Record changes (edit, create, delete) are refused in offline mode, when `filemaker.features.recordEdit.enabled` is off, and when the enterprise role or `disabledFeatures` disallow `writeOperations` or `recordEdit`.
 - Script runs are refused in offline mode, when `filemaker.features.scriptRunner.enabled` is off, and when the enterprise role or `disabledFeatures` disallow `scriptRunner`.
-- It does **not** apply `filemaker.features.recordEdit.enabled`, the batch switch or workspace trust to those calls (the commands that start the preview need a trusted workspace).
-
-**Known problem in this release:** the generated preview app does not send the bridge's session token, so every data call from the preview is refused today with HTTP 403 ("Invalid or missing bridge session token"). Layout Mode and code generation work; the live preview does not show data until this is fixed.
 
 For the layout file format, architecture and bridge security details, see [FM_WEB.md](./FM_WEB.md).
 
@@ -397,10 +407,7 @@ Offline mode keeps you working with what the extension has already learned about
 
 Offline mode does not block finds or opening records: those still call the server, and fail if it is unreachable.
 
-**Turning it off.** Run **FileMaker: Toggle Offline Mode** again. Two cautions, both current behavior:
-
-- The command writes the **workspace** setting, so it needs a folder to be open (with none open it fails).
-- A workspace can only turn offline mode on, never off. If offline mode is on in your **user** settings, the toggle cannot turn it off; change `filemaker.offline.mode` in your user settings instead.
+**Turning it off.** Run **FileMaker: Toggle Offline Mode** again. The command changes your **user** setting and tells you the mode that is really in effect. If a workspace setting (for example `offline.mode: true` written into `.vscode/settings.json` by an older version of this extension) keeps offline mode on, the message says so ("still on because of ...") and the command cannot clear it: edit the workspace setting yourself. A workspace can turn offline mode on but never off.
 
 ---
 
@@ -498,7 +505,7 @@ Names are cleaned: letters, digits, space and `_ - . : ( )`, up to 64 characters
 To let an agent use a connection:
 
 1. In your **user** settings, turn on `filemaker.ai.enabled`. A workspace setting cannot turn it on.
-2. Run **FileMaker: Set AI Access for Connection**, pick the connection, and choose **Read** (or **Write**, see below). A message then reminds you to use a restricted account and offers **Use for AI Tools**, which sets `filemaker.ai.connection`. A repository file cannot choose the connection.
+2. Run **FileMaker: Set AI Access for Connection**, pick the connection, and choose **Read** (or **Write**, see below). A message then reminds you to use a restricted account and offers **Use for AI Tools**, which sets `filemaker.ai.connection`. A profile's AI access is reset to none when you change its server, user, database or API paths, so you set it again after such an edit. A repository file cannot choose the connection.
 3. Open the agent in VS Code. The tools appear in its tool list.
 
 The status bar shows the state: `AI: off`, `AI: off (connection not enabled)`, `AI: read-only`, `AI: writes on` or `AI: scripts on`. The hover text shows records read, write attempts used and the FileMaker account in use.
@@ -509,7 +516,7 @@ These are the controls the extension applies. They are the reasons it is safe to
 
 - **Read-only.** The tools that read are `fm_list_layouts`, `fm_describe_layout`, `fm_list_scripts`, `fm_find_records`, `fm_get_record` and `fm_explain_error`. Write tools are not offered at all until you switch them on.
 - **Writes are opt-in.** `filemaker.ai.allowWrites` adds `fm_edit_record`, `fm_create_record` and `fm_delete_record` (one record per call), and the connection must be set to **Write**. `filemaker.ai.allowScripts` adds `fm_run_script`, which also needs the connection's access to be **Write** and is limited to the scripts you list in `filemaker.ai.scriptAllowlist`, for example `{"<profile id>": ["Export Report"]}`. These settings are read from your user settings only.
-- **Every write is confirmed by you.** Each change opens a dialog built by the extension from a fresh read of the record. VS Code cannot set it to "always allow". It shows the connection, layout, record, every field with the old and new value, and the AI's own description, labelled as the AI's. Deleting asks you to type the record ID. A record changed in the meantime is not overwritten. A write is limited to 10 fields and 300 characters per value so that the dialog can show all of it; a larger write is refused. <!-- #381 lowers the per-value limit from 300 to 200 characters and adds a 4,000-character dialog limit: update when it merges -->
+- **Every write is confirmed by you.** Each change opens a dialog built by the extension from a fresh read of the record. VS Code cannot set it to "always allow". It shows the connection, layout, record, every field with the old and new value, and the AI's own description, labelled as the AI's. Deleting asks you to type the record ID. A record changed in the meantime is not overwritten. A write is limited to 10 fields and 200 characters per value, and the whole dialog text to 4,000 characters (escaped characters take extra room), so that the dialog can show all of it; a larger write is refused.
 - **You approve each layout.** The first read of a layout in a session asks you (at most 20 layouts a session). List layouts you trust in `filemaker.ai.readableLayouts` to skip the question.
 - **Limits.** 50 records per call, 500 records per session, 30 calls a minute, 10 write attempts per session and 3 a minute (a declined attempt counts). Results are capped at 200 KB.
 - **Hidden fields.** `filemaker.ai.hiddenFields` lists field names AI tools never see (case-insensitive, with or without `Table::`). This is by name only. It does not stop disclosure through a calculation, a summary field or a script result.
@@ -528,18 +535,16 @@ Three commands exist for this. They appear in the Command Palette only while AI 
 
 ### Claude Code, Cursor and other MCP clients
 
-<!-- MCP: confirm after #381 merges -->
-The same tools, with the same limits, approvals and dialogs, are available to MCP clients that run outside VS Code. This is off by default and works only in local VS Code windows, not in Dev Containers, Codespaces, SSH or WSL windows.
+The same tools, with the same limits, approvals and dialogs, are available to MCP clients that run outside VS Code. This is off by default and works only in local VS Code windows, not in Dev Containers, Codespaces, SSH or WSL windows (the server will not start there).
 
 1. Set up AI access as above (turn on `filemaker.ai.enabled`, set a connection).
-2. In the window you want to use, run **FileMaker: Start/Stop AI Server for External Tools**. If `filemaker.ai.externalServer.enabled` is off, the command asks first (**Turn On and Start**) and turns it on in your user settings. The status bar then shows `MCP`.
-3. Run **FileMaker: Copy MCP Config for Claude Code / Cursor** and paste the result into Claude Code's `.mcp.json` (or use `claude mcp add-json filemaker '<the filemaker entry>'`) or into Cursor's `mcp.json`. The config points at a copy of the client program in the extension's storage that is refreshed whenever the server starts, so it keeps working after extension updates.
-4. The client starts a small program (`node .../aiMcpShim.js`) that connects to your VS Code window. **Node.js 18 or newer must be on the PATH of the client.**
+2. In the window you want to use, run **FileMaker: Start/Stop AI Server for External Tools**. The command always asks in a dialog first; the dialog says the server will start automatically each time you open this workspace. If `filemaker.ai.externalServer.enabled` is off, the same dialog turns it on in your user settings. Nothing can start the server, or make it start automatically, without that dialog. The status bar then shows `MCP`.
+3. Run **FileMaker: Copy MCP Config for Claude Code / Cursor** and paste the result into Claude Code's `.mcp.json` (or use `claude mcp add-json filemaker '<the filemaker entry>'`) or into Cursor's `mcp.json`. The config points at a copy of the client program (`aiMcpShim.js`) kept in the extension's storage, in a folder only you can use, so it keeps working after extension updates. If the copy could not be made, the message says so and you copy the config again after an update.
+4. The client starts that small program with `node`, and it connects to your VS Code window. **Node.js 18 or newer must be on the PATH of the client**; without it the config cannot run.
 
-**The setting is a permission, not a switch.** `filemaker.ai.externalServer.enabled` (user settings only) only allows the server; it never starts it. A window runs the server only after you run **Start/Stop AI Server for External Tools** in that window. VS Code remembers that for that workspace and starts the server again each time you open it, while the setting is on, until you run the same command there to stop it. Stopping clears that memory and keeps it stopped, also after a restart. Turning the setting off stops the server everywhere and clears the memory. A window you never started it in never runs it.
+**The setting is a permission, not a switch.** `filemaker.ai.externalServer.enabled` (user settings only) only allows the server; it never starts it. A window runs the server only after you ran **Start/Stop AI Server for External Tools** in that window and confirmed. VS Code remembers that for that workspace and starts the server again each time you open it, while the setting is on, until you run the same command there to stop it. Stopping persists, also after a restart. Turning the setting off stops the server in every window where it runs and ends the automatic start for every workspace, including closed ones; turning the setting on again does not bring them back, and you start the server there again by running the command. A window you never started it in never runs it.
 
-Notes: with several VS Code windows running the server, the config names the folder and the program refuses to guess. Only programs running as you can connect, and each needs a secret token kept in a file only you can read; a stale file from a closed window is never used. You get a notification when a program connects (at most one every 30 seconds), and the status bar shows the number of connections. The name an MCP client gives itself appears only in **Show AI Activity**, never in a dialog. Layout approvals and write dialogs still appear in VS Code, and if the client cancels or disconnects while a dialog is open, nothing is sent whatever you answer. Everything the tools return is sent to the provider behind your MCP client, which is often a different provider from the one VS Code uses.
-<!-- end MCP -->
+How it is protected: a socket in a folder only you can use (on Windows an unguessable named pipe), the folder name includes a hash of the product's storage path so VS Code, Insiders and Cursor do not share one; a secret per-session token in a file only you can read; the program checks that the window that wrote the file is still the same process before it sends the token. With several windows running the server, the config names the folder and the program refuses to guess. You get a notification when a program connects (at most one every 30 seconds), and the status bar shows the number of connections. The name an MCP client gives itself appears only in **Show AI Activity**, never in a dialog. Layout approvals and write dialogs still appear in VS Code, and if the client cancels or disconnects while a dialog is open, nothing is sent whatever you answer. Everything the tools return is sent to the provider behind your MCP client, which is often a different provider from the one VS Code uses.
 
 ---
 
@@ -566,7 +571,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 | `filemaker.connectionWizard.requireTestBeforeSave` | `"warn"` | User or workspace | `off`, `warn` or `block`: whether saving a profile needs a successful Test Connection. |
 | `filemaker.session.maxAgeMinutes` | `14` | User or workspace | Treat a session token as expired this many minutes after it was issued. |
 | `filemaker.session.refreshLeadSeconds` | `30` | User or workspace | Renew the token this many seconds before it expires. 0 turns early renewal off. |
-| `filemaker.secrets.fallback` | `"vscode-only"` | User or workspace | What to do when VS Code SecretStorage is unavailable: `vscode-only` (error), `workspace-state` (obfuscated fallback, not protection against anyone with local access to VS Code state), `disabled` (do not store secrets; development only). |
+| `filemaker.secrets.fallback` | `"vscode-only"` | User only | What to do when VS Code SecretStorage is unavailable: `vscode-only` (error), `workspace-state` (obfuscated copy keyed from the machine id; not protection against anyone with local access to VS Code state), `disabled` (do not store secrets; development only). |
 
 **Queries and History**
 
@@ -580,14 +585,15 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.features.scriptRunner.enabled` | `true` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | Turns the Script Runner off when false. |
+| `filemaker.features.scriptRunner.enabled` | `true` | User or workspace (T) (R) | Turns the Script Runner off when false. |
 | `filemaker.scripts.parameterBuilder.enabled` | `true` | User or workspace | Shows the JSON parameter builder in the Script Runner. |
-| `filemaker.batch.maxRecords` | `10000` | User or workspace; ignored in an untrusted workspace | Most records a batch export fetches. |
-| `filemaker.batch.concurrency` | `4` | User or workspace; ignored in an untrusted workspace | Requests sent at a time by a batch update (1 to 10). |
-| `filemaker.batch.dryRunDefault` | `true` | User or workspace; ignored in an untrusted workspace | Default mode shown for batch updates. |
-| `filemaker.features.recordEdit.enabled` | `true` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | Turns the Record Editor write-back and container upload off when false. |
+| `filemaker.export.neutralizeFormulas` | `true` | User only | Put an apostrophe in front of CSV cells and Copy results as table cells that start with `=`, `+`, `-`, `@`, tab or carriage return. Turn off only if you need the raw text. |
+| `filemaker.batch.maxRecords` | `10000` | User or workspace (T) | Most records a batch export fetches. |
+| `filemaker.batch.concurrency` | `4` | User or workspace (T) | Requests sent at a time by a batch update (1 to 10). |
+| `filemaker.batch.dryRunDefault` | `true` | User or workspace (T) | Default mode shown for batch updates. |
+| `filemaker.features.recordEdit.enabled` | `true` | User or workspace (T) (R) | Turns the Record Editor write-back and container upload off when false. |
 | `filemaker.containerUploadMaxBytes` | `104857600` | User or workspace | Largest file Upload to Container accepts, in bytes (default 100 MB). |
-| `filemaker.features.batch.enabled` | `true` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | Turns batch export and update off when false. |
+| `filemaker.features.batch.enabled` | `true` | User or workspace (T) (R) | Turns batch export and update off when false. |
 | `filemaker.performance.mode` | `"standard"` | User or workspace | `standard` or `high-scale`. High-scale writes batch exports as JSONL. |
 
 **Schema**
@@ -605,7 +611,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.typegen.outputDir` | `"filemaker-types"` | User or workspace | Workspace folder for generated types (a relative path inside the workspace). |
+| `filemaker.typegen.outputDir` | `"filemaker-types"` | User or workspace (T) | Workspace folder for generated types (a relative path inside the workspace). |
 
 **FM Web Projects**
 
@@ -619,15 +625,15 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.offline.mode` | `false` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | Use cached metadata and block writes. |
+| `filemaker.offline.mode` | `false` | User or workspace (T) (R) | Use cached metadata and block writes. |
 | `filemaker.offline.staleCacheWarnHours` | `24` | User or workspace | Warn when the offline cache is older than this many hours. 0 turns the warning off. |
 
 **Enterprise**
 
 | Setting | Default | Where | What it does |
 | --- | --- | --- | --- |
-| `filemaker.enterprise.mode` | `false` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | Turns on role-based limits. |
-| `filemaker.enterprise.role` | `"developer"` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | `viewer`, `developer` or `admin`. |
+| `filemaker.enterprise.mode` | `false` | User or workspace (T) (R) | Turns on role-based limits. |
+| `filemaker.enterprise.role` | `"developer"` | User or workspace (T) (R) | `viewer`, `developer` or `admin`. |
 
 **Advanced**
 
@@ -652,17 +658,18 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 | `filemaker.ai.readableLayouts` | `{}` | User only | Layouts AI tools may read without asking, by profile id. |
 | `filemaker.ai.hiddenFields` | `[]` | User or workspace | Field names AI tools never see. A workspace can add names, not remove yours. |
 | `filemaker.ai.connection` | `""` | User only | Profile id AI tools use. Set it with Set AI Access for Connection. |
-| `filemaker.features.ai.enabled` | `true` | User or workspace; ignored in an untrusted workspace; a workspace can only make it stricter | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
+| `filemaker.features.ai.enabled` | `true` | User or workspace (T) (R) | A workspace or enterprise switch that can turn AI tools off. It cannot turn them on. |
+| `filemaker.ai.externalServer.enabled` | `false` | User only | Permission for MCP clients (Claude Code, Cursor) to use the AI tools through a local server. It never starts the server; you start it in a window with Start/Stop AI Server for External Tools. |
 
 Old names: `filemakerDataApiTools.logLevel`, `.requestTimeoutMs`, `.defaultApiBasePath` and `.defaultApiVersionPath` still work but are replaced by `filemaker.logging.level`, `filemaker.requestTimeoutMs`, `filemaker.defaultApiBasePath` and `filemaker.defaultApiVersionPath`. A more specific value wins whichever name it uses. The extension offers a one-click migration.
 
-<!-- MCP: confirm after #381 merges: that PR adds the user-only setting filemaker.ai.externalServer.enabled (default false), a permission that never starts the server by itself -->
 
 ---
 
 ## Security behavior you will notice
 
-- **Workspace trust.** In an untrusted workspace (Restricted Mode, see [above](#trusted-workspace-and-restricted-mode)) you can browse, read metadata and run finds. Deleting records, uploading to containers, batch export and update, writing files (type generation, snippets, snapshots on disk, the AI context copy, FM Web), plugins, the FM Web preview and AI tools need a trusted workspace. Editing and creating records and running scripts from the Script Runner are not blocked by workspace trust today; they are blocked by offline mode, the feature switches and the enterprise role.
+- **Workspace trust.** In an untrusted workspace (Restricted Mode, see [above](#trusted-workspace-and-restricted-mode)) you can browse, read metadata and run finds. Editing, creating and deleting records, uploading to containers, the Script Runner, batch export and update, writing files (type generation, snippets, snapshots on disk, the AI context copy, FM Web), plugins, the FM Web preview and AI tools need a trusted workspace. Trust is checked each time, and an open panel refuses changes if trust is lost. This is not a free pass in a trusted workspace: the prompts below still apply.
+- **Virtual workspaces** (such as github.dev) are not supported: the extension writes files to a folder on disk.
 - **Prompts before risky actions.** You are asked before: saving a record (lists the changed fields), deleting a record, running a batch update, running workspace plugins, starting the FM Web preview (`npm install`, `npm run dev`), running a script from a Layout Mode button, switching AI tools back on, every AI write, and sending credentials to a template-supplied address or a remote `http://` address.
 - **Secrets stay in the keychain.** Passwords, API keys and session tokens are kept in VS Code SecretStorage and never shown in webviews.
 - **Redaction.** Logs, request history, error details and copied snippets hide authorization headers, session tokens (including in request paths), token-like query parameters and JSON keys (anything containing `token`, `secret`, `password`, `session` or `apiKey`), and passwords inside URLs. Copy as curl and Copy as fetch() leave out authorization unless you opt in.
@@ -688,7 +695,7 @@ The most common first-run failure is a **certificate error** (the first row of t
 
 | Problem | What to try |
 | --- | --- |
-| Certificate error ("self-signed certificate", "unable to verify the first certificate") | The server's certificate is not trusted by your computer. Install the certificate authority into the operating system trust store, or start VS Code with the environment variable `NODE_EXTRA_CA_CERTS` pointing to the CA file (this usually works, because the extension runs on Node). The extension has no setting for self-signed certificates. |
+| Certificate error ("self-signed certificate", "unable to verify the first certificate") | The server's certificate is not trusted by your computer. Best: in the connection wizard open **Certificates (advanced)** and set **Custom CA certificate file** to the PEM file of the authority that signed it. Only if you cannot, and only on a network you control, tick **Allow self-signed certificate (insecure)**. See [Certificates](#certificates-private-authority-or-self-signed). Installing the authority into your operating system's trust store also works. |
 | "Connection refused", timeout, or no response | Check the server URL, VPN and firewall. The Data API must be enabled on the server. Raise `filemaker.requestTimeoutMs` for a slow server. |
 | Sign-in fails with HTTP 401 or FileMaker error 212 | Wrong user name or password, or the account's privilege set lacks the `fmrest` extended privilege. Edit the profile, type the password again, and test. A missing `fmrest` privilege can look the same as a wrong password. |
 | "Session expired" or error 952 | The Data API token timed out. The extension renews it and retries once on its own. If it keeps happening, disconnect and connect again, and check that nothing else is signing the same account out. |
@@ -709,6 +716,8 @@ The most common first-run failure is a **certificate error** (the first row of t
 | CSV cells start with an apostrophe | See [apostrophes in CSV files](#batch-export-and-batch-update). |
 | `AI: off` in the status bar | AI tools are off by default. See [Using AI with FileMaker](#using-ai-with-filemaker). |
 
+<!-- TODO: link docs/FILEMAKER_FAILURE_MODES.md from this section once it merges (separate PR). -->
+
 ### Reporting a problem
 
 Open an issue at <https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues> and include: the extension and VS Code versions, your operating system, the server type and version, direct or proxy mode, the steps, and the redacted log or the **Show Diagnostics** report. Do not open a public issue for a security problem: see [SECURITY.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md).
@@ -727,7 +736,7 @@ Open an issue at <https://github.com/SureForgeTech/filemaker-data-api-for-vs-cod
 
 **Can I share connections with my team?** Share a [profile template](#profile-templates-for-a-team) (no secrets) and saved queries (export and import). Everyone enters their own password.
 
-**Why can't I turn offline mode off?** If it is on in your user settings, a workspace toggle cannot override it. Check your user settings. See [Offline mode](#offline-mode).
+**Why can't I turn offline mode off?** A workspace setting (for example `offline.mode: true` in `.vscode/settings.json`) can keep it on, and the toggle cannot clear that. The message names the cause. See [Offline mode](#offline-mode).
 
 **Why is the Command Palette missing some commands?** Many appear only with a profile; enterprise and power-user commands need those modes. See [The FileMaker sidebar](#the-filemaker-sidebar).
 

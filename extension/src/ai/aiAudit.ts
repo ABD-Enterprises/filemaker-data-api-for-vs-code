@@ -18,6 +18,8 @@ export interface AuditEntry {
   confirmed: boolean | null;
   /** Short note; model-supplied text is escaped and cut. */
   note?: string;
+  /** The caller's own, unverified name for itself (for example from an MCP initialize). Logged, never trusted. */
+  client?: string;
 }
 
 /**
@@ -32,6 +34,7 @@ export function formatAuditLine(entry: AuditEntry, at: Date): string {
     at: at.toISOString(),
     tool: entry.tool,
     connection: safe(entry.connection, 80),
+    client: safe(entry.client, 64),
     layout: safe(entry.layout, 80),
     recordIds: entry.recordIds?.slice(0, 50).map((id) => displayText(id, 20)),
     outcome: entry.outcome,
@@ -58,13 +61,26 @@ function isWriteLine(line: string): boolean {
  * operation goes through one promise queue, so two calls can neither interleave an append
  * with a trim nor race on the temporary file.
  */
+export interface AuditIo {
+  mkdir: typeof mkdir;
+  appendFile: typeof appendFile;
+  stat: typeof stat;
+  readFile: typeof readFile;
+  writeFile: typeof writeFile;
+  rename: typeof rename;
+}
+
+const REAL_IO: AuditIo = { mkdir, appendFile, stat, readFile, writeFile, rename };
+
 export class AuditLog {
   private queue: Promise<void> = Promise.resolve();
 
   public constructor(
     private readonly pathSource: string | (() => string),
     private readonly now: () => Date = () => new Date(),
-    private readonly maxBytes = AUDIT_MAX_BYTES
+    private readonly maxBytes = AUDIT_MAX_BYTES,
+    /** For tests: lets them slow or watch file operations. */
+    private readonly io: AuditIo = REAL_IO
   ) {}
 
   private get filePath(): string {
@@ -75,8 +91,8 @@ export class AuditLog {
     const line = `${formatAuditLine(entry, this.now())}\n`;
     const task = this.queue.then(async () => {
       try {
-        await mkdir(dirname(this.filePath), { recursive: true });
-        await appendFile(this.filePath, line, { encoding: 'utf8', mode: 0o600 });
+        await this.io.mkdir(dirname(this.filePath), { recursive: true });
+        await this.io.appendFile(this.filePath, line, { encoding: 'utf8', mode: 0o600 });
         await this.trim();
       } catch {
         // A full disk or a read-only folder must not turn a tool call into a failure.
@@ -89,7 +105,7 @@ export class AuditLog {
   public async read(): Promise<string> {
     await this.queue;
     try {
-      return await readFile(this.filePath, 'utf8');
+      return await this.io.readFile(this.filePath, 'utf8');
     } catch {
       return '';
     }
@@ -101,12 +117,12 @@ export class AuditLog {
    * lines alone are still too many, the oldest of those go too.
    */
   private async trim(): Promise<void> {
-    const { size } = await stat(this.filePath);
+    const { size } = await this.io.stat(this.filePath);
     if (size <= this.maxBytes) {
       return;
     }
 
-    const lines = (await readFile(this.filePath, 'utf8')).split('\n').filter((line) => line.length > 0);
+    const lines = (await this.io.readFile(this.filePath, 'utf8')).split('\n').filter((line) => line.length > 0);
     const target = this.maxBytes / 2;
     const bytes = (list: string[]): number => list.reduce((total, line) => total + Buffer.byteLength(line, 'utf8') + 1, 0);
     const keep = lines.map(() => true);
@@ -122,7 +138,7 @@ export class AuditLog {
     }
 
     const temporary = `${this.filePath}.tmp`;
-    await writeFile(temporary, `${lines.filter((_line, index) => keep[index]).join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
-    await rename(temporary, this.filePath);
+    await this.io.writeFile(temporary, `${lines.filter((_line, index) => keep[index]).join('\n')}\n`, { encoding: 'utf8', mode: 0o600 });
+    await this.io.rename(temporary, this.filePath);
   }
 }

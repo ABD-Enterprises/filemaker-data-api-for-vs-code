@@ -9,7 +9,7 @@ import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
-import { isOfflineModeOn } from '../../utils/policySetting';
+import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
 
 interface RecordEditorOpenOptions {
   profileId?: string;
@@ -29,6 +29,19 @@ interface DraftPayload extends LoadRecordPayload {
   draftFieldData: Record<string, unknown>;
 }
 
+const UNTRUSTED_EDITOR_MESSAGE =
+  'The record editor is disabled in untrusted workspaces. Trust the workspace to edit or create records.';
+
+interface CreateRecordPayload {
+  profileId: string;
+  layout: string;
+  fieldData: Record<string, unknown>;
+}
+
+const MAX_CREATE_FIELDS = 500;
+const RECORD_EDIT_DISABLED_MESSAGE =
+  'Record editing is disabled by the setting filemaker.features.recordEdit.enabled.';
+
 type IncomingMessage =
   | { type: 'ready' }
   | { type: 'loadLayouts'; profileId: string }
@@ -36,7 +49,8 @@ type IncomingMessage =
   | { type: 'validateDraft'; payload: DraftPayload }
   | { type: 'previewPatch'; payload: DraftPayload }
   | { type: 'saveRecord'; payload: DraftPayload }
-  | { type: 'createRecord'; payload: { profileId: string; layout: string; fieldData: Record<string, unknown> } }
+  | { type: 'createRecord'; payload: CreateRecordPayload }
+  | { type: 'loadLayoutFields'; payload: { profileId: string; layout: string } }
   | { type: 'exportRecord' };
 
 export class RecordEditorPanel {
@@ -77,6 +91,11 @@ export class RecordEditorPanel {
     logger: Logger,
     defaults?: RecordEditorOpenOptions
   ): void {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showWarningMessage(UNTRUSTED_EDITOR_MESSAGE);
+      return;
+    }
+
     const column = vscode.ViewColumn.One;
 
     if (RecordEditorPanel.currentPanel) {
@@ -122,6 +141,22 @@ export class RecordEditorPanel {
       return;
     }
 
+    // Defence in depth: the commands refuse in an untrusted workspace, and so does every
+    // message that reads or changes data, in case a panel outlives a change of trust.
+    if (!vscode.workspace.isTrusted && incoming.type !== 'ready') {
+      await this.postError(UNTRUSTED_EDITOR_MESSAGE);
+      return;
+    }
+
+    // A user's own switch-off of record editing also applies to a panel that is already open.
+    if (
+      (incoming.type === 'saveRecord' || incoming.type === 'createRecord') &&
+      !isFeatureEnabled(vscode.workspace.getConfiguration('filemaker'), 'features.recordEdit.enabled')
+    ) {
+      await this.postError(RECORD_EDIT_DISABLED_MESSAGE);
+      return;
+    }
+
     switch (incoming.type) {
       case 'ready':
         await this.sendInit();
@@ -146,6 +181,9 @@ export class RecordEditorPanel {
         break;
       case 'exportRecord':
         await this.exportCurrentRecord();
+        break;
+      case 'loadLayoutFields':
+        await this.loadLayoutFields(incoming.payload);
         break;
       default:
         break;
@@ -414,13 +452,41 @@ export class RecordEditorPanel {
     });
   }
 
-  private async handleCreateRecord(payload: {
-    profileId: string;
-    layout: string;
-    fieldData: Record<string, unknown>;
-  }): Promise<void> {
+  /** Create mode: the layout's fields, so the form can list them (no record is loaded). */
+  private async loadLayoutFields(payload: { profileId: string; layout: string }): Promise<void> {
+    const profile = await this.profileStore.getProfile(payload.profileId);
+    if (!profile) {
+      await this.postError('Selected profile was not found.');
+      return;
+    }
+
+    try {
+      const schema = await this.schemaService.getFields(profile, payload.layout);
+      if (schema.supported) {
+        this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
+      }
+      await this.panel.webview.postMessage({
+        type: 'layoutFields',
+        payload: {
+          profileId: payload.profileId,
+          layout: payload.layout,
+          fields: schema.fields.map((field) => ({ name: field.name, type: field.type, result: field.result })),
+          metadataSupported: schema.supported,
+          message: schema.message
+        }
+      });
+    } catch (error) {
+      await this.postError(formatError(error));
+    }
+  }
+
+  private async handleCreateRecord(payload: CreateRecordPayload): Promise<void> {
     if (isOfflineModeOn(vscode.workspace.getConfiguration('filemaker'))) {
       await this.postError('Offline mode is enabled; record writes are disabled.');
+      return;
+    }
+    if (this.saving) {
+      await this.postError('A save is already in progress.');
       return;
     }
 
@@ -433,15 +499,34 @@ export class RecordEditorPanel {
     const nonEmptyFields = Object.fromEntries(
       Object.entries(payload.fieldData).filter(([, v]) => v !== '' && v !== undefined && v !== null)
     );
-
-    if (Object.keys(nonEmptyFields).length === 0) {
+    const names = Object.keys(nonEmptyFields);
+    if (names.length === 0) {
       await this.postError('At least one field must have a value to create a record.');
       return;
     }
 
+    // Names must be fields of the layout when its fields are known: the page cannot add
+    // others, and `recordId`/`modId` are never fields to send.
+    const known = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout));
+    if (known) {
+      const allowed = new Set(known.map((field) => field.name));
+      const unknown = names.filter((name) => !allowed.has(name));
+      if (unknown.length > 0) {
+        await this.postError(`These are not fields on layout "${payload.layout}": ${unknown.join(', ')}.`);
+        return;
+      }
+    }
+
+    const validation = this.recordEditService.validateDraft(nonEmptyFields, known);
+    if (!validation.valid) {
+      await this.postError(validation.errors.map((item) => `${item.field}: ${item.message}`).join(' | '));
+      return;
+    }
+
+    const shown = names.slice(0, 10).join(', ') + (names.length > 10 ? `, and ${names.length - 10} more` : '');
     const confirmation = await vscode.window.showWarningMessage(
-      `Create a new record in layout "${payload.layout}" with ${Object.keys(nonEmptyFields).length} field(s)?`,
-      { modal: true },
+      `Create a new record in layout "${payload.layout}" on "${profile.name}" with ${names.length} field(s)?`,
+      { modal: true, detail: `Fields: ${shown}` },
       'Create'
     );
 
@@ -450,17 +535,20 @@ export class RecordEditorPanel {
       return;
     }
 
+    this.saving = true;
     try {
       const result = await this.fmClient.createRecord(profile, payload.layout, nonEmptyFields);
 
-      vscode.window.showInformationMessage(`Record created (ID: ${result.recordId}).`);
+      void vscode.window.showInformationMessage(`Record created (ID: ${result.recordId}).`);
 
       await this.panel.webview.postMessage({
         type: 'recordCreated',
-        payload: { recordId: result.recordId, modId: result.modId }
+        payload: { recordId: result.recordId, modId: result.modId, layout: payload.layout }
       });
     } catch (error) {
       await this.postError(formatError(error));
+    } finally {
+      this.saving = false;
     }
   }
 
@@ -528,7 +616,7 @@ export class RecordEditorPanel {
         <label for="layoutSelect">Layout</label>
         <select id="layoutSelect"></select>
       </div>
-      <div class="row">
+      <div class="row" id="recordIdRow">
         <label for="recordIdInput">Record ID</label>
         <input id="recordIdInput" type="text" placeholder="1" />
       </div>
@@ -537,6 +625,7 @@ export class RecordEditorPanel {
         <button id="validateButton">Validate</button>
         <button id="previewButton">Preview Update JSON</button>
         <button id="saveButton">Save</button>
+        <button id="createButton" class="hidden">Create Record</button>
         <button id="discardButton">Discard Changes</button>
         <button id="exportButton">Export Record JSON</button>
       </div>
@@ -590,7 +679,32 @@ function parseIncomingMessage(raw: unknown): IncomingMessage | undefined {
     return { type };
   }
 
-  if (type === 'loadRecord' || type === 'validateDraft' || type === 'previewPatch' || type === 'saveRecord' || type === 'createRecord') {
+  if (type === 'loadLayoutFields' || type === 'createRecord') {
+    const body = toRecord(value.payload);
+    const bodyProfileId = body ? getStringField(body, 'profileId') : undefined;
+    const bodyLayout = body ? getStringField(body, 'layout') : undefined;
+    if (!body || !bodyProfileId || !bodyLayout) {
+      return undefined;
+    }
+    if (type === 'loadLayoutFields') {
+      return { type, payload: { profileId: bodyProfileId, layout: bodyLayout } };
+    }
+    const fieldData = body.fieldData;
+    if (
+      !fieldData ||
+      typeof fieldData !== 'object' ||
+      Array.isArray(fieldData) ||
+      Object.keys(fieldData).length > MAX_CREATE_FIELDS
+    ) {
+      return undefined;
+    }
+    return {
+      type,
+      payload: { profileId: bodyProfileId, layout: bodyLayout, fieldData: fieldData as Record<string, unknown> }
+    };
+  }
+
+  if (type === 'loadRecord' || type === 'validateDraft' || type === 'previewPatch' || type === 'saveRecord') {
     const payload = parseDraftPayload(value.payload, type === 'loadRecord');
     if (!payload) {
       return undefined;

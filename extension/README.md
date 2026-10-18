@@ -2,13 +2,13 @@
 
 Work with a FileMaker database from VS Code: connect to a server, inspect layouts, run finds, edit records, compare schema snapshots, export large result sets, generate TypeScript types, and review diagnostics without leaving the editor.
 
-**Built by [ABD Enterprises](https://abdenterprises.com?ref=vscode).** Free, open source (MIT), no telemetry, no cloud account.
+**Built by [ABD Enterprises](https://abdenterprises.com).** Free, open source (MIT), no telemetry, no cloud account.
 
 ## What it does
 
 - **Connect** directly to the FileMaker Data API or through your own proxy. Passwords stay in your operating system keychain.
 - **Find** with a visual query builder or raw JSON, and page, sort and export the results.
-- **Edit** records (create, update, delete, container upload). If someone else changed a record, your save is refused instead of overwriting theirs.
+- **Edit** records (create, update, delete, container upload), in a trusted workspace. If someone else changed a record, your save is refused instead of overwriting theirs.
 - **Run scripts** with parameters and see the result.
 - **Track schema**: capture snapshots, diff them, compare environments, and generate TypeScript types, a typed client and editor snippets.
 - **Batch**: export to JSONL or CSV, or update many records from a CSV or JSON file, with a dry run first.
@@ -33,7 +33,8 @@ Capture schema snapshots, review drift between environments, and run batch expor
 
 - FileMaker Server (or FileMaker Cloud) with the **Data API** enabled, reachable over HTTPS.
 - A FileMaker account whose privilege set has the **`fmrest`** extended privilege.
-- VS Code 1.96 or newer.
+- A server certificate your computer trusts. For a private authority or a self-signed certificate, the connection wizard has a **Certificates (advanced)** section.
+- VS Code 1.96 or newer on the desktop with a folder open (virtual workspaces such as github.dev are not supported).
 
 See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for tested server versions.
 
@@ -59,14 +60,28 @@ Off by default. Turn on `filemaker.ai.enabled` in your **user** settings (a work
 
 What protects you, and what does not:
 
-- **Read-only first.** Write and script tools are not offered until you switch them on, and the connection must be set to AI access "read" or "write". The status bar shows the state.
-- **You approve.** The first read of each layout asks once per session (at most 20 layouts a session). Every write asks in a dialog that VS Code cannot set to "always allow". The dialog shows every field name and every new value in full, so a write is limited to 10 fields and 300 characters per value; anything larger is refused. A long old value is shown cut, with the number of characters left out. Delete asks you to type the record id. A record changed in the meantime is not overwritten, and if you switch AI off while a dialog is open, nothing is sent.
-- **Limits.** 50 records per call and 500 per session, 30 calls per minute, 10 write attempts per session and 3 per minute (a declined attempt counts). Switching the kill switch off and on does not reset these; **FileMaker: Start New AI Session** does, after asking you. The status bar item is the kill switch. **FileMaker: Show AI Activity** lists what was done (no field values).
+- **Read-only first.** Write and script tools are not offered until you switch them on. A connection has to be set to AI access "read" or "write" first. The status bar shows the effective state for the chosen connection.
+- **You approve.** The first read of each layout asks once per session (at most 20 layouts a session). Every write asks in a dialog that VS Code cannot set to "always allow". A write is limited to 10 fields and 200 characters per value so the dialog can show every field name and every new value in full; anything larger is refused. A long old value is shown cut, with the number of characters left out. Delete asks you to type the record id. A record changed in the meantime is not overwritten, and if you switch AI off while a dialog is open, nothing is sent. A call whose values already match the record writes nothing and asks nothing; it still counts one record against the read quota.
+- **Limits.** 50 records per call and 500 per session (reserved before the request is sent, so parallel calls cannot exceed it), 30 calls per minute, 10 write attempts per session and 3 per minute (a declined attempt counts). Switching the kill switch off and on does not reset these; **FileMaker: Start New AI Session** does, after asking you. The status bar item shows the state; one click switches everything off, and switching back on asks you. **FileMaker: Show AI Activity** lists what was done (no field values).
 - **Use a restricted FileMaker account.** FileMaker privilege sets are the only control that does not depend on the AI model or on you. Connect with a dedicated account with a read-only privilege set.
 - **Data goes to the model provider.** Anything a tool returns is sent to the AI model you chose, and can leave through any shell, web or git tool the same agent has. Field values and field names are text from your database; a hostile value or name can try to steer the agent. Container fields, container streaming URLs and the server address are left out of results; other text in a value is passed on.
 - **Hidden fields are best effort.** `filemaker.ai.hiddenFields` hides fields by name (repetitions such as `Salary(2)` included). It does not stop disclosure through a calculation, a summary field or a script.
 - **Keep policy in user settings.** A workspace file can be edited by an agent that has file-editing tools. Put `filemaker.ai.hiddenFields` and enterprise settings such as `filemaker.features.ai.enabled` in your **user** settings (or in an enterprise-managed location), not only in `.vscode/settings.json` or `.vscode/filemaker.config.json`. The `filemaker.ai.*` settings that widen access already ignore workspace values.
 - **Tool names.** The tools are called `fm_list_layouts`, `fm_find_records` and so on. VS Code tool names share one namespace across extensions; the prefix `fm_` makes a clash unlikely.
+
+### Claude Code, Cursor and other MCP clients
+
+The same tools, with the same limits, approvals and dialogs, are available to MCP clients that run outside VS Code. This is off by default and works in local windows only (not Dev Containers, Codespaces, SSH or WSL windows).
+
+1. Turn on `filemaker.ai.enabled` and set up a connection as above, then run **FileMaker: Start/Stop AI Server for External Tools** in the window you want to use. The command always asks in a dialog first (it says the server will start automatically each time you open this workspace); if `filemaker.ai.externalServer.enabled` is off, the same dialog turns it on in your user settings. Nothing can start the server, or make it start automatically, without that dialog. The status bar then shows "MCP".
+2. Run **FileMaker: Copy MCP Config for Claude Code / Cursor** and paste the result into Claude Code's `.mcp.json` (or run `claude mcp add-json filemaker '<the filemaker entry>'`) or into Cursor's `mcp.json`. The config points at a copy of the shim in the extension's storage that is refreshed whenever the server starts, so it keeps working after extension updates. If the copy could not be made, the message says so and you copy the config again after an update.
+3. The client starts a small program (`node .../aiMcpShim.js`) that connects to this window. **Node.js 18 or newer must be on the PATH of the client**; without it the config cannot run.
+
+**The setting is a permission, not a switch.** `filemaker.ai.externalServer.enabled` (user settings only) only allows the server. It does not start it anywhere. The server runs in a window only after you run **Start/Stop AI Server for External Tools** in that window. VS Code then remembers that for that workspace: the server starts again each time you open it, as long as the setting is on, until you run the same command there to stop it. Stopping clears that memory and keeps it stopped, also after a restart. Turning the setting off stops the server in every window where it runs and ends the automatic start for every workspace, including workspaces that are closed at that moment: turning the setting back on does not bring them back, and you start the server there again by running the command. (If you change the setting in a file while no VS Code window is open, the end of the automatic start is noticed the next time a window opens with the setting off.) A window you never started it in never runs it.
+
+Notes: with several VS Code windows running the server, the config names the folder (`--workspace`), and the shim refuses to guess if it matches none or several. Only programs running as you can connect (each VS Code-based product, such as VS Code, Insiders or Cursor, has its own socket folder, so one never touches another's), and each needs the secret token that is kept in a file only you can read; a file from a closed window is never used, and a window whose process cannot be verified is reported and left alone. You get a notification when a program connects, and the status bar shows the number of connections. The name an MCP client gives itself is shown only in **Show AI Activity**, never in a dialog. **Everything the tools return is sent to the AI model provider behind your MCP client**, which is often a different provider from the one VS Code uses; the layout approvals and write dialogs still appear in VS Code.
+
+See `docs/DATA_HANDLING.md` and ADR-0004 for the full list.
 
 Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/USER_GUIDE.md#using-ai-with-filemaker) and [Data handling](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/DATA_HANDLING.md).
 
@@ -93,7 +108,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 
 - Passwords, API keys and session tokens live in VS Code SecretStorage (your OS keychain), not in settings or logs.
 - Logs, history and error details hide authorization headers, tokens and passwords.
-- Deleting records, uploading, batch jobs, writing generated files and plugins need a trusted workspace. A repository can make the extension's policy stricter but never looser.
+- Editing, creating and deleting records, uploading, the Script Runner, batch jobs, writing generated files and plugins need a trusted workspace. Virtual workspaces (such as github.dev) are not supported. A repository can make the extension's policy stricter but never looser.
 - The extension collects no telemetry. It talks only to your FileMaker server or your proxy.
 
 Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/security.md), the [data handling notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/DATA_HANDLING.md), and the [security policy](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md) for how to report a vulnerability.
@@ -108,8 +123,24 @@ Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api
 
 ## Need help with FileMaker integration?
 
-This extension is free and MIT-licensed. [ABD Enterprises](https://abdenterprises.com?ref=vscode) has delivered FileMaker integration, migration and modernization work since 2005. Contact: [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension).
+This extension is free and MIT-licensed. The team behind it, [ABD Enterprises](https://abdenterprises.com), has been delivering FileMaker integration, migration, and modernization work since 2005.
+
+If you need a hand with the work behind the tool:
+
+| Engagement | Price | What you get |
+| --- | --- | --- |
+| **Discovery Sprint** | $3,000 / 1 week | Documented requirements + effort estimate |
+| **Integration Audit** | $4,500 / 1 week | Architecture review, gap analysis, prioritized remediation |
+| **Migration Assessment** | $9,000 / 2 weeks | Honest evaluation: modernize within FileMaker, or move on |
+| **Platform Modernization** | $25k – $150k | Execute the chosen path in measured phases |
+| **Retainer** | $5,000 / month | Ongoing maintenance, feature work, FM Server administration |
+
+**Contact:** [registrar@abdenterprises.com](mailto:registrar@abdenterprises.com?subject=From%20VS%20Code%20Extension) · [abdenterprises.com](https://abdenterprises.com)
 
 ## License
 
-MIT
+MIT. The licences of the third-party packages bundled into the extension are in [THIRD_PARTY_NOTICES.txt](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/THIRD_PARTY_NOTICES.txt).
+
+## Trademarks
+
+Claris and FileMaker are trademarks of Claris International Inc., registered in the U.S. and other countries. This extension is independent and is not affiliated with or endorsed by Claris.

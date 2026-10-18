@@ -136,7 +136,15 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.deleteRecord', async (arg: unknown) => {
-      if (!(await roleGuard.assertFeature('writeOperations', 'Delete Record'))) {
+      // Deleting is a record edit as much as saving is: it needs the same switch and policy.
+      if (!settingsService.isRecordEditEnabled()) {
+        vscode.window.showInformationMessage('Record editing is disabled by settings.');
+        return;
+      }
+      if (
+        !(await roleGuard.assertFeature('writeOperations', 'Delete Record')) ||
+        !(await roleGuard.assertFeature('recordEdit', 'Delete Record'))
+      ) {
         return;
       }
       if (!vscode.workspace.isTrusted) {

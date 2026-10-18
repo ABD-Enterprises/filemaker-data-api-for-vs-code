@@ -60,7 +60,19 @@ export function distinctFileName(original: string, sanitized: string, fallback =
   return WINDOWS_RESERVED_NAMES.test(name) ? `_${name}` : name;
 }
 
-/** A snapshot or cache file name taken from an index file in the workspace: a plain `.json` name, no path. */
+/**
+ * A snapshot or cache file name taken from an index file in the workspace: a plain `.json`
+ * name, no path. Dots may appear inside the name (a layout called `Q1..Q2` is stored as
+ * `...__Q1..Q2__....json`), because without a separator a run of dots cannot leave the
+ * folder. What is refused is anything that could: a path separator, a drive letter or
+ * other character outside `A-Za-z0-9_.-`, a segment that is `.` or `..`, and a name with
+ * nothing but dots before `.json`.
+ */
 export function isPlainJsonFileName(value: unknown): value is string {
-  return typeof value === 'string' && /^[A-Za-z0-9_.-]+\.json$/.test(value) && !value.includes('..');
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_.-]+\.json$/.test(value)) {
+    return false;
+  }
+
+  const stem = value.slice(0, -'.json'.length);
+  return !/^\.*$/.test(stem) && value.split(/[\\/]/).every((segment) => segment !== '.' && segment !== '..');
 }

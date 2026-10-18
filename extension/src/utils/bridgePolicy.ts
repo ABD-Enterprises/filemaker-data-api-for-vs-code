@@ -1,4 +1,4 @@
-import type { RoleGuard } from '../enterprise/roleGuard';
+import type { EnterpriseFeatureId, RoleGuard } from '../enterprise/roleGuard';
 import { isFeatureEnabled, isOfflineModeOn, type ConfigurationReader } from './policySetting';
 
 /**
@@ -18,9 +18,21 @@ export function bridgeRouteRefusal(
   if (isScript && !isFeatureEnabled(configuration, 'features.scriptRunner.enabled')) {
     return 'Script running is disabled by the setting filemaker.features.scriptRunner.enabled.';
   }
-  const feature = isScript ? 'scriptRunner' : isWrite ? 'writeOperations' : undefined;
-  const guard = feature ? roleGuard.getFeatureGuard(feature) : undefined;
-  return guard && !guard.allowed
-    ? (guard.reason ?? 'Not allowed by enterprise policy.')
-    : undefined;
+  if (isWrite && !isFeatureEnabled(configuration, 'features.recordEdit.enabled')) {
+    return 'Record editing is disabled by the setting filemaker.features.recordEdit.enabled.';
+  }
+  // Writes need both the general write permission and record editing; scripts need the
+  // script runner. Each is checked against enterprise policy.
+  const features: EnterpriseFeatureId[] = isScript
+    ? ['scriptRunner']
+    : isWrite
+      ? ['writeOperations', 'recordEdit']
+      : [];
+  for (const feature of features) {
+    const guard = roleGuard.getFeatureGuard(feature);
+    if (!guard.allowed) {
+      return guard.reason ?? 'Not allowed by enterprise policy.';
+    }
+  }
+  return undefined;
 }
