@@ -1,6 +1,7 @@
 import { createServer as createHttpServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import net from 'net';
+import type { Duplex } from 'stream';
 
 import axios from 'axios';
 import nock from 'nock';
@@ -65,7 +66,7 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   /** A CONNECT proxy that tunnels everything to `target`, whatever host was asked for. */
   async function startProxy(target: number): Promise<string> {
     const proxy: Server = createHttpServer();
-    const open = new Set<net.Socket>();
+    const open = new Set<Duplex>();
     proxy.on('connect', (_request, socket) => {
       connects.push(String(_request.url));
       open.add(socket);

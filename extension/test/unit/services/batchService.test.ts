@@ -409,14 +409,34 @@ describe('BatchService.batchUpdate failure handling', () => {
     }
   });
 
-  it('stops the whole job once, with the reason, when the account lacks the privilege', async () => {
-    const editRecord = vi.fn().mockRejectedValue(
-      businessError('200', { fmCategory: 'privilege', message: undefined })
-    );
+  it('stops the whole job once, with the reason, when the account lacks the privilege everywhere (error 9)', async () => {
+    const editRecord = vi.fn().mockRejectedValue(businessError('9', { fmCategory: 'privilege' }));
     const result = await run(editRecord, 20);
     expect(editRecord).toHaveBeenCalledTimes(1);
-    expect(result.stoppedReason).toMatch(/\[200\]/);
+    expect(result.stoppedReason).toMatch(/\[9\]/);
     expect(result.notAttempted).toBe(19);
     expect(result.failureCount).toBe(1);
+  });
+
+  it.each(['205', '207', '212'])('also stops for the account-wide error %s', async (code) => {
+    const editRecord = vi.fn().mockRejectedValue(businessError(code, { fmCategory: code === '212' ? 'credentials' : 'privilege' }));
+    const result = await run(editRecord, 6);
+    expect(editRecord).toHaveBeenCalledTimes(1);
+    expect(result.stoppedReason).toBeDefined();
+  });
+
+  it('a record denied by a record-level access rule (200) fails that record only; the rest are updated', async () => {
+    const editRecord = vi.fn(async (_profile: unknown, _layout: unknown, recordId: string) => {
+      if (recordId === '2' || recordId === '4') {
+        throw businessError('200', { fmCategory: 'privilege' });
+      }
+      return { recordId, modId: '2' };
+    });
+    const result = await run(editRecord as never, 6);
+    expect(editRecord).toHaveBeenCalledTimes(6);
+    expect(result.stoppedReason).toBeUndefined();
+    expect(result.successCount).toBe(4);
+    expect(result.failures.map((failure) => failure.recordId).sort()).toEqual(['2', '4']);
+    expect(result.failures[0]?.reason).toMatch(/\[200\]/);
   });
 });

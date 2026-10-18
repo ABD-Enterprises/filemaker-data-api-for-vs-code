@@ -17,6 +17,7 @@ import type {
   JobContext,
   PerformanceMode
 } from '../types/fm';
+import { isCredentialRejection } from '../utils/fileMakerCodes';
 import { createCsvStreamWriter } from '../utils/csvStreamWriter';
 import { restoreFormulaText } from '../utils/exportCsv';
 import { createJsonlWriter } from '../utils/jsonlWriter';
@@ -329,9 +330,24 @@ function isServerTrouble(error: unknown): boolean {
   return error.code === undefined || error.code === '956' || error.code === '1701';
 }
 
+/**
+ * Codes that say the account cannot do this at all (not "this record"): insufficient privileges (9),
+ * no privilege to create records (205), no privilege to change the schema (207). Anything else in
+ * the privilege group, above all 200 "Record access is denied", can come from a record-level access
+ * rule that hides one record and not the next, so it fails that record only.
+ */
+const ACCOUNT_WIDE_CODES = new Set(['9', '205', '207']);
+
 /** The account cannot do this at all: stop instead of failing every remaining record the same way. */
 function stopsTheJob(error: unknown): boolean {
-  return error instanceof FMClientError && (error.fmCategory === 'privilege' || error.fmCategory === 'credentials');
+  if (!(error instanceof FMClientError)) {
+    return false;
+  }
+  return (
+    (error.code !== undefined && ACCOUNT_WIDE_CODES.has(error.code)) ||
+    isCredentialRejection(error.code) ||
+    error.fmCategory === 'credentials'
+  );
 }
 
 export function inferExportFormat(outputPath: string): BatchExportFormat {
