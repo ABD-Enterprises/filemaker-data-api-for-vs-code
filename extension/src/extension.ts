@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import * as vscode from 'vscode';
 
 import { registerBatchCommands } from './commands/batch';
@@ -17,9 +19,9 @@ import { registerSchemaCommands } from './commands/schema';
 import { AuditLog } from './ai/aiAudit';
 import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
 import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from './ai/aiSettings';
-import { AiMcpController } from './ai/mcp/aiMcpController';
+import { AiMcpController, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
 import { AiToolService } from './ai/aiToolService';
-import { registerAiMcpCommands } from './commands/aiMcp';
+import { registerAiMcpCommands, watchExternalServerSetting } from './commands/aiMcp';
 import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/aiTools';
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
@@ -446,6 +448,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       confirm: async (spec) =>
         (await vscode.window.showWarningMessage(spec.message, { modal: true, detail: spec.detail }, spec.confirmLabel)) ===
         spec.confirmLabel,
+      notifyCancelled: () =>
+        void vscode.window.showInformationMessage(
+          'An AI tool request was cancelled. Anything you approve in the dialog that is still open will not be applied.'
+        ),
       input: async (spec) =>
         vscode.window.showInputBox({ title: spec.title, prompt: spec.prompt, ignoreFocusOut: true })
     },
@@ -459,12 +465,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // MCP transport (ADR-0004 phase 3): off unless the user setting is on; it only forwards to aiService.
   const aiMcp = new AiMcpController({
     core: aiService,
-    globalStoragePath: context.globalStorageUri?.fsPath ?? '',
+    globalStoragePath: context.globalStorageUri?.fsPath,
+    extensionShimPath: context.extensionUri ? path.join(context.extensionUri.fsPath, 'dist', 'aiMcpShim.js') : undefined,
     serverInfo: { name: 'filemaker-data-api-tools', version: String(context.extension?.packageJSON?.version ?? '0') },
     isEnabled: () => isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker')),
     remoteName: () => vscode.env.remoteName,
     workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
-    log: (message) => logger.info(message)
+    state: { get: () => context.workspaceState?.get<boolean>(STARTED_HERE_KEY, false) === true, set: (value) => context.workspaceState?.update(STARTED_HERE_KEY, value) },
+    log: (message) => logger.info(message),
+    notify: (message) => void vscode.window.showInformationMessage(message)
   });
   const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore }, aiMcp);
   const refreshAi = (): void => {
@@ -480,10 +489,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       void aiStatusBar.refresh();
     }),
     aiMcp.onDidChange(() => void aiStatusBar.refresh()),
+    watchExternalServerSetting({
+      onDidChangeConfiguration: (listener) => vscode.workspace.onDidChangeConfiguration(listener),
+      controller: aiMcp,
+      log: (message) => logger.warn(message)
+    }),
     ...registerAiMcpCommands({
       controller: aiMcp,
       extensionPath: context.extensionUri?.fsPath ?? '',
-      globalStoragePath: context.globalStorageUri?.fsPath ?? '',
+      globalStoragePath: context.globalStorageUri?.fsPath,
       isEnabled: () => isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker')),
       refresh: () => void aiStatusBar.refresh()
     }),
@@ -497,12 +511,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(refreshAi),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('filemaker.ai.externalServer')) {
-        const wanted = isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker'));
-        if (!wanted && aiMcp.isRunning()) {
-          void aiMcp.stop();
-        }
-      }
       if (
         event.affectsConfiguration('filemaker.ai') ||
         event.affectsConfiguration('filemaker.features.ai') ||
@@ -513,9 +521,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   ];
   refreshAi();
-  if (isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker'))) {
-    aiMcp.start().catch((error: Error) => logger.warn(`AI server for external tools not started: ${error.message}`));
-  }
+  // The setting is only a permission: start only where the user started the server before.
+  void aiMcp.autostart();
 
   const typeGenDisposables = registerTypeGenCommands({
     profileStore,

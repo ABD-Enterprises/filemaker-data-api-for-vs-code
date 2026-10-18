@@ -59,6 +59,7 @@ export interface Harness {
   state: { trusted: boolean; offline: boolean; featureSwitch: boolean; denyFeatures: Set<string>; now: number };
   confirm: ReturnType<typeof vi.fn>;
   input: ReturnType<typeof vi.fn>;
+  notifyCancelled: ReturnType<typeof vi.fn>;
   client: Record<
     'listLayouts' | 'listScripts' | 'getRecord' | 'findRecords' | 'editRecord' | 'createRecord' | 'deleteRecord' | 'runScript',
     ReturnType<typeof vi.fn>
@@ -92,6 +93,7 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
   });
   const input = vi.fn<(spec: { title: string; prompt: string }) => Promise<string | undefined>>(async () => '1');
 
+  const notifyCancelled = vi.fn();
   const client = {
     listLayouts: vi.fn(async () => ['Contacts', 'Orders', 'Odd/Layout']),
     listScripts: vi.fn(async () => ['Archive Old', 'Other Script', 'Bad`Script']),
@@ -138,12 +140,12 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
     getProfile,
     client: client as never,
     schema: schema as never,
-    ui: { confirm, input },
+    ui: { confirm, input, notifyCancelled },
     audit: { record: async (entry) => void audit.push(entry) },
     now: () => state.now
   };
 
-  return { service: new AiToolService(deps), profiles, getProfile, settings, profile, records, audit, confirms, state, confirm, input, client, schema, layoutFields };
+  return { service: new AiToolService(deps), profiles, getProfile, notifyCancelled, settings, profile, records, audit, confirms, state, confirm, input, client, schema, layoutFields };
 }
 
 /** Runs a call that should fail and returns its message. */

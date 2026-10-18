@@ -12,7 +12,9 @@
 import net from 'net';
 
 import { HELLO_ACK, helloLine } from './auth';
-import { scanDiscovery, selectWindow } from './discovery';
+import { assertOwnerOnly, safeText, scanDiscovery, selectWindow } from './discovery';
+import { lstat } from 'fs/promises';
+import { dirname } from 'path';
 
 const CONNECT_TIMEOUT_MS = 5000;
 
@@ -38,17 +40,29 @@ async function main(): Promise<void> {
   try {
     scan = await scanDiscovery(directory);
   } catch (error) {
-    fail(`cannot use the discovery folder: ${(error as Error).message}`);
+    fail(`cannot use the discovery folder: ${safeText((error as Error).message)}`);
   }
   for (const entry of scan.unsafe) {
-    process.stderr.write(`filemaker-ai: ignoring ${entry.file}: ${entry.reason}\n`);
+    process.stderr.write(`filemaker-ai: ignoring ${safeText(entry.file)}: ${safeText(entry.reason)}\n`);
   }
 
-  const selection = selectWindow(scan.live, workspace);
+  const selection = selectWindow(scan.live, workspace, scan.unverified);
   if (!selection.ok) {
     fail(selection.message);
   }
   const { record } = selection.window;
+  if (process.platform !== 'win32') {
+    try {
+      // The socket must be one this extension made, in a folder only this user can use.
+      await assertOwnerOnly(dirname(record.socketPath), 'directory');
+      const stats = await lstat(record.socketPath);
+      if (!stats.isSocket() || (typeof process.getuid === 'function' && stats.uid !== process.getuid())) {
+        throw new Error('it is not a socket owned by the current user.');
+      }
+    } catch (error) {
+      fail(`will not connect: ${safeText((error as Error).message)}`);
+    }
+  }
 
   const socket = net.connect(record.socketPath);
   const timer = setTimeout(() => {

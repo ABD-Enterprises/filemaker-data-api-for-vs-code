@@ -100,6 +100,26 @@ describe('process identity', () => {
     expect(await getProcessStartTime(process.pid)).toBe(first);
   });
 
+  it('reads the same start time whatever time zone or locale the caller has (ps prints local time)', async () => {
+    const saved = { TZ: process.env.TZ, LC_ALL: process.env.LC_ALL, LANG: process.env.LANG };
+    try {
+      const seen = new Set<string | undefined>();
+      for (const [tz, locale] of [['UTC', 'C'], ['Asia/Tokyo', 'ja_JP.UTF-8'], ['America/Los_Angeles', 'de_DE.UTF-8'], ['Pacific/Kiritimati', 'fr_FR.UTF-8']]) {
+        process.env.TZ = tz;
+        process.env.LC_ALL = locale;
+        process.env.LANG = locale;
+        seen.add(await getProcessStartTime(process.pid));
+      }
+      expect(seen.size).toBe(1);
+      expect([...seen][0]).toBeTruthy();
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('reports a dead process as not alive and without a start time', async () => {
     const child = spawn(process.execPath, ['-e', '0']);
     const pid = child.pid as number;

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises';
-import { basename, join, resolve } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 
 import { isProcessAlive, getProcessStartTime } from './processInfo';
 
@@ -56,6 +56,26 @@ export function parseDiscovery(text: string): DiscoveryRecord | undefined {
 export function discoveryFileName(workspaceFolders: readonly string[], pid: number): string {
   const digest = createHash('sha256').update(JSON.stringify([workspaceFolders, pid])).digest('hex');
   return `${digest.slice(0, 16)}.json`;
+}
+
+/** Text that came from a file or a command line, made safe to print: only printable ASCII is kept. */
+export function safeText(value: string, max = 200): string {
+  return value.replace(/[^\x20-\x7e]/g, '?').slice(0, max);
+}
+
+const UNIX_SOCKET_NAME = /^[0-9a-f]{12}\.sock$/;
+const WINDOWS_PIPE = /^\\\\\.\\pipe\\fm-ai-[0-9a-f]{32}$/;
+
+/**
+ * Only the sockets this extension creates are acceptable: `<folder>/fmai-<uid>/<12 hex>.sock`
+ * on Unix, `\\.\pipe\fm-ai-<32 hex>` on Windows. A discovery file that names anything else is
+ * not trusted (the folder itself is checked on disk by the shim).
+ */
+export function isExpectedSocketPath(path: string, uid: number | undefined = currentUid()): boolean {
+  if (WINDOWS_PIPE.test(path)) {
+    return true;
+  }
+  return UNIX_SOCKET_NAME.test(basename(path)) && basename(dirname(path)) === `fmai-${uid ?? 0}` && resolve(path) === path;
 }
 
 function currentUid(): number | undefined {
@@ -129,6 +149,8 @@ const REAL_LIVENESS: Liveness = { alive: isProcessAlive, startTime: (pid) => get
 
 export interface DiscoveryScan {
   live: LiveWindow[];
+  /** The process is alive but its start time could not be read: not used, and never treated as stale. */
+  unverified: LiveWindow[];
   /** Files whose process is gone or is a different run: never used. */
   stale: string[];
   /** Files that could not be trusted (permissions, owner, link, unreadable). */
@@ -137,7 +159,7 @@ export interface DiscoveryScan {
 
 /** Reads every discovery file and sorts them into live, stale and unsafe. Never deletes. */
 export async function scanDiscovery(directory: string, liveness: Liveness = REAL_LIVENESS): Promise<DiscoveryScan> {
-  const scan: DiscoveryScan = { live: [], stale: [], unsafe: [] };
+  const scan: DiscoveryScan = { live: [], unverified: [], stale: [], unsafe: [] };
   await assertOwnerOnly(directory, 'directory');
 
   for (const name of (await readdir(directory)).filter((entry) => entry.endsWith('.json') && !entry.startsWith('.')).sort()) {
@@ -147,10 +169,21 @@ export async function scanDiscovery(directory: string, liveness: Liveness = REAL
       const record = parseDiscovery(await readFile(file, 'utf8'));
       if (!record) {
         scan.unsafe.push({ file, reason: 'not a valid discovery file' });
-      } else if (!liveness.alive(record.pid) || (await liveness.startTime(record.pid)) !== record.startTime) {
+      } else if (!isExpectedSocketPath(record.socketPath)) {
+        scan.unsafe.push({ file, reason: 'it names a socket this extension would not create' });
+      } else if (!liveness.alive(record.pid)) {
         scan.stale.push(file);
       } else {
-        scan.live.push({ file, record });
+        // Stale only when the start time is readable and different. If it cannot be read the
+        // window may still be running: the file is kept and the shim says it could not verify.
+        const start = await liveness.startTime(record.pid);
+        if (start === undefined) {
+          scan.unverified.push({ file, record });
+        } else if (start !== record.startTime) {
+          scan.stale.push(file);
+        } else {
+          scan.live.push({ file, record });
+        }
       }
     } catch (error) {
       scan.unsafe.push({ file, reason: (error as Error).message });
@@ -162,7 +195,7 @@ export async function scanDiscovery(directory: string, liveness: Liveness = REAL
 export type Selection = { ok: true; window: LiveWindow } | { ok: false; message: string };
 
 function describe(window: LiveWindow): string {
-  return `  ${window.record.label} (process ${window.record.pid}; folders: ${window.record.workspaceFolders.join(', ') || 'none'})`;
+  return `  ${safeText(window.record.label, 80)} (process ${window.record.pid}; folders: ${window.record.workspaceFolders.map((folder) => safeText(folder, 120)).join(', ') || 'none'})`;
 }
 
 /**
@@ -170,7 +203,13 @@ function describe(window: LiveWindow): string {
  * the window label) it must match exactly one live window; without one there must be exactly
  * one live window. It never guesses.
  */
-export function selectWindow(live: readonly LiveWindow[], workspace: string | undefined): Selection {
+export function selectWindow(live: readonly LiveWindow[], workspace: string | undefined, unverified: readonly LiveWindow[] = []): Selection {
+  if (live.length === 0 && unverified.length > 0) {
+    return {
+      ok: false,
+      message: `Could not verify the window: its process is running but its start time could not be read, so the token was not sent. Nothing was changed. Windows:\n${unverified.map(describe).join('\n')}`
+    };
+  }
   if (live.length === 0) {
     return {
       ok: false,
@@ -191,10 +230,10 @@ export function selectWindow(live: readonly LiveWindow[], workspace: string | un
     return { ok: true, window: candidates[0] as LiveWindow };
   }
   if (candidates.length === 0) {
-    return { ok: false, message: `No live window matches "${wanted}". Live windows:\n${live.map(describe).join('\n')}` };
+    return { ok: false, message: `No live window matches "${safeText(wanted ?? '', 80)}". Live windows:\n${live.map(describe).join('\n')}` };
   }
   return {
     ok: false,
-    message: `${candidates.length} windows match${wanted ? ` "${wanted}"` : ''}; not guessing. Pass --workspace (or set FM_AI_WORKSPACE) to one of:\n${candidates.map(describe).join('\n')}`
+    message: `${candidates.length} windows match${wanted ? ` "${safeText(wanted, 80)}"` : ''}; not guessing. Pass --workspace (or set FM_AI_WORKSPACE) to one of:\n${candidates.map(describe).join('\n')}`
   };
 }

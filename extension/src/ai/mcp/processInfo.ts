@@ -14,9 +14,10 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
+/** `ps` prints local time, so the time zone and locale are fixed: the host and the shim must read the same text. */
 function run(command: string, args: string[]): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile(command, args, { timeout: 8000, windowsHide: true, env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => {
+    execFile(command, args, { timeout: 8000, windowsHide: true, env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' } }, (error, stdout) => {
       resolve(error ? undefined : String(stdout).trim());
     });
   });

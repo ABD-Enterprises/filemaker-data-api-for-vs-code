@@ -8,6 +8,8 @@ import {
   DISCOVERY_VERSION,
   assertOwnerOnly,
   discoveryFileName,
+  isExpectedSocketPath,
+  safeText,
   ensureOwnerOnlyDirectory,
   parseDiscovery,
   removeDiscovery,
@@ -21,10 +23,13 @@ import { createEndpoint } from '../../../../src/ai/mcp/socketPath';
 
 const posix = process.platform !== 'win32';
 
+const uid = process.getuid?.() ?? 0;
+const socketPath = (name = 'abcdef012345'): string => `/tmp/fmai-${uid}/${name}.sock`;
+
 function record(overrides: Partial<DiscoveryRecord> = {}): DiscoveryRecord {
   return {
     version: DISCOVERY_VERSION,
-    socketPath: '/tmp/x.sock',
+    socketPath: socketPath(),
     pid: 4242,
     startTime: 'T1',
     token: newToken(),
@@ -145,12 +150,22 @@ describe('files on disk', () => {
     await expect(assertOwnerOnly(file, 'file', mine)).resolves.toBeUndefined();
   });
 
-  it.skipIf(!posix)('a process with no readable start time is not live', async () => {
+  it.skipIf(!posix)('a running process whose start time cannot be read is unverified: not live, and NOT stale', async () => {
     const directory = join(base, 'ai-mcp');
     await writeDiscovery(directory, 'a.json', record({ pid: 9 }));
     const scan = await scanDiscovery(directory, liveness([9], {}));
     expect(scan.live).toHaveLength(0);
-    expect(scan.stale).toHaveLength(1);
+    expect(scan.stale).toHaveLength(0);
+    expect(scan.unverified.map((window) => window.record.pid)).toEqual([9]);
+  });
+
+  it.skipIf(!posix)('a file that names a socket this extension would not create is unsafe', async () => {
+    const directory = join(base, 'ai-mcp');
+    await writeDiscovery(directory, 'a.json', record({ pid: 1, startTime: 'A', socketPath: '/tmp/evil.sock' }));
+    await writeDiscovery(directory, 'b.json', record({ pid: 1, startTime: 'A', socketPath: `/etc/fmai-${uid}/../x.sock` }));
+    const scan = await scanDiscovery(directory, liveness([1], { 1: 'A' }));
+    expect(scan.live).toHaveLength(0);
+    expect(scan.unsafe.map((entry) => entry.reason)).toEqual(Array(2).fill('it names a socket this extension would not create'));
   });
 
   it.skipIf(!posix)('refuses to scan an unsafe folder', async () => {
@@ -158,6 +173,32 @@ describe('files on disk', () => {
     await mkdir(open);
     await chmod(open, 0o755);
     await expect(scanDiscovery(open)).rejects.toThrow(/accessible by other users/);
+  });
+});
+
+describe('isExpectedSocketPath', () => {
+  it('accepts only the socket and pipe names the extension creates', () => {
+    expect(isExpectedSocketPath(socketPath(), uid)).toBe(true);
+    expect(isExpectedSocketPath('\\\\.\\pipe\\fm-ai-' + 'a'.repeat(32), uid)).toBe(true);
+    for (const bad of [
+      '/tmp/evil.sock',
+      `/tmp/fmai-${uid + 1}/abcdef012345.sock`,
+      `/tmp/fmai-${uid}/abcdef012345.sockx`,
+      `/tmp/fmai-${uid}/ABCDEF012345.sock`,
+      `/tmp/other/fmai-${uid}/../abcdef012345.sock`,
+      `fmai-${uid}/abcdef012345.sock`,
+      '\\\\.\\pipe\\other',
+      '\\\\.\\pipe\\fm-ai-short'
+    ]) {
+      expect(isExpectedSocketPath(bad, uid), bad).toBe(false);
+    }
+  });
+});
+
+describe('safeText', () => {
+  it('keeps printable ASCII only and cuts long text', () => {
+    expect(safeText('a\nb\u001b[31m\u202Ec')).toBe('a?b?[31m?c');
+    expect(safeText('x'.repeat(500)).length).toBe(200);
   });
 });
 
@@ -188,6 +229,19 @@ describe('selectWindow', () => {
     expect(selectWindow([alpha, beta], '/work/beta')).toEqual({ ok: true, window: beta });
     expect(selectWindow([alpha, beta], 'alpha')).toEqual({ ok: true, window: alpha });
     expect(selectWindow([alpha, beta], 'beta')).toEqual({ ok: true, window: beta });
+  });
+
+  it('explains an unverified window instead of saying none is running, and never prints control characters', () => {
+    const unverified = window('al\u001b[2Jpha', ['/w/\nx'], 5);
+    const result = selectWindow([], undefined, [unverified]);
+    expect(result.ok).toBe(false);
+    const message = !result.ok ? result.message : '';
+    expect(message).toMatch(/Could not verify the window/);
+    expect(message).not.toContain('\u001b');
+    expect(message).not.toContain('/w/\nx');
+    expect(message).toContain('al?[2Jpha');
+    const unknown = selectWindow([alpha], 'x\u001b[31my');
+    expect(!unknown.ok && unknown.message).not.toContain('\u001b');
   });
 
   it('refuses an ambiguous or unknown name and lists the live windows', () => {

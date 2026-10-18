@@ -325,12 +325,14 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
 
   it('accepts only maxConnections shims at once; the others end with a refusal', async () => {
     const window = await openWindow(join(work, 'alpha'), { limits: { maxConnections: 3 } });
-    const results = Array.from({ length: 5 }, () => {
+    const results: ChildProcess[] = [];
+    for (let i = 0; i < 5; i += 1) {
       const child = spawn(process.execPath, [shimPath, '--dir', window.directory], { stdio: ['pipe', 'pipe', 'pipe'] });
       children.push(child);
-      return child;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+      results.push(child);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
     expect(results.filter((child) => child.exitCode === null)).toHaveLength(3);
     expect(results.filter((child) => child.exitCode === 1)).toHaveLength(2);
     expect(window.server.connectionCount()).toBe(3);
@@ -358,6 +360,42 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
     children.push(child);
     const code = await new Promise<number | null>((resolve) => child.once('exit', resolve));
     expect(code).toBe(1); // nothing is listening any more
+  });
+
+  it('does not use a discovery file that names a socket this extension would not create, and never connects to it', async () => {
+    const directory = join(work, 'evil');
+    let attempts = 0;
+    const decoyPath = join(work, 'decoy.sock');
+    const decoy = net.createServer(() => void (attempts += 1));
+    await new Promise<void>((resolve) => decoy.listen(decoyPath, resolve));
+    try {
+      await writeDiscovery(directory, 'evil.json', {
+        version: DISCOVERY_VERSION as 1,
+        socketPath: decoyPath,
+        pid: process.pid,
+        startTime,
+        token: newToken(),
+        workspaceFolders: ['/w'],
+        label: 'evil',
+        created: 'x'
+      });
+      const result = await runShim(['--dir', directory]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toMatch(/ignoring .*would not create/);
+      expect(attempts).toBe(0);
+    } finally {
+      decoy.close();
+    }
+  });
+
+  it('never prints control characters from a workspace argument or a label to stderr', async () => {
+    const alpha = await openWindow(join(work, 'alpha'));
+    await openWindow(join(work, 'beta'));
+    const result = await runShim(['--dir', alpha.directory, '--workspace', 'x\u001b[31mred\u0007']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).not.toContain('\u001b');
+    expect(result.stderr).not.toContain('\u0007');
+    expect(result.stderr).toContain('x?[31mred?');
   });
 
   it('reports a missing --dir on stderr and writes nothing to stdout', async () => {

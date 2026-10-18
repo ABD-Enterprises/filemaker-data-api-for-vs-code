@@ -9,6 +9,8 @@ import type {
   RunScriptResult,
   SchemaMetadataResult
 } from '../types/fm';
+import { domainToUnicode } from 'url';
+
 import { FMClientError, isRecordModifiedConflict } from '../services/errors';
 import { redactString } from '../utils/redact';
 import type { AuditEntry } from './aiAudit';
@@ -107,6 +109,8 @@ export interface AiToolDeps {
   ui: {
     /** A modal the user must answer; true only for an explicit confirm. */
     confirm(spec: ConfirmSpec): Promise<boolean>;
+    /** Tells the user that a request was cancelled while a dialog of theirs is still open. */
+    notifyCancelled?(): void;
     /** A text prompt; undefined when dismissed. */
     input(spec: { title: string; prompt: string }): Promise<string | undefined>;
   };
@@ -621,7 +625,8 @@ export class AiToolService {
       description: input.description as string | undefined
     });
     this.takeWriteSlot();
-    const confirmed = await this.deps.ui.confirm(confirmation);
+    const confirmed = await this.dialog(env, confirmation);
+    env.control.signal?.throwIfAborted();
     env.trace.confirmed = confirmed;
     if (!confirmed) {
       env.trace.declined = true;
@@ -659,7 +664,8 @@ export class AiToolService {
       description: input.description as string | undefined
     });
     this.takeWriteSlot();
-    const confirmed = await this.deps.ui.confirm(confirmation);
+    const confirmed = await this.dialog(env, confirmation);
+    env.control.signal?.throwIfAborted();
     env.trace.confirmed = confirmed;
     if (!confirmed) {
       env.trace.declined = true;
@@ -701,7 +707,8 @@ export class AiToolService {
       description: input.description as string | undefined
     });
     this.takeWriteSlot();
-    const confirmed = await this.deps.ui.confirm(confirmation);
+    const confirmed = await this.dialog(env, confirmation);
+    env.control.signal?.throwIfAborted();
     if (!confirmed) {
       env.trace.confirmed = false;
       env.trace.declined = true;
@@ -713,6 +720,7 @@ export class AiToolService {
       title: 'Delete record',
       prompt: `Type the record id ${recordId} to delete it. This cannot be undone. Dismiss to cancel.`
     });
+    env.control.signal?.throwIfAborted();
     if (typed === undefined || typed.trim() !== recordId) {
       env.trace.confirmed = false;
       env.trace.declined = true;
@@ -754,7 +762,8 @@ export class AiToolService {
       description: input.description as string | undefined
     });
     this.takeWriteSlot();
-    const confirmed = await this.deps.ui.confirm(confirmation);
+    const confirmed = await this.dialog(env, confirmation);
+    env.control.signal?.throwIfAborted();
     env.trace.confirmed = confirmed;
     if (!confirmed) {
       env.trace.declined = true;
@@ -812,7 +821,20 @@ export class AiToolService {
    * switch, `enabled`, `allowWrites`, trust, offline mode or the connection may have changed
    * while the dialog was open, and a person's "yes" does not outlast that.
    */
+  /** Opens a dialog; if the request is cancelled while it is open, tells the user it no longer counts. */
+  private async dialog(env: Env, spec: ConfirmSpec): Promise<boolean> {
+    const signal = env.control.signal;
+    const onAbort = (): void => this.deps.ui.notifyCancelled?.();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await this.deps.ui.confirm(spec);
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
   private async recheck(env: Env): Promise<void> {
+    env.control.signal?.throwIfAborted();
     try {
       const profile = await this.gate(env.definition);
       if (profile === undefined || profileFingerprint(profile) !== profileFingerprint(env.profile)) {
@@ -825,6 +847,7 @@ export class AiToolService {
       if (env.trace.script !== undefined && !(settings.scriptAllowlist[env.profile.id] ?? []).includes(env.trace.script)) {
         throw new AiToolError('The script is no longer on the allowlist.');
       }
+      env.control.signal?.throwIfAborted();
     } catch (error) {
       if (error instanceof AiToolError) {
         throw new AiToolError(`Policy changed while a dialog was open, so nothing was written: ${error.message}`);
@@ -889,13 +912,16 @@ export class AiToolService {
     }
 
     const generation = this.generation;
-    if (!(await pending)) {
+    const allowed = await pending;
+    env.control.signal?.throwIfAborted();
+    // An answer given in a session that has since been reset belongs to that session.
+    if (generation !== this.generation) {
+      throw new AiToolError('The AI session was reset while a dialog was open. Try again.');
+    }
+    if (!allowed) {
       this.declined.add(key);
       env.trace.declined = true;
       throw new AiToolError('The user did not allow reading this layout.');
-    }
-    if (generation !== this.generation) {
-      throw new AiToolError('The AI session was reset while a dialog was open. Try again.');
     }
     const refusal = this.baseRefusal();
     if (refusal) {
@@ -1258,9 +1284,31 @@ export function toModelError(error: unknown, profile: ConnectionProfile | undefi
   return new AiToolError(scrubGenericText(scrub(redactString(text), profile)).slice(0, 500), 'error');
 }
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** An IPv6 address as eight lower-case four-digit groups, however it was written; undefined if it is not one. */
+function canonicalIPv6(address: string): string | undefined {
+  const lower = address.toLowerCase();
+  if (!/^[0-9a-f:]+$/.test(lower) || (lower.match(/::/g) ?? []).length > 1 || lower.includes(':::')) {
+    return undefined;
+  }
+  const [head = '', tail = ''] = lower.split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const compressed = lower.includes('::');
+  const missing = 8 - left.length - right.length;
+  if (compressed ? missing < 1 : left.length !== 8) {
+    return undefined;
+  }
+  const groups = compressed ? [...left, ...Array<string>(missing).fill('0'), ...right] : left;
+  return groups.every((group) => /^[0-9a-f]{1,4}$/.test(group)) ? groups.map((group) => group.padStart(4, '0')).join(':') : undefined;
+}
+
 /**
- * Removes the server address of a profile from text: its URL, origin, `host:port`, and the
- * host name as a whole token (so `fm` does not match inside "confirm"). The user name is NOT
+ * Removes the server address of a profile from text, however it is written: the URL and
+ * origin and `host:port` (any letter case), the host name as a whole token (so `fm` does not
+ * match inside "confirm"), a host name in its Unicode and punycode forms, and an IP address
+ * (IPv6 compressed, expanded or unpadded, with or without brackets). The user name is NOT
  * removed as a plain word ("contact the admin" stays); a name inside a URL or after `@` is
  * covered by the host and by redaction of credentials in URLs.
  */
@@ -1268,9 +1316,9 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
   if (!profile) {
     return text;
   }
-  let result = text;
   const literals = new Set<string>();
   const hosts = new Set<string>();
+  const addresses = new Set<string>();
   const addUrl = (value: string | undefined): void => {
     if (!value) return;
     literals.add(value);
@@ -1278,7 +1326,15 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
       const url = new URL(value);
       literals.add(url.origin);
       literals.add(url.host);
-      hosts.add(url.hostname);
+      const hostname = url.hostname.replace(/^\[|\]$/g, '');
+      if (url.hostname.startsWith('[')) {
+        const canonical = canonicalIPv6(hostname);
+        if (canonical) addresses.add(canonical);
+      } else {
+        hosts.add(hostname);
+        const unicode = domainToUnicode(hostname);
+        if (unicode) hosts.add(unicode);
+      }
     } catch {
       // Not a URL: only the literal text is scrubbed.
     }
@@ -1286,14 +1342,22 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
   addUrl(profile.serverUrl);
   addUrl(profile.proxyEndpoint);
 
-  for (const literal of [...literals].sort((a, b) => b.length - a.length)) {
-    if (literal.length > 0) {
-      result = result.split(literal).join(SERVER_MARKER);
-    }
+  let result = text;
+  for (const literal of [...literals].filter((value) => value.length > 0).sort((a, b) => b.length - a.length)) {
+    result = result.replace(new RegExp(escapeRegExp(literal), 'gi'), SERVER_MARKER);
   }
   for (const host of hosts) {
-    const escaped = host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    result = result.replace(new RegExp(`(?<![\\w.-])${escaped}(?![\\w-])`, 'gi'), SERVER_MARKER);
+    result = result.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, 'giu'), SERVER_MARKER);
+  }
+  if (addresses.size > 0) {
+    // Any spelling of the address: bracketed (with a port) or bare, compressed, padded or not.
+    const isServer = (candidate: string): boolean => {
+      const canonical = canonicalIPv6(candidate);
+      return canonical !== undefined && addresses.has(canonical);
+    };
+    result = result
+      .replace(/\[([0-9a-f:]{3,})\](?::\d{1,5})?/gi, (match, inner: string) => (isServer(inner) ? SERVER_MARKER : match))
+      .replace(/(?<![0-9a-f:])[0-9a-f:]{3,}(?![0-9a-f:])/gi, (match) => (isServer(match) ? SERVER_MARKER : match));
   }
   return result;
 }
