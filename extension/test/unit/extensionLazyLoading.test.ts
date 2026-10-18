@@ -245,6 +245,16 @@ describe('extension lazy FM runtime loading', () => {
     vi.restoreAllMocks();
   });
 
+  it('activation registers a serializer for every webview panel type, so restored tabs are not dead', async () => {
+    const { RESTORABLE_PANELS } = await import('../../src/webviews/common/panelRestore');
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    const registered = vi.mocked(vscode.window.registerWebviewPanelSerializer).mock.calls.map(([viewType]) => viewType);
+    disposeSubscriptions(context);
+    expect(registered.sort()).toEqual(RESTORABLE_PANELS.map((panel) => panel.viewType).sort());
+  });
+
   it('deactivate closes the sockets of every cached TLS agent (once the TLS module has been loaded), and is harmless before', async () => {
     const { activate, deactivate } = await import('../../src/extension');
     expect(() => deactivate()).not.toThrow(); // nothing loaded yet

@@ -38,6 +38,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Restored webview tabs show a reopen page instead of staying dead (serializer for every panel type).
 - Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
 - Command Palette context keys refresh when profiles change and after Initialize FM Web.
 - Follow-up review fixes: Effective Settings note, agent shutdown/grace/LRU, atomic managed-file writes, 956/1703 wording, CA-file hint only for known host names.

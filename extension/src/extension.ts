@@ -58,6 +58,7 @@ import { ConnectionStatusBar } from './views/connectionStatusBar';
 import { FMExplorerProvider } from './views/fmExplorer';
 import { LayoutInspectorProvider } from './views/layoutInspector';
 import { OfflineStatusBar } from './views/offlineStatusBar';
+import { registerPanelRestoreGuards } from './webviews/common/panelRestore';
 
 type HealthListener = Parameters<FMClient['onHealthChange']>[0];
 
@@ -824,6 +825,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     })
   );
+
+  // A panel tab that VS Code restores after a reload would otherwise come back empty and dead.
+  context.subscriptions.push(...registerPanelRestoreGuards());
 
   registerWalkthroughCommands(context, logger);
   void maybeOpenFirstRunWalkthrough(context, logger);
