@@ -206,6 +206,45 @@ describe('extension lazy FM runtime loading', () => {
     expect(lazyModules.circuitBreakerModuleLoaded).not.toHaveBeenCalled();
   });
 
+  it('re-reads the Command Palette context keys when a profile is saved or removed and when the FM Web project is created', async () => {
+    const { ProfileStore } = await import('../../src/services/profileStore');
+    const { FmWebProjectService } = await import('../../src/services/fmWebProjectService');
+    const profileListeners: Array<() => void> = [];
+    const projectListeners: Array<() => void> = [];
+    vi.spyOn(ProfileStore.prototype, 'onDidChange').mockImplementation((listener: () => void) => {
+      profileListeners.push(listener);
+      return { dispose: () => undefined };
+    });
+    vi.spyOn(FmWebProjectService.prototype, 'onDidChangeProject').mockImplementation((listener: () => void) => {
+      projectListeners.push(listener);
+      return { dispose: () => undefined };
+    });
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    const keyCalls = (key: string) =>
+      vi.mocked(vscode.commands.executeCommand).mock.calls.filter(([command, name]) => command === 'setContext' && name === key).length;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(profileListeners).toHaveLength(1);
+    expect(projectListeners).toHaveLength(1);
+    const profileKeyBefore = keyCalls('filemaker.hasProfiles');
+    profileListeners[0]?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(keyCalls('filemaker.hasProfiles')).toBe(profileKeyBefore + 1);
+
+    const projectKeyBefore = keyCalls('filemaker.fmWebProjectInitialized');
+    projectListeners[0]?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(keyCalls('filemaker.fmWebProjectInitialized')).toBe(projectKeyBefore + 1);
+
+    // A project.json created, changed or deleted outside the extension is noticed as well.
+    const watcherCalls = vi.mocked(vscode.workspace.createFileSystemWatcher).mock.calls.map(([pattern]) => String(pattern));
+    expect(watcherCalls).toContain('**/.fmweb/project.json');
+    disposeSubscriptions(context);
+    vi.restoreAllMocks();
+  });
+
   it('deactivate closes the sockets of every cached TLS agent (once the TLS module has been loaded), and is harmless before', async () => {
     const { activate, deactivate } = await import('../../src/extension');
     expect(() => deactivate()).not.toThrow(); // nothing loaded yet

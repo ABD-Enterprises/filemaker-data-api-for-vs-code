@@ -797,6 +797,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
   void refreshPaletteContexts();
+  // The keys depend on what the stores hold, so they are re-read whenever that changes: a profile saved
+  // by the wizard, removed or selected, and a project created by Initialize FM Web (or by a file change
+  // outside the extension). Without this, Connect and the FM Web commands stay missing until a reload.
+  const projectFileWatcher = vscode.workspace.createFileSystemWatcher('**/.fmweb/project.json');
+  context.subscriptions.push(
+    profileStore.onDidChange(() => void refreshPaletteContexts()),
+    fmWebProjectService.onDidChangeProject(() => void refreshPaletteContexts()),
+    projectFileWatcher,
+    projectFileWatcher.onDidCreate(() => void refreshPaletteContexts()),
+    projectFileWatcher.onDidDelete(() => void refreshPaletteContexts()),
+    projectFileWatcher.onDidChange(() => void refreshPaletteContexts())
+  );
   // Hide the preview commands in an installation that has no runtime template (the Marketplace
   // package); computed the same way the generator resolves it.
   void publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>
