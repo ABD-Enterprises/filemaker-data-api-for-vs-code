@@ -15,16 +15,27 @@ import type {
 } from '../types/fm';
 import { extractLayoutNames } from '../utils/layoutParser';
 import { extractScriptNames } from '../utils/scriptParser';
+import { getFileMakerErrorInfo } from '../utils/fileMakerCodes';
 import { normalizeError } from '../utils/normalizeError';
 import { redactValue } from '../utils/redact';
 import { createHttpsAgentForProfile } from './tlsAgent';
 
+/**
+ * What a proxy answers. On failure (`ok: false`, with HTTP status 200 or an error status) the proxy
+ * should also pass on what FileMaker said, so the extension can act on it exactly as in direct
+ * mode (a modification-id conflict, "no records match", a rejected password):
+ *   - `fmCode`: FileMaker's error code (`"306"` or `306`), from `messages[0].code`;
+ *   - `status`: the HTTP status FileMaker answered with.
+ * Both are optional; without them the failure still shows the proxy's message.
+ */
 interface ProxyEnvelope<T> {
   ok?: boolean;
   data?: T;
   error?: string;
   message?: string;
   details?: unknown;
+  fmCode?: string | number;
+  status?: number;
 }
 
 interface ProxySessionResponse {
@@ -307,16 +318,22 @@ export class ProxyClient {
         {
           headers,
           signal,
+          maxRedirects: 0,
           httpsAgent: createHttpsAgentForProfile(profile)
         }
       );
 
       const responseData = response.data;
+      if (responseData === undefined || responseData === null || typeof responseData === 'string') {
+        throw new FMClientError(
+          `The proxy did not return JSON (HTTP ${response.status}). A web page, firewall or sign-in page may be answering instead of the proxy: check the proxy endpoint address.`,
+          { status: response.status, code: 'NOT_DATA_API_RESPONSE', kind: 'server', isRetryable: false }
+        );
+      }
+
       if (this.isProxyEnvelope(responseData)) {
         if (responseData.ok === false) {
-          throw new FMClientError(responseData.error ?? responseData.message ?? 'Proxy request failed.', {
-            details: responseData.details
-          });
+          throw proxyFailure(responseData, response.status);
         }
 
         if (responseData.data === undefined) {
@@ -330,6 +347,12 @@ export class ProxyClient {
     } catch (error) {
       if (error instanceof FMClientError) {
         throw error;
+      }
+
+      // A proxy that reports a failure with an error status and an `ok: false` envelope.
+      const body = (error as { response?: { status?: number; data?: unknown } })?.response?.data;
+      if (this.isProxyEnvelope(body) && body.ok === false) {
+        throw proxyFailure(body, (error as { response?: { status?: number } }).response?.status);
       }
 
       throw this.normalizeProxyError(error);
@@ -358,6 +381,29 @@ export class ProxyClient {
 
     return toFMClientError(normalized);
   }
+}
+
+/** A failure reported by the proxy, rebuilt as the error direct mode would have raised. */
+function proxyFailure(envelope: ProxyEnvelope<unknown>, httpStatus: number | undefined): FMClientError {
+  const text = envelope.error ?? envelope.message ?? 'Proxy request failed.';
+  const fmCode = envelope.fmCode === undefined ? undefined : String(envelope.fmCode);
+  const status = typeof envelope.status === 'number' ? envelope.status : httpStatus;
+  if (fmCode === undefined) {
+    return new FMClientError(text, { status, details: envelope.details });
+  }
+
+  const info = getFileMakerErrorInfo(fmCode);
+  return new FMClientError(
+    `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmCode}]: ${text}${info?.advice ? ` ${info.advice}` : ''}`,
+    {
+      status,
+      code: fmCode,
+      fmCategory: info?.category,
+      kind: info?.category === 'credentials' ? 'auth' : undefined,
+      isRetryable: info?.retryable === true,
+      details: envelope.details
+    }
+  );
 }
 
 /**

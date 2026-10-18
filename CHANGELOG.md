@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Proxy error envelope with fmCode/status (documented), HTML replies reported, no redirects.
 - Invalidate the schema cache on new sign-in/sign-out/profile save.
 - Batch: retry only transient failures (honour Retry-After), no breaker trips on business errors, stop on privilege/credential errors with a reason; truncated only when more rows exist.
 - Connect retries only transient failures (decided once where the error is built); no retry of 500/802 or certificate errors.

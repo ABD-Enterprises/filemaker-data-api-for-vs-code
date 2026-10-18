@@ -32,6 +32,9 @@ vi.mock('../../src/services/fmClient', () => {
       public deleteRecord = async (): Promise<Record<string, unknown>> => ({});
       public runScript = async (): Promise<Record<string, unknown>> => ({});
       public invalidateProfileCache(): void {}
+      public onProfileInvalidated(): () => void {
+        return () => undefined;
+      }
       public onHealthChange(): () => void {
         return () => undefined;
       }

@@ -494,7 +494,15 @@ export class FMClient {
       },
       async (trace) => {
         if (isProxyProfile(profile)) {
-          return this.proxyClient.findRecords(profile, layout, body, control?.signal);
+          try {
+            return await this.proxyClient.findRecords(profile, layout, body, control?.signal);
+          } catch (error) {
+            // The proxy passes FileMaker's code on, so "no records match" is an empty result here too.
+            if (isNoRecordsFound(error)) {
+              return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+            }
+            throw error;
+          }
         }
 
         const payload: Record<string, unknown> = {
