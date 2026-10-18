@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Add a mock FileMaker Data API for local testing (`npm run mock:server`) and an end-to-end check that runs the real client against it (`npm run mock:check`, 25 checks). It mirrors the documented response shapes and error codes, so it can catch bugs that in-memory fakes cannot; it is not shipped in the extension.
 - [FEATURE] The Record Editor now refuses to overwrite a record that someone else changed after you opened it. Saving sends the version of the record you loaded, and FileMaker rejects the edit if it no longer matches (error 306). The editor then shows which fields changed since, which of them you also edited, keeps your edits in the form, and offers **Reload record**. Before, the last save silently overwrote the other person's change. Batch update is unchanged.
 - [FIX] A find that matches nothing, or an offset past the last match, now returns an empty result. FileMaker reports that case as HTTP 404 with error 401, and the extension treated it as a failure, so an empty Query Builder result showed an error and a batch export failed on its final request whenever the match count was an exact multiple of the page size, or when nothing matched.
 - [FIX] When a session expires, parallel requests now share one renewal instead of each opening its own FileMaker session. Before, five simultaneous requests opened five sessions and left four orphaned on the server until they timed out.

@@ -1328,6 +1328,8 @@
     "docs:api": "typedoc --options typedoc.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "mock:server": "node test/mock-server/server.mjs",
+    "mock:check": "esbuild test/mock-server/client-check.mjs --bundle --platform=node --format=cjs --alias:vscode=./test/mock-server/vscode-stub.mjs --outfile=.mock-check/client-check.cjs --log-level=warning && node .mock-check/client-check.cjs",
     "vscode:prepublish": "npm run build",
     "typecheck": "tsc -p tsconfig.vitest.json --noEmit",
     "package:vsix": "shx mkdir -p ../artifacts && vsce package --no-dependencies --allow-missing-repository --baseContentUrl https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension --baseImagesUrl https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension --out ../artifacts/filemaker-data-api-tools-${npm_package_version}.vsix",
