@@ -10,6 +10,7 @@
 - [INTERNAL] Dependabot now also watches `tools/publish` (the pinned Marketplace publish tool), which has its own lockfile and was not covered before.
 - [FIX] After an untrusted-certificate failure the extension looks at the server certificate once per server and failure for a minute (the result is remembered, including a look that got no answer), instead of paying up to 1.5 s on every failed request.
 - [SECURITY] Log and diagnostics redaction now also covers single-quoted keys (`{'token': '...'}`) and plain-text `Cookie:`, `Set-Cookie:`, `Authorization:` and `Proxy-Authorization:` lines.
+- [SECURITY] Configured file paths (for example `filemaker.ai.contextPath`) now also reject characters that render as blank (Hangul fillers, variation selectors, the combining grapheme joiner), so a path cannot look like a different one.
 
 ## 1.4.0
 

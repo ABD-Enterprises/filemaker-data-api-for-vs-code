@@ -40,6 +40,7 @@ PR title prefix matches the highest-tier label added:
 ### [SECURITY]
 
 - Log and diagnostics redaction now also covers single-quoted keys (`{'token': '...'}`) and plain-text `Cookie:`, `Set-Cookie:`, `Authorization:` and `Proxy-Authorization:` lines.
+- Configured file paths (for example `filemaker.ai.contextPath`) now also reject characters that render as blank (Hangul fillers, variation selectors, the combining grapheme joiner), so a path cannot look like a different one.
 
 ## 1.4.0 - 2026-10-18
 
