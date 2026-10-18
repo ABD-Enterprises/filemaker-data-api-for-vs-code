@@ -42,7 +42,7 @@ export interface McpLimits {
 export const DEFAULT_MCP_LIMITS: McpLimits = {
   maxMessageBytes: 1024 * 1024,
   maxConnections: 8,
-  maxUnauthenticated: 2,
+  maxUnauthenticated: 64,
   helloTimeoutMs: 1000,
   maxBytesPerSecond: 4 * 1024 * 1024,
   maxWriteBacklogBytes: 4 * 1024 * 1024,
@@ -185,9 +185,11 @@ export class AiMcpServer {
   // Connections
 
   private accept(socket: net.Socket): void {
-    // Connections that have not authenticated have their own small allowance. When it is full
-    // the OLDEST silent one is dropped to make room, so silent connections cannot lock out a
-    // client that is about to send its hello.
+    // Connections that have not authenticated have their own allowance. When it is full the
+    // OLDEST silent one is dropped to make room. Refusing new connections instead would let a
+    // flood of silent ones keep the pool full and lock every real client out; with this order
+    // a real client, which sends its hello within milliseconds of connecting, outlives the
+    // flood by the size of the pool.
     const silent = [...this.connections].filter((connection) => !connection.authed);
     while (silent.length >= this.limits.maxUnauthenticated) {
       this.close(silent.shift() as Connection);

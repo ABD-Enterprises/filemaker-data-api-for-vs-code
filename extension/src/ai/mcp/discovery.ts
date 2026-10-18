@@ -67,7 +67,7 @@ const UNIX_SOCKET_NAME = /^[0-9a-f]{12}\.sock$/;
 const WINDOWS_PIPE = /^\\\\\.\\pipe\\fm-ai-[0-9a-f]{32}$/;
 
 /**
- * Only the sockets this extension creates are acceptable: `<folder>/fmai-<uid>/<12 hex>.sock`
+ * Only the sockets this extension creates are acceptable: `<folder>/fmai-<uid>-<8 hex>/<12 hex>.sock`
  * on Unix, `\\.\pipe\fm-ai-<32 hex>` on Windows. A discovery file that names anything else is
  * not trusted (the folder itself is checked on disk by the shim).
  */
@@ -75,7 +75,8 @@ export function isExpectedSocketPath(path: string, uid: number | undefined = cur
   if (WINDOWS_PIPE.test(path)) {
     return true;
   }
-  return UNIX_SOCKET_NAME.test(basename(path)) && basename(dirname(path)) === `fmai-${uid ?? 0}` && resolve(path) === path;
+  const folder = /^fmai-(\d+)-[0-9a-f]{8}$/.exec(basename(dirname(path)));
+  return UNIX_SOCKET_NAME.test(basename(path)) && folder !== null && folder[1] === String(uid ?? 0) && resolve(path) === path;
 }
 
 function currentUid(): number | undefined {

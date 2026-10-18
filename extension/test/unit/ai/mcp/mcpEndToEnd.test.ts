@@ -19,7 +19,7 @@ import { AiMcpServer, type McpLimits } from '../../../../src/ai/mcp/aiMcpServer'
 import { newToken } from '../../../../src/ai/mcp/auth';
 import { DISCOVERY_VERSION, discoveryFileName, writeDiscovery } from '../../../../src/ai/mcp/discovery';
 import { getProcessStartTime } from '../../../../src/ai/mcp/processInfo';
-import { createEndpoint } from '../../../../src/ai/mcp/socketPath';
+import { createEndpoint, socketFolderName } from '../../../../src/ai/mcp/socketPath';
 import { FMClient } from '../../../../src/services/fmClient';
 import { SchemaService } from '../../../../src/services/schemaService';
 import { SecretStore } from '../../../../src/services/secretStore';
@@ -66,7 +66,7 @@ async function freePort(): Promise<number> {
 }
 
 beforeAll(async () => {
-  work = await mkdtemp(join(tmpdir(), 'fm-mcp-e2e-'));
+  work = await mkdtemp(join(tmpdir(), 'fme-'));
   shimPath = join(work, 'aiMcpShim.js');
   buildSync({
     entryPoints: [join(repo, 'src/ai/mcp/shim.ts')],
@@ -385,6 +385,60 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
       expect(attempts).toBe(0);
     } finally {
       decoy.close();
+    }
+  });
+
+  it.skipIf(!posix)('will not connect to a path that is not a socket, even one named as the extension names its sockets', async () => {
+    const uid = process.getuid?.() ?? 0;
+    const folder = join(work, socketFolderName(uid, 'plain-file'));
+    await mkdir(folder, { mode: 0o700 });
+    const plain = join(folder, 'abcdef012345.sock');
+    const { writeFile } = await import('fs/promises');
+    await writeFile(plain, 'not a socket');
+    const directory = join(work, 'plain-file-disc');
+    await writeDiscovery(directory, 'plain.json', {
+      version: DISCOVERY_VERSION as 1,
+      socketPath: plain,
+      pid: process.pid,
+      startTime,
+      token: newToken(),
+      workspaceFolders: ['/w'],
+      label: 'plain',
+      created: 'x'
+    });
+    const result = await runShim(['--dir', directory]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toMatch(/will not connect: .*not a socket/);
+    expect(result.stdout).toBe('');
+  });
+
+  it.skipIf(!posix)('will not connect to a socket in a folder other users can use', async () => {
+    const uid = process.getuid?.() ?? 0;
+    const folder = join(work, socketFolderName(uid, 'open-folder'));
+    await mkdir(folder, { mode: 0o755 });
+    await chmod(folder, 0o755);
+    const path = join(folder, 'abcdef012345.sock');
+    let attempts = 0;
+    const server = net.createServer(() => void (attempts += 1));
+    await new Promise<void>((resolve) => server.listen(path, resolve));
+    try {
+      const directory = join(work, 'open-folder-disc');
+      await writeDiscovery(directory, 'open.json', {
+        version: DISCOVERY_VERSION as 1,
+        socketPath: path,
+        pid: process.pid,
+        startTime,
+        token: newToken(),
+        workspaceFolders: ['/w'],
+        label: 'open',
+        created: 'x'
+      });
+      const result = await runShim(['--dir', directory]);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toMatch(/will not connect: .*accessible by other users/);
+      expect(attempts).toBe(0);
+    } finally {
+      server.close();
     }
   });
 

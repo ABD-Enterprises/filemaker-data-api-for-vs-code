@@ -16,8 +16,10 @@ interface Deps {
   refresh: () => void;
 }
 
-const PERMISSION_DETAIL =
-  'This starts a local server in THIS window only. Programs running as you (such as Claude Code or Cursor, once you give them the config) can connect to it with a secret token. Everything the AI tools can do is limited by your AI settings, layout approvals and write dialogs, and what they read goes to the model provider behind that program.\n\nThe setting filemaker.ai.externalServer.enabled in your user settings is only a permission. The server is not started in other windows. In this workspace it will start again each time you open it, until you run the same command here to stop it. To use it in another window, run the command there.';
+const START_DETAIL =
+  'This starts a local server in THIS window only. Programs running as you (such as Claude Code or Cursor, once you give them the config) can connect to it with a secret token. Everything the AI tools can do is limited by your AI settings, layout approvals and write dialogs, and what they read goes to the model provider behind that program.\n\nThis workspace will start the server automatically each time you open it, as long as filemaker.ai.externalServer.enabled stays on in your user settings, until you run this command again to stop it. Other windows are not affected; run the command there to use it there.';
+const SETTING_DETAIL =
+  '\n\nThe setting filemaker.ai.externalServer.enabled in your user settings is only a permission. It is turned on now. Turning it off later stops the server in every window and ends the automatic start for every workspace.';
 
 export function registerAiMcpCommands(deps: Deps): vscode.Disposable[] {
   return [
@@ -29,16 +31,19 @@ export function registerAiMcpCommands(deps: Deps): vscode.Disposable[] {
             'The AI server for external tools is stopped in this window and will not start again here until you start it.'
           );
         } else {
-          if (!deps.isEnabled()) {
-            // Only you can allow this: a modal, then your user settings.
-            const choice = await vscode.window.showWarningMessage(
-              'Allow external AI tools (such as Claude Code or Cursor) to use FileMaker through this window?',
-              { modal: true, detail: PERMISSION_DETAIL },
-              'Turn On and Start'
-            );
-            if (choice !== 'Turn On and Start') {
-              return;
-            }
+          // Any caller can run this command (an agent, another extension). Starting, and
+          // remembering to start again, therefore always needs this dialog.
+          const needsSetting = !deps.isEnabled();
+          const label = needsSetting ? 'Turn On and Start' : 'Start Here';
+          const choice = await vscode.window.showWarningMessage(
+            'Start the AI server for external tools (Claude Code, Cursor) in this window?',
+            { modal: true, detail: needsSetting ? START_DETAIL + SETTING_DETAIL : START_DETAIL },
+            label
+          );
+          if (choice !== label) {
+            return;
+          }
+          if (needsSetting) {
             await vscode.workspace
               .getConfiguration('filemaker')
               .update('ai.externalServer.enabled', true, vscode.ConfigurationTarget.Global);

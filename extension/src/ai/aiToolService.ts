@@ -834,7 +834,6 @@ export class AiToolService {
   }
 
   private async recheck(env: Env): Promise<void> {
-    env.control.signal?.throwIfAborted();
     try {
       const profile = await this.gate(env.definition);
       if (profile === undefined || profileFingerprint(profile) !== profileFingerprint(env.profile)) {
@@ -1288,7 +1287,16 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 /** An IPv6 address as eight lower-case four-digit groups, however it was written; undefined if it is not one. */
 function canonicalIPv6(address: string): string | undefined {
-  const lower = address.toLowerCase();
+  let lower = address.toLowerCase();
+  // An embedded IPv4 tail (`::ffff:10.1.2.3`) is two more groups.
+  const dotted = /^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(lower);
+  if (dotted) {
+    const octets = [dotted[2], dotted[3], dotted[4], dotted[5]].map(Number);
+    if (octets.some((octet) => octet > 255)) {
+      return undefined;
+    }
+    lower = `${dotted[1]}${((octets[0] as number) * 256 + (octets[1] as number)).toString(16)}:${((octets[2] as number) * 256 + (octets[3] as number)).toString(16)}`;
+  }
   if (!/^[0-9a-f:]+$/.test(lower) || (lower.match(/::/g) ?? []).length > 1 || lower.includes(':::')) {
     return undefined;
   }
@@ -1317,6 +1325,8 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
     return text;
   }
   const literals = new Set<string>();
+  /** `host` or `[v6]` forms: the port after them, if any, goes too. */
+  const hostLiterals = new Set<string>();
   const hosts = new Set<string>();
   const addresses = new Set<string>();
   const addUrl = (value: string | undefined): void => {
@@ -1326,12 +1336,16 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
       const url = new URL(value);
       literals.add(url.origin);
       literals.add(url.host);
+      hostLiterals.add(url.host);
       const hostname = url.hostname.replace(/^\[|\]$/g, '');
       if (url.hostname.startsWith('[')) {
         const canonical = canonicalIPv6(hostname);
         if (canonical) addresses.add(canonical);
       } else {
         hosts.add(hostname);
+        // An IPv4 server also appears as an IPv4-mapped IPv6 address (`::ffff:10.1.2.3`).
+        const mapped = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ? canonicalIPv6(`::ffff:${hostname}`) : undefined;
+        if (mapped) addresses.add(mapped);
         const unicode = domainToUnicode(hostname);
         if (unicode) hosts.add(unicode);
       }
@@ -1344,20 +1358,32 @@ export function scrub(text: string, profile: ConnectionProfile | undefined): str
 
   let result = text;
   for (const literal of [...literals].filter((value) => value.length > 0).sort((a, b) => b.length - a.length)) {
-    result = result.replace(new RegExp(escapeRegExp(literal), 'gi'), SERVER_MARKER);
-  }
-  for (const host of hosts) {
-    result = result.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, 'giu'), SERVER_MARKER);
+    const port = hostLiterals.has(literal) && !/:\d+$/.test(literal) ? '(?::\\d{1,5})?' : '';
+    result = result.replace(new RegExp(`${escapeRegExp(literal)}${port}`, 'gi'), SERVER_MARKER);
   }
   if (addresses.size > 0) {
-    // Any spelling of the address: bracketed (with a port) or bare, compressed, padded or not.
+    // Any spelling of the address: bracketed (with a port) or bare, compressed, padded or not,
+    // with an IPv4 tail, and bare with a port (`2001:db8::10:443` is the address `2001:db8::10`
+    // and port 443, as well as a valid address of its own: both are the server's, so both go).
     const isServer = (candidate: string): boolean => {
       const canonical = canonicalIPv6(candidate);
       return canonical !== undefined && addresses.has(canonical);
     };
+    const matches = (token: string): boolean => {
+      if (isServer(token)) return true;
+      const port = /^(.*[0-9a-f:]):(\d{1,5})$/i.exec(token);
+      return port !== null && !token.endsWith('::') && isServer(port[1] as string);
+    };
     result = result
-      .replace(/\[([0-9a-f:]{3,})\](?::\d{1,5})?/gi, (match, inner: string) => (isServer(inner) ? SERVER_MARKER : match))
-      .replace(/(?<![0-9a-f:])[0-9a-f:]{3,}(?![0-9a-f:])/gi, (match) => (isServer(match) ? SERVER_MARKER : match));
+      .replace(/\[([0-9a-f:.]{3,})\](?::\d{1,5})?/gi, (match, inner: string) => (isServer(inner) ? SERVER_MARKER : match))
+      .replace(/(?<![0-9a-f:.])[0-9a-f:.]{3,}(?![0-9a-f:])/gi, (match) => {
+        const trailing = /\.+$/.exec(match)?.[0] ?? '';
+        const token = trailing ? match.slice(0, -trailing.length) : match;
+        return matches(token) ? `${SERVER_MARKER}${trailing}` : match;
+      });
+  }
+  for (const host of hosts) {
+    result = result.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, 'giu'), SERVER_MARKER);
   }
   return result;
 }

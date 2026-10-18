@@ -92,6 +92,22 @@ describe('a cancelled request does not write', () => {
   });
 });
 
+describe('the re-check after a dialog honours cancellation', () => {
+  it('a request cancelled while the policy is being re-checked sends nothing', async () => {
+    const h = ready();
+    const controller = new AbortController();
+    let calls = 0;
+    h.getProfile.mockImplementation(async (id: string) => {
+      calls += 1;
+      if (calls >= 2) controller.abort(); // the first call is the gate; the second is the re-check
+      return h.profiles.get(id);
+    });
+    await expect(edit(h, controller.signal)).rejects.toThrow(/cancelled/);
+    expect(calls).toBe(2);
+    expect(h.client.editRecord).not.toHaveBeenCalled();
+  });
+});
+
 describe('session reset while a layout prompt is open', () => {
   it('a "no" given before the reset is not remembered against the new session', async () => {
     const h = makeHarness();
@@ -155,6 +171,23 @@ describe('scrub of the server address', () => {
       expect(result, form).toContain('[server]');
     }
     expect(scrub('unrelated 2001:db8::2 stays', profile)).toContain('2001:db8::2');
+  });
+
+  it('removes a bare IPv6 address with a port, IPv4-mapped forms and an address at the end of a sentence', () => {
+    const profile = at('https://[2001:db8::10]:443');
+    for (const text of ['2001:db8::10:443', '2001:0db8:0:0:0:0:0:10:443', '[2001:db8::10]:443', '2001:DB8::10']) {
+      const result = scrub(`refused by ${text} today`, profile);
+      expect(result, text).toBe('refused by [server] today');
+    }
+    expect(scrub('connect to 2001:db8::10.', profile)).toBe('connect to [server].');
+    expect(scrub('other 2001:db8::11:443 stays', profile)).toContain('2001:db8::11:443');
+    const loopback = at('http://[::1]:8443');
+    expect(scrub('at ::1:8443 and ::1', loopback)).toBe('at [server] and [server]');
+    const v4 = at('http://10.1.2.3:8080');
+    expect(scrub('at ::ffff:10.1.2.3 and ::ffff:a01:203', v4)).toBe('at [server] and [server]');
+    const mapped = at('http://[::ffff:10.1.2.3]:8080');
+    expect(scrub('at ::ffff:10.1.2.3 and ::ffff:a01:203', mapped)).toBe('at [server] and [server]');
+    expect(scrub('at ::ffff:10.1.2.4', v4)).toBe('at ::ffff:10.1.2.4');
   });
 
   it('removes an IPv4 address and does not touch a longer one that contains it', () => {

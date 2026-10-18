@@ -1,3 +1,4 @@
+import { spawn } from 'child_process';
 import { mkdtemp, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -49,7 +50,7 @@ describe('AiMcpServer hardening', () => {
   }
 
   beforeEach(async () => {
-    base = await mkdtemp(join(tmpdir(), 'fm-ai-srvh-'));
+    base = await mkdtemp(join(tmpdir(), 'fmh-'));
     token = newToken();
     events.length = 0;
     core = { listTools: () => AI_TOOL_DEFINITIONS.filter((t) => t.kind === 'read'), invoke: vi.fn(async () => ({ ok: true })) } as never;
@@ -60,14 +61,14 @@ describe('AiMcpServer hardening', () => {
     await rm(base, { recursive: true, force: true });
   });
 
-  it('uses a short hello timeout and a small allowance for connections that have not authenticated', () => {
+  it('uses a short hello timeout and a pool of pending connections big enough to outlast a flood', () => {
     expect(DEFAULT_MCP_LIMITS.helloTimeoutMs).toBeLessThanOrEqual(1000);
-    expect(DEFAULT_MCP_LIMITS.maxUnauthenticated).toBeLessThanOrEqual(2);
+    expect(DEFAULT_MCP_LIMITS.maxUnauthenticated).toBeGreaterThanOrEqual(32);
   });
 
   describe('connections that never authenticate', () => {
     it('eight silent connections do not keep a legitimate client out (the oldest silent one is dropped)', async () => {
-      await start({ helloTimeoutMs: 5000 });
+      await start({ helloTimeoutMs: 5000, maxUnauthenticated: 2 });
       const silent: RawClient[] = [];
       for (let i = 0; i < 8; i += 1) {
         silent.push(await RawClient.connect(endpoint));
@@ -97,6 +98,44 @@ describe('AiMcpServer hardening', () => {
       clients.push(silent);
       expect(await silent.waitClosed(1500)).toBe(true);
     });
+  });
+
+  describe('a flood of connections', () => {
+    it('a real client gets in at least 95% of the time while another process opens 50 silent connections per tick', async () => {
+      await start();
+      const flooder = spawn(
+        process.execPath,
+        [
+          '-e',
+          `const net = require('net');
+           setInterval(() => { for (let i = 0; i < 50; i += 1) { const s = net.connect(process.argv[1]); s.on('error', () => {}); setTimeout(() => s.destroy(), 1500); } }, 10);
+           console.log('flooding');`,
+          endpoint
+        ],
+        { stdio: ['ignore', 'pipe', 'inherit'] }
+      );
+      try {
+        await new Promise<void>((resolve) => flooder.stdout?.once('data', () => resolve()));
+        await wait(300);
+        let succeeded = 0;
+        const attempts = 100;
+        for (let i = 0; i < attempts; i += 1) {
+          const c = await RawClient.connect(endpoint).catch(() => undefined);
+          if (!c) continue;
+          clients.push(c);
+          c.write(`${JSON.stringify({ hello: { protocol: 1, token } })}\n`);
+          if ((await c.next(500)) === '{"hello":"ok"}') {
+            c.send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+            if ((await c.next(500)).includes('"result"')) succeeded += 1;
+          }
+          c.close();
+          await wait(5);
+        }
+        expect(succeeded / attempts).toBeGreaterThanOrEqual(0.95);
+      } finally {
+        flooder.kill('SIGKILL');
+      }
+    }, 60_000);
   });
 
   describe('idle timeout', () => {

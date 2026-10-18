@@ -19,7 +19,7 @@ import { registerSchemaCommands } from './commands/schema';
 import { AuditLog } from './ai/aiAudit';
 import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
 import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from './ai/aiSettings';
-import { AiMcpController, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
+import { AiMcpController, PERMISSION_EPOCH_KEY, PERMISSION_SEEN_KEY, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
 import { AiToolService } from './ai/aiToolService';
 import { registerAiMcpCommands, watchExternalServerSetting } from './commands/aiMcp';
 import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/aiTools';
@@ -471,7 +471,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     isEnabled: () => isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker')),
     remoteName: () => vscode.env.remoteName,
     workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
-    state: { get: () => context.workspaceState?.get<boolean>(STARTED_HERE_KEY, false) === true, set: (value) => context.workspaceState?.update(STARTED_HERE_KEY, value) },
+    state: {
+      get: () => context.workspaceState?.get<number>(STARTED_HERE_KEY),
+      set: (value) => context.workspaceState?.update(STARTED_HERE_KEY, value)
+    },
+    permission: {
+      epoch: () => context.globalState?.get<number>(PERMISSION_EPOCH_KEY, 0) ?? 0,
+      bump: () => context.globalState?.update(PERMISSION_EPOCH_KEY, (context.globalState?.get<number>(PERMISSION_EPOCH_KEY, 0) ?? 0) + 1),
+      seenEnabled: () => context.globalState?.get<boolean>(PERMISSION_SEEN_KEY),
+      setSeenEnabled: (value) => context.globalState?.update(PERMISSION_SEEN_KEY, value)
+    },
     log: (message) => logger.info(message),
     notify: (message) => void vscode.window.showInformationMessage(message)
   });

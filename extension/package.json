@@ -1462,7 +1462,7 @@
             "type": "boolean",
             "default": false,
             "scope": "application",
-            "markdownDescription": "Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools**; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and clears that memory. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
+            "markdownDescription": "Permission for MCP clients such as Claude Code and Cursor to use the AI tools through a local server in a VS Code window. **This setting never starts the server.** The server runs only in a window where you run **FileMaker: Start/Stop AI Server for External Tools** and confirm its dialog; VS Code then remembers that for the workspace and starts the server again each time you open it, while this setting is on, until you stop it with the same command. Turning this setting off stops the server and ends the automatic start for every workspace (also workspaces that are closed at that moment); turning it back on does not bring them back. Everything the tools can do is still limited by the other `filemaker.ai.*` settings, your layout approvals and the write dialogs. Not supported in remote windows. Read from your user settings only.",
             "order": 10
           }
         }

@@ -44,7 +44,7 @@ describe('AiMcpServer', () => {
   }
 
   beforeEach(async () => {
-    base = await mkdtemp(join(tmpdir(), 'fm-ai-srv-'));
+    base = await mkdtemp(join(tmpdir(), 'fms-'));
     token = newToken();
     tools = AI_TOOL_DEFINITIONS.filter((tool) => tool.kind === 'read');
     core = { listTools: () => tools, invoke: vi.fn(async () => ({ ok: true })) } as never;

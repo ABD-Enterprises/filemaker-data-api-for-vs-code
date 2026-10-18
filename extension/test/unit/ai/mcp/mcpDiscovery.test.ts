@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { newToken } from '../../../../src/ai/mcp/auth';
@@ -19,12 +19,12 @@ import {
   type DiscoveryRecord,
   type Liveness
 } from '../../../../src/ai/mcp/discovery';
-import { createEndpoint } from '../../../../src/ai/mcp/socketPath';
+import { createEndpoint, socketFolderName } from '../../../../src/ai/mcp/socketPath';
 
 const posix = process.platform !== 'win32';
 
 const uid = process.getuid?.() ?? 0;
-const socketPath = (name = 'abcdef012345'): string => `/tmp/fmai-${uid}/${name}.sock`;
+const socketPath = (name = 'abcdef012345'): string => `/tmp/${socketFolderName(uid, 'storage-a')}/${name}.sock`;
 
 function record(overrides: Partial<DiscoveryRecord> = {}): DiscoveryRecord {
   return {
@@ -162,7 +162,7 @@ describe('files on disk', () => {
   it.skipIf(!posix)('a file that names a socket this extension would not create is unsafe', async () => {
     const directory = join(base, 'ai-mcp');
     await writeDiscovery(directory, 'a.json', record({ pid: 1, startTime: 'A', socketPath: '/tmp/evil.sock' }));
-    await writeDiscovery(directory, 'b.json', record({ pid: 1, startTime: 'A', socketPath: `/etc/fmai-${uid}/../x.sock` }));
+    await writeDiscovery(directory, 'b.json', record({ pid: 1, startTime: 'A', socketPath: `/etc/${socketFolderName(uid, 'storage-a')}/../x.sock` }));
     const scan = await scanDiscovery(directory, liveness([1], { 1: 'A' }));
     expect(scan.live).toHaveLength(0);
     expect(scan.unsafe.map((entry) => entry.reason)).toEqual(Array(2).fill('it names a socket this extension would not create'));
@@ -182,11 +182,14 @@ describe('isExpectedSocketPath', () => {
     expect(isExpectedSocketPath('\\\\.\\pipe\\fm-ai-' + 'a'.repeat(32), uid)).toBe(true);
     for (const bad of [
       '/tmp/evil.sock',
-      `/tmp/fmai-${uid + 1}/abcdef012345.sock`,
-      `/tmp/fmai-${uid}/abcdef012345.sockx`,
-      `/tmp/fmai-${uid}/ABCDEF012345.sock`,
-      `/tmp/other/fmai-${uid}/../abcdef012345.sock`,
-      `fmai-${uid}/abcdef012345.sock`,
+      `/tmp/${socketFolderName(uid + 1, 'storage-a')}/abcdef012345.sock`,
+      `/tmp/${socketFolderName(uid, 'storage-a')}/abcdef012345.sockx`,
+      `/tmp/${socketFolderName(uid, 'storage-a')}/ABCDEF012345.sock`,
+      `/tmp/other/${socketFolderName(uid, 'storage-a')}/../abcdef012345.sock`,
+      `${socketFolderName(uid, 'storage-a')}/abcdef012345.sock`,
+      `/tmp/fmai-${uid}/abcdef012345.sock`,
+      `/tmp/fmai-${uid}-zzzzzzzz/abcdef012345.sock`,
+      `/tmp/fmai-${uid}-abcd1234ab/abcdef012345.sock`,
       '\\\\.\\pipe\\other',
       '\\\\.\\pipe\\fm-ai-short'
     ]) {
@@ -254,12 +257,34 @@ describe('selectWindow', () => {
   });
 });
 
+describe('socketFolderName', () => {
+  it('is per user and per storage path, so products sharing a temp folder do not share a socket folder', () => {
+    expect(socketFolderName(501, '/code/storage')).toBe(socketFolderName(501, '/code/storage'));
+    expect(socketFolderName(501, '/code/storage')).not.toBe(socketFolderName(501, '/cursor/storage'));
+    expect(socketFolderName(501, '/code/storage')).not.toBe(socketFolderName(502, '/code/storage'));
+    expect(socketFolderName(501, '/x')).toMatch(/^fmai-501-[0-9a-f]{8}$/);
+  });
+
+  it.skipIf(!posix)('createEndpoint puts different storage paths in different folders under the macOS length limit', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'fmp-'));
+    try {
+      const a = await createEndpoint({ baseDirectory: base, scope: '/code/storage' });
+      const b = await createEndpoint({ baseDirectory: base, scope: '/cursor/storage' });
+      expect(dirname(a.path)).not.toBe(dirname(b.path));
+      expect(isExpectedSocketPath(a.path, uid)).toBe(true);
+      expect(Buffer.byteLength(a.path)).toBeLessThanOrEqual(103);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('createEndpoint', () => {
   it.skipIf(!posix)('makes a short socket path in an owner-only folder', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'fm-ai-ep-'));
+    const base = await mkdtemp(join(tmpdir(), 'fmp-'));
     try {
       const endpoint = await createEndpoint({ baseDirectory: base });
-      expect(Buffer.byteLength(endpoint.path)).toBeLessThanOrEqual(100);
+      expect(Buffer.byteLength(endpoint.path)).toBeLessThanOrEqual(103);
       expect(endpoint.path.endsWith('.sock')).toBe(true);
       const directory = endpoint.path.slice(0, endpoint.path.lastIndexOf('/'));
       expect((await stat(directory)).mode & 0o777).toBe(0o700);
@@ -270,11 +295,11 @@ describe('createEndpoint', () => {
   });
 
   it.skipIf(!posix)('refuses an existing socket folder that others can read, and a path that is too long', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'fm-ai-ep-'));
+    const base = await mkdtemp(join(tmpdir(), 'fmp-'));
     try {
       const uid = process.getuid?.() ?? 0;
-      await mkdir(join(base, `fmai-${uid}`), { mode: 0o755 });
-      await chmod(join(base, `fmai-${uid}`), 0o755);
+      await mkdir(join(base, socketFolderName(uid, undefined)), { mode: 0o755 });
+      await chmod(join(base, socketFolderName(uid, undefined)), 0o755);
       await expect(createEndpoint({ baseDirectory: base })).rejects.toThrow(/accessible by other users/);
       const long = join(base, 'x'.repeat(90));
       await expect(createEndpoint({ baseDirectory: long })).rejects.toThrow(/byte limit/);

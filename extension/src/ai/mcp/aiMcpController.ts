@@ -10,8 +10,12 @@ import { discoveryDirectory, installShim } from './mcpConfig';
 import { getProcessStartTime } from './processInfo';
 import { createEndpoint, removeStaleSockets } from './socketPath';
 
-/** Per-workspace flag: the user started the server in this window and has not stopped it. */
+/** Per-workspace: the permission epoch in which the user started the server here (absent when stopped). */
 export const STARTED_HERE_KEY = 'filemaker.ai.externalServer.startedHere';
+/** Global: counts how many times the permission setting was turned off. */
+export const PERMISSION_EPOCH_KEY = 'filemaker.ai.externalServer.permissionEpoch';
+/** Global: the last state of the permission setting this extension saw. */
+export const PERMISSION_SEEN_KEY = 'filemaker.ai.externalServer.permissionSeen';
 
 export interface McpControllerDeps {
   core: McpToolCore;
@@ -25,8 +29,22 @@ export interface McpControllerDeps {
   /** `vscode.env.remoteName`. */
   remoteName: () => string | undefined;
   workspaceFolders: () => string[];
-  /** workspaceState: remembers that the user started the server in this window. */
-  state: { get(): boolean; set(value: boolean): PromiseLike<void> | void };
+  /**
+   * workspaceState: the permission epoch in which the user started the server in this
+   * workspace, or undefined. It is honoured only while it equals the current epoch.
+   */
+  state: { get(): number | undefined; set(value: number | undefined): PromiseLike<void> | void };
+  /**
+   * globalState: the permission epoch (bumped whenever the setting is seen turned off, so a
+   * workspace that was closed at that moment does not revive its flag when the setting is
+   * turned on again) and the last permission state seen.
+   */
+  permission: {
+    epoch(): number;
+    bump(): PromiseLike<void> | void;
+    seenEnabled(): boolean | undefined;
+    setSeenEnabled(value: boolean): PromiseLike<void> | void;
+  };
   log: (message: string) => void;
   /** Tells the user something (an external program connected). */
   notify?: (message: string) => void;
@@ -76,21 +94,40 @@ export class AiMcpController implements vscode.Disposable {
   // ---------------------------------------------------------------------------------------
   // What the user does
 
-  /** The user starts the server in this window. */
+  /**
+   * The user, after a confirmation, starts the server in this window AND wants it to come back
+   * when this workspace is reopened. Only this method remembers anything; `start()` does not.
+   */
   public async startHere(): Promise<void> {
     await this.start();
-    await this.deps.state.set(true);
+    await this.deps.state.set(this.deps.permission.epoch());
   }
 
   /** The user stops the server in this window: it stays stopped, also after a restart. */
   public async stopHere(): Promise<void> {
-    await this.deps.state.set(false);
+    await this.deps.state.set(undefined);
     await this.stop();
   }
 
-  /** On activation: start only if the permission is on AND the user started it in this window before. */
+  /**
+   * Notes the state of the permission setting. When it is seen off (now, or on activation
+   * after being turned off while no window was open) the epoch advances, which ends every
+   * workspace's "started here" memory, open or not.
+   */
+  public async reconcilePermission(): Promise<void> {
+    const enabled = this.deps.isEnabled();
+    if (!enabled && this.deps.permission.seenEnabled() !== false) {
+      await this.deps.permission.bump();
+    }
+    if (this.deps.permission.seenEnabled() !== enabled) {
+      await this.deps.permission.setSeenEnabled(enabled);
+    }
+  }
+
+  /** On activation: start only if the permission is on AND the user started it here in the current permission epoch. */
   public async autostart(): Promise<void> {
-    if (this.deps.isEnabled() && this.deps.state.get()) {
+    await this.reconcilePermission();
+    if (this.deps.isEnabled() && this.deps.state.get() === this.deps.permission.epoch()) {
       try {
         await this.start();
       } catch (error) {
@@ -99,9 +136,10 @@ export class AiMcpController implements vscode.Disposable {
     }
   }
 
-  /** The permission setting changed: if it is off, the server stops and the flag is cleared. */
+  /** The permission setting changed: if it is off, the server stops, the flag is cleared and the epoch advances. */
   public async handleSettingChange(): Promise<void> {
-    if (!this.deps.isEnabled() && (this.isRunning() || this.deps.state.get())) {
+    await this.reconcilePermission();
+    if (!this.deps.isEnabled() && (this.isRunning() || this.deps.state.get() !== undefined)) {
       await this.stopHere();
     }
   }
@@ -141,7 +179,7 @@ export class AiMcpController implements vscode.Disposable {
     }
 
     const token = newToken();
-    const endpoint = await createEndpoint();
+    const endpoint = await createEndpoint({ scope: storage });
     const server = new AiMcpServer({
       core: this.deps.core,
       token,
