@@ -40,9 +40,9 @@ const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 /**
  * Turns a file-safe base name (already reduced to letters, digits and `_.-`) into one that
  * cannot collide with a different original name or mean something special:
- *  - when the original had characters that were dropped or replaced (other than plain
- *    spaces and underscores), a short hash of the original is appended, so `A/B` and `A:B`
- *    stay two files;
+ *  - when the sanitized name differs from the original in any way (characters dropped or
+ *    replaced, spaces folded, text cut short), a short hash of the original is appended, so
+ *    `A/B`, `A:B`, `My Layout` and `My_Layout` stay separate files;
  *  - Windows device names (`CON`, `NUL`, `COM1`, ...) get a leading underscore;
  *  - a name made only of dots, or empty, becomes `layout`.
  */
@@ -52,10 +52,15 @@ export function distinctFileName(original: string, sanitized: string, fallback =
     name = fallback;
   }
 
-  if (/[^A-Za-z0-9_.\-\s]/.test(original.trim()) || name === fallback) {
-    const hash = createHash('sha1').update(original).digest('hex').slice(0, 6);
+  if (sanitized !== original || name === fallback) {
+    const hash = createHash('sha1').update(original).digest('hex').slice(0, 8);
     name = name === fallback && original.trim().length === 0 ? name : `${name}-${hash}`;
   }
 
   return WINDOWS_RESERVED_NAMES.test(name) ? `_${name}` : name;
+}
+
+/** A snapshot or cache file name taken from an index file in the workspace: a plain `.json` name, no path. */
+export function isPlainJsonFileName(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_.-]+\.json$/.test(value) && !value.includes('..');
 }

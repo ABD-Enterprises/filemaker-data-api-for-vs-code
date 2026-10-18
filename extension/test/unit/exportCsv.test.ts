@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { escapeCsvValue, recordsToCsv } from '../../src/utils/exportCsv';
+import { escapeCsvValue, recordsToCsv, restoreFormulaText } from '../../src/utils/exportCsv';
 
 describe('exportCsv', () => {
   it('escapes commas, quotes, and newlines', () => {
@@ -46,5 +46,20 @@ describe('exportCsv spreadsheet formulas', () => {
   it('applies to every cell of an export', () => {
     const csv = recordsToCsv([{ A: '=1+1' }]);
     expect(csv.split('\n')[1]).toBe("'=1+1");
+  });
+});
+
+describe('exportCsv round trip', () => {
+  it('leaves signed numbers and phone numbers alone', () => {
+    expect(escapeCsvValue('+1 (555) 123-4567')).toBe('+1 (555) 123-4567');
+    expect(escapeCsvValue('-1,234.5')).toBe('"-1,234.5"');
+  });
+
+  it('restores text the export defused, and nothing else', () => {
+    for (const text of ['=1+1', '@x', '-N/A', '+cmd|calc', '-Notes']) {
+      expect(restoreFormulaText(escapeCsvValue(text).replace(/^"|"$/g, ''))).toBe(text);
+    }
+    expect(restoreFormulaText("it's fine")).toBe("it's fine");
+    expect(restoreFormulaText("'plain")).toBe("'plain");
   });
 });

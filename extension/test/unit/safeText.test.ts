@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commentText, distinctFileName, singleQuotedText, snippetPlaceholderText } from '../../src/utils/safeText';
+import { commentText, distinctFileName, isPlainJsonFileName, singleQuotedText, snippetPlaceholderText } from '../../src/utils/safeText';
 
 describe('safeText', () => {
   it('keeps text inside a comment: no line breaks and no early block-comment end', () => {
@@ -22,6 +22,21 @@ describe('safeText', () => {
   it('keeps layouts whose names differ only by punctuation as different files', () => {
     const names = ['A/B', 'A:B', 'A?B'].map((name) => distinctFileName(name, name.replace(/[^A-Za-z0-9_.-]+/g, '_')));
     expect(new Set(names).size).toBe(3);
+  });
+
+  it('keeps spacing variants, underscores and cut-short names apart', () => {
+    const clean = (name: string) => name.replace(/\s+/g, '_').slice(0, 120);
+    const names = ['My Layout', 'My  Layout', 'My_Layout', 'x'.repeat(130) + 'a', 'x'.repeat(130) + 'b'].map((name) =>
+      distinctFileName(name, clean(name))
+    );
+    expect(new Set(names).size).toBe(5);
+  });
+
+  it('accepts only plain json file names from an index', () => {
+    expect(isPlainJsonFileName('p__L__2020__id.json')).toBe(true);
+    for (const bad of ['../x.json', 'a/b.json', 'a\\b.json', '..json', 'x.txt', 5, undefined]) {
+      expect(isPlainJsonFileName(bad)).toBe(false);
+    }
   });
 
   it('leaves plain names alone and avoids Windows device names and dot-only names', () => {

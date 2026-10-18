@@ -1,3 +1,4 @@
+import { isPlainJsonFileName } from '../utils/safeText';
 import { randomUUID } from 'crypto';
 import { mkdir, readdir, readFile, unlink, writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -414,8 +415,7 @@ function isIndexEntry(value: unknown): value is SchemaSnapshotSummary & { fileNa
     typeof entry.layout === 'string' &&
     typeof entry.capturedAt === 'string' &&
     typeof entry.fileName === 'string' &&
-    /^[A-Za-z0-9_.-]+\.json$/.test(entry.fileName) &&
-    !entry.fileName.includes('..') &&
+    isPlainJsonFileName(entry.fileName) &&
     entry.fileName !== SNAPSHOT_INDEX_FILE
   );
 }

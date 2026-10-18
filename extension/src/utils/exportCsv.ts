@@ -7,6 +7,8 @@ export interface CsvExportOptions {
 }
 
 const PLAIN_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+/** Signed numbers and phone numbers such as `-1,234.5` or `+1 (555) 123-4567`. */
+const NUMBER_OR_PHONE = /^[-+][\d\s().,/-]*\d[\d\s().,/-]*$/;
 
 /**
  * Spreadsheets run a cell that starts with `=`, `+`, `-`, `@`, tab or carriage return as a
@@ -15,7 +17,11 @@ const PLAIN_NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
  * as `-5` are left alone.
  */
 function neutralizeFormula(text: string): string {
-  return /^[=+\-@\t\r]/.test(text) && !PLAIN_NUMBER.test(text) ? `'${text}` : text;
+  if (!/^[=+\-@\t\r]/.test(text) || PLAIN_NUMBER.test(text) || NUMBER_OR_PHONE.test(text)) {
+    return text;
+  }
+
+  return `'${text}`;
 }
 
 export function escapeCsvValue(value: unknown, options?: { neutralizeFormulas?: boolean }): string {
@@ -76,4 +82,9 @@ export function recordsToCsv(
   }
 
   return lines.join(lineEnding);
+}
+
+/** Reverses `neutralizeFormula` when reading back a file this extension exported. */
+export function restoreFormulaText(text: string): string {
+  return /^'[=+\-@\t\r]/.test(text) ? text.slice(1) : text;
 }
