@@ -30,6 +30,7 @@ PR title prefix matches the highest-tier label added:
 
 - A malformed `filemaker.ai.hiddenFields` value no longer switches hiding off for the whole scope: non-text entries are ignored and the valid names in the same list still hide (a bare string counts as one name), and the Output panel says so once.
 - Refreshing a generated FM Web runtime file now keeps the file permissions of the file it replaces, and a write that fails part way (for example a full disk) no longer leaves a hidden `.tmp` file in the generated folder.
+- The AI server for external tools now writes a line to the Output panel when it rejects a socket folder (for example an `XDG_RUNTIME_DIR` that is open to other users) before falling back to the temp folder, and the error names each folder variable that was tried instead of only the last one (a too-long socket path now names the variable actually in use).
 
 ### [INTERNAL]
 

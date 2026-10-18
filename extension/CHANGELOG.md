@@ -6,6 +6,7 @@
 - [INTERNAL] Real VS Code UI end-to-end tests (`npm run test:e2e-ui`, not part of `npm test` or CI): Playwright drives the downloaded VS Code desktop app with the built VSIX through twelve user journeys plus failure-mode, AI and MCP server journeys, writing a step report with screenshots. A known-findings list (`e2e-ui/known-findings.json`) lets a run exit 0 when only known findings fail and exit 1 on a new failure; the real Claude Code CLI journey is opt-in (`E2E_CLAUDE=1`). See `extension/e2e-ui/README.md`.
 - [FIX] A malformed `filemaker.ai.hiddenFields` value no longer switches hiding off for the whole scope: non-text entries are ignored and the valid names in the same list still hide (a bare string counts as one name), and the Output panel says so once.
 - [FIX] Refreshing a generated FM Web runtime file now keeps the file permissions of the file it replaces, and a write that fails part way (for example a full disk) no longer leaves a hidden `.tmp` file in the generated folder.
+- [FIX] The AI server for external tools now writes a line to the Output panel when it rejects a socket folder (for example an `XDG_RUNTIME_DIR` that is open to other users) before falling back to the temp folder, and the error names each folder variable that was tried instead of only the last one (a too-long socket path now names the variable actually in use).
 
 ## 1.4.0
 
