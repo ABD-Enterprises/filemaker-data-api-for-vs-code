@@ -26,25 +26,25 @@ export const AUDIT_SCRIPT = () => {
   // Root cause first: a <select> wider than the panel (a very long option text widens it) pushes the whole
   // page sideways. Report that once, then constrain such selects and audit the rest of the page without it.
   const rootCauses = [];
+  let hasLongOption = false;
   for (const sel of document.querySelectorAll('select')) {
+    const longest = [...sel.options].reduce((m, o) => (o.text.length > m.length ? o.text : m), '');
+    if (longest.length > 60) hasLongOption = true;
     if (!visible(sel)) continue;
     const w = sel.getBoundingClientRect().width;
-    if (w > vw + 1) {
-      const longest = [...sel.options].reduce(
-        (m, o) => (o.text.length > m.length ? o.text : m),
-        ''
-      );
+    if (w > vw + 1)
       rootCauses.push({
         type: 'select-widened-by-long-option',
         where: `${desc(sel)} is ${Math.round(w)}px wide in a ${vw}px panel; longest option has ${longest.length} characters`
       });
-    }
   }
-  if (rootCauses.length) {
-    const st = document.createElement('style');
-    st.textContent =
-      'select{max-width:100% !important;width:100% !important;min-width:0 !important}';
-    document.head.appendChild(st);
+  // Audit the rest of the page as if those selects were capped to the panel (the cap is refreshed per call).
+  if (hasLongOption) {
+    // CSSOM edits are allowed under the webview's CSP (an injected <style> element is not).
+    for (const sel of document.querySelectorAll('select')) {
+      sel.style.setProperty('max-width', `${Math.max(120, Math.floor(vw * 0.5))}px`, 'important');
+      sel.style.setProperty('min-width', '0', 'important');
+    }
   }
   if (doc.scrollWidth > vw + 1)
     issues.push({
