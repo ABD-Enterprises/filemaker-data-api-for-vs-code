@@ -301,18 +301,16 @@ export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): 
 }
 
 /**
- * Columns the export writes before the fields (`recordId`, `modId`). They are record
- * metadata, not fields: `recordId` names the record to edit, and `modId` is ignored on
- * import because the update path sends no modification-id guard (and FileMaker would reject
- * `modId` as an unknown field). Matched case-insensitively and ignoring surrounding space.
+ * Columns the export writes before the fields: exactly `recordId` and `modId`. They are record
+ * metadata, not fields: `recordId` names the record to edit, and `modId` is ignored on import
+ * because the update path sends no modification-id guard (FileMaker would reject it as an
+ * unknown field). Only surrounding whitespace and a byte-order mark are ignored. The match is
+ * case-sensitive on purpose: a layout field called `RecordID` or `ModId` is a field, and must
+ * never be mistaken for FileMaker's internal record id.
  */
 function metaColumn(header: string): 'recordId' | 'modId' | undefined {
-  const normalized = header.trim().toLowerCase();
-  if (normalized === 'recordid') {
-    return 'recordId';
-  }
-
-  return normalized === 'modid' ? 'modId' : undefined;
+  const normalized = header.replace(/^\uFEFF/, '').trim();
+  return normalized === 'recordId' || normalized === 'modId' ? normalized : undefined;
 }
 
 /**

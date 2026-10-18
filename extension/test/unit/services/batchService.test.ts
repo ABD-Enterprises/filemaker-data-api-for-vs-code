@@ -313,9 +313,19 @@ describe('batch export then import round trip', () => {
     }
   });
 
-  it('ignores the recordId and modId meta columns whatever their case', () => {
-    const entries = parseBatchUpdateInput('RecordID,MODID, modId ,name\n7,3,4,Zed\n', 'csv');
+  it('ignores only the exact recordId and modId meta columns (whitespace and a BOM are allowed)', () => {
+    const entries = parseBatchUpdateInput('\uFEFFrecordId, modId ,name\n7,3,Zed\n', 'csv');
     expect(entries).toEqual([{ recordId: '7', fieldData: { name: 'Zed' } }]);
+  });
+
+  it('does not take a field named RecordID for the record id', () => {
+    expect(() => parseBatchUpdateInput('RecordID,Name\n7,Alice\n', 'csv')).toThrow(/must include a "recordId" column/);
+    expect(() => parseBatchUpdateInput('recordid,Name\n7,Alice\n', 'csv')).toThrow(/recordId/);
+  });
+
+  it('writes user fields named RecordID and ModId as fields when a real recordId column exists', () => {
+    const entries = parseBatchUpdateInput('recordId,RecordID,ModId,Name\n7,99,5,Alice\n', 'csv');
+    expect(entries).toEqual([{ recordId: '7', fieldData: { RecordID: 99, ModId: 5, Name: 'Alice' } }]);
   });
 
   it('documents the lossy cases: cells that look like JSON or numbers become JSON values, empty cells are skipped', async () => {

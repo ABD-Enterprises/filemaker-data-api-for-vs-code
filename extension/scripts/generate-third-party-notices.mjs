@@ -31,6 +31,9 @@ function designerBundle() {
     format: 'iife',
     minify: true,
     define: { 'process.env.NODE_ENV': '"production"' },
+    // Resolve the workspace package from its source so the list does not depend on whether
+    // shared/dist has been built yet (CI runs the tests before the build).
+    alias: { '@fmweb/shared': path.resolve(designerDir, '..', 'shared/src/index.ts') },
     logLevel: 'error'
   };
 }
@@ -173,7 +176,9 @@ export async function collectBundledPackages() {
     });
   }
 
-  packages.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+  // Plain code-unit comparison: localeCompare depends on the machine's locale.
+  const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  packages.sort((a, b) => compare(a.name, b.name) || compare(a.version, b.version));
   missing.sort();
   return { packages, missing };
 }

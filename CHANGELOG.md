@@ -38,7 +38,7 @@ PR title prefix matches the highest-tier label added:
 - Allow `..` inside snapshot/offline-cache index file names (layout `Q1..Q2`) while still rejecting traversal; traversal corpus added.
 - AI kill-switch status item does nothing (with guidance) when AI is not enabled, instead of silently setting the switch.
 - Toggle Offline Mode writes the user (Global) scope, creates no workspace settings file, and reports the effective state and what keeps it on.
-- Batch CSV import ignores the `recordId`/`modId` meta columns (case-insensitive) so an exported file re-imports cleanly; round-trip test added.
+- Batch CSV import ignores the `recordId`/`modId` meta columns so an exported file re-imports cleanly; round-trip test added.
 - FM Web preview: write the bridge URL and session token to the generated runtime's gitignored `.env.local`, send `X-FM-Bridge-Token` from the runtime client (and call `fetch` unbound), and apply `features.recordEdit.enabled` and the enterprise `recordEdit` guard to bridge edit/create/delete.
 - AI tools follow-ups (#380): 4,000-character dialog budget, placeholder markers refused in writes, host-only server scrub, session generation counter for the quota, wider post-dialog re-check.
 - Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.
