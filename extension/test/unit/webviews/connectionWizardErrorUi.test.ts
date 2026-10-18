@@ -10,12 +10,22 @@ import { ConnectionWizardPanel } from '../../../src/webviews/connectionWizard';
 import { InMemorySecretStorage } from '../mocks';
 
 // The page script is run in a real DOM (jsdom, which the designer-ui workspace installs).
+interface DomElement {
+  value: string;
+  textContent: string | null;
+  click(): void;
+  contains(other: unknown): boolean;
+}
 interface JsdomWindow {
-  document: Document;
+  document: {
+    getElementById(id: string): DomElement | null;
+    body: { textContent: string | null };
+    dispatchEvent(event: unknown): boolean;
+  };
   eval(code: string): void;
-  dispatchEvent(event: Event): boolean;
-  MessageEvent: typeof MessageEvent;
-  Event: typeof Event;
+  dispatchEvent(event: unknown): boolean;
+  MessageEvent: new (type: string, init: { data: unknown }) => unknown;
+  Event: new (type: string) => unknown;
 }
 type JsdomCtor = new (html: string, options: { runScripts: string; url: string }) => { window: JsdomWindow };
 let JSDOM: JsdomCtor | undefined;
@@ -74,13 +84,13 @@ describe.skipIf(!JSDOM)('Test Connection failure in the wizard page', () => {
 
   it('puts the Trust this certificate… action with the error for certificate problems, and it asks for the review', () => {
     const { document, send, posted } = load();
-    (document.getElementById('profileName') as HTMLInputElement).value = 'P';
-    (document.getElementById('serverUrl') as HTMLInputElement).value = 'https://fm.example.com';
-    (document.getElementById('database') as HTMLInputElement).value = 'D';
-    (document.getElementById('username') as HTMLInputElement).value = 'u';
+    (document.getElementById('profileName') as DomElement).value = 'P';
+    (document.getElementById('serverUrl') as DomElement).value = 'https://fm.example.com';
+    (document.getElementById('database') as DomElement).value = 'D';
+    (document.getElementById('username') as DomElement).value = 'u';
     send({ type: 'testError', message: MESSAGE, trust: 'trust' });
 
-    const button = document.getElementById('trustCertFromErrorBtn') as HTMLButtonElement;
+    const button = document.getElementById('trustCertFromErrorBtn') as DomElement;
     expect(button.textContent).toBe('Trust this certificate…');
     expect(document.getElementById('status')?.contains(button)).toBe(true);
     button.click();
