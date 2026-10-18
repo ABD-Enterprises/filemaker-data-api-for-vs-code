@@ -65,6 +65,8 @@ export interface AiContextInput {
   scripts?: string[];
   /** Layouts the user picked whose metadata could not be read. */
   unavailableLayouts?: number;
+  /** Fields the caller left out because `filemaker.ai.hiddenFields` hides them from AI tools (only the count is written). */
+  hiddenFieldsOmitted?: number;
   budgetBytes?: number;
 }
 
@@ -179,6 +181,9 @@ function renderPlan(input: AiContextInput, plan: Plan): AiContextRenderResult {
     ''
   );
 
+  if (input.hiddenFieldsOmitted && input.hiddenFieldsOmitted > 0) {
+    lines.push(`Fields left out because the user's settings hide them from AI tools: ${input.hiddenFieldsOmitted}.`, '');
+  }
   if (input.unavailableLayouts && input.unavailableLayouts > 0) {
     lines.push(`Layouts skipped because their metadata could not be read: ${input.unavailableLayouts}.`, '');
   }

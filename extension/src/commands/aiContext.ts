@@ -2,6 +2,8 @@ import { join } from 'path';
 
 import * as vscode from 'vscode';
 
+import { HiddenFields } from '../ai/aiText';
+import { readAiSettings } from '../ai/aiSettings';
 import {
   AI_CONTEXT_END_MARKER,
   AI_CONTEXT_MAX_LAYOUTS,
@@ -120,7 +122,8 @@ async function writeAiContext(deps: RegisterAiContextCommandsDeps): Promise<void
     generatedAt: (deps.now ?? (() => new Date()))(),
     layouts: gathered.layouts,
     scripts: gathered.scripts,
-    unavailableLayouts: gathered.unavailable
+    unavailableLayouts: gathered.unavailable,
+    hiddenFieldsOmitted: gathered.hiddenOmitted
   });
   const wrapped = wrapInMarkers(rendered.content);
   // Names cannot contain these (the allowlist has no `<`), but a section that could end
@@ -150,7 +153,8 @@ async function writeAiContext(deps: RegisterAiContextCommandsDeps): Promise<void
   const summary =
     `AI context written (${rendered.includedLayouts} layouts, ${rendered.includedScripts} scripts` +
     `${rendered.omittedLayouts > 0 ? `, ${rendered.omittedLayouts} layouts left out for size` : ''}` +
-    `${rendered.replacedNames > 0 ? `, ${rendered.replacedNames} names replaced` : ''}): ${outcome.path}`;
+    `${rendered.replacedNames > 0 ? `, ${rendered.replacedNames} names replaced` : ''}` +
+    `${gathered.hiddenOmitted > 0 ? `, ${gathered.hiddenOmitted} field${gathered.hiddenOmitted === 1 ? '' : 's'} left out by filemaker.ai.hiddenFields` : ''}): ${outcome.path}`;
   const actions = ['Open File'];
   if (!outcome.insideWorkspace && workspaceRoots.length > 0) {
     actions.push('Copy into Workspace');
@@ -169,9 +173,12 @@ async function gatherSchema(
   layouts: string[],
   deps: RegisterAiContextCommandsDeps,
   token?: vscode.CancellationToken
-): Promise<{ layouts: AiContextLayout[]; scripts: string[] | undefined; unavailable: number } | undefined> {
+): Promise<{ layouts: AiContextLayout[]; scripts: string[] | undefined; unavailable: number; hiddenOmitted: number } | undefined> {
   const result: AiContextLayout[] = [];
   let unavailable = 0;
+  let hiddenOmitted = 0;
+  // The same setting and the same name matching the AI tools use: a hidden field is not listed here either.
+  const hidden = new HiddenFields(readAiSettings(vscode.workspace.getConfiguration('filemaker')).hiddenFields);
 
   for (const layout of layouts) {
     if (token?.isCancellationRequested) {
@@ -182,7 +189,15 @@ async function gatherSchema(
       if (schema.supported) {
         result.push({
           name: layout,
-          fields: schema.fields.map((field) => ({ name: field.name, type: field.result ?? field.type }))
+          fields: schema.fields
+            .filter((field) => {
+              if (hidden.isHidden(field.name)) {
+                hiddenOmitted += 1;
+                return false;
+              }
+              return true;
+            })
+            .map((field) => ({ name: field.name, type: field.result ?? field.type }))
         });
       } else {
         unavailable += 1;
@@ -205,7 +220,7 @@ async function gatherSchema(
     return undefined;
   }
 
-  return { layouts: result, scripts, unavailable };
+  return { layouts: result, scripts, unavailable, hiddenOmitted };
 }
 
 async function resolveTarget(

@@ -10,10 +10,28 @@ const ACTIVE_PROFILE_KEY = 'filemakerDataApiTools.activeProfileId';
 const SAVED_QUERIES_KEY = 'filemakerDataApiTools.savedQueries';
 
 export class ProfileStore {
+  private readonly changeListeners = new Set<() => void>();
+
   public constructor(
     private readonly globalState: vscode.Memento,
     private readonly workspaceState: vscode.Memento
   ) {}
+
+  /** Calls `listener` after profiles are added, changed or removed, or the active profile changes. */
+  public onDidChange(listener: () => void): { dispose(): void } {
+    this.changeListeners.add(listener);
+    return { dispose: () => void this.changeListeners.delete(listener) };
+  }
+
+  private fireChange(): void {
+    for (const listener of [...this.changeListeners]) {
+      try {
+        listener();
+      } catch {
+        // a listener must not break a save
+      }
+    }
+  }
 
   public async listProfiles(): Promise<ConnectionProfile[]> {
     const rawProfiles = this.globalState.get<unknown>(PROFILES_KEY, []);
@@ -43,6 +61,7 @@ export class ProfileStore {
     }
 
     await this.globalState.update(PROFILES_KEY, profiles);
+    this.fireChange();
   }
 
   public async removeProfile(profileId: string): Promise<void> {
@@ -58,6 +77,7 @@ export class ProfileStore {
     const savedQueries = this.listSavedQueries();
     const remaining = savedQueries.filter((query) => query.profileId !== profileId);
     await this.workspaceState.update(SAVED_QUERIES_KEY, remaining);
+    this.fireChange();
   }
 
   public getActiveProfileId(): string | undefined {
@@ -66,6 +86,7 @@ export class ProfileStore {
 
   public async setActiveProfileId(profileId: string | undefined): Promise<void> {
     await this.globalState.update(ACTIVE_PROFILE_KEY, profileId);
+    this.fireChange();
   }
 
   public listSavedQueries(): SavedQuery[] {

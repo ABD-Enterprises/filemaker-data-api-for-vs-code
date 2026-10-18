@@ -2,7 +2,7 @@
   "name": "filemaker-data-api-tools",
   "displayName": "FileMaker Data API Tools",
   "description": "Query, edit, and explore FileMaker data without leaving VS Code. Full CRUD for fmrest, visual query builder, schema diffing, batch import/export, and TypeScript type generation for Claris FileMaker Server and FileMaker Cloud.",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "SureForgeTech",
   "license": "MIT",
   "author": {
@@ -51,7 +51,17 @@
     "crud"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:filemakerConnectionWizard",
+    "onWebviewPanel:filemakerQueryBuilder",
+    "onWebviewPanel:filemakerRecordViewer",
+    "onWebviewPanel:filemakerRecordEditor",
+    "onWebviewPanel:filemakerScriptRunner",
+    "onWebviewPanel:filemakerLayoutMode",
+    "onWebviewPanel:filemakerSchemaDiff",
+    "onWebviewPanel:filemakerEnvironmentCompare",
+    "onWebviewPanel:filemakerDiagnosticsDashboard",
+    "onWebviewPanel:filemakerEffectiveSettings"
   ],
   "main": "./dist/extension.js",
   "capabilities": {

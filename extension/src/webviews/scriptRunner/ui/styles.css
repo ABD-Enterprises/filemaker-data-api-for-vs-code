@@ -199,6 +199,11 @@ button:disabled {
   margin-bottom: 8px;
 }
 
+.summary.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
 .loading-skeleton {
   display: flex;
   flex-direction: column;

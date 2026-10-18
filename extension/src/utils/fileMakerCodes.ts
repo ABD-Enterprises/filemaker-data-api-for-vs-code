@@ -35,6 +35,14 @@ const ADMIN_PRIVILEGE =
 
 const KNOWN: Record<number, FileMakerErrorInfo> = {
   0: { meaning: 'No error.', category: 'request' },
+  1: { meaning: 'User canceled the action.', category: 'request' },
+  3: {
+    meaning: 'Command is unavailable (for example, wrong operating system or mode).',
+    category: 'request',
+    advice: 'A script step is not allowed when the script runs through the Data API (for example a step that needs a window or a dialog). Ask the script author to make it server-safe.'
+  },
+  4: { meaning: 'Command is unknown.', category: 'request' },
+  5: { meaning: 'Command is invalid (for example, a Set Field script step does not have a calculation specified).', category: 'request' },
   9: {
     meaning: 'Insufficient privileges.',
     category: 'privilege',

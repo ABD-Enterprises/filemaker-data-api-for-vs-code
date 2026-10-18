@@ -4,6 +4,7 @@ import { FMClientError } from '../../services/errors';
 import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
+import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
 import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
 import { buildWebviewCsp, createNonce } from '../common/csp';
@@ -223,15 +224,19 @@ export class ScriptRunnerPanel {
       const request = validateRunScriptPayload(payload);
       const result = await this.fmClient.runScript(profile, request);
 
-      this.lastResult = {
-        profileId: payload.profileId,
-        request,
-        result
-      };
+      const payloadForPage = { profileId: payload.profileId, request, result };
+      this.lastResult = payloadForPage;
 
+      // A script that ran but reported a non-zero error (for example 3, "command is unavailable") is not a
+      // success: the Data API answers 200 with `scriptError` in the response, so the page needs it spelled out.
+      const scriptErrors = extractScriptErrors(result.response);
       await this.panel.webview.postMessage({
         type: 'scriptResult',
-        payload: this.lastResult
+        payload: {
+          ...payloadForPage,
+          scriptErrors,
+          scriptErrorText: scriptErrors.length > 0 ? describeScriptErrors(scriptErrors) : undefined
+        }
       });
     } catch (error) {
       if (error instanceof FMClientError && error.code === 'SCRIPT_UNSUPPORTED') {
@@ -546,6 +551,10 @@ function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
 }
 
 function formatError(error: unknown): string {
+  if (error instanceof FMClientError && error.kind === 'timeout') {
+    // The request gave up waiting; the server was not told to stop.
+    return `${error.message} The script may still be running on the server.`;
+  }
   if (error instanceof Error) {
     return error.message;
   }

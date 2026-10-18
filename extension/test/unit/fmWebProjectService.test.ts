@@ -47,6 +47,25 @@ describe('FmWebProjectService', () => {
     expect(config.name).toBe('Demo');
   });
 
+  it('tells listeners when the project file has been written, after it exists (the command context key depends on it)', async () => {
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub(), createSchemaServiceStub(), logger);
+    const seen: Array<string | undefined> = [];
+    const subscription = service.onDidChangeProject(() => {
+      seen.push('fired');
+    });
+    service.onDidChangeProject(() => {
+      throw new Error('listener bug');
+    });
+
+    await service.initializeProject('Demo');
+    expect(seen).toEqual(['fired']);
+    expect((await service.readProjectConfig())?.name).toBe('Demo'); // already readable when the event fires
+
+    subscription.dispose();
+    await service.initializeProject('Demo');
+    expect(seen).toEqual(['fired']);
+  });
+
   it('syncs metadata into local cache for offline usage', async () => {
     const service = new FmWebProjectService(
       createProfileStoreStub(),
