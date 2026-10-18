@@ -14,9 +14,10 @@ const NUMBER_OR_PHONE = /^[-+][\d\s().,/-]*\d[\d\s().,/-]*$/;
  * Spreadsheets run a cell that starts with `=`, `+`, `-`, `@`, tab or carriage return as a
  * formula (`=HYPERLINK(...)`, `+cmd|...`). Text from a database can start that way, so it is
  * prefixed with an apostrophe, which spreadsheets treat as "this is text". Plain numbers such
- * as `-5` are left alone.
+ * as `-5` are left alone. Keep in step with ui/cellText.js in the Query Builder webview (copy
+ * as table); test/unit/queryBuilderCellText.test.ts compares the two.
  */
-function neutralizeFormula(text: string): string {
+export function neutralizeFormula(text: string): string {
   if (!/^'*[=+\-@\t\r]/.test(text) || PLAIN_NUMBER.test(text) || NUMBER_OR_PHONE.test(text)) {
     return text;
   }

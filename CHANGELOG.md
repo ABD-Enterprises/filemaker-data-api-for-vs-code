@@ -61,6 +61,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [SECURITY]
 
+- Query Builder copy-as-table neutralizes formula-looking cells like the CSV export (shared behaviour, parity-tested).
 - Record edit, create and upload and the Script Runner require a trusted workspace (commands, panels and panel messages), matching the documented behaviour; the manifest's untrusted-workspace description lists them.
 - Escape database-supplied names in generated types, clients and snippets; give punctuation-only-different layouts distinct file names and safe Windows names.
 - Neutralize spreadsheet formulas in CSV exports: a cell starting with `=`, `+`, `-`, `@`, tab or carriage return gets a leading apostrophe.

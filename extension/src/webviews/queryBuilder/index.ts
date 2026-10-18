@@ -916,6 +916,7 @@ export class QueryBuilderPanel {
       );
     const styleUri = uiUri('styles.css');
     const findFormUri = uiUri('findForm.js');
+    const cellTextUri = uiUri('cellText.js');
     const scriptUri = uiUri('index.js');
 
     const nonce = createNonce();
@@ -1049,6 +1050,7 @@ export class QueryBuilderPanel {
   </div>
 
   <script nonce="${nonce}" src="${findFormUri}"></script>
+  <script nonce="${nonce}" src="${cellTextUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

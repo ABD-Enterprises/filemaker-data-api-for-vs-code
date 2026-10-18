@@ -1314,7 +1314,9 @@ function buildResultsTsv() {
   }
 
   const columns = ['recordId', ...collectColumns(records, Infinity)];
-  const clean = (value) => toCellValue(value).replace(/[\t\r\n]+/g, ' ');
+  // A cell that a spreadsheet would run as a formula (=HYPERLINK(...), +cmd|...) gets a leading
+  // apostrophe, as in the CSV export. Tabs and line breaks are flattened first.
+  const clean = (value) => window.CellText.neutralizeFormula(toCellValue(value).replace(/[\t\r\n]+/g, ' '));
   const lines = [columns.map(clean).join('\t')];
   sortRecords(records).forEach((record) => {
     lines.push(columns.map((column) => clean(getCellRaw(record, column))).join('\t'));
