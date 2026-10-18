@@ -50,7 +50,7 @@ The Record Editor's create mode lists the layout's fields, has a **Create Record
 
 ### 7. The FM Web live preview is not in the Marketplace build
 
-The Marketplace package does not include the preview app template, so **Start FM Web Preview Server** and **Generate FM Web Next.js App** say "not available in this installation" and need the repository. Layout Mode and metadata sync are unchanged. For repository users the preview now sends its bridge token, and previously generated apps get their managed files refreshed (an edited copy is left alone with a warning).
+The Marketplace package does not include the preview app template, so **Start FM Web Preview Server** and **Generate FM Web Next.js App** are hidden from the Command Palette (invoked another way they say "not available in this installation") and need the repository. Layout Mode and metadata sync are unchanged. For repository users the preview now sends its bridge token, and previously generated apps get their managed files refreshed (an edited copy is left alone with a warning).
 
 ### 8. Other behavior to know about
 
