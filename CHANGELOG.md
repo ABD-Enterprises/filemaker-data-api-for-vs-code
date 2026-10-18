@@ -62,6 +62,7 @@ PR title prefix matches the highest-tier label added:
 - Untrack artifacts/*.log and gitignore them.
 - Ship generated `THIRD_PARTY_NOTICES.txt` (checked in CI via `package:check` and a unit test); exclude lint config, build scripts, QA docs and ARCHITECTURE.md from the VSIX.
 - Production-minify the extension, worker and Layout Mode UI bundles; no inline or shipped source maps; clear designer-ui build failure message.
+- Add a catalogue of FileMaker failure modes (`docs/FILEMAKER_FAILURE_MODES.md`): TLS and network, authentication, privilege-set effects and server quirks, what the extension shows for each, a ranked gap list, mock-server scenarios to add, and a troubleshooting-by-symptom section for the user guide. Documentation only.
 - Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
 - Release pipeline: separate publish (environment-gated, tag-on-main and version checks, no `npm ci` with the token) and release jobs; untrack the session lock file.
