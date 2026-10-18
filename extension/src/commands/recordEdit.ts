@@ -6,6 +6,7 @@ import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SchemaService } from '../services/schemaService';
 import type { SettingsService } from '../services/settingsService';
+import { describeScriptErrors } from '../services/responseGuard';
 import { validateRecordId } from '../utils/jsonValidate';
 import { readContainerUploadFile } from '../utils/containerUpload';
 import { parseLayoutArg, parseRecordIdArg, resolveLayoutContext, showCommandError } from './common';
@@ -184,6 +185,11 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
         vscode.window.showInformationMessage(
           `Record ${result.recordId} deleted from "${layout}".`
         );
+        if (result.scriptErrors && result.scriptErrors.length > 0) {
+          vscode.window.showWarningMessage(
+            `Record deleted, but ${describeScriptErrors(result.scriptErrors)}.`
+          );
+        }
       } catch (error) {
         await showCommandError(error, {
           fallbackMessage: 'Failed to delete record.',

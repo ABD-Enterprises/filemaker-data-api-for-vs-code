@@ -81,10 +81,22 @@ describe('SchemaService.getLayoutSchema', () => {
     expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
   });
 
-  it('caches unsupported-metadata error responses (404/405/501) as a sentinel', async () => {
-    const getLayoutMetadata = vi.fn().mockRejectedValue(
-      new FMClientError('not found', { status: 404 })
-    );
+  it('does not call a bare 404 "metadata not supported", and does not cache it', async () => {
+    // A bare 404 is a wrong address, wrong path or a disabled Data API: report it every time.
+    const getLayoutMetadata = vi.fn().mockRejectedValue(new FMClientError('Nothing answered', { status: 404 }));
+    const svc = new SchemaService({ getLayoutMetadata } as unknown as FMClient, createLogger());
+
+    await expect(svc.getLayoutSchema(profile(), 'Contacts')).rejects.toThrow(/Nothing answered/);
+    await expect(svc.getLayoutSchema(profile(), 'Contacts')).rejects.toThrow(/Nothing answered/);
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['404 that carries a FileMaker code', { status: 404, code: '1630' }],
+    ['405', { status: 405 }],
+    ['501', { status: 501 }]
+  ])('caches unsupported-metadata error responses (%s) as a sentinel', async (_label, options) => {
+    const getLayoutMetadata = vi.fn().mockRejectedValue(new FMClientError('not found', options));
     const fmClient = { getLayoutMetadata } as unknown as FMClient;
     const svc = new SchemaService(fmClient, createLogger());
 
@@ -95,6 +107,31 @@ describe('SchemaService.getLayoutSchema', () => {
     expect(first.message).toMatch(/not supported/i);
     expect(getLayoutMetadata).toHaveBeenCalledTimes(1); // second served from cache
     expect(second.fromCache).toBe(true);
+  });
+
+  it('drops its cache when the client says the profile changed (new sign-in, other account, profile edit)', async () => {
+    let invalidate: ((profileId: string) => void) | undefined;
+    const getLayoutMetadata = vi.fn().mockResolvedValue(metadataWith([{ name: 'a' }]));
+    const fmClient = {
+      getLayoutMetadata,
+      onProfileInvalidated: (listener: (profileId: string) => void) => {
+        invalidate = listener;
+        return () => undefined;
+      }
+    } as unknown as FMClient;
+    const svc = new SchemaService(fmClient, createLogger());
+
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(1);
+
+    invalidate?.('some-other-profile');
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(1); // another profile's change does not matter
+
+    invalidate?.(profile().id);
+    await svc.getLayoutSchema(profile(), 'Contacts');
+    expect(getLayoutMetadata).toHaveBeenCalledTimes(2);
   });
 
   it('does not cache unexpected errors (rethrows so caller can react)', async () => {

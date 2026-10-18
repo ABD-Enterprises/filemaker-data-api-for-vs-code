@@ -51,11 +51,17 @@ export async function validateCaBundleFile(rawPath: string): Promise<CaBundleVal
 
 /** Short text for profile lists and tooltips when the profile changes how TLS is checked. */
 export function describeTlsSettings(
-  profile: Pick<ConnectionProfile, 'allowSelfSigned' | 'caBundlePath'>
+  profile: Pick<ConnectionProfile, 'allowSelfSigned' | 'caBundlePath' | 'pinnedCertSha256' | 'pinnedCertAllowExpired'>
 ): string | undefined {
   const parts: string[] = [];
-  if (profile.allowSelfSigned === true) {
-    parts.push('⚠ accepts any certificate (insecure)');
+  if (profile.pinnedCertSha256) {
+    parts.push(
+      profile.pinnedCertAllowExpired
+        ? 'trusts one pinned certificate (accepted although it is not valid)'
+        : 'trusts one pinned certificate'
+    );
+  } else if (profile.allowSelfSigned === true) {
+    parts.push('⚠ skips ALL certificate checks (older setting; convert it to a pinned certificate)');
   }
   if (profile.caBundlePath?.trim()) {
     parts.push('custom CA');

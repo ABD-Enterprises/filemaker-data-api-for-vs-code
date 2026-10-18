@@ -43,10 +43,14 @@ describe('validateCaBundleFile', () => {
 });
 
 describe('describeTlsSettings', () => {
-  it('says nothing for a normal profile and names both options when set', () => {
+  it('says nothing for a normal profile and describes each way trust was changed', () => {
     expect(describeTlsSettings({})).toBeUndefined();
-    expect(describeTlsSettings({ allowSelfSigned: true })).toMatch(/insecure/);
+    expect(describeTlsSettings({ allowSelfSigned: true })).toMatch(/skips ALL certificate checks.*pinned certificate/);
     expect(describeTlsSettings({ caBundlePath: '/x.pem' })).toBe('custom CA');
-    expect(describeTlsSettings({ allowSelfSigned: true, caBundlePath: '/x.pem' })).toMatch(/insecure.*custom CA/);
+    expect(describeTlsSettings({ pinnedCertSha256: 'ab'.repeat(32) })).toBe('trusts one pinned certificate');
+    expect(describeTlsSettings({ pinnedCertSha256: 'ab'.repeat(32), pinnedCertAllowExpired: true })).toMatch(/not valid/);
+    // A pin replaces the older flag in the description (the pin wins in the agent too).
+    expect(describeTlsSettings({ allowSelfSigned: true, pinnedCertSha256: 'ab'.repeat(32) })).not.toMatch(/ALL/);
+    expect(describeTlsSettings({ allowSelfSigned: true, caBundlePath: '/x.pem' })).toMatch(/ALL.*custom CA/);
   });
 });

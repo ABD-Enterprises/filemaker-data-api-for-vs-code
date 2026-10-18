@@ -58,14 +58,50 @@ import { FMExplorerProvider } from './views/fmExplorer';
 import { LayoutInspectorProvider } from './views/layoutInspector';
 import { OfflineStatusBar } from './views/offlineStatusBar';
 
+type HealthListener = Parameters<FMClient['onHealthChange']>[0];
+
 function createLazyFmClient(
   loadClient: () => Promise<FMClient>,
-  getLoadedClient: () => FMClient | undefined
+  getLoadedClient: () => FMClient | undefined,
+  healthListeners: Set<HealthListener>,
+  invalidationListeners: Set<(profileId: string) => void>
 ): FMClient {
   return new Proxy({} as FMClient, {
     get(_target, property) {
       if (property === 'then') {
         return undefined;
+      }
+
+      // Cheap, synchronous reads that must not load the client: they answer from the loaded one
+      // (nothing is known before it loads).
+      if (property === 'getHealth') {
+        return (profileId: string) => getLoadedClient()?.getHealth(profileId);
+      }
+
+      if (property === 'isSignInPaused') {
+        return (profileId: string): boolean => getLoadedClient()?.isSignInPaused(profileId) ?? false;
+      }
+
+      if (property === 'forgetProfile') {
+        return (profileId: string): void => getLoadedClient()?.forgetProfile(profileId);
+      }
+
+      if (property === 'clearAuthPause') {
+        return (profileId: string): void => getLoadedClient()?.clearAuthPause(profileId);
+      }
+
+      if (property === 'onProfileInvalidated') {
+        return (listener: (profileId: string) => void) => {
+          invalidationListeners.add(listener);
+          return () => invalidationListeners.delete(listener);
+        };
+      }
+
+      if (property === 'onHealthChange') {
+        return (listener: HealthListener) => {
+          healthListeners.add(listener);
+          return () => healthListeners.delete(listener);
+        };
       }
 
       if (property === 'invalidateProfileCache') {
@@ -186,13 +222,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   let loadedFmClient: FMClient | undefined;
   let fmClientLoad: Promise<FMClient> | undefined;
+  const healthListeners = new Set<HealthListener>();
+  const invalidationListeners = new Set<(profileId: string) => void>();
   const loadFmClient = (): Promise<FMClient> => {
     if (loadedFmClient) {
       return Promise.resolve(loadedFmClient);
     }
 
-    fmClientLoad ??= import('./services/fmClient')
-      .then(({ FMClient }) => {
+    fmClientLoad ??= Promise.all([import('./services/fmClient'), import('./services/tlsAgent')])
+      .then(([{ FMClient }, { setSystemCertificatePolicy, warmSystemCertificates }]) => {
+        // Trust the operating system's certificates as VS Code does, unless http.systemCertificates is off.
+        setSystemCertificatePolicy(() =>
+          vscode.workspace.getConfiguration('http').get<boolean>('systemCertificates', true)
+        );
+        warmSystemCertificates();
         loadedFmClient = new FMClient(
           secretStore,
           logger,
@@ -206,6 +249,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             refreshLeadMs: settingsService.getSessionRefreshLeadMs()
           })
         );
+        loadedFmClient.onProfileInvalidated((profileId) => {
+          for (const listener of invalidationListeners) {
+            listener(profileId);
+          }
+        });
+        loadedFmClient.onHealthChange((profileId, health) => {
+          for (const listener of healthListeners) {
+            listener(profileId, health);
+          }
+        });
         return loadedFmClient;
       })
       .catch((error) => {
@@ -215,7 +268,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     return fmClientLoad;
   };
-  const fmClient = createLazyFmClient(loadFmClient, () => loadedFmClient);
+  const fmClient = createLazyFmClient(loadFmClient, () => loadedFmClient, healthListeners, invalidationListeners);
 
   let loadedCircuitBreakerRegistry: CircuitBreakerRegistry | undefined;
   let circuitBreakerRegistryLoad: Promise<CircuitBreakerRegistry> | undefined;
@@ -359,7 +412,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Persistent connection-state status bar — sits at priority 105 (above the
   // offline badge, below the transient connect-progress item). Created first
   // so we can hand its refresh callback to the commands registry.
-  const connectionStatusBar = new ConnectionStatusBar(profileStore, getRuntimeVersion());
+  const connectionStatusBar = new ConnectionStatusBar(profileStore, fmClient, getRuntimeVersion());
 
   const coreCommandDisposables = registerCoreCommands({
     context,
@@ -542,6 +595,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   refreshAi();
   // The setting is only a permission: start only where the user started the server before.
   void aiMcp.autostart();
+  // Tell the user once about any profile that skips all certificate checks (an older setting).
+  void import('./services/legacyTlsNotice')
+    .then(({ notifyAboutLegacyTlsProfiles }) =>
+      notifyAboutLegacyTlsProfiles(profileStore, context.globalState, () => {
+        refreshExplorer();
+        connectionStatusBar.refresh();
+      })
+    )
+    .catch((error) => logger.warn('Could not check profiles for the older TLS setting.', { error }));
 
   const typeGenDisposables = registerTypeGenCommands({
     profileStore,
