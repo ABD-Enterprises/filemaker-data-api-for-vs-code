@@ -57,4 +57,16 @@ describe('restored webview tabs', () => {
     const titles = new Set(manifest.contributes.commands.map((command) => `${command.category ?? 'FileMaker'}: ${command.title}`));
     expect(RESTORABLE_PANELS.filter((panel) => !titles.has(panel.reopenWith)).map((panel) => panel.reopenWith)).toEqual([]);
   });
+
+  it('the manifest activates the extension before a saved tab is restored: onWebviewPanel for every panel type, and onStartupFinished is kept', () => {
+    // VS Code does not generate onWebviewPanel events (there is no contribution point for a webview panel),
+    // and a serializer registered at activation is too late if the extension has not activated when the tab is restored.
+    const manifest = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')) as { activationEvents: string[] };
+    expect(manifest.activationEvents).toContain('onStartupFinished');
+    expect(RESTORABLE_PANELS.filter((panel) => !manifest.activationEvents.includes(`onWebviewPanel:${panel.viewType}`)).map((panel) => panel.viewType)).toEqual([]);
+    // And no event for a panel type that does not exist.
+    const events = manifest.activationEvents.filter((event) => event.startsWith('onWebviewPanel:')).map((event) => event.slice('onWebviewPanel:'.length));
+    expect(events.filter((viewType) => !RESTORABLE_PANELS.some((panel) => panel.viewType === viewType))).toEqual([]);
+    expect(new Set(manifest.activationEvents).size).toBe(manifest.activationEvents.length);
+  });
 });

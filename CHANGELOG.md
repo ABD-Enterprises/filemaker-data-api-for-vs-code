@@ -38,6 +38,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Add onWebviewPanel activation events for every restorable panel type so the serializers exist before a saved tab is restored.
 - Restored webview tabs show a reopen page instead of staying dead (serializer for every panel type).
 - Script Runner and Layout Mode show non-zero script errors as failures with code and meaning; timeout says the script may still run.
 - Command Palette context keys refresh when profiles change and after Initialize FM Web.
