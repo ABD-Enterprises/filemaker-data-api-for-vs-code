@@ -302,14 +302,19 @@ describe('createEndpoint folder choice', () => {
 
   it.skipIf(!posix)('falls back to the temp folder when XDG_RUNTIME_DIR cannot be used, but never when the caller named a folder', async () => {
     const saved = process.env.XDG_RUNTIME_DIR;
+    // A folder "inside a file" cannot be created on any system (ENOTDIR), and fails fast.
+    const holder = await mkdtemp(join(tmpdir(), 'fmu-'));
+    const blocked = join(holder, 'file', 'run');
     try {
-      process.env.XDG_RUNTIME_DIR = '/proc/does-not-exist-fm-ai';
+      await writeFile(join(holder, 'file'), 'x');
+      process.env.XDG_RUNTIME_DIR = blocked;
       const endpoint = await createEndpoint({ scope: 'fallback' });
       expect(endpoint.path.startsWith(tmpdir())).toBe(true);
       await rm(dirname(endpoint.path), { recursive: true, force: true });
-      await expect(createEndpoint({ baseDirectory: '/proc/does-not-exist-fm-ai', scope: 'explicit' })).rejects.toThrow();
+      await expect(createEndpoint({ baseDirectory: blocked, scope: 'explicit' })).rejects.toThrow();
     } finally {
       restore('XDG_RUNTIME_DIR', saved);
+      await rm(holder, { recursive: true, force: true });
     }
   });
 
