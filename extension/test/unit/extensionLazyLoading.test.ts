@@ -117,6 +117,42 @@ describe('extension lazy FM runtime loading', () => {
     expect(contributes.commands.map(({ command }) => command).filter((id) => !registered.has(id))).toEqual([]);
   });
 
+  it('only asks the AI server controller to autostart (it starts nothing by itself), once', async () => {
+    const { AiMcpController } = await import('../../src/ai/mcp/aiMcpController');
+    const autostart = vi.spyOn(AiMcpController.prototype, 'autostart').mockResolvedValue(undefined);
+    const start = vi.spyOn(AiMcpController.prototype, 'start').mockResolvedValue(undefined);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    disposeSubscriptions(context);
+
+    expect(autostart).toHaveBeenCalledTimes(1);
+    expect(start).not.toHaveBeenCalled();
+    autostart.mockRestore();
+    start.mockRestore();
+  });
+
+  it('stops the AI server when the external-server permission setting changes, and ignores other settings', async () => {
+    const { AiMcpController } = await import('../../src/ai/mcp/aiMcpController');
+    const handle = vi.spyOn(AiMcpController.prototype, 'handleSettingChange').mockResolvedValue(undefined);
+    vi.spyOn(AiMcpController.prototype, 'autostart').mockResolvedValue(undefined);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+
+    const listeners = vi.mocked(vscode.workspace.onDidChangeConfiguration).mock.calls.map(([listener]) => listener);
+    for (const listener of listeners) {
+      listener({ affectsConfiguration: (section: string) => section === 'filemaker.offline' } as never);
+    }
+    expect(handle).not.toHaveBeenCalled();
+    for (const listener of listeners) {
+      listener({ affectsConfiguration: (section: string) => section === 'filemaker.ai.externalServer' } as never);
+    }
+    expect(handle).toHaveBeenCalledTimes(1);
+    disposeSubscriptions(context);
+    vi.restoreAllMocks();
+  });
+
   it('loads and caches the FM client module on the first Connect command', async () => {
     const { activate } = await import('../../src/extension');
     const context = createActivationContext();

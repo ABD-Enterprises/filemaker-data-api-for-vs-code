@@ -30,7 +30,10 @@ interface Deps {
 export class AiStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
 
-  public constructor(private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'>) {
+  public constructor(
+    private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'>,
+    private readonly mcp?: { isRunning(): boolean; connectionCount(): number }
+  ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
     this.item.command = KILL_SWITCH_COMMAND;
     this.item.show();
@@ -47,8 +50,10 @@ export class AiStatusBar implements vscode.Disposable {
       profile?.username,
       profile?.aiAccess
     );
-    this.item.text = model.text;
-    this.item.tooltip = model.tooltip;
+    const server = this.mcp?.isRunning() ? this.mcp.connectionCount() : undefined;
+    this.item.text = server === undefined ? model.text : `${model.text} \u00b7 MCP`;
+    this.item.tooltip =
+      server === undefined ? model.tooltip : `${model.tooltip}\nExternal tools (MCP) server: running, ${server} connection${server === 1 ? '' : 's'}.`;
   }
 
   public dispose(): void {

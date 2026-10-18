@@ -24,6 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- AI tools for MCP clients (ADR-0004 phase 3): `AiMcpServer` over a local socket with per-session token, discovery file with pid and start time, the bundled `aiMcpShim.js` stdio program, `list_changed` on policy changes, commands to start/stop the server and copy the client config; off by default (`filemaker.ai.externalServer.enabled`, user scope), no local policy of its own.
 - AI tools for VS Code language-model clients (ADR-0004 phase 2): `AiToolService` tool core (policy, layout consent, record and write caps, hidden-field filter, host-built write dialogs with fresh modId, delete by typed id, script allowlist, redaction, audit log), registered as language-model tools only when the user-scope switches allow; profile `aiAccess`, `ai` enterprise feature id, kill-switch status bar item, **Set AI Access for Connection** and **Show AI Activity** commands.
 - **FileMaker: Write AI Context** (ADR-0004 phase 1): writes a size-limited, allowlist-rendered Markdown summary of selected layouts, fields and script names for AI tools, outside the repository by default, with a user-scope-only `filemaker.ai.contextPath`, confined paths and marker-section updates.
 - Record Editor edit-conflict protection: saving sends the record's loaded `modId`, FileMaker refuses the edit if it changed (error 306), and the editor shows the fields that changed, keeps the draft, and offers a reload. Batch update is unchanged.
@@ -31,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- AI tools follow-ups (#380): 4,000-character dialog budget, placeholder markers refused in writes, host-only server scrub, session generation counter for the quota, wider post-dialog re-check.
 - Return an empty result when a find matches nothing or the offset is past the last match (FileMaker's HTTP 404 / error 401), instead of failing. This also fixes batch export failing on its last request when the match count is an exact multiple of the page size.
 - Share one session renewal between parallel requests after a session expires, instead of opening one session per request and orphaning the rest.
 - Query Builder paging uses FileMaker's 1-based offsets, so the next page no longer repeats a record (#364).

@@ -142,13 +142,13 @@ describe('per-call policy', () => {
     expect(h.client.listLayouts).not.toHaveBeenCalled();
   });
 
-  it('never puts the server address or user name in an error from the client', async () => {
+  it('never puts the server address or a credential in an error from the client', async () => {
     const h = makeHarness();
     h.client.listLayouts.mockRejectedValue(
       new Error(`connect ECONNREFUSED https://${SECRET_HOST}:16000/fmi/data as ai_reader with Bearer abcdef123456`)
     );
     const message = await failure(h.service.invoke('fm_list_layouts', {}));
-    for (const secret of [SECRET_HOST, '16000', 'ai_reader', 'abcdef123456']) {
+    for (const secret of [SECRET_HOST, '16000', 'abcdef123456']) {
       expect(message, secret).not.toContain(secret);
     }
     expect(message).toMatch(/request failed/);

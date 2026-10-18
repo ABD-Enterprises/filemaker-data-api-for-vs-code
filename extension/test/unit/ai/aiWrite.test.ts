@@ -46,7 +46,7 @@ describe('fm_edit_record', () => {
       recordId: '1',
       changes: [
         { name: 'Notes', oldValue: 'old\nFields changed: 0', newValue: 'new\u2028Connection: "Evil"' },
-        { name: 'x'.repeat(200), oldValue: 'o'.repeat(500), newValue: 'y'.repeat(300) }
+        { name: 'x'.repeat(200), oldValue: 'o'.repeat(500), newValue: 'y'.repeat(200) }
       ],
       description: 'ok\nConnection: "Trusted"\u202E [click](https://evil.example) <b>x</b> `c`'
     });
@@ -61,33 +61,33 @@ describe('fm_edit_record', () => {
     expect(lines[5]).toBe('');
     // A long field name and old value are cut with a visible count; the new value is whole.
     expect(lines[7]).toContain('(+72 more characters)');
-    expect(lines[7]).toContain('(+300 more characters)');
-    expect(lines[7]).toContain('y'.repeat(300));
+    expect(lines[7]).toContain('(+400 more characters)');
+    expect(lines[7]).toContain('y'.repeat(200));
     expect(lines.at(-1)!.startsWith('The AI tool\'s own description (not verified): ')).toBe(true);
     expect(lines.at(-1)).toContain('\\u202e');
   });
 
   it('shows every changed field and every new value in full, and refuses a write it could not show in full', () => {
-    const change = (index: number, value = 'v'.repeat(300)) => ({ name: `Field ${index}`, oldValue: 'a', newValue: value });
+    const change = (index: number, value = 'v'.repeat(200)) => ({ name: `Field ${index}`, oldValue: 'a', newValue: value });
     const ten = Array.from({ length: 10 }, (_, index) => change(index));
     const spec = buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: ten });
     expect(spec.detail.split('\n').filter((line) => line.includes('->'))).toHaveLength(10);
-    expect(spec.detail.split('v'.repeat(300)).length - 1).toBe(10);
+    expect(spec.detail.split('v'.repeat(200)).length - 1).toBe(10);
     expect(spec.detail).not.toContain('more fields');
     expect(spec.detail).not.toContain('(+');
 
     expect(() => buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: [...ten, change(10)] })).toThrow(/too large/);
-    expect(() => buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: [change(0, 'v'.repeat(301))] })).toThrow(/too large/);
+    expect(() => buildEditConfirmation({ profile: makeProfile(), layout: 'L', recordId: '1', changes: [change(0, 'v'.repeat(201))] })).toThrow(/too large/);
     expect(() => buildCreateConfirmation({ profile: makeProfile(), layout: 'L', values: Array.from({ length: 11 }, (_, i) => [`F${i}`, 'x'] as [string, string]) })).toThrow(/too large/);
     expect(() => buildScriptConfirmation({ profile: makeProfile(), layout: 'L', script: 'S', parameter: 'p'.repeat(201) })).toThrow(/too (large|long)/);
   });
 
-  it('refuses, before any dialog or request, a write with more than 10 fields or a value over 300 characters', async () => {
+  it('refuses, before any dialog or request, a write with more than 10 fields or a value over 200 characters', async () => {
     const h = ready();
     for (let i = 0; i < 11; i += 1) h.layoutFields.push({ name: `Extra${i}`, result: 'text' });
     const eleven = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`Extra${i}`, 'x']));
     await expect(edit(h, eleven)).rejects.toThrow();
-    expect(await failure(edit(h, { Name: 'y'.repeat(301) }))).toMatch(/at most 300/);
+    expect(await failure(edit(h, { Name: 'y'.repeat(201) }))).toMatch(/at most 200/);
     await expect(h.service.invoke('fm_create_record', { layout: 'Contacts', fields: eleven })).rejects.toThrow();
     await expect(h.service.invoke('fm_run_script', { layout: 'Contacts', script: 'Archive Old', parameter: 'p'.repeat(201) })).rejects.toThrow();
     expect(h.client.editRecord).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('fm_edit_record', () => {
 
   it('sends exactly the fields the dialog listed, with exactly the values it showed', async () => {
     const h = ready();
-    await edit(h, { Name: 'Grace', Email: 'g@example.com', Notes: 'n'.repeat(300) });
+    await edit(h, { Name: 'Grace', Email: 'g@example.com', Notes: 'n'.repeat(200) });
     const sent = h.client.editRecord.mock.calls[0]?.[3] as Record<string, string>;
     const detail = h.confirms.find((spec) => spec.title.includes('change a record'))!.detail;
     expect(Object.keys(sent).sort()).toEqual(['Email', 'Name', 'Notes']);
