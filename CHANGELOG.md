@@ -41,6 +41,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Publish with Microsoft Entra ID (OIDC, managed identity) instead of `VSCE_PAT`; add the setup job aid and a one-off helper workflow.
 - Job aid for the Marketplace publishing token, with the 2026-12-01 PAT retirement noted.
 - ADR-0004 (proposed): AI integration design — schema context, language-model tools, MCP server, with read-only defaults and confirmed writes.
 - Release pipeline: separate publish (environment-gated, tag-on-main and version checks, no `npm ci` with the token) and release jobs; untrack the session lock file.

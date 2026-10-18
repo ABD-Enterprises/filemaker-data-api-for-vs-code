@@ -2,7 +2,7 @@
   "name": "marketplace-publish-tool",
   "version": "0.0.0",
   "private": true,
-  "description": "Only @vscode/vsce, locked, so the job that holds VSCE_PAT installs a fixed dependency tree.",
+  "description": "Only @vscode/vsce, locked, so the publish job installs a fixed dependency tree.",
   "dependencies": {
     "@vscode/vsce": "4.0.0"
   }

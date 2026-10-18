@@ -102,10 +102,16 @@ jobs:
           name: extension-vsix
           path: artifacts/*.vsix
 
-  # Marketplace publishing is its own job so that the VSCE_PAT secret is never present in a job
-  # that installs project dependencies or has write access to the repository. It runs only for a
-  # tag that points at a commit on main whose version matches the tag, and it waits for the
-  # `marketplace` environment (set required reviewers on it in the repository settings).
+  # Marketplace publishing is its own job so that nothing from the project's dependency tree runs
+  # where the Azure login exists, and so that the repository write scope is not present. It runs
+  # only for a tag that points at a commit on main whose version matches the tag, and it waits for
+  # the `marketplace` environment (required reviewer).
+  #
+  # Authentication is Microsoft Entra ID, not a personal access token: GitHub issues a short-lived
+  # OIDC token, azure/login exchanges it for the managed identity `AZURE_CLIENT_ID`, and vsce
+  # publishes with --azure-credential. The federated credential is tied to the `marketplace`
+  # environment, so no other job or branch can obtain it. One-time setup:
+  # docs/JOB_AID_ENTRA_PUBLISHING.md.
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
@@ -113,6 +119,7 @@ jobs:
     environment: marketplace
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -144,18 +151,33 @@ jobs:
           name: extension-vsix
           path: artifacts
 
-      # Project dependencies and their install scripts must not run in the job that holds the
-      # token. vsce comes from its own minimal lockfile (tools/publish), installed without
-      # lifecycle scripts, so its whole dependency tree is fixed.
+      # Project dependencies and their install scripts never run in this job. vsce comes from its
+      # own minimal lockfile (tools/publish), installed without lifecycle scripts, before the
+      # Azure login exists.
       - name: Install vsce from its lockfile
         run: npm ci --ignore-scripts --no-audit --no-fund --prefix tools/publish
+
+      - name: Require the Azure identity settings
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+            echo "::error::AZURE_CLIENT_ID and AZURE_TENANT_ID must be set on the marketplace environment. See docs/JOB_AID_ENTRA_PUBLISHING.md."
+            exit 1
+          fi
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
 
       - name: Publish to Marketplace
         run: |
           VSIX_PATH="$(realpath artifacts/*.vsix)"
-          tools/publish/node_modules/.bin/vsce publish --packagePath "$VSIX_PATH" --no-update-package-json
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          tools/publish/node_modules/.bin/vsce publish --packagePath "$VSIX_PATH" --no-update-package-json --azure-credential
 
   # Runs only after `publish` succeeded, which already required the tag to be on main and to match
   # the version; it does not repeat those checks.
