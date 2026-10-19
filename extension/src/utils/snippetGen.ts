@@ -1,3 +1,10 @@
+import { jsString, safeJson, shellQuote } from '../snippets/escape';
+
+/**
+ * Copies an arbitrary request as curl or fetch(). Kept for callers that already hold a finished
+ * request; the Data API operations go through `src/snippets` (`generateSnippet`), which shares
+ * these escapes.
+ */
 export interface SnippetRequest {
   method: string;
   url: string;
@@ -38,10 +45,6 @@ function sanitizeHeaders(
   return result;
 }
 
-function shellEscape(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
-
 function serializeBody(body: unknown): string | undefined {
   if (body === undefined) {
     return undefined;
@@ -64,16 +67,16 @@ export function generateCurlSnippet(request: SnippetRequest, options?: SnippetOp
 
   const parts: string[] = ['curl'];
 
-  parts.push('-X', request.method.toUpperCase());
-  parts.push(shellEscape(request.url));
+  parts.push('-X', shellQuote(request.method.toUpperCase()));
+  parts.push(shellQuote(request.url));
 
   for (const [name, value] of Object.entries(headers)) {
-    parts.push('-H', shellEscape(`${name}: ${value}`));
+    parts.push('-H', shellQuote(`${name}: ${value}`));
   }
 
   const body = serializeBody(request.body);
   if (body !== undefined) {
-    parts.push('--data-raw', shellEscape(body));
+    parts.push('--data-raw', shellQuote(body));
   }
 
   return parts.join(' ');
@@ -84,12 +87,12 @@ export function generateFetchSnippet(request: SnippetRequest, options?: SnippetO
   const headers = sanitizeHeaders(request.headers, includeAuthHeader);
 
   const body = serializeBody(request.body);
-  const bodyLine = body ? `  body: ${JSON.stringify(body)},\n` : '';
+  const bodyLine = body ? `  body: ${jsString(body)},\n` : '';
 
   return [
-    `const response = await fetch(${JSON.stringify(request.url)}, {`,
-    `  method: ${JSON.stringify(request.method.toUpperCase())},`,
-    `  headers: ${JSON.stringify(headers, null, 2).replace(/\n/g, '\n  ')},`,
+    `const response = await fetch(${jsString(request.url)}, {`,
+    `  method: ${jsString(request.method.toUpperCase())},`,
+    `  headers: ${safeJson(headers, { space: 2 }).replace(/\n/g, '\n  ')},`,
     bodyLine.trimEnd(),
     '});',
     'const data = await response.json();'

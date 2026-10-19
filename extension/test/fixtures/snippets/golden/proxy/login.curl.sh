@@ -1,0 +1,2 @@
+# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
+curl -X POST 'https://proxy.example.com/filemaker' -H 'Content-Type: application/json' -H 'Authorization: Bearer <REDACTED>' --data-raw '{"action":"createSession","profile":{"id":"profile-proxy","database":"Sales DB","serverUrl":"https://fm.example.com"},"payload":{}}'

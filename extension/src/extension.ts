@@ -26,6 +26,7 @@ import { registerAiMcpCommands, watchExternalServerSetting } from './commands/ai
 import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/aiTools';
 import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
+import { registerCopyRequestCommands } from './commands/copyRequest';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
 import { activationLogLine, registerAboutCommand } from './about/aboutCommand';
 import { getRuntimeVersion, setRuntimeVersion } from './about/runtimeVersion';
@@ -477,6 +478,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     diagnostics
   });
 
+  const copyRequestDisposables = registerCopyRequestCommands({ profileStore, fmClient, logger });
   const scriptRunnerDisposables = registerScriptRunnerCommands({
     context,
     profileStore,
@@ -729,6 +731,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ...savedQueryDisposables,
     ...schemaDisposables,
     ...schemaSnapshotDisposables,
+    ...copyRequestDisposables,
     ...scriptRunnerDisposables,
     ...recordEditDisposables,
     ...typeGenDisposables,

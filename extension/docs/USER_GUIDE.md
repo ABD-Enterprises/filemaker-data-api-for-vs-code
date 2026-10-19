@@ -17,18 +17,19 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 9. [Upload to a container field](#upload-to-a-container-field)
 10. [Batch export and batch update](#batch-export-and-batch-update)
 11. [Run scripts](#run-scripts)
-12. [Schema snapshots and diffs](#schema-snapshots-and-diffs)
-13. [Generate types, a client and snippets](#generate-types-a-client-and-snippets)
-14. [FM Web and Layout Mode](#fm-web-and-layout-mode)
-15. [Offline mode](#offline-mode)
-16. [Enterprise mode and roles](#enterprise-mode-and-roles)
-17. [Plugins](#plugins)
-18. [Using AI with FileMaker](#using-ai-with-filemaker)
-19. [User settings vs Workspace settings in plain words](#user-settings-vs-workspace-settings-in-plain-words)
-20. [Settings reference](#settings-reference)
-21. [Security behavior you will notice](#security-behavior-you-will-notice)
-22. [Troubleshooting](#troubleshooting)
-23. [FAQ](#faq)
+12. [Copy a request as code](#copy-a-request-as-code)
+13. [Schema snapshots and diffs](#schema-snapshots-and-diffs)
+14. [Generate types, a client and snippets](#generate-types-a-client-and-snippets)
+15. [FM Web and Layout Mode](#fm-web-and-layout-mode)
+16. [Offline mode](#offline-mode)
+17. [Enterprise mode and roles](#enterprise-mode-and-roles)
+18. [Plugins](#plugins)
+19. [Using AI with FileMaker](#using-ai-with-filemaker)
+20. [User settings vs Workspace settings in plain words](#user-settings-vs-workspace-settings-in-plain-words)
+21. [Settings reference](#settings-reference)
+22. [Security behavior you will notice](#security-behavior-you-will-notice)
+23. [Troubleshooting](#troubleshooting)
+24. [FAQ](#faq)
 
 ---
 
@@ -282,7 +283,7 @@ Results:
 - The table shows `Showing 1-100 of N found`. Use **Previous page** and **Next page**, and set **Records per page** and **Start at record** (the first record is 1).
 - Select a column heading to sort the current page. Double-click a row, or use **View** or **Edit**, to open that record.
 - Under the **Export** disclosure: **Copy results as table** copies text that pastes into a spreadsheet, and **Save results as CSV…**, **Save results as JSON…** and **Open results in editor** export the results on screen. Both **Save results as CSV…** and **Copy results as table** put an apostrophe in front of text that a spreadsheet would run as a formula (see [apostrophes in CSV files](#batch-export-and-batch-update)); `filemaker.export.neutralizeFormulas` turns that off. For large exports use [batch export](#batch-export-and-batch-update).
-- Under the **Copy request** disclosure: **Copy as curl** and **Copy as fetch()** copy the equivalent request. Authorization headers are left out unless you tick **Include auth header** (its starting value is `filemaker.snippets.includeAuthByDefault`).
+- Under the **Copy request** disclosure: **Copy as curl**, **Copy as fetch()**, **Copy as .http (REST Client)**, **Copy as Postman collection**, **Copy as TypeScript** and **Save as .http file…** copy the find you have entered. The session token, password and API key are never copied; the Authorization header carries a variable to fill in once you tick **Include auth header** (its starting value is `filemaker.snippets.includeAuthByDefault`). See [Copy a request as code](#copy-a-request-as-code).
 - A find that matches nothing shows an empty result, not an error.
 
 **Save…** stores the query under the profile in the sidebar (**Saved Queries**). Saved queries live in the workspace by default; set `filemaker.savedQueries.scope` to `global` to keep them in your user data. Run one from its right-click menu or **FileMaker: Run Saved Query**. **FileMaker: Export Saved Queries (JSON)** and **FileMaker: Import Saved Queries (JSON)** share them with a team. The panel keeps a short **Request history**, the last `filemaker.history.maxEntries` requests (default 10).
@@ -377,9 +378,80 @@ Batch update is blocked in offline mode, for the `viewer` role, and when `filema
 1. Run **FileMaker: Open Script Runner** (or use a layout's right-click menu).
 2. Choose a profile and a layout. FileMaker runs scripts in the context of a layout.
 3. Type the script name exactly as it appears in FileMaker. Add a record ID and a parameter if the script needs them. **Build Parameter** helps you assemble a JSON parameter.
-4. Select **Run Script**. The result appears below. **Copy as curl** and **Copy as fetch()** copy the request.
+4. Select **Run Script**. The result appears below. Under **Copy request** the same formats as in the Query Builder copy the request without running it (see [Copy a request as code](#copy-a-request-as-code)).
 
 The Script Runner does not ask for confirmation, so check the script name before you run it. Running scripts is blocked in offline mode, for the `viewer` role, and when `filemaker.features.scriptRunner.enabled` is off. A workspace setting can only switch this off, never on.
+
+---
+
+## Copy a request as code
+
+Any request the extension sends can be copied as text, to try it in a terminal, put it in a repository, share it with a colleague or move it to Postman. Nothing is sent when you copy.
+
+**Where.** Query Builder and Script Runner: **Copy request** (next to Export). Record Viewer and Record Editor: **Copy request for this record** (choose **Get**, **Edit** or **Delete**, and a format). Command Palette: **FileMaker: Copy Request as Code…** asks for the request (log in, find, get, create, edit, delete, run a script, list layouts, list scripts, layout metadata, container upload), then the layout and details it needs, then the format, for the active connection.
+
+**Formats.**
+
+| Format | What you get |
+| --- | --- |
+| curl | One `curl` command for a POSIX shell (sh, bash, zsh). Values are quoted so that nothing in a name can run as a command. |
+| fetch() | A `fetch` call for Node 18 or later (top-level `await`) or a browser. |
+| .http (REST Client) | A `.http` file for VS Code's REST Client (and other editors that read the `.http` convention) with an `@host` variable (and `@token` when **Include auth header** is ticked), one request after a `###` line. |
+| Postman collection | A Postman v2.1 collection (JSON) with one request and the variable `baseUrl` (and `token` when **Include auth header** is ticked). Import it with **Import** in Postman. |
+| TypeScript | A small typed `fetch` wrapper and the call, with the response typed. It stands alone: the client from **Generate TypeScript Client** needs generated types per layout and has no calls for sessions, scripts, modId or containers, so it is not used here. |
+
+**Save as .http file…** opens the request in a new unsaved editor. Use **File > Save As** to put it where you want; the extension never writes a request into your workspace by itself.
+
+**What is not included, ever.** The password, the session token and the API key. A request that needs them shows a placeholder:
+
+| Format | Authorization header | Login (account name and password) |
+| --- | --- | --- |
+| curl | `Bearer <REDACTED>`, or with **Include auth header** `Bearer $FM_TOKEN` | `-u "$FM_USERNAME:$FM_PASSWORD"` |
+| fetch(), TypeScript | `Bearer <REDACTED>`, or `process.env.FM_TOKEN` | `process.env.FM_USERNAME` and `FM_PASSWORD` |
+| .http | `Bearer <REDACTED>`, or `Bearer {{token}}` | `{{username}}` and `{{password}}` |
+| Postman | `Bearer <REDACTED>`, or `Bearer {{token}}` | the collection variables `username` and `password` (empty) |
+
+**Include auth header** (and the setting `filemaker.snippets.includeAuthByDefault`) only changes the header from `<REDACTED>` to a variable you fill in: set `FM_TOKEN` in your shell, or `@token` in the `.http` file, to the token from the **Log in** request (its `response.token`). The extension does not offer to copy a live token. A proxy connection copies one `POST` to the proxy with `Bearer <REDACTED>` or `$FM_PROXY_API_KEY`.
+
+**What is included.** The server address of the connection (the host, port and path; any account, query string or fragment typed into the address is dropped), the database, the layout and record in the address, and the find criteria, field values or script parameter you entered. Layout, field and script names are percent-encoded in the address exactly as the extension does it (`A/B` becomes `A%2FB`, `100%` becomes `100%25`). Text is escaped for the format, so a name with quotes, new lines, `$(...)`, a backtick or `</script>` cannot change the command or the file.
+
+**Credential-looking text is replaced.** The same redaction as the logs is applied to the names and values you copy: text such as `Bearer abc…`, `password=…`, or a field called `token` or `password` is shown as `***`, and the copied request says so in a comment. Free text with no recognisable shape (a bare secret typed into a field value) cannot be recognised; check what you share.
+
+**Details worth knowing.**
+
+- **Run a script** is copied in the form the Claris Data API Guide documents: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<text>`. With a record in context the script is attached to a `GET` of that record (`?script=<name>&script.param=<text>`). A parameter too long for an address (more than about 2000 characters with the server and script name) is copied as a find limited to one record, which reads that record; with a record in context a parameter that long is refused.
+- **Edit** carries `"modId": "<modId>"` (`{{modId}}` in `.http` and Postman). Put in the modId from the record you read: FileMaker refuses the edit with error 306 if the record changed since. The Record Editor copies the fields you changed in the form; without changes (and in the Record Viewer) it shows one field to fill in.
+- **Delete** really deletes when sent. The copied text says so.
+- **Container upload** is a multipart request with the file at `./file-to-upload`: change the path. Add the modId to the address for a checked upload.
+- A `curl` command that has a comment line first (login, edit, upload) works in a script and in bash; some shells, such as an interactive zsh, print a harmless error for the `#` line when you paste it into the terminal.
+- Copying works in an untrusted workspace (it only builds text).
+
+**Examples.** A find, copied as `.http` with **Include auth header** ticked:
+
+```http
+@host = https://fm.example.com
+@token = <session token>
+
+### Find records in layout "Contacts"
+POST {{host}}/fmi/data/vLatest/databases/Sales/layouts/Contacts/_find
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "query": [
+    {
+      "City": "Portland"
+    }
+  ],
+  "limit": 25
+}
+```
+
+The same find as curl (set `FM_TOKEN` first):
+
+```sh
+curl -X POST 'https://fm.example.com/fmi/data/vLatest/databases/Sales/layouts/Contacts/_find' -H 'Content-Type: application/json' -H "Authorization: Bearer $FM_TOKEN" --data-raw '{"query":[{"City":"Portland"}],"limit":25}'
+```
 
 ---
 
@@ -674,7 +746,7 @@ Open Settings (`Cmd+,` / `Ctrl+,`) and search for `filemaker`; make sure the **U
 | --- | --- | --- | --- |
 | `filemaker.savedQueries.scope` | `"workspace"` | Per workspace | Where saved queries are kept: `workspace` or `global`. |
 | `filemaker.history.maxEntries` | `10` | Per workspace | Request history entries kept per workspace. |
-| `filemaker.snippets.includeAuthByDefault` | `false` | Per workspace | Include authorization headers in Copy as curl and Copy as fetch(). |
+| `filemaker.snippets.includeAuthByDefault` | `false` | Per workspace | Show an Authorization header with a variable to fill in (`$FM_TOKEN`, `{{token}}`) instead of `<REDACTED>` in copied requests (curl, fetch(), .http, Postman, TypeScript). A real token, password or API key is never written. |
 
 **Records, Scripts, and Batch**
 
@@ -767,7 +839,7 @@ Old names: `filemakerDataApiTools.logLevel`, `.requestTimeoutMs`, `.defaultApiBa
 - **Virtual workspaces** (such as github.dev) are not supported: the extension writes files to a folder on disk.
 - **Prompts before risky actions.** You are asked before: saving a record (lists the changed fields), deleting a record, running a batch update, running workspace plugins, starting the FM Web preview (`npm install`, `npm run dev`), running a script from a Layout Mode button, switching AI tools back on, every AI write, and sending credentials to a template-supplied address or a remote `http://` address.
 - **Secrets stay in the keychain.** Passwords, API keys and session tokens are kept in VS Code SecretStorage and never shown in webviews.
-- **Redaction.** Logs, request history, error details and copied snippets hide authorization headers, session tokens (including in request paths), token-like query parameters and JSON keys (anything containing `token`, `secret`, `password`, `session` or `apiKey`), and passwords inside URLs. Copy as curl and Copy as fetch() leave out authorization unless you opt in.
+- **Redaction.** Logs, request history, error details and copied snippets hide authorization headers, session tokens (including in request paths), token-like query parameters and JSON keys (anything containing `token`, `secret`, `password`, `session` or `apiKey`), and passwords inside URLs. Copied requests (curl, fetch(), .http, Postman, TypeScript) never contain a password, session token or API key: the Authorization header shows `<REDACTED>`, or with the opt-in a variable name, and the server address loses any account or query string typed into it.
 - **Certificates.** The server certificate is checked, except for a profile that still has the older allow-self-signed setting (that skips every check, and shows a warning). You can trust one specific certificate by its fingerprint (never from a workspace file); a different certificate later is a hard failure, and for a normal or pinned profile nothing is sent before the certificate is checked. A pin is trust on first use: it does not authenticate who presented the certificate when you trusted it (see [What pinning does and does not give you](#what-pinning-does-and-does-not-give-you)).
 - **Repositories cannot loosen your policy.** Workspace settings and `.vscode/filemaker.config.json` can only restrict enterprise mode, roles, offline mode and feature switches.
 - **No telemetry.** The extension sends nothing to its authors. It talks only to your FileMaker server (or your proxy).

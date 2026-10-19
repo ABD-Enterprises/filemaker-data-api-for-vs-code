@@ -1,0 +1,1 @@
+curl -X GET 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42?script=Send%20Welcome&script.param=hi' -H 'Authorization: Bearer <REDACTED>'

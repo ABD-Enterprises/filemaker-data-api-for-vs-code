@@ -1,0 +1,26 @@
+// Fill in the account name and password yourself (never copied). The response holds the session token.
+interface DataApiEnvelope<T> {
+  response: T;
+  messages: Array<{ code: string; message: string }>;
+}
+
+const host = "https://fm.example.com";
+const basic = Buffer.from(`${process.env.FM_USERNAME ?? "<account name>"}:${process.env.FM_PASSWORD ?? "<password>"}`).toString("base64");
+const authorization = `Basic ${basic}`;
+
+async function dataApi<T>(method: string, path: string, body?: unknown): Promise<DataApiEnvelope<T>> {
+  const isForm = body instanceof FormData;
+  const response = await fetch(`${host}${path}`, {
+    method,
+    headers: body === undefined || isForm ? { Authorization: authorization } : { "Content-Type": "application/json", Authorization: authorization },
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body)
+  });
+  const envelope = (await response.json()) as DataApiEnvelope<T>;
+  if (!response.ok) {
+    throw new Error(`Data API request failed (${response.status}): ${envelope.messages?.map((m) => m.message).join("; ")}`);
+  }
+  return envelope;
+}
+
+const { response } = await dataApi<{ token: string }>("POST", "/fmi/data/vLatest/databases/Sales%20DB/sessions", {});
+console.log(response);

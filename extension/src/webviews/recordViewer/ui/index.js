@@ -89,6 +89,50 @@ exportButton.addEventListener('click', () => {
   vscode.postMessage({ type: 'exportRecord' });
 });
 
+
+// "Copy request for this record": the two selects pick the request and the format, the host builds it.
+const copyRecordMenu = document.getElementById('copyRecordMenu');
+const copyOperationSelect = document.getElementById('copyOperationSelect');
+const copyFormatSelect = document.getElementById('copyFormatSelect');
+
+function postRecordRequest(destination) {
+  const payload = collectPayload();
+  if (!payload) {
+    return;
+  }
+
+  vscode.postMessage({
+    type: 'copyRecordRequest',
+    payload: {
+      ...payload,
+      operation: copyOperationSelect.value,
+      format: destination === 'editor' ? 'http' : copyFormatSelect.value,
+      destination
+    }
+  });
+}
+
+document.getElementById('copyRecordButton').addEventListener('click', () => postRecordRequest('clipboard'));
+document.getElementById('saveRecordHttpButton').addEventListener('click', () => postRecordRequest('editor'));
+
+// The menu closes after a choice, on outside click, and on Escape.
+copyRecordMenu.addEventListener('click', (event) => {
+  if (event.target instanceof HTMLButtonElement && event.target.closest('.menu-items')) {
+    copyRecordMenu.open = false;
+  }
+});
+window.addEventListener('click', (event) => {
+  if (!(event.target instanceof Element) || !event.target.closest('details.menu')) {
+    copyRecordMenu.open = false;
+  }
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && copyRecordMenu.open) {
+    copyRecordMenu.open = false;
+    copyRecordMenu.querySelector('summary').focus();
+  }
+});
+
 function applyInit(payload) {
   state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
   state.activeProfileId = payload.activeProfileId;

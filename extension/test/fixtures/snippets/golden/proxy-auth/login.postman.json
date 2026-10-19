@@ -1,0 +1,49 @@
+{
+  "info": {
+    "name": "Log in (create a session)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Log in (create a session)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{proxyApiKey}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/filemaker",
+        "description": "Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"createSession\",\n  \"profile\": {\n    \"id\": \"profile-proxy\",\n    \"database\": \"Sales DB\",\n    \"serverUrl\": \"https://fm.example.com\"\n  },\n  \"payload\": {}\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://proxy.example.com",
+      "description": "The server address of the connection profile."
+    },
+    {
+      "key": "proxyApiKey",
+      "value": "",
+      "description": "Proxy API key (fill in; never copied)."
+    }
+  ]
+}

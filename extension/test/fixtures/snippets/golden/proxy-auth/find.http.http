@@ -1,0 +1,40 @@
+# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
+@host = https://proxy.example.com
+@proxyApiKey = <proxy api key>
+
+### Find records in layout "Contacts"
+POST {{host}}/filemaker
+Content-Type: application/json
+Authorization: Bearer {{proxyApiKey}}
+
+{
+  "action": "findRecords",
+  "profile": {
+    "id": "profile-proxy",
+    "database": "Sales DB",
+    "serverUrl": "https://fm.example.com"
+  },
+  "payload": {
+    "layout": "Contacts",
+    "body": {
+      "query": [
+        {
+          "City": "Portland",
+          "Status": "==Active"
+        },
+        {
+          "City": "Seattle",
+          "omit": "true"
+        }
+      ],
+      "sort": [
+        {
+          "fieldName": "Name",
+          "sortOrder": "ascend"
+        }
+      ],
+      "limit": 25,
+      "offset": 26
+    }
+  }
+}

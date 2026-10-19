@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "Find records in layout \"Contacts\"",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Find records in layout \"Contacts\"",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/_find",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": [\n    {\n      \"City\": \"Portland\",\n      \"Status\": \"==Active\"\n    },\n    {\n      \"City\": \"Seattle\",\n      \"omit\": \"true\"\n    }\n  ],\n  \"sort\": [\n    {\n      \"fieldName\": \"Name\",\n      \"sortOrder\": \"ascend\"\n    }\n  ],\n  \"limit\": 25,\n  \"offset\": 26\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://fm.example.com",
+      "description": "The server address of the connection profile."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "description": "Session token from the login request (fill in; never copied)."
+    }
+  ]
+}

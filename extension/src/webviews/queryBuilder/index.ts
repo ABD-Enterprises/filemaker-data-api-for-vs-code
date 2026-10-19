@@ -7,15 +7,15 @@ import { describeScriptErrors } from '../../services/responseGuard';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { SavedQueriesStore } from '../../services/savedQueriesStore';
-import type { ConnectionProfile, FindRecordsRequest, SavedQuery } from '../../types/fm';
+import type { FindRecordsRequest, SavedQuery } from '../../types/fm';
 import { recordsToCsv } from '../../utils/exportCsv';
 import { isFormulaNeutralizationOn } from '../../utils/userScopeSetting';
 import { extractLayoutFieldNames } from '../../utils/layoutFields';
 import { parseFindJson, parseSortJson } from '../../utils/jsonValidate';
-import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
+import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
+import type { SnippetFormat } from '../../snippets/model';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import {
-  getOptionalBooleanField,
   getOptionalNumberField,
   getStringField,
   toRecord
@@ -57,7 +57,7 @@ interface OpenRecordPayload {
 const MAX_CLIPBOARD_TEXT_LENGTH = 5_000_000;
 
 interface CopySnippetPayload extends RunQueryPayload {
-  includeAuthHeader?: boolean;
+  delivery: SnippetDelivery;
 }
 
 interface UploadContainerPayload {
@@ -86,6 +86,7 @@ type IncomingMessage =
   | { type: 'exportResultsCsvFile' }
   | { type: 'copyFetchSnippet'; payload: CopySnippetPayload }
   | { type: 'copyCurlSnippet'; payload: CopySnippetPayload }
+  | { type: 'copyRequest'; payload: CopySnippetPayload }
   | { type: 'uploadContainer'; payload: UploadContainerPayload }
   | { type: 'openRecord'; payload: OpenRecordPayload }
   | { type: 'copyText'; text: string; label: string }
@@ -204,6 +205,7 @@ export class QueryBuilderPanel {
       saveQuery: 'Enter a find request before saving the query.',
       copyFetchSnippet: 'Enter a find request before copying it.',
       copyCurlSnippet: 'Enter a find request before copying it.',
+      copyRequest: 'Enter a find request before copying it.',
       copyText: 'Nothing to copy, or the results are too large to copy. Save them as CSV instead.',
       openRecord: 'That row has no record ID to open.'
     };
@@ -242,10 +244,9 @@ export class QueryBuilderPanel {
         await this.exportResultsCsvFile();
         break;
       case 'copyFetchSnippet':
-        await this.copyFetchSnippet(message.payload);
-        break;
       case 'copyCurlSnippet':
-        await this.copyCurlSnippet(message.payload);
+      case 'copyRequest':
+        await this.copyRequest(message.payload);
         break;
       case 'uploadContainer':
         await this.uploadContainer(message.payload);
@@ -578,43 +579,19 @@ export class QueryBuilderPanel {
     return rows;
   }
 
-  private async copyFetchSnippet(payload: CopySnippetPayload): Promise<void> {
+  private async copyRequest(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
-      await this.postError('Cannot generate snippet because the profile was not found.');
+      await this.postError('Cannot copy the request because the profile was not found.');
       return;
     }
 
     try {
-      const request = this.toFindRequest(payload);
-      const snippetRequest = this.toFindSnippetRequest(profile, payload.layout, request);
-      const snippet = generateFetchSnippet(snippetRequest, {
-        includeAuthHeader: payload.includeAuthHeader
-      });
-
-      await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied fetch() snippet to clipboard.');
-    } catch (error) {
-      await this.postError(this.formatError(error));
-    }
-  }
-
-  private async copyCurlSnippet(payload: CopySnippetPayload): Promise<void> {
-    const profile = await this.profileStore.getProfile(payload.profileId);
-    if (!profile) {
-      await this.postError('Cannot generate snippet because the profile was not found.');
-      return;
-    }
-
-    try {
-      const request = this.toFindRequest(payload);
-      const snippetRequest = this.toFindSnippetRequest(profile, payload.layout, request);
-      const snippet = generateCurlSnippet(snippetRequest, {
-        includeAuthHeader: payload.includeAuthHeader
-      });
-
-      await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied curl snippet to clipboard.');
+      await deliverSnippet(
+        profile,
+        { kind: 'find', layout: payload.layout, request: this.toFindRequest(payload) },
+        payload.delivery
+      );
     } catch (error) {
       await this.postError(this.formatError(error));
     }
@@ -650,48 +627,6 @@ export class QueryBuilderPanel {
     } catch (error) {
       await this.postError(this.formatError(error));
     }
-  }
-
-  private toFindSnippetRequest(
-    profile: ConnectionProfile,
-    layout: string,
-    request: FindRecordsRequest
-  ): SnippetRequest {
-    if (profile.authMode === 'proxy') {
-      return {
-        method: 'POST',
-        url: profile.proxyEndpoint ?? '',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer <PROXY_API_KEY>'
-        },
-        body: {
-          action: 'findRecords',
-          profile: {
-            id: profile.id,
-            database: profile.database,
-            serverUrl: profile.serverUrl
-          },
-          payload: {
-            layout,
-            body: request
-          }
-        }
-      };
-    }
-
-    const apiBasePath = profile.apiBasePath ?? '/fmi/data';
-    const apiVersionPath = profile.apiVersionPath ?? 'vLatest';
-
-    return {
-      method: 'POST',
-      url: `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${apiVersionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(layout)}/_find`,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer <SESSION_TOKEN>'
-      },
-      body: request
-    };
   }
 
   private formatError(error: unknown): string {
@@ -771,19 +706,13 @@ export class QueryBuilderPanel {
       case 'exportResultsCsvFile':
       case 'refreshHistory':
         return { type };
-      case 'copyFetchSnippet': {
-        const payload = this.parseCopySnippetPayload(value.payload);
-        if (!payload) {
-          return undefined;
-        }
-
-        return {
-          type,
-          payload
-        };
-      }
-      case 'copyCurlSnippet': {
-        const payload = this.parseCopySnippetPayload(value.payload);
+      case 'copyFetchSnippet':
+      case 'copyCurlSnippet':
+      case 'copyRequest': {
+        // The two older message types name their format; `copyRequest` carries it in the payload.
+        const fallback: SnippetFormat | undefined =
+          type === 'copyFetchSnippet' ? 'fetch' : type === 'copyCurlSnippet' ? 'curl' : undefined;
+        const payload = this.parseCopySnippetPayload(value.payload, fallback);
         if (!payload) {
           return undefined;
         }
@@ -886,18 +815,15 @@ export class QueryBuilderPanel {
     };
   }
 
-  private parseCopySnippetPayload(rawPayload: unknown): CopySnippetPayload | undefined {
+  private parseCopySnippetPayload(rawPayload: unknown, fallbackFormat?: SnippetFormat): CopySnippetPayload | undefined {
     const payload = this.parseRunQueryPayload(rawPayload);
-    if (!payload) {
+    const raw = toRecord(rawPayload);
+    const delivery = raw ? parseSnippetDelivery(raw, fallbackFormat) : undefined;
+    if (!payload || !delivery) {
       return undefined;
     }
 
-    const raw = toRecord(rawPayload);
-
-    return {
-      ...payload,
-      includeAuthHeader: raw ? getOptionalBooleanField(raw, 'includeAuthHeader') : undefined
-    };
+    return { ...payload, delivery };
   }
 
   private parseUploadContainerPayload(rawPayload: unknown): UploadContainerPayload | undefined {
@@ -1023,8 +949,12 @@ export class QueryBuilderPanel {
         <details class="menu" id="copyRequestMenu">
           <summary class="secondary">Copy request</summary>
           <div class="menu-items">
-            <button id="copyFetchButton" type="button">Copy as fetch()</button>
-            <button id="copyCurlButton" type="button">Copy as curl</button>
+            <button id="copyCurlButton" type="button" data-copy-format="curl">Copy as curl</button>
+            <button id="copyFetchButton" type="button" data-copy-format="fetch">Copy as fetch()</button>
+            <button id="copyHttpButton" type="button" data-copy-format="http">Copy as .http (REST Client)</button>
+            <button id="copyPostmanButton" type="button" data-copy-format="postman">Copy as Postman collection</button>
+            <button id="copyTypeScriptButton" type="button" data-copy-format="typescript">Copy as TypeScript</button>
+            <button id="saveHttpButton" type="button" data-copy-format="http" data-copy-destination="editor" title="Opens the request in a new editor. Save it where you want.">Save as .http file…</button>
             <label class="toggle menu-toggle"><input id="includeAuthCheckbox" type="checkbox" /> Include auth header</label>
           </div>
         </details>

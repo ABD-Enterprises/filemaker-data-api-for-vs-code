@@ -6,11 +6,11 @@ import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
 import { dotSegmentMessage, isDotSegment } from '../../utils/urlSegment';
-import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
-import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
+import type { RunScriptRequest } from '../../types/fm';
+import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
+import type { SnippetFormat } from '../../snippets/model';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import {
-  getOptionalBooleanField,
   getStringField,
   toRecord
 } from '../common/messageValidation';
@@ -32,7 +32,7 @@ interface RunScriptPayload {
 }
 
 interface CopySnippetPayload extends RunScriptPayload {
-  includeAuthHeader?: boolean;
+  delivery: SnippetDelivery;
 }
 
 const UNTRUSTED_RUNNER_MESSAGE =
@@ -43,7 +43,8 @@ type IncomingMessage =
   | { type: 'loadLayouts'; profileId: string }
   | { type: 'runScript'; payload: RunScriptPayload }
   | { type: 'copyCurl'; payload: CopySnippetPayload }
-  | { type: 'copyFetch'; payload: CopySnippetPayload };
+  | { type: 'copyFetch'; payload: CopySnippetPayload }
+  | { type: 'copyRequest'; payload: CopySnippetPayload };
 
 export class ScriptRunnerPanel {
   private static currentPanel: ScriptRunnerPanel | undefined;
@@ -136,10 +137,9 @@ export class ScriptRunnerPanel {
         await this.runScript(message.payload);
         break;
       case 'copyCurl':
-        await this.copyCurl(message.payload);
-        break;
       case 'copyFetch':
-        await this.copyFetch(message.payload);
+      case 'copyRequest':
+        await this.copyRequest(message.payload);
         break;
       default:
         break;
@@ -253,7 +253,7 @@ export class ScriptRunnerPanel {
     }
   }
 
-  private async copyCurl(payload: CopySnippetPayload): Promise<void> {
+  private async copyRequest(payload: CopySnippetPayload): Promise<void> {
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
       await this.postError('Connection profile not found.');
@@ -262,79 +262,20 @@ export class ScriptRunnerPanel {
 
     try {
       const request = validateRunScriptPayload(payload);
-      const snippetRequest = this.toSnippetRequest(profile, request);
-      const snippet = generateCurlSnippet(snippetRequest, {
-        includeAuthHeader: payload.includeAuthHeader
-      });
-
-      await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied curl snippet to clipboard.');
-    } catch (error) {
-      await this.postError(formatError(error));
-    }
-  }
-
-  private async copyFetch(payload: CopySnippetPayload): Promise<void> {
-    const profile = await this.profileStore.getProfile(payload.profileId);
-    if (!profile) {
-      await this.postError('Connection profile not found.');
-      return;
-    }
-
-    try {
-      const request = validateRunScriptPayload(payload);
-      const snippetRequest = this.toSnippetRequest(profile, request);
-      const snippet = generateFetchSnippet(snippetRequest, {
-        includeAuthHeader: payload.includeAuthHeader
-      });
-
-      await vscode.env.clipboard.writeText(snippet);
-      vscode.window.showInformationMessage('Copied fetch snippet to clipboard.');
-    } catch (error) {
-      await this.postError(formatError(error));
-    }
-  }
-
-  private toSnippetRequest(profile: ConnectionProfile, request: RunScriptRequest): SnippetRequest {
-    if (profile.authMode === 'proxy') {
-      const endpoint = profile.proxyEndpoint ?? '';
-
-      return {
-        method: 'POST',
-        url: endpoint,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer <PROXY_API_KEY>'
+      await deliverSnippet(
+        profile,
+        {
+          kind: 'runScript',
+          layout: request.layout,
+          scriptName: request.scriptName,
+          scriptParam: request.scriptParam,
+          recordId: request.recordId
         },
-        body: {
-          action: 'runScript',
-          profile: {
-            id: profile.id,
-            database: profile.database,
-            serverUrl: profile.serverUrl
-          },
-          payload: request
-        }
-      };
+        payload.delivery
+      );
+    } catch (error) {
+      await this.postError(formatError(error));
     }
-
-    const apiBasePath = profile.apiBasePath ?? '/fmi/data';
-    const versionPath = profile.apiVersionPath ?? 'vLatest';
-    const layoutUrl = `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${versionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(request.layout)}`;
-    const encode = encodeURIComponent;
-    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer <SESSION_TOKEN>' };
-    const param = request.scriptParam ? `&script.param=${encode(request.scriptParam)}` : '';
-
-    // The same requests the extension sends (see FMClient.runScript): the documented script endpoint, a GET
-    // with script.param in the URL; or, with a record in context, a GET of that record with the script attached.
-    if (request.recordId) {
-      return { method: 'GET', url: `${layoutUrl}/records/${encode(request.recordId)}?script=${encode(request.scriptName)}${param}`, headers };
-    }
-    return {
-      method: 'GET',
-      url: `${layoutUrl}/script/${encode(request.scriptName)}${request.scriptParam ? `?script.param=${encode(request.scriptParam)}` : ''}`,
-      headers
-    };
   }
 
   private async postError(message: string): Promise<void> {
@@ -374,26 +315,17 @@ export class ScriptRunnerPanel {
       };
     }
 
-    if (value.type === 'copyCurl') {
-      const payload = parseCopyPayload(value.payload);
+    if (value.type === 'copyCurl' || value.type === 'copyFetch' || value.type === 'copyRequest') {
+      // The two older message types name their format; `copyRequest` carries it in the payload.
+      const fallback: SnippetFormat | undefined =
+        value.type === 'copyCurl' ? 'curl' : value.type === 'copyFetch' ? 'fetch' : undefined;
+      const payload = parseCopyPayload(value.payload, fallback);
       if (!payload) {
         return undefined;
       }
 
       return {
-        type: 'copyCurl',
-        payload
-      };
-    }
-
-    if (value.type === 'copyFetch') {
-      const payload = parseCopyPayload(value.payload);
-      if (!payload) {
-        return undefined;
-      }
-
-      return {
-        type: 'copyFetch',
+        type: value.type,
         payload
       };
     }
@@ -476,8 +408,17 @@ export class ScriptRunnerPanel {
       </div>
       <div class="actions">
         <button id="runButton">Run Script</button>
-        <button id="copyCurlButton">Copy as curl</button>
-        <button id="copyFetchButton">Copy as fetch()</button>
+        <details class="menu" id="copyRequestMenu">
+          <summary class="secondary">Copy request</summary>
+          <div class="menu-items">
+            <button id="copyCurlButton" type="button" data-copy-format="curl">Copy as curl</button>
+            <button id="copyFetchButton" type="button" data-copy-format="fetch">Copy as fetch()</button>
+            <button id="copyHttpButton" type="button" data-copy-format="http">Copy as .http (REST Client)</button>
+            <button id="copyPostmanButton" type="button" data-copy-format="postman">Copy as Postman collection</button>
+            <button id="copyTypeScriptButton" type="button" data-copy-format="typescript">Copy as TypeScript</button>
+            <button id="saveHttpButton" type="button" data-copy-format="http" data-copy-destination="editor" title="Opens the request in a new editor. Save it where you want.">Save as .http file…</button>
+          </div>
+        </details>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
@@ -519,18 +460,15 @@ function parseRunPayload(value: unknown): RunScriptPayload | undefined {
   };
 }
 
-function parseCopyPayload(value: unknown): CopySnippetPayload | undefined {
+function parseCopyPayload(value: unknown, fallbackFormat?: SnippetFormat): CopySnippetPayload | undefined {
   const payload = parseRunPayload(value);
-  if (!payload) {
+  const raw = toRecord(value);
+  const delivery = raw ? parseSnippetDelivery(raw, fallbackFormat) : undefined;
+  if (!payload || !delivery) {
     return undefined;
   }
 
-  const raw = toRecord(value);
-
-  return {
-    ...payload,
-    includeAuthHeader: raw ? getOptionalBooleanField(raw, 'includeAuthHeader') : undefined
-  };
+  return { ...payload, delivery };
 }
 
 function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {

@@ -136,6 +136,33 @@ describe('extension manifest UX contract', () => {
     expect(properties['filemaker.ai.contextPath']?.default).toBe('');
   });
 
+  it('declares Copy Request as Code, offers it once profiles exist, and wires it up in the extension', () => {
+    expect(commandIds.has(id('copyRequestAsCode'))).toBe(true);
+    const command = commands.find((candidate) => candidate.command === id('copyRequestAsCode'));
+    expect(command?.title).toBe('Copy Request as Code…');
+    expect(command?.category).toBe('FileMaker');
+    expect(palette.get(id('copyRequestAsCode'))).toBe('filemaker.hasProfiles');
+    const extensionSource = readFileSync(join(extensionRoot, 'src', 'extension.ts'), 'utf8');
+    expect(extensionSource).toContain('registerCopyRequestCommands');
+    const commandSource = readFileSync(join(extensionRoot, 'src', 'commands', 'copyRequest.ts'), 'utf8');
+    expect(commandSource).toContain(`'${id('copyRequestAsCode')}'`);
+  });
+
+  it('says in the include-auth setting that a real token, password or key is never written', () => {
+    const properties = Object.assign({}, ...configuration.map((section) => section.properties)) as Record<
+      string,
+      { default?: unknown; description?: string; markdownDescription?: string }
+    >;
+    const setting = properties['filemaker.snippets.includeAuthByDefault'];
+    expect(setting?.default).toBe(false);
+    for (const text of [setting?.description, setting?.markdownDescription]) {
+      expect(text).toContain('never written');
+      for (const format of ['curl', 'fetch()', 'Postman', 'TypeScript']) {
+        expect(text).toContain(format);
+      }
+    }
+  });
+
   it('declares the external-tools commands and builds the MCP shim as part of the build', () => {
     for (const name of ['toggleAiServer', 'copyAiMcpConfig']) {
       expect(commandIds.has(id(name)), name).toBe(true);
