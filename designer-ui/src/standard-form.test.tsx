@@ -48,9 +48,32 @@ describe('standard form engine', () => {
   it('only arranges requested objects, preserving bindings and z-order', () => {
     const before = fixture();
     const after = arrangeStandardForm(before, fields, 1, [ids[2]]);
-    expect(after.objects[2]).toMatchObject({ x: 24, y: 24, width: 160, height: 34 });
+    expect(after.objects[2]).toMatchObject({ x: 8, y: 216, width: 160, height: 34 });
     before.objects.forEach((object, index) => { if (index !== 2) expect(after.objects[index]).toEqual(object); });
     expect(arrangeStandardForm(before, fields, 1, []).objects).toEqual(before.objects);
+  });
+  it('keeps standard fields and their labels inside the canvas, including tiny canvases', () => {
+    const before = fixture();
+    Object.assign(before.objects[1], { x: 1200, y: 780, width: 60, height: 20 });
+    const after = standardizeFields(before, fields, [ids[1]]);
+    expect(after.objects[1]).toMatchObject({ x: 1040, y: 616, width: 240, height: 160 });
+    expect(after.canvas).toEqual(before.canvas);
+    before.canvas = { width: 40, height: 20, gridSize: 8 };
+    const tiny = standardizeFields(before, fields, [ids[1]]);
+    expect(tiny.objects[1]).toMatchObject({ x: 0, y: 0 });
+    expect(tiny.canvas).toMatchObject({ width: 240, height: 184 });
+  });
+  it('starts a selection at its snapped origin and moves below colliding unselected objects', () => {
+    const before = fixture();
+    before.objects = before.objects.slice(0, 3);
+    Object.assign(before.objects[0], { x: 403, y: 163 });
+    Object.assign(before.objects[1], { x: 700, y: 160 });
+    Object.assign(before.objects[2], { x: 400, y: 160, width: 240, height: 96 });
+    const after = arrangeStandardForm(before, fields, 1, [ids[0]]);
+    expect(after.objects[0]).toMatchObject({ x: 400, y: 296 });
+    expect(after.objects.slice(1)).toEqual(before.objects.slice(1));
+    before.objects.pop();
+    expect(arrangeStandardForm(before, fields, 1, [ids[0]]).objects[0]).toMatchObject({ x: 400, y: 160 });
   });
   it('standardizes idempotently without changing identity, binding, behavior, labels or order', () => {
     const before = fixture();
@@ -148,14 +171,36 @@ describe('standard form toolbar', () => {
     expect(after[0]).not.toBe(before[0]);
     expect(after.slice(1)).toEqual(before.slice(1));
   });
+  it('undo and redo restore the template source choice along with its field palette', () => {
+    const { container } = render(<App />);
+    init(createBlankLayout('New'), { isNewLayout: true, templateLayouts: [
+      { layoutName: ' First ', fields, portals: [] },
+      { layoutName: ' Second ', fields: [{ name: 'Second only', type: 'number' }], portals: [] }
+    ] });
+    fireEvent.change(screen.getByLabelText('Starter template'), { target: { value: 'form' } });
+    fireEvent.change(screen.getByLabelText('Template FileMaker layout'), { target: { value: ' Second ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply starter template' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect((screen.getByLabelText('Template FileMaker layout') as HTMLSelectElement).value).toBe(' First ');
+    expect(container.querySelector('.field-list')?.textContent).toContain(' Z');
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(container.querySelector('.field-list')?.textContent).toBe('Second only');
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect((screen.getByLabelText('Template FileMaker layout') as HTMLSelectElement).value).toBe(' First ');
+  });
   it('offers templates only for a new layout and creates one in a single undo step', () => {
     const { container } = render(<App />);
-    init(createBlankLayout('New'), { isNewLayout: true, templateLayouts: [{ layoutName: ' Source ', fields, portals: [] }] });
+    init(createBlankLayout('New'), { isNewLayout: true, templateLayouts: [{ layoutName: ' Source ', fields: [{ name: 'Template only', type: 'number' }], portals: [] }] });
     fireEvent.change(screen.getByLabelText('Starter template'), { target: { value: 'twoColumn' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply starter template' }));
-    expect(container.querySelectorAll('.object-hitbox')).toHaveLength(5);
+    expect(container.querySelectorAll('.object-hitbox')).toHaveLength(1);
+    expect(container.querySelector('.field-list')?.textContent).toContain('Template only');
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(container.querySelectorAll('.object-hitbox')).toHaveLength(0);
+    expect(container.querySelector('.field-list')?.textContent).not.toContain('Template only');
+    expect(container.querySelector('.field-list')?.textContent).toContain(' Z');
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(container.querySelector('.field-list')?.textContent).toContain('Template only');
     init(fixture());
     expect(screen.queryByLabelText('Starter template')).toBeNull();
   });

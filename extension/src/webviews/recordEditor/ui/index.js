@@ -24,7 +24,8 @@ const state = {
   layoutsByProfile: new Map(),
   loaded: undefined,
   originalFieldData: {},
-  draftFieldData: {}
+  draftFieldData: {},
+  presentationFields: []
 };
 
 const profileSelect = document.getElementById('profileSelect');
@@ -285,6 +286,7 @@ function applyLayoutFields(payload) {
     return;
   }
 
+  state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = {};
   state.draftFieldData = {};
   for (const field of payload.fields) {
@@ -346,6 +348,7 @@ function applyRecord(payload) {
   debouncedMarkDirtyState.cancel();
   hideConflict();
   state.loaded = payload;
+  state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);
 
@@ -579,7 +582,9 @@ function buildFieldEditor(keys) {
   wrapper.className = 'table-scroll-wrapper';
 
   const table = document.createElement('table');
+  table.className = 'fm-field-table';
   const thead = document.createElement('thead');
+  thead.className = 'visually-hidden';
   const headerRow = document.createElement('tr');
   const fieldHeader = document.createElement('th');
   fieldHeader.textContent = 'Field';
@@ -592,15 +597,24 @@ function buildFieldEditor(keys) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  tbody.className = 'fm-fields';
   for (const key of keys) {
     const tr = document.createElement('tr');
+    tr.className = 'fm-field';
+    FieldStandards.applyStandardField(tr, fieldPresentation(key));
 
     const labelCell = document.createElement('td');
+    labelCell.className = 'fm-field-label';
+    labelCell.id = `record-field-label-${fieldInputs.size}`;
     labelCell.textContent = key;
     tr.appendChild(labelCell);
 
     const inputCell = document.createElement('td');
     const input = document.createElement('textarea');
+    input.id = `record-field-${fieldInputs.size}`;
+    input.className = 'fm-field-control';
+    input.setAttribute('aria-label', key);
+    input.setAttribute('aria-labelledby', labelCell.id);
     input.rows = 2;
     input.value = toEditableValue(state.draftFieldData[key]);
     input.addEventListener('input', () => {
@@ -618,6 +632,11 @@ function buildFieldEditor(keys) {
   fieldEditor.replaceChildren(wrapper);
 }
 
+function fieldPresentation(name) {
+  const metadata = state.presentationFields.find((field) => field.name === name) || {};
+  return { ...metadata, type: metadata.result || metadata.type };
+}
+
 function updateFieldEditorValues(keys) {
   for (const key of keys) {
     const input = fieldInputs.get(key);
@@ -626,6 +645,7 @@ function updateFieldEditorValues(keys) {
     }
 
     input.value = toEditableValue(state.draftFieldData[key]);
+    FieldStandards.applyStandardField(input.closest('tr'), fieldPresentation(key));
   }
 }
 

@@ -18,6 +18,7 @@ const fieldDataContainer = document.getElementById('fieldDataContainer');
 const relatedDataContainer = document.getElementById('relatedDataContainer');
 const rawJson = document.getElementById('rawJson');
 const fieldCellRefs = new Map();
+let presentationFields = [];
 const portalSectionRefs = new Map();
 const recordViewerPanel = fieldDataContainer.closest('.panel');
 const recordViewerHeading = recordViewerPanel ? recordViewerPanel.querySelector('h2') : null;
@@ -279,6 +280,7 @@ function renderRecord(payload) {
   const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
   const relatedData = record.portalData && typeof record.portalData === 'object' ? record.portalData : {};
 
+  presentationFields = payload.presentationFields || [];
   renderFieldData(fieldData);
   renderPortalData(relatedData);
 
@@ -343,8 +345,10 @@ function buildFieldTable(fieldData, fieldKeys) {
   wrapper.className = 'table-scroll-wrapper';
 
   const table = document.createElement('table');
+  table.className = 'fm-field-table';
 
   const thead = document.createElement('thead');
+  thead.className = 'visually-hidden';
   const headRow = document.createElement('tr');
 
   const fieldHeader = document.createElement('th');
@@ -363,15 +367,20 @@ function buildFieldTable(fieldData, fieldKeys) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  tbody.className = 'fm-fields';
 
   for (const field of fieldKeys) {
     const row = document.createElement('tr');
+    row.className = 'fm-field';
+    FieldStandards.applyStandardField(row, presentationFields.find((entry) => entry.name === field));
 
     const fieldCell = document.createElement('td');
+    fieldCell.className = 'fm-field-label';
     fieldCell.textContent = field;
     row.appendChild(fieldCell);
 
     const valueCell = document.createElement('td');
+    valueCell.className = 'fm-field-control';
     valueCell.textContent = toText(fieldData[field]);
     fieldCellRefs.set(field, valueCell);
     row.appendChild(valueCell);
@@ -397,6 +406,7 @@ function buildFieldTable(fieldData, fieldKeys) {
 function updateFieldCells(fieldData, fieldKeys) {
   fieldKeys.forEach((fieldKey) => {
     const cell = fieldCellRefs.get(fieldKey);
+    if (cell) FieldStandards.applyStandardField(cell.closest('tr'), presentationFields.find((entry) => entry.name === fieldKey));
     const nextValue = toText(fieldData[fieldKey]);
     if (cell && cell.textContent !== nextValue) {
       cell.textContent = nextValue;

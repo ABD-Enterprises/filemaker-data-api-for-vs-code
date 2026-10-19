@@ -642,3 +642,11 @@ button {
     flex: 1 1 100%;
   }
 }
+
+/* Find values use the shared field form; action controls remain in the same row. */
+.criterion-row.fm-fields { display: flex; margin-bottom: var(--fm-row-gap); align-items: flex-end; }
+.criterion-row.fm-fields > .fm-field { flex: 0 1 var(--fm-field-width); }
+@media (max-width: 640px) {
+  .criterion-row.fm-fields { align-items: flex-start; }
+  .criterion-row.fm-fields > .fm-field { flex: none; }
+}

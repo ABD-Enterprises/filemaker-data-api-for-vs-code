@@ -22,6 +22,7 @@ const state = {
   editorMode: 'form',
   model: FindForm.createEmptyModel(),
   fieldNames: [],
+  fieldMetadata: [],
   resultSort: undefined,
   resultView: 'table',
   running: false,
@@ -298,7 +299,7 @@ function renderRequest(request, requestIndex) {
 
 function renderCriterion(request, criterion, requestIndex, criterionIndex) {
   const row = document.createElement('div');
-  row.className = 'criterion-row';
+  row.className = 'criterion-row fm-fields';
   const idPrefix = `req${requestIndex}-crit${criterionIndex}`;
 
   const field = document.createElement('input');
@@ -310,6 +311,7 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
   field.id = `${idPrefix}-field`;
   field.addEventListener('input', () => {
     criterion.field = field.value;
+    sizeValues();
   });
 
   const operator = document.createElement('select');
@@ -332,7 +334,11 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
     }
   });
 
-  row.append(field, operator);
+  row.append(labelControl(field, 'Field'), labelControl(operator, 'Condition'));
+  function sizeValues() {
+    const metadata = state.fieldMetadata.find((entry) => entry.name === criterion.field);
+    row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+  }
 
   const definition = FindForm.getOperator(criterion.operator);
   if (definition.needsValue) {
@@ -368,6 +374,7 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
   removeButton.setAttribute('aria-label', 'Remove criterion');
   removeButton.title = 'Remove criterion';
   row.appendChild(removeButton);
+  sizeValues();
 
   return row;
 }
@@ -379,7 +386,19 @@ function makeValueInput(value, label, onInput) {
   input.setAttribute('aria-label', label);
   input.value = value || '';
   input.addEventListener('input', () => onInput(input.value));
-  return input;
+  return labelControl(input, label);
+}
+
+function labelControl(control, text) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'fm-field';
+  const label = document.createElement('span');
+  label.className = 'fm-field-label';
+  label.textContent = text;
+  control.classList.add('fm-field-control');
+  wrapper.append(label, control);
+  FieldStandards.applyStandardField(wrapper);
+  return wrapper;
 }
 
 function renderSortRow(item, sortIndex) {
@@ -460,6 +479,7 @@ function applyFieldNames(payload) {
     return;
   }
 
+  state.fieldMetadata = Array.isArray(payload && payload.fieldMetadata) ? payload.fieldMetadata : [];
   state.fieldNames = Array.isArray(payload && payload.fieldNames) ? payload.fieldNames : [];
   fieldNameOptions.replaceChildren(
     ...state.fieldNames.map((name) => {
@@ -469,6 +489,11 @@ function applyFieldNames(payload) {
     })
   );
 
+  requestList.querySelectorAll('.criterion-row').forEach((row) => {
+    const field = row.querySelector('.criterion-field');
+    const metadata = state.fieldMetadata.find((entry) => entry.name === field.value);
+    row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+  });
   fieldNamesHint.classList.remove('error');
   if (payload && payload.error) {
     fieldNamesHint.textContent = `Couldn't load this layout's fields (${payload.error}). You can still type field names.`;
@@ -880,6 +905,8 @@ function requestFieldNamesForCurrentLayout() {
     applyFieldNames({ profileId: '', layout: '', fieldNames: [] });
     return;
   }
+  // Do not temporarily size a new layout using the previous layout's types.
+  applyFieldNames({ profileId, layout, fieldNames: [] });
   vscode.postMessage({ type: 'loadFieldNames', profileId, layout });
 }
 

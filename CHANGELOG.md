@@ -2,8 +2,6 @@
 
 This file is the operator-facing release ledger. Every pull request adds one
 line under `## Unreleased` with one of the allowed section labels, or
-
-- [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 applies the `changelog-skip` label for a purely no-impact change. See EAS
 §B2 Universal PR Essentials.
 
@@ -26,9 +24,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- [FEATURE] Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing.
+- [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 
 ### [FIX]
 
+- [FIX] Layout Mode keeps standardized fields on canvas, arranges selections without covering other objects, sizes Data API option controls from value lists, restores template palettes on Undo, and loads template metadata on demand.
 
 ### [INTERNAL]
 

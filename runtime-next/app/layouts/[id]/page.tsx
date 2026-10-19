@@ -1,3 +1,5 @@
+// fmweb-managed: runtime template v3. Field presentation uses the shared designer rules.
+import { standardFieldsCss } from '@fmweb/shared';
 import { notFound } from 'next/navigation';
 import type { JSX } from 'react';
 
@@ -22,7 +24,8 @@ export default async function LayoutPage({ params, searchParams }: LayoutPagePro
   const initialRecordIndex = readNumberSearchParam(searchParams?.foundIndex);
 
   return (
-    <main className="runtime-layout-page">
+    <main className="runtime-layout-page" data-fm-field-layout="standard">
+      <style>{standardFieldsCss()}</style>
       <RuntimeLayoutClient
         layout={layout}
         initialRecordId={initialRecordId}
