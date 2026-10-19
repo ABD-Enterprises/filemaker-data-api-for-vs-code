@@ -511,7 +511,7 @@ function extractFieldNames(metadata: Record<string, unknown>): string[] {
             : undefined;
 
       if (fieldName && fieldName.trim().length > 0) {
-        fields.add(fieldName.trim());
+        fields.add(fieldName);
       }
     }
   }

@@ -20,8 +20,9 @@ export function buildGlobalFieldsPayload(
   const result: Record<string, string> = {};
 
   for (const entry of entries) {
-    const name = entry.fieldName.trim();
-    if (name.length > 0) {
+    // Exactly as given: a leading or trailing space can be part of a field name. Only a blank name is skipped.
+    const name = entry.fieldName;
+    if (name.trim().length > 0) {
       result[name] = entry.value;
     }
   }
