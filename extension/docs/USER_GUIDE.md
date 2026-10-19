@@ -557,6 +557,23 @@ FM Web is an experimental workflow for designing web layouts that sit on top of 
 4. **FileMaker: Generate FM Web Next.js App** and **FileMaker: Generate FM Web Layout Page** write the app to `.fmweb/generated`.
 5. **FileMaker: Start FM Web Preview Server** starts a local bridge (bound to `127.0.0.1`) and runs the app. **The preview needs the source repository.** The Marketplace extension does not include the preview app template, so in a Marketplace installation **Generate FM Web Next.js App** and **Start FM Web Preview Server** are hidden from the Command Palette (the commands that need the template are only listed when it is installed); invoking one another way, for example from a keybinding, still stops with "The FM Web preview is not available in this installation". Layout Mode and metadata sync work everywhere. To use the preview, work from a clone of the repository (see [CONTRIBUTING.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CONTRIBUTING.md)).
 
+New field chips (click to add, or drag onto the canvas) use an 8 px grid, labels on top and standard sizes. Existing layouts load as saved; moving and resizing existing objects still works as before. The page margin is 24 px, rows have at least 16 px between them (plus room for the top label), and columns have a 24 px gap.
+
+| Field type or display | Width × height (px) |
+| --- | --- |
+| Text, or unknown type | 240 × 34 |
+| Long or multiline text | 240 × 96 |
+| Number | 120 × 34 |
+| Date, time, timestamp | 160 × 34 |
+| Checkbox or radio | 240 wide; 24 per option, at least 34 high |
+| Container | 240 × 160 |
+
+Layout Mode has three new actions:
+
+- **Arrange standard form** uses **One column** or **Two columns**, in the source FileMaker layout's field order (down the left column, then down the right). With a selection it arranges only selected fields and portals; with no selection it arranges all fields and portals. Portals go underneath at full page width. A narrow canvas uses one column. The canvas grows to fit tall forms. Text, buttons and other objects stay where they are; portal columns, settings and behaviors stay intact.
+- **Standardize selected / Standardize all** applies standard field sizes, top labels and the 8 px grid without rearranging rows. Selection limits the action to those fields; no selection applies it to all fields. Field names, labels, bindings, behaviors and stacking order stay intact. Each arrangement or standardization is one Undo step.
+- **Apply starter template** appears for a new, empty web layout. **Blank** is the default. Choose a synced **Template FileMaker layout** and **Form**, **Two-column form**, or **Form + first portal**, then apply. The portal template uses the first portal listed in metadata; if there is none, it creates just the form. Templates use every field in the chosen layout, retain names exactly (including spaces), and can be undone in one step. Sync metadata first to supply types and field order; unavailable types use text sizing.
+
 When you run **Generate FM Web Next.js App** or **Start FM Web Preview Server** again, the extension refreshes the few managed runtime files (marked `fmweb-managed: runtime template v2`) in an app you generated earlier. It never overwrites a file you edited and never follows a symbolic link: such files are left as they are, and a warning names each one ("These generated preview files were edited (or are symbolic links), so they were not updated: ..."). Delete the named files and run the command again to get fresh copies; until then the preview cannot reach the bridge.
 
 Confirmations you will see:

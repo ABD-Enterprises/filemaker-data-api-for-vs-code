@@ -26,6 +26,8 @@ import {
   type FmWebSyncSummary
 } from '../types/fmWeb';
 import { distinctFileName } from '../utils/safeText';
+import { resolveConfinedFile } from '../utils/pathConfinement';
+import { designerLayoutMetadata, type DesignerLayoutMetadata } from '../fmweb/fieldMetadata';
 
 const FMWEB_FOLDER = '.fmweb';
 const DEFAULT_FEATURE_FLAGS: FmWebFeatureFlags = {
@@ -297,6 +299,27 @@ export class FmWebProjectService {
     return [...fields].sort((a, b) => a.localeCompare(b));
   }
 
+  public async getDesignerLayouts(): Promise<DesignerLayoutMetadata[]> {
+    const cache = await this.loadMetadataCache();
+    return Promise.all((cache?.layoutMetadata ?? []).map(async (entry) => {
+      // The index is a workspace file. A metadata filename must stay inside its directory.
+      const fileName = path.basename(entry.metadataFile);
+      let stored: { metadata?: Record<string, unknown> } | undefined;
+      if (fileName === entry.metadataFile) {
+        try {
+          const confined = await resolveConfinedFile(
+            path.join(this.getMetadataLayoutsDirPath(), fileName), this.getProjectRoot(), [this.getProjectRoot()]
+          );
+          stored = await this.readJsonSafe(confined.path);
+        } catch {
+          // Old/missing metadata or an unsafe path falls back to the cached names.
+        }
+      }
+      const parsed = designerLayoutMetadata(entry.layoutName, stored?.metadata ?? {});
+      return { ...parsed, fields: parsed.fields.length ? parsed.fields : entry.fields.map((name) => ({ name })) };
+    }));
+  }
+
   public getProjectConfigPath(): string {
     return path.join(this.getProjectRoot(), 'project.json');
   }
@@ -350,8 +373,7 @@ export class FmWebProjectService {
       const schema = await this.schemaService.getLayoutSchema(profile, layoutName);
       return schema.fields
         .map((field) => field.name)
-        .filter((name) => typeof name === 'string' && name.length > 0)
-        .sort((a, b) => a.localeCompare(b));
+        .filter((name) => typeof name === 'string' && name.length > 0);
     } catch {
       return [];
     }
@@ -516,7 +538,7 @@ function extractFieldNames(metadata: Record<string, unknown>): string[] {
     }
   }
 
-  return [...fields].sort((a, b) => a.localeCompare(b));
+  return [...fields];
 }
 
 function extractTableOccurrences(metadata: Record<string, unknown>): string[] {

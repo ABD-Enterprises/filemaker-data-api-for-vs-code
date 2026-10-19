@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from 'fs/promises';
+import { mkdir, readFile, rm, writeFile, symlink } from 'fs/promises';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,6 +81,54 @@ describe('FmWebProjectService', () => {
     expect(summary.fieldCount).toBe(2);
     const cache = JSON.parse(await readFile(path.join(WORKSPACE_ROOT, '.fmweb', 'metadata', 'index.json'), 'utf8')) as { fields?: string[]; allFields?: string[] };
     expect(JSON.stringify(cache)).toContain('" Photo"');
+  });
+
+  it('passes stored metadata order, field types, exact names and the first portal to the designer', async () => {
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub({
+      listLayouts: vi.fn(async () => [' Contacts ']),
+      getLayoutMetadata: vi.fn(async () => ({
+        fieldMetaData: [{ name: ' Z', result: 'number' }, { name: 'A', result: 'container' }],
+        portalMetaData: { ' Related ': [{ name: ' Related::Value ' }] }
+      }))
+    }), createSchemaServiceStub(), logger);
+    await service.initializeProject();
+    await service.syncMetadata(profile);
+    expect(await service.getAvailableFields(' Contacts ')).toEqual([' Z', 'A']);
+    expect(await service.getDesignerLayouts()).toEqual([{
+      layoutName: ' Contacts ', fields: [
+        { name: ' Z', type: 'number', multiline: false }, { name: 'A', type: 'container', multiline: false }
+      ], portals: [{ name: ' Related ', fields: [' Related::Value '] }]
+    }]);
+  });
+
+  it('falls back to cached names for old or missing metadata and refuses paths outside the metadata folder', async () => {
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub(), createSchemaServiceStub(), logger);
+    await service.initializeProject();
+    const entries = [
+      { layoutName: 'Old', fields: [' Old field '], metadataFile: 'missing.json' },
+      { layoutName: 'Outside', fields: ['Keep'], metadataFile: '../../../outside.json' }
+    ];
+    await writeFile(service.getMetadataIndexPath(), JSON.stringify({ layoutMetadata: entries }));
+    expect(await service.getDesignerLayouts()).toEqual([
+      { layoutName: 'Old', fields: [{ name: ' Old field ' }], portals: [] },
+      { layoutName: 'Outside', fields: [{ name: 'Keep' }], portals: [] }
+    ]);
+    if (process.platform !== 'win32') {
+      const outside = path.join(WORKSPACE_ROOT, 'outside.json');
+      await writeFile(outside, JSON.stringify({ metadata: { fields: [{ name: 'Do not read' }] } }));
+      await symlink(outside, path.join(service.getMetadataLayoutsDirPath(), 'missing.json'));
+      expect((await service.getDesignerLayouts())[0]?.fields).toEqual([{ name: ' Old field ' }]);
+    }
+  });
+
+  it('loads a saved layout unchanged without applying any standards', async () => {
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub(), createSchemaServiceStub(), logger);
+    const created = await service.loadOrCreateLayout();
+    created.layout.canvas.gridSize = 10;
+    await service.saveLayout(created.layout);
+    const loaded = await service.loadOrCreateLayout(created.layout.id);
+    expect(loaded.source).toBe('existing');
+    expect(loaded.layout).toEqual(created.layout);
   });
 
   it('syncs metadata into local cache for offline usage', async () => {

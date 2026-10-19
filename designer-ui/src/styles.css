@@ -124,6 +124,12 @@ button:disabled {
   padding-bottom: 4px;
 }
 
+.action-row select {
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+}
+
 .canvas-scroll {
   border: 1px solid var(--line);
   border-radius: 8px;

@@ -1,4 +1,4 @@
-import type { LayoutDefinition, LayoutObject } from '@fmweb/shared';
+import { FIELD_LAYOUT, standardFieldSize, type StandardFieldMetadata, type FieldLayoutObject, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
 
 export interface Point {
   x: number;
@@ -438,4 +438,114 @@ export function withNormalizedZIndex(layout: LayoutDefinition, ordered: LayoutOb
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/** Only geometry and label position change; bindings, order and all other data survive. */
+export function standardizeFields(
+  layout: LayoutDefinition,
+  fields: StandardFieldMetadata[],
+  ids?: string[]
+): LayoutDefinition {
+  return {
+    ...layout,
+    objects: layout.objects.map((object) => {
+      if (object.type !== 'field' || (ids && !ids.includes(object.id))) return object;
+      const metadata = fields.find((field) => field.name === object.fmFieldName);
+      return {
+        ...object,
+        ...standardFieldSize({ ...metadata, displayType: object.displayType === 'editBox' ? metadata?.displayType : object.displayType }),
+        x: Math.max(0, snapToGrid(object.x, FIELD_LAYOUT.grid)),
+        y: Math.max(0, snapToGrid(object.y, FIELD_LAYOUT.grid)),
+        labelPosition: FIELD_LAYOUT.labelPosition
+      };
+    })
+  };
+}
+
+/** Column-major order: the first half runs down the left, the rest down the right. */
+export function arrangeStandardForm(
+  layout: LayoutDefinition,
+  fields: StandardFieldMetadata[],
+  columns: 1 | 2 = 1,
+  ids?: string[]
+): LayoutDefinition {
+  if (!layout.objects.some((object) => (object.type === 'field' || object.type === 'portal') && (!ids || ids.includes(object.id)))) return layout;
+  const next = standardizeFields(layout, fields, ids);
+  const included = (object: LayoutObject): boolean => !ids || ids.includes(object.id);
+  const order = new Map(fields.map((field, index) => [field.name, index]));
+  const arranged = next.objects.filter((object) => object.type === 'field' && included(object))
+    .sort((a, b) => (order.get((a as FieldLayoutObject).fmFieldName) ?? fields.length)
+      - (order.get((b as FieldLayoutObject).fmFieldName) ?? fields.length));
+  const columnWidth = Math.max(FIELD_LAYOUT.textWidth, ...arranged.map((object) => object.width));
+  const actualColumns = columns === 2 && layout.canvas.width >= FIELD_LAYOUT.pageMargin * 2 + columnWidth * 2 + FIELD_LAYOUT.columnGap ? 2 : 1;
+  const split = Math.ceil(arranged.length / actualColumns);
+  const bottom = [FIELD_LAYOUT.pageMargin, FIELD_LAYOUT.pageMargin];
+  const positions = new Map<string, Partial<LayoutObject>>();
+  arranged.forEach((object, index) => {
+    const column = index < split ? 0 : 1;
+    positions.set(object.id, { x: FIELD_LAYOUT.pageMargin + column * (columnWidth + FIELD_LAYOUT.columnGap), y: bottom[column] });
+    // Reserve room for the top label and round upwards, so the 34 px controls cannot overlap.
+    bottom[column] += Math.ceil((object.height + FIELD_LAYOUT.labelSpace + FIELD_LAYOUT.rowGap) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
+  });
+  let portalY = Math.max(...bottom);
+  const fullWidth = Math.max(columnWidth, layout.canvas.width - FIELD_LAYOUT.pageMargin * 2);
+  next.objects.filter((object) => object.type === 'portal' && included(object)).forEach((object) => {
+    positions.set(object.id, { x: FIELD_LAYOUT.pageMargin, y: portalY, width: fullWidth });
+    portalY += Math.ceil((object.height + FIELD_LAYOUT.rowGap) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
+  });
+  return {
+    ...next,
+    canvas: {
+      ...next.canvas,
+      width: Math.max(next.canvas.width, FIELD_LAYOUT.pageMargin * 2 + columnWidth),
+      height: Math.max(next.canvas.height, portalY + FIELD_LAYOUT.pageMargin)
+    },
+    objects: next.objects.map((object) => positions.has(object.id) ? { ...object, ...positions.get(object.id) } as LayoutObject : object)
+  };
+}
+
+export type StarterTemplate = 'blank' | 'form' | 'twoColumn' | 'formPortal';
+export interface StandardPortalMetadata { name: string; fields: string[] }
+
+export function createStandardField(
+  metadata: StandardFieldMetadata,
+  id: string,
+  point: Point,
+  zIndex: number
+): FieldLayoutObject {
+  const display = (metadata.displayType ?? '').toLowerCase().replace(/[ -]/g, '');
+  return {
+    id, name: metadata.name, type: 'field', fmFieldName: metadata.name,
+    x: Math.max(0, snapToGrid(point.x, FIELD_LAYOUT.grid)),
+    y: Math.max(0, snapToGrid(point.y, FIELD_LAYOUT.grid)),
+    ...standardFieldSize(metadata), zIndex,
+    anchors: { top: true, right: false, bottom: false, left: true },
+    displayType: ['checkbox', 'checkboxset'].includes(display) ? 'checkbox'
+      : ['radio', 'radiobuttongroup'].includes(display) ? 'radio'
+      : display === 'dropdown' ? 'dropdown' : 'editBox',
+    format: metadata.type?.toLowerCase() === 'number' ? 'number' : metadata.type?.toLowerCase() === 'date' ? 'date' : 'text',
+    labelPosition: FIELD_LAYOUT.labelPosition, required: false
+  };
+}
+
+/** IDs are supplied by the caller, keeping template generation pure and repeatable. */
+export function createStarterTemplate(
+  layout: LayoutDefinition,
+  fields: StandardFieldMetadata[],
+  template: StarterTemplate,
+  ids: string[],
+  portal?: StandardPortalMetadata
+): LayoutDefinition {
+  if (template === 'blank') return layout;
+  const objects: LayoutObject[] = fields.map((field, index) => createStandardField(field, ids[index], { x: 0, y: 0 }, index));
+  if (template === 'formPortal' && portal) {
+    objects.push({
+      id: ids[fields.length], name: portal.name, type: 'portal', relatedContext: portal.name,
+      x: 0, y: 0, width: 420, height: 220, zIndex: objects.length,
+      anchors: { top: true, right: false, bottom: false, left: true },
+      rowCount: 5, scroll: true, selectableRows: false,
+      columns: portal.fields.map((name, index) => ({ id: ids[fields.length + 1 + index], fmFieldName: name, label: name, width: FIELD_LAYOUT.textWidth }))
+    });
+  }
+  return arrangeStandardForm({ ...layout, objects }, fields, template === 'twoColumn' ? 2 : 1);
 }
