@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import {
+  answerPickers,
   connect,
   createProfile,
   ensureProfileCommands,
@@ -230,6 +231,134 @@ export async function run(ctx) {
       }
       await s.closeAllEditors();
       return out.join(' | ');
+    }
+  );
+
+  await s.step(
+    J,
+    'the Copy request menus open inside a narrow panel in all four panels and a click copies',
+    'at ~360 and ~480 px every item of the open menu is inside the panel and Copy puts a request on the clipboard',
+    async () => {
+      const recordId = String(expected.response.data[0].recordId);
+      const productId = (await mock.manifest()).databases.Quality.tables.Products.conditions.clean[2];
+      const original = await s.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
+      const setWidth = async (width) => {
+        await s.app.evaluate(
+          ({ BrowserWindow }, [w, h]) => {
+            const win = BrowserWindow.getAllWindows()[0];
+            win.setMinimumSize(300, 300);
+            win.setBounds({ x: 20, y: 20, width: w, height: h });
+          },
+          [width, 900]
+        );
+        await s.page.waitForTimeout(900);
+      };
+      const panels = [
+        {
+          name: 'Query Builder',
+          menu: '#copyRequestMenu',
+          copy: '#copyCurlButton',
+          open: async () => {
+            const w = await openQueryBuilder(s, 'Customers');
+            await w.locator('#jsonTab').click();
+            await w.locator('#findJson').fill('[{}]');
+            return w;
+          }
+        },
+        {
+          name: 'Script Runner',
+          menu: '#copyRequestMenu',
+          copy: '#copyCurlButton',
+          open: async () => {
+            await s.closeAllEditors();
+            await s.cmd('FileMaker: Open Script Runner');
+            await answerPickers(s, ['Mock Quality', 'Customers']);
+            if (await s.pickerOpen()) await s.inputBox('');
+            const w = await s.webview('#scriptNameInput');
+            await w.locator('#scriptNameInput').fill('Echo');
+            return w;
+          }
+        },
+        {
+          name: 'Record Viewer',
+          menu: '#copyRecordMenu',
+          copy: '#copyRecordButton',
+          open: async () => {
+            await s.closeAllEditors();
+            await s.cmd('FileMaker: Open Record Viewer');
+            await answerPickers(s, ['Mock Quality', 'Customers']);
+            if (await s.pickerOpen()) await s.inputBox(recordId);
+            const w = await s.webview('#relatedDataContainer', { visible: false });
+            await w.locator('#loadButton').click();
+            await s.page.waitForTimeout(1500);
+            return w;
+          }
+        },
+        {
+          name: 'Record Editor',
+          menu: '#copyRecordMenu',
+          copy: '#copyRecordButton',
+          open: async () => {
+            await s.closeAllEditors();
+            await s.cmd('FileMaker: Open Record Editor');
+            await answerPickers(s, ['Mock Quality', 'Products']);
+            if (await s.pickerOpen()) await s.inputBox(String(productId));
+            const w = await s.webview('#recordIdInput');
+            const loaded = await w
+              .locator('#fieldEditor textarea')
+              .first()
+              .waitFor({ timeout: 8000 })
+              .then(
+                () => true,
+                () => false
+              );
+            if (!loaded) await w.locator('#loadButton').click();
+            await w.locator('#fieldEditor textarea').first().waitFor({ timeout: 20000 });
+            return w;
+          }
+        }
+      ];
+      const report = [];
+      try {
+        for (const width of [360, 480]) {
+          for (const panel of panels) {
+            const w = await panel.open();
+            // As in J14: sidebar closed, and the window is the editor width plus the activity bar.
+            await s.cmd('View: Close Primary Side Bar').catch(() => {});
+            await setWidth(width + 52);
+            await w.locator(`${panel.menu} summary`).click();
+            // A wide <select> (the 140-character layout name of the mock) can stretch a page sideways, a separate
+            // known finding of J14; look at the menu from the left edge of the page.
+            await w.locator('body').evaluate(() => window.scrollTo(0, 0));
+            await s.page.waitForTimeout(300);
+            const box = await w.locator(`${panel.menu} .menu-items`).evaluate((el) => {
+              const vw = document.documentElement.clientWidth;
+              const items = [...el.querySelectorAll('button, select')].map((item) => {
+                const r = item.getBoundingClientRect();
+                return { id: item.id, left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width) };
+              });
+              const r = el.getBoundingClientRect();
+              return { vw, left: Math.round(r.left), right: Math.round(r.right), items };
+            });
+            const outside = box.items.filter((item) => item.width <= 0 || item.left < 0 || item.right > box.vw + 1);
+            assert(
+              box.left >= 0 && box.right <= box.vw + 1 && outside.length === 0,
+              `${panel.name} at ${width}px: menu ${box.left}..${box.right} of ${box.vw}; outside: ${JSON.stringify(outside)}`
+            );
+            await writeClipboard(s, 'sentinel');
+            await w.locator(`${panel.menu} ${panel.copy}`).click();
+            await s.page.waitForTimeout(700);
+            const clip = await readClipboard(s);
+            assert(/^curl -X /.test(clip), `${panel.name} at ${width}px copied: ${clip.slice(0, 80)}`);
+            report.push(`${panel.name}@${width}`);
+          }
+        }
+      } finally {
+        await s.app.evaluate(({ BrowserWindow }, b) => BrowserWindow.getAllWindows()[0].setBounds(b), original);
+        await s.page.waitForTimeout(500);
+        await s.closeAllEditors();
+      }
+      return report.join(', ');
     }
   );
 

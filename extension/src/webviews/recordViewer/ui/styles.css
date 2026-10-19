@@ -69,6 +69,7 @@ input {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -264,4 +265,26 @@ details.menu > summary::after {
 .menu-items button {
   text-align: left;
   white-space: normal;
+}
+
+/* A closed menu has no boxes at all (nothing to overflow or cover), and on a narrow panel an open one
+   opens in the flow of the page instead of floating over it. */
+details.menu:not([open]) > .menu-items {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  details.menu[open] {
+    flex: 1 0 100%;
+  }
+
+  /* Bound to the window, not to the page: a page that a wide control stretches must not stretch the menu. */
+  details.menu > .menu-items {
+    position: static;
+    width: min(100%, calc(100vw - 48px));
+    min-width: 0;
+    max-width: none;
+    margin-top: 6px;
+    box-shadow: none;
+  }
 }
