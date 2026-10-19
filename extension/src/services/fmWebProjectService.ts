@@ -426,7 +426,7 @@ function parseEnvironmentProfiles(value: unknown): FmWebEnvironmentProfile[] {
       id,
       name,
       profileId,
-      database: typeof record.database === 'string' ? record.database.trim() || undefined : undefined
+      database: typeof record.database === 'string' ? record.database.trim() ? record.database : undefined : undefined
     });
   }
 

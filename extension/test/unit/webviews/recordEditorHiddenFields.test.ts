@@ -40,10 +40,31 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     return document.getElementById('hiddenNote');
   };
 
-  it('always says that fields the account cannot access are not shown', () => {
+  it('says nothing when nothing is missing (the note is hidden and empty)', () => {
     const note = load({ Name: 'A' }, [{ name: 'Name' }]);
-    expect(note?.textContent).toBe('Fields your account has no access to are not shown here.');
-    expect(note?.classList.contains('hidden')).toBe(false);
+    expect(note?.textContent).toBe('');
+    expect(note?.classList.contains('hidden')).toBe(true);
+    // No field list at all (metadata unavailable) is not evidence that anything is missing.
+    expect(load({ Name: 'A' }, [])?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('hides the note again when the next record has nothing missing', () => {
+    const { document, send } = loadPage(pageHtml(), uiSource);
+    const record = (fieldData: Record<string, unknown>) => ({ type: 'recordLoaded', payload: { profileId: 'p', layout: 'C', record: { recordId: '1', modId: '1', fieldData }, fields: [{ name: 'Name' }, { name: 'Email' }], metadataSupported: true } });
+    send(record({ Name: 'A' }));
+    expect(document.getElementById('hiddenNote')?.classList.contains('hidden')).toBe(false);
+    send(record({ Name: 'A', Email: 'a@example.com' }));
+    expect(document.getElementById('hiddenNote')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows a hostile field name as text, never as markup', () => {
+    const hostile = '<img src=x onerror="window.pwned=1"><b>x</b>';
+    const { document, send } = loadPage(pageHtml(), uiSource);
+    send({ type: 'recordLoaded', payload: { profileId: 'p', layout: 'C', record: { recordId: '1', modId: '1', fieldData: { Name: 'A' } }, fields: [{ name: 'Name' }, { name: hostile }], metadataSupported: true } });
+    const note = document.getElementById('hiddenNote');
+    expect(note?.textContent).toContain(hostile);
+    expect(note?.querySelectorAll('img, b, script')).toHaveLength(0);
+    expect(document.querySelectorAll('#hiddenNote *')).toHaveLength(0);
   });
 
   it('counts and names layout fields that the record has no value for', () => {

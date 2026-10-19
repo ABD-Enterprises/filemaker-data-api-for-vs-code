@@ -299,6 +299,13 @@ export async function run(ctx) {
       const tabs = await s.editorTabs();
       if (!tabs.some((t) => /Record Editor/.test(t)))
         return `no restored tab (tabs: ${tabs.join(', ') || 'none'})`;
+      // A restored tab that is not in front is not rendered (the first-run Welcome tab can be in front): bring it up.
+      await s.page
+        .locator('.tabs-container .tab', { hasText: /Record Editor/ })
+        .first()
+        .click({ timeout: 5000 })
+        .catch(() => {});
+      await s.page.waitForTimeout(800);
       // The restored tab is a static page that says it was closed by the reload and names the command to reopen it.
       let reopenText;
       for (let i = 0; i < 10 && !reopenText; i += 1) {

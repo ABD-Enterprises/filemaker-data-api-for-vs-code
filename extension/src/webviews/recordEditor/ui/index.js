@@ -320,12 +320,15 @@ function showHiddenFieldNote(payload) {
   const present = new Set(Object.keys(payload.record.fieldData));
   const listed = Array.isArray(payload.fields) ? payload.fields.map((field) => field && field.name).filter((name) => typeof name === 'string') : [];
   const missing = listed.filter((name) => !present.has(name));
-  let text = 'Fields your account has no access to are not shown here.';
-  if (missing.length > 0) {
-    const names = missing.slice(0, 5).join(', ') + (missing.length > 5 ? `, and ${missing.length - 5} more` : '');
-    text = `${missing.length} field${missing.length === 1 ? '' : 's'} on this layout ${missing.length === 1 ? 'is' : 'are'} not shown (hidden by your account or its privileges): ${names}. ${text}`;
+  if (missing.length === 0) {
+    // Nothing is missing, so there is nothing to explain.
+    hiddenNote.textContent = '';
+    hiddenNote.classList.add('hidden');
+    return;
   }
-  hiddenNote.textContent = text;
+  const names = missing.slice(0, 5).join(', ') + (missing.length > 5 ? `, and ${missing.length - 5} more` : '');
+  // textContent, never innerHTML: a field name is text from the database.
+  hiddenNote.textContent = `${missing.length} field${missing.length === 1 ? '' : 's'} on this layout ${missing.length === 1 ? 'is' : 'are'} not shown (hidden by your account or its privileges): ${names}. Fields your account has no access to are not shown here.`;
   hiddenNote.classList.remove('hidden');
 }
 

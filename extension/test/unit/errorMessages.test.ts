@@ -109,4 +109,36 @@ describe('error messages and retry decisions', () => {
     ).message;
     expect(other).not.toMatch(/Claris ID/);
   });
+
+  describe('a connection dropped while the response is read', () => {
+    const dropped = (status: number | undefined, code: string, message = 'stream has been aborted') => {
+      const config = { headers: new AxiosHeaders(), url: 'https://fm.example.com/fmi/data/vLatest/databases/D/sessions' };
+      const response = status === undefined ? undefined : { status, statusText: '', headers: {}, config: config as never, data: undefined };
+      return normalizeError(new AxiosError(message, code, config as never, {}, response as never), { fallbackMessage: 'Failed to create FileMaker session.' });
+    };
+
+    it.each(['ERR_BAD_RESPONSE', 'ECONNRESET', 'ERR_STREAM_PREMATURE_CLOSE'])('%s after a 2xx start is reported as a drop', (code) => {
+      for (const status of [200, 201, 299]) {
+        const result = dropped(status, code, code === 'ERR_BAD_RESPONSE' ? 'stream has been aborted' : 'Premature close');
+        expect(result.message, `${code} ${status}`).toMatch(/dropped while reading the response/);
+        expect(result.message).not.toMatch(/HTTP \d/);
+        expect(result.networkCode).toBe('ERR_RESPONSE_ABORTED');
+        expect(result.isRetryable).toBe(true);
+      }
+    });
+
+    it('only a response that started with 2xx counts: a failure status keeps its own wording', () => {
+      for (const code of ['ERR_BAD_RESPONSE', 'ECONNRESET', 'ERR_STREAM_PREMATURE_CLOSE']) {
+        for (const status of [199, 301, 404, 500, 503]) {
+          const result = dropped(status, code);
+          expect(result.message, `${code} ${status}`).not.toMatch(/dropped while reading the response/);
+          expect(result.message, `${code} ${status}`).toContain(`HTTP ${status}`);
+        }
+      }
+    });
+
+    it('a bad response that is not an abort (for example a parse error) is not called a drop', () => {
+      expect(dropped(200, 'ERR_BAD_RESPONSE', 'Unexpected token < in JSON').message).not.toMatch(/dropped while reading/);
+    });
+  });
 });

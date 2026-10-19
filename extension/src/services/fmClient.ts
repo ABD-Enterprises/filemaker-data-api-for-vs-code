@@ -816,19 +816,21 @@ export class FMClient {
     file: ContainerUploadFile,
     options?: FMClientContainerUploadOptions
   ): Promise<EditRecordResult> {
-    const normalizedLayout = layout.trim();
+    // Layout and field names are used exactly as given: a leading or trailing space is part of the name, and
+    // trimming it would send the upload to a different layout or field (`Sales` instead of ` Sales`).
+    const normalizedLayout = layout;
     const normalizedRecordId = recordId.trim();
-    const normalizedFieldName = fieldName.trim();
+    const normalizedFieldName = fieldName;
     const normalizedFileName = file.fileName.trim();
     const content = normalizeUploadContent(file.content);
 
-    if (!normalizedLayout) {
+    if (!normalizedLayout.trim()) {
       throw new FMClientError('Layout is required to upload container data.');
     }
     if (!normalizedRecordId) {
       throw new FMClientError('Record ID is required to upload container data.');
     }
-    if (!normalizedFieldName) {
+    if (!normalizedFieldName.trim()) {
       throw new FMClientError('Container field name is required.');
     }
     if (!normalizedFileName) {
@@ -928,13 +930,14 @@ export class FMClient {
           return this.proxyClient.runScript(profile, request, control?.signal);
         }
 
-        const scriptName = request.scriptName.trim();
-        if (!scriptName) {
+        // Names are used exactly as given (see uploadContainer): only an empty or all-blank name is refused.
+        const scriptName = request.scriptName;
+        if (!scriptName.trim()) {
           throw new FMClientError('Script name is required.');
         }
 
-        const layout = request.layout.trim();
-        if (!layout) {
+        const layout = request.layout;
+        if (!layout.trim()) {
           throw new FMClientError('Layout is required to run script.');
         }
 

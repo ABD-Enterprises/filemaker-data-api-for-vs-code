@@ -531,14 +531,15 @@ function parseCopyPayload(value: unknown): CopySnippetPayload | undefined {
 }
 
 function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
-  const scriptName = payload.scriptName.trim();
+  // Script and layout names are used exactly as given: a leading or trailing space is part of the name.
+  const scriptName = payload.scriptName;
 
-  if (!scriptName) {
+  if (!scriptName.trim()) {
     throw new FMClientError('Script name is required.');
   }
 
-  const layout = payload.layout.trim();
-  if (!layout) {
+  const layout = payload.layout;
+  if (!layout.trim()) {
     throw new FMClientError('Layout is required.');
   }
 

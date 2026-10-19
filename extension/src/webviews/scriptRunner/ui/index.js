@@ -249,7 +249,7 @@ function renderLayouts(layouts, preferredLayout) {
 function collectPayload() {
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
-  const scriptName = scriptNameInput.value.trim();
+  const scriptName = scriptNameInput.value; // exactly as typed: a space can be part of a script name
 
   if (!profileId) {
     setStatus('Select a profile.', true);
