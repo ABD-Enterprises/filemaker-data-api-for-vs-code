@@ -1,7 +1,8 @@
 const CHILD_LAYOUT_KEYS = ['folderLayoutNames', 'layouts', 'children', 'items', 'layoutNames'] as const;
 
 // FileMaker layout list payloads can include folder nodes with nested layout arrays.
-// This parser walks mixed shapes and returns a flat, de-duplicated layout name list.
+// This parser walks mixed shapes and returns a flat layout name list. Names are kept exactly; only an
+// identical name (which the Data API cannot tell apart either) appears once.
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -11,13 +12,18 @@ function toRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
+/**
+ * A layout name exactly as the server sent it. The Data API addresses a layout by its exact name
+ * (`/layouts/<name>`), so a name with a leading or trailing space is a different layout from the
+ * same name without it, and trimming would make the first one impossible to open. Only a name that
+ * is empty or all whitespace is dropped.
+ */
 function toName(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return value.trim().length > 0 ? value : undefined;
 }
 
 function collectChildNodes(entry: Record<string, unknown>): unknown[] {

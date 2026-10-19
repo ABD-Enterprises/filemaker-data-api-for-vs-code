@@ -66,6 +66,23 @@ describe('FmWebProjectService', () => {
     expect(seen).toEqual(['fired']);
   });
 
+  it('keeps field names exactly in the synced field list, and skips blank ones', async () => {
+    const service = new FmWebProjectService(
+      createProfileStoreStub(),
+      createFmClientStub({
+        listLayouts: vi.fn(async () => ['Contacts']),
+        getLayoutMetadata: vi.fn(async () => ({ fieldMetaData: [{ name: ' Photo' }, { name: 'Photo' }, { name: '   ' }] }))
+      }),
+      createSchemaServiceStub(),
+      logger
+    );
+    await service.initializeProject();
+    const summary = await service.syncMetadata(profile);
+    expect(summary.fieldCount).toBe(2);
+    const cache = JSON.parse(await readFile(path.join(WORKSPACE_ROOT, '.fmweb', 'metadata', 'index.json'), 'utf8')) as { fields?: string[]; allFields?: string[] };
+    expect(JSON.stringify(cache)).toContain('" Photo"');
+  });
+
   it('syncs metadata into local cache for offline usage', async () => {
     const service = new FmWebProjectService(
       createProfileStoreStub(),

@@ -69,6 +69,21 @@ export async function run(ctx) {
   );
   await s.step(
     J,
+    'a script run sends only the documented script request',
+    'one GET /layouts/<layout>/script/<script>?script.param=... and no record read or find (Claris: "Run a script")',
+    async () => {
+      const r = await runScript('Echo', 'only the script');
+      const sent = r.requests.filter((line) => !/\/sessions/.test(line));
+      assert(
+        sent.length === 1 && /^GET \/layouts\/Customers\/script\/Echo\?script\.param=only/.test(sent[0]),
+        `requests: ${sent.join(' ; ')}`
+      );
+      assert(!sent.some((line) => /_find|\/records/.test(line)), `a record was read: ${sent.join(' ; ')}`);
+      return sent.join(' ; ');
+    }
+  );
+  await s.step(
+    J,
     'script that returns an error code (Fail -> scriptError 3)',
     'the non-zero script error is visible, not reported as plain success',
     async () => {

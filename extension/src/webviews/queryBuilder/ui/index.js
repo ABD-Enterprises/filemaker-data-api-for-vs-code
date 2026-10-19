@@ -1412,6 +1412,7 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
     }
 
     option.textContent = label;
+    option.title = label; // the full text, since a long name is clipped in the list
 
     if (select.children[index] !== option) {
       select.insertBefore(option, select.children[index] || null);

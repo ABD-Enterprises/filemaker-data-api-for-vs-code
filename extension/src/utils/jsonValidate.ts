@@ -145,7 +145,8 @@ export function validateDatabaseName(value: string): JsonValidationResult<string
 }
 
 export function validateLayoutName(value: string): JsonValidationResult<string> {
-  return validateBasicName(value, 'Layout name');
+  // A layout is addressed by its exact name: a leading or trailing space is part of it, so the value is returned as given.
+  return validateBasicName(value, 'Layout name', true);
 }
 
 export function validateRecordId(value: string): JsonValidationResult<string> {
@@ -192,7 +193,7 @@ export function validateProfileId(value: string): JsonValidationResult<string> {
   };
 }
 
-function validateBasicName(value: string, label: string): JsonValidationResult<string> {
+function validateBasicName(value: string, label: string, exact = false): JsonValidationResult<string> {
   const trimmed = value.trim();
   if (!trimmed) {
     return {
@@ -217,7 +218,7 @@ function validateBasicName(value: string, label: string): JsonValidationResult<s
 
   return {
     ok: true,
-    value: trimmed
+    value: exact ? value : trimmed
   };
 }
 

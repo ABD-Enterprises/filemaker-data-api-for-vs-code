@@ -58,6 +58,8 @@ window.addEventListener('message', (event) => {
       break;
     }
     case 'error': {
+      // Show the form with the error rather than leaving the loading skeleton up.
+      revealRecordViewer();
       setStatus(message.message || 'Unknown error.', true);
       break;
     }
@@ -142,7 +144,14 @@ function applyInit(payload) {
     recordIdInput.value = state.defaults.recordId;
   }
 
-  setStatus('Ready.');
+  if (state.defaults && state.defaults.recordId && state.defaults.layout) {
+    state.autoLoad = true;
+    setStatus('Loading record...');
+  } else {
+    // Nothing to load yet: show the form with an explicit hint instead of an endless loading skeleton.
+    revealRecordViewer();
+    setStatus('Enter a record ID and select Load Record.');
+  }
 }
 
 function renderProfiles() {
@@ -198,8 +207,15 @@ function applyLayouts(payload) {
   state.layoutsByProfile.set(payload.profileId, payload.layouts);
 
   if (profileSelect.value === payload.profileId) {
-    renderLayouts(payload.layouts, state.defaults && state.defaults.layout);
+    const wanted = state.defaults && state.defaults.layout;
+    renderLayouts(payload.layouts, wanted);
     state.defaults = undefined;
+
+    // Opened for a particular record (from a results row, say): load it now instead of waiting for a click.
+    if (state.autoLoad && wanted && layoutSelect.value === wanted && recordIdInput.value.trim()) {
+      state.autoLoad = false;
+      loadButton.click();
+    }
   }
 }
 
@@ -218,6 +234,7 @@ function renderLayouts(layouts, preferredLayout) {
     const option = document.createElement('option');
     option.value = layout;
     option.textContent = layout;
+    option.title = layout; // the full name, since a long one is clipped in the list
     layoutSelect.appendChild(option);
   }
 

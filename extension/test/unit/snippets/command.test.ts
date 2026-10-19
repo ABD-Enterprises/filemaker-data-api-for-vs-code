@@ -102,7 +102,7 @@ describe('FileMaker: Copy Request as Code…', () => {
     vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(' Send Welcome ').mockResolvedValueOnce('hi there').mockResolvedValueOnce('7');
     await run();
     expect(clipboard()).toEqual([
-      generateSnippet(profile, { kind: 'runScript', layout: 'Contacts', scriptName: 'Send Welcome', scriptParam: 'hi there', recordId: '7' }, 'curl')
+      generateSnippet(profile, { kind: 'runScript', layout: 'Contacts', scriptName: ' Send Welcome ', scriptParam: 'hi there', recordId: '7' }, 'curl')
     ]);
   });
 

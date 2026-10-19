@@ -12,6 +12,9 @@ export const AUDIT_SCRIPT = () => {
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''}${t ? ` "${t}"` : ''}`;
   };
   const visible = (el) => {
+    // The content of a closed <details> is not shown (the browser keeps its boxes, so the size alone is no proof).
+    const closed = el.closest('details:not([open])');
+    if (closed && !(el.tagName === 'SUMMARY' && el.parentElement === closed)) return false;
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
@@ -71,6 +74,8 @@ export const AUDIT_SCRIPT = () => {
     'button, [role=tab], summary, label, th, h1, h2, td, a'
   )) {
     if (!visible(el)) continue;
+    // Text that is visually hidden on purpose (a heading for screen readers) is 1px by design.
+    if (el.closest('.visually-hidden')) continue;
     const cs = getComputedStyle(el);
     // An ellipsis on a table cell or a header with a title attribute is a design choice; text cut off
     // silently (overflow hidden without an ellipsis) or an ellipsis on a button or tab is not.

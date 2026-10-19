@@ -68,7 +68,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === fs.realpathSync(proces
   if (process.argv.includes('--check')) {
     const stale = Object.entries(files).filter(
       ([n, c]) =>
-        !fs.existsSync(path.join(dir, n)) || fs.readFileSync(path.join(dir, n), 'utf8') !== c
+        !fs.existsSync(path.join(dir, n)) || fs.readFileSync(path.join(dir, n), 'utf8').replace(/\r\n/g, '\n') !== c
     );
     if (stale.length) {
       console.error(

@@ -46,4 +46,13 @@ describe('extractLayoutNames', () => {
 
     expect(result).toEqual(['Asset_Record', 'Asset_Edit']);
   });
+
+  it('keeps names exactly: surrounding spaces are part of the name, because the Data API addresses a layout by its exact name', () => {
+    expect(extractLayoutNames([{ name: ' Sales' }, { name: 'Sales' }, { name: 'Sales ' }, { name: 'sales' }])).toEqual([' Sales', 'Sales', 'Sales ', 'sales']);
+    expect(extractLayoutNames(['  A/B  ', 'Percent%20Layout', 'Question?Mark', 'Ünïcode Layöut'])).toEqual(['  A/B  ', 'Percent%20Layout', 'Question?Mark', 'Ünïcode Layöut']);
+  });
+
+  it('drops an empty or all-whitespace name, and shows an identical name once (the API cannot tell two identical names apart)', () => {
+    expect(extractLayoutNames([{ name: '' }, { name: '   ' }, { name: 'Customers' }, { name: 'Folder', folderLayoutNames: [{ name: 'Customers' }] }])).toEqual(['Customers']);
+  });
 });

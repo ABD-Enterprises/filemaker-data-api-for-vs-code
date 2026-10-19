@@ -1,6 +1,7 @@
 import { isProxyProfile, type ConnectionProfile } from '../types/fm';
 import { buildProxyProfilePayload } from '../services/proxyClient';
 import { redactString, redactValue } from '../utils/redact';
+import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
 import { cleanServerAddress } from './address';
 import { encodeComponent, encodeQuery, singleLine } from './escape';
 import {
@@ -52,12 +53,21 @@ function clip(value: string): string {
   return line.length > MAX_TITLE_LENGTH ? `${line.slice(0, MAX_TITLE_LENGTH - 1)}…` : line;
 }
 
+/** The value exactly as given (a leading or trailing space is part of a name), or an error when it is blank. */
 function required(value: string | undefined, what: string): string {
-  const text = value?.trim();
-  if (!text) {
+  if (value === undefined || value.trim() === '') {
     throw new SnippetError(`${what} is required.`);
   }
-  return text;
+  return value;
+}
+
+/** A layout, script or field called `.` or `..` would be resolved away by a web address: refuse, as the client does. */
+function segment(value: string | undefined, what: string, kind: string): string {
+  const name = required(value, what);
+  if (isDotSegment(name)) {
+    throw new SnippetError(dotSegmentMessage(kind, name));
+  }
+  return name;
 }
 
 /** Builds the request the extension would send for `operation`, with every secret replaced by a placeholder. */
@@ -108,7 +118,7 @@ function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation
   const base = `${normalizePath(profile.apiBasePath ?? '/fmi/data')}/${version}/databases/${encodeComponent(redactor.text(profile.database))}`;
   const title = titleFor(operation, redactor);
   const notes: string[] = [];
-  const layoutPath = (layout: string): string => `${base}/layouts/${encodeComponent(redactor.text(required(layout, 'Layout')))}`;
+  const layoutPath = (layout: string): string => `${base}/layouts/${encodeComponent(redactor.text(segment(layout, 'Layout', 'layout')))}`;
   const recordPath = (layout: string, recordId: string): string =>
     `${layoutPath(layout)}/records/${encodeComponent(redactor.text(required(recordId, 'Record ID')))}`;
 
@@ -166,7 +176,7 @@ function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation
       notes.push('This deletes the record when sent.');
       return make('DELETE', recordPath(operation.layout, operation.recordId), 'modified');
     case 'runScript': {
-      const scriptName = redactor.text(required(operation.scriptName, 'Script name'));
+      const scriptName = redactor.text(segment(operation.scriptName, 'Script name', 'script'));
       const scriptParam =
         operation.scriptParam !== undefined && operation.scriptParam.length > 0
           ? redactor.text(operation.scriptParam)
@@ -218,7 +228,7 @@ function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation
       if (operation.withModId) {
         notes.push('Replace the modId with the one from the record you read.');
       }
-      const path = `${recordPath(operation.layout, operation.recordId)}/containers/${encodeComponent(redactor.text(required(operation.fieldName, 'Container field name')))}/${repetition}`;
+      const path = `${recordPath(operation.layout, operation.recordId)}/containers/${encodeComponent(redactor.text(segment(operation.fieldName, 'Container field name', 'field')))}/${repetition}`;
       return make('POST', path, 'modified', {
         body: { kind: 'upload' },
         query: operation.withModId ? [['modId', new Placeholder('modId')]] : []
@@ -249,7 +259,7 @@ function buildProxySpec(profile: ConnectionProfile, operation: SnippetOperation,
   const notes: string[] = [
     'Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.'
   ];
-  const layout = (): string => redactor.text(required('layout' in operation ? operation.layout : undefined, 'Layout'));
+  const layout = (): string => redactor.text(segment('layout' in operation ? operation.layout : undefined, 'Layout', 'layout'));
   const recordId = (): string =>
     redactor.text(required('recordId' in operation ? operation.recordId : undefined, 'Record ID'));
 
@@ -293,7 +303,7 @@ function buildProxySpec(profile: ConnectionProfile, operation: SnippetOperation,
       action = 'runScript';
       payload = {
         layout: layout(),
-        scriptName: redactor.text(required(operation.scriptName, 'Script name')),
+        scriptName: redactor.text(segment(operation.scriptName, 'Script name', 'script')),
         ...(operation.scriptParam ? { scriptParam: redactor.text(operation.scriptParam) } : {}),
         ...(operation.recordId ? { recordId: recordId() } : {})
       };
@@ -315,7 +325,7 @@ function buildProxySpec(profile: ConnectionProfile, operation: SnippetOperation,
       payload = {
         layout: layout(),
         recordId: recordId(),
-        fieldName: redactor.text(required(operation.fieldName, 'Container field name')),
+        fieldName: redactor.text(segment(operation.fieldName, 'Container field name', 'field')),
         fieldRepetition: repetitionOf(operation.fieldRepetition),
         ...(operation.withModId ? { modId: new Placeholder('modId') } : {}),
         fileName: '<file name>',

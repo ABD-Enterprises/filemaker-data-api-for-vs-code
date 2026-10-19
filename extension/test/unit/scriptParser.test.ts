@@ -34,4 +34,8 @@ describe('extractScriptNames', () => {
 
     expect(names).toEqual(['Duplicate']);
   });
+
+  it('keeps names exactly (a leading or trailing space is part of the name) and drops blank ones', () => {
+    expect(extractScriptNames([{ name: ' Echo' }, { name: 'Echo' }, { name: 'Echo ' }, { name: '   ' }, ' Inline '])).toEqual([' Echo', 'Echo', 'Echo ', ' Inline ']);
+  });
 });

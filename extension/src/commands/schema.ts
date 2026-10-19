@@ -63,10 +63,19 @@ export function registerSchemaCommands(deps: RegisterSchemaCommandDeps): vscode.
       }
     }),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.refreshSchemaCache', () => {
+    vscode.commands.registerCommand('filemakerDataApiTools.refreshSchemaCache', async () => {
       schemaService.invalidateAll();
+      // The layout list, layout metadata and their validators live in the client, not in the schema
+      // service; drop them too, or the next refresh would be served the old list.
+      try {
+        for (const profile of await profileStore.listProfiles()) {
+          fmClient.invalidateProfileCache(profile.id);
+        }
+      } catch (error) {
+        logger.warn('Could not clear the layout caches while refreshing the schema cache.', { error });
+      }
       refreshExplorer();
-      vscode.window.showInformationMessage('Schema cache cleared.');
+      vscode.window.showInformationMessage('Schema cache cleared; layouts will be read again.');
     })
   ];
 }

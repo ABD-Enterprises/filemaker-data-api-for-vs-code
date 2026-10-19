@@ -231,7 +231,7 @@ async function askForOperation(
       return {
         kind,
         layout,
-        scriptName: scriptName.trim(),
+        scriptName,
         scriptParam: scriptParam.length > 0 ? scriptParam : undefined,
         recordId: recordId.trim() || undefined
       };
@@ -245,7 +245,7 @@ async function askForOperation(
       if (fieldName === undefined) {
         return undefined;
       }
-      return { kind, layout, recordId: recordId.trim(), fieldName: fieldName.trim(), withModId: true };
+      return { kind, layout, recordId: recordId.trim(), fieldName, withModId: true };
     }
   }
   return undefined;

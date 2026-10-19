@@ -23,9 +23,13 @@ describe('buildGlobalFieldsPayload', () => {
     expect(result).toEqual({ Valid: 'kept' });
   });
 
-  it('trims field names', () => {
-    const result = buildGlobalFieldsPayload([{ fieldName: '  Field  ', value: 'v' }]);
-    expect(result).toEqual({ Field: 'v' });
+  it('keeps field names exactly (a space can be part of a name) and skips blank ones', () => {
+    const result = buildGlobalFieldsPayload([
+      { fieldName: '  Field  ', value: 'v' },
+      { fieldName: 'Field', value: 'w' },
+      { fieldName: '   ', value: 'ignored' }
+    ]);
+    expect(result).toEqual({ '  Field  ': 'v', Field: 'w' });
   });
 
   it('returns empty object for empty array', () => {

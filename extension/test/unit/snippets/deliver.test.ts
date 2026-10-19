@@ -109,3 +109,20 @@ describe('record requests', () => {
     expect(recordOperation('edit', 'L', '1')).toMatchObject({ fieldData: { '<field name>': '<new value>' } });
   });
 });
+
+describe('names are used exactly as given', () => {
+  it('keeps a leading or trailing space in a layout, script or field name', () => {
+    const text = generateSnippet(directProfile, { kind: 'runScript', layout: ' Sales ', scriptName: ' Echo ' }, 'curl');
+    expect(text).toContain('/layouts/%20Sales%20/script/%20Echo%20');
+  });
+
+  it('refuses a layout, script or field called . or .. like the client does', () => {
+    for (const operation of [
+      { kind: 'find', layout: '..', request: { query: [{}] } },
+      { kind: 'runScript', layout: 'L', scriptName: '.' },
+      { kind: 'uploadContainer', layout: 'L', recordId: '1', fieldName: '..' }
+    ] as const) {
+      expect(() => generateSnippet(directProfile, operation as never, 'curl')).toThrow('cannot be used in a request');
+    }
+  });
+});
