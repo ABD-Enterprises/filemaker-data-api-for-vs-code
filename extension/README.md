@@ -13,31 +13,55 @@ Work with a FileMaker database from VS Code: connect to a server, inspect layout
 - **Copy any request as code**: curl, fetch(), a `.http` file, a Postman collection or TypeScript, from the Query Builder, Script Runner, record panels or the Command Palette. Passwords and tokens are never copied.
 - **Track schema**: capture snapshots, diff them, compare environments, and generate TypeScript types, a typed client and editor snippets.
 - **Batch**: export to JSONL or CSV, or update many records from a CSV or JSON file, with a dry run first.
-- **Control**: workspace trust, an enterprise mode with roles, an offline metadata mode, and confirmation before risky actions.
-- **AI, off by default**: give AI coding tools your real layout names, and optionally let an agent read, and with your approval change, records.
+- **Control**: workspace trust (Restricted Mode keeps editing, scripts and batch jobs off), an enterprise mode with roles, an offline metadata mode, and confirmation before risky actions.
+- **Trust a private server on purpose**: for FileMaker Server's default certificate or a company certificate, review the certificate in the connection wizard and trust exactly that one by its fingerprint. A different certificate later is refused.
+- **AI, off by default**: give AI coding tools your real layout names, let an agent in VS Code or an MCP client (Claude Code, Cursor) read records and, with your approval, change one record at a time, or ask `@filemaker` in the Chat view (read only).
+- **Windows, Linux and macOS**: build, lint, type check and the unit tests run on Windows and Linux in CI.
 
 ## Product tour
 
-![Explorer overview](docs/marketplace/explorer-overview.png)
+The screenshots show a mock FileMaker Data API with made-up data (names and `example.com` addresses), not a real server.
 
-The sidebar keeps connections, layouts, fields, saved queries, schema snapshots and jobs in one place.
+![The query builder: a find on the Contacts layout with sort, paging and results](docs/marketplace/query-builder.png)
 
-![Query builder](docs/marketplace/query-builder.png)
+The query builder gives you a readable form for FileMaker find requests (or the JSON request itself), with sorting, paging, saved queries and export.
 
-The query builder gives you a readable form for FileMaker find requests, with a JSON view, saved queries and export.
+![The Copy request menu: curl, fetch(), .http, Postman and TypeScript](docs/marketplace/copy-as-code.png)
 
-![Schema diff and batch tooling](docs/marketplace/schema-and-batch.png)
+**Copy request** turns what you just built into curl, `fetch()`, a `.http` file for REST Client, a Postman collection or TypeScript. The password and session token are never copied.
 
-Capture schema snapshots, review drift between environments, and run batch exports with job status.
+![The record editor with the fields of one record](docs/marketplace/record-editor.png)
+
+The record editor shows every field of a record, previews the update before it is sent, and refuses to save over a record someone else changed.
+
+![The connection wizard filled in with example values](docs/marketplace/connection-setup.png)
+
+The connection wizard takes a direct or proxy connection, tests it step by step, and keeps the password in your operating system keychain.
+
+![The FileMaker sidebar: layouts, fields and the Layout Inspector](docs/marketplace/explorer.png)
+
+The sidebar lists connections, layouts, fields, saved queries and schema snapshots, and the Layout Inspector shows one layout in detail.
+
+![Schema Diff after a field was added and another removed](docs/marketplace/schema-diff.png)
+
+Capture schema snapshots and compare them to see which fields were added, removed or changed.
+
+![Layout Mode with six fields placed on a layout](docs/marketplace/layout-mode.png)
+
+Layout Mode places fields from a synced layout on a canvas for an FM Web project.
+
+![@filemaker in the Chat view answering a find](docs/marketplace/chat-participant.png)
+
+`@filemaker` in VS Code's Chat view reads the database through the same safety rules as the AI tools, read only. This screenshot was made with a stand-in language model; the records come from the extension.
 
 ## Requirements
 
 - FileMaker Server with the **Data API** enabled, reachable over HTTPS. FileMaker Cloud is untested: the extension has no Claris ID login, and whether a tenant accepts an account name and password is not confirmed.
 - A FileMaker account whose privilege set has the **`fmrest`** extended privilege.
 - A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file).
-- VS Code 1.96 or newer on the desktop with a folder open (virtual workspaces such as github.dev are not supported).
+- VS Code 1.96 or newer on a macOS, Windows or Linux desktop, with a folder open (virtual workspaces such as github.dev are not supported). The AI server for MCP clients does not run in remote windows (SSH, WSL, Dev Containers, Codespaces).
 
-See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for tested server versions.
+See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for server versions, operating systems and what has and has not been tested. The automated tests run against a mock of the Data API built from Claris's documentation.
 
 ## Install
 
@@ -115,6 +139,8 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 - Passwords, API keys and session tokens live in VS Code SecretStorage (your OS keychain), not in settings or logs.
 - Logs, history and error details hide authorization headers, tokens and passwords.
 - Editing, creating and deleting records, uploading, the Script Runner, batch jobs, writing generated files and plugins need a trusted workspace. Virtual workspaces (such as github.dev) are not supported. A repository can make the extension's policy stricter but never looser.
+- The server certificate is checked. To use FileMaker Server's default certificate or a private authority's, the wizard shows the certificate and you trust that one certificate by its SHA-256 fingerprint (never from a workspace file); a different certificate later is refused. A pin is trust on first use: it detects a change, it does not prove who you reached the first time.
+- In Restricted Mode (an untrusted folder) you can browse, read metadata and run finds. The connection wizard says so and offers **Manage Workspace Trust**.
 - The extension collects no telemetry. It talks only to your FileMaker server or your proxy.
 
 Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/security.md), the [data handling notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/DATA_HANDLING.md), and the [security policy](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md) for how to report a vulnerability.
