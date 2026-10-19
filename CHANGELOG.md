@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- The API Docs workflow now builds the shared package before running typedoc (it failed on `main` since the field-standards import landed, with `Cannot find module '@fmweb/shared/dist/field-standards'`). The manual release job aid names the 1.5.0 release commit (`e2f9aac`) and sets it as the default `RELEASE_SHA`, drops the untrue claim that nothing else merges meanwhile, and gives the VSIX size as a range. No user-facing change.
 
 ### [SECURITY]
 
