@@ -11,24 +11,38 @@ const MODEL = { vendor: 'fme2e', id: 'fm-e2e-model' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const chatText = (s) =>
-  s.page.evaluate(() => document.querySelector('.interactive-session')?.innerText ?? '');
+  s.page.evaluate(() => {
+    const rows = [
+      ...document.querySelectorAll('.interactive-session .monaco-list-row.response')
+    ].filter((row) => row.getBoundingClientRect().height > 0);
+    return (rows.at(-1)?.innerText ?? '').replace(/\u00a0/g, ' '); // Monaco code blocks use no-break spaces
+  });
 
 /** What the last response contains that could act: links, images, buttons, and where they point. */
 const responseParts = (s) =>
   s.page.evaluate(() => {
-    const items = [...document.querySelectorAll('.interactive-item-container')];
-    const last = items.at(-1);
+    const rows = [
+      ...document.querySelectorAll('.interactive-session .monaco-list-row.response')
+    ].filter((row) => row.getBoundingClientRect().height > 0);
+    const last = rows.at(-1);
     if (!last) return { links: [], images: [], buttons: [], codeBlocks: 0, text: '' };
+    const body = [...last.querySelectorAll('.chat-markdown-part')];
     return {
-      links: [...last.querySelectorAll('a')].map(
-        (a) => a.getAttribute('data-href') ?? a.getAttribute('href') ?? a.innerText
+      links: body.flatMap((part) =>
+        [...part.querySelectorAll('a')].map(
+          (a) => a.getAttribute('data-href') ?? a.getAttribute('href') ?? a.innerText
+        )
       ),
       images: [...last.querySelectorAll('img')].map((i) => i.getAttribute('src') ?? ''),
-      buttons: [...last.querySelectorAll('.chat-command-button, .monaco-button')].map((b) =>
-        b.innerText.trim()
-      ),
-      codeBlocks: last.querySelectorAll('.interactive-result-code-block, pre').length,
-      text: last.innerText
+      buttons: [
+        ...last.querySelectorAll(
+          '.chat-command-button *, a.monaco-button, button.monaco-button, .monaco-button'
+        )
+      ]
+        .map((b) => b.innerText.trim())
+        .filter(Boolean),
+      codeBlocks: last.querySelectorAll('.interactive-result-code-block').length,
+      text: last.innerText.replace(/\u00a0/g, ' ')
     };
   });
 
@@ -36,7 +50,7 @@ const responseParts = (s) =>
 async function ask(s, query, { answer, timeout = 45000 } = {}) {
   await s.escape(2);
   await s.helper('executeCommand', { command: 'workbench.action.chat.newChat' }).catch(() => {});
-  await sleep(500);
+  for (let i = 0; i < 20 && (await chatText(s)) !== ''; i += 1) await sleep(250); // the old answer is gone
   await s.helper('executeCommand', {
     command: 'workbench.action.chat.open',
     args: [{ query, modelSelector: MODEL, mode: 'ask' }]
@@ -49,19 +63,32 @@ async function ask(s, query, { answer, timeout = 45000 } = {}) {
     if (answer) await s.modal(buttons.find((b) => new RegExp(answer, 'i').test(b)) ?? buttons[0]);
     else await s.modal(buttons.find((b) => /cancel|don'?t|no\b/i.test(b)) ?? 'Cancel');
   }
-  let last = '';
+  // The list is virtualised: keep the longest text seen for the last response, and stop when it has not grown for 3 seconds.
+  let best = '';
   let stable = 0;
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
     const text = await chatText(s);
-    const answered = /\nFileMaker\n/.test(text) && !/Working|Asking the language model/.test(text);
-    stable = text === last && answered ? stable + 1 : 0;
-    last = text;
-    if (stable >= 4) break;
+    const body = text.replace(/^\s*FileMaker\s*/, '').trim();
+    if (body.length > 0 && !/Asking the language model/.test(text) && text.length >= best.length) {
+      stable = text === best ? stable + 1 : 0;
+      best = text;
+    }
+    if (best && stable >= 6) break;
     await sleep(500);
   }
   const parts = await responseParts(s);
-  return { ...parts, modal, all: last };
+  return { ...parts, text: best.length >= parts.text.length ? best : parts.text, modal };
+}
+
+async function clickResponseButton(s, label) {
+  const button = s.page
+    .locator('.interactive-session .monaco-list-row.response')
+    .last()
+    .locator('.monaco-button', { hasText: label })
+    .first();
+  await button.scrollIntoViewIfNeeded().catch(() => {});
+  await button.click({ timeout: 10000 });
 }
 
 const noActiveContent = (parts) => {
@@ -71,7 +98,6 @@ const noActiveContent = (parts) => {
 
 export async function run(ctx) {
   const { s, mock } = ctx;
-  s.observeOnly(['Hostile layout: markdown, HTML and command text in data stays inert']);
   if (!ctx.profileMain) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
@@ -106,12 +132,22 @@ export async function run(ctx) {
       );
       const reads = (await mock.log()).slice(before).filter((l) => l.path.includes('/layouts'));
       assert(reads.length === 0, `server was read while AI was off: ${reads.length} requests`);
-      await s.page.getByText('Open AI Settings', { exact: false }).last().click();
+      await clickResponseButton(s, 'Open AI Settings');
       await s.page.waitForTimeout(2000);
-      const tabs = await s.editorTabs();
+      const searchBox = await s.page
+        .locator('.settings-editor')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      assert(searchBox, 'the Settings editor did not open from the button');
+      const query = await s.page
+        .locator('.settings-editor .suggest-input-container .monaco-editor')
+        .first()
+        .innerText()
+        .catch(() => '');
       assert(
-        tabs.some((t) => /Settings/.test(t)),
-        `settings editor not opened: ${tabs.join(' | ')}`
+        /filemaker\.ai/.test(query),
+        `Settings opened without the filemaker.ai search: ${query}`
       );
       await s.shot('settings-opened-from-chat');
       await s.closeAllEditors();
@@ -331,7 +367,7 @@ export async function run(ctx) {
         (await mock.log()).slice(before).filter((l) => l.path.includes('/layouts')).length === 0,
         'server read while killed'
       );
-      await s.page.getByText('Switch AI Tools Back On').last().click();
+      await clickResponseButton(s, 'Switch AI Tools Back On');
       await s.modal('Switch On');
       await s.page.waitForTimeout(500);
       const back = await ask(s, '@filemaker /layouts');

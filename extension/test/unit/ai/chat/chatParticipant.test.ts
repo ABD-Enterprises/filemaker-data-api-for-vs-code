@@ -272,7 +272,7 @@ describe('/find: the closed grammar', () => {
     expect(find?.input).toEqual({
       layout: 'Contacts',
       requests: [{ fields: { Name: '=Ada', Email: 'ada@example.com' } }],
-      limit: 20
+      limit: 10
     });
     const sent = bed.h.client.findRecords.mock.calls[0]?.[2] as { query: unknown[] };
     expect(sent.query).toHaveLength(1);

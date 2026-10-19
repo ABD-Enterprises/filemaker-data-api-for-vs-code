@@ -584,7 +584,7 @@ Type `@filemaker` in the Chat view, then:
 | --- | --- |
 | `/layouts` | Lists the layouts of the connection chosen for AI. |
 | `/describe LAYOUT` | Shows the fields and their types. Hidden fields are left out. Value lists are not available through AI tools, so they are not shown. |
-| `/find LAYOUT criteria` | Finds records. `Name==Ada; City=Paris` (field names exactly as `/describe` shows them, separated by `;`) is sent as written. Any other text, such as `/find Customers people in Paris named Ada`, is turned into a search by the language model you picked in the chat; the extension checks the search exactly as it checks a tool call, and shows it before it runs. Up to 20 records are shown. |
+| `/find LAYOUT criteria` | Finds records. `Name==Ada; City=Paris` (field names exactly as `/describe` shows them, separated by `;`) is sent as written. Any other text, such as `/find Customers people in Paris named Ada`, is turned into a search by the language model you picked in the chat; the extension checks the search exactly as it checks a tool call, and shows it before it runs. A `Field=value` search returns up to 10 records; at most 20 records are ever shown. |
 | `/explain CODE` | Explains a FileMaker error code. With no code it uses the last FileMaker error `@filemaker` saw. |
 | `/help` | Lists the commands. |
 

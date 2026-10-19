@@ -21,7 +21,7 @@ export const CHAT_CLIENT_NAME = 'chat participant';
 export const MAX_PROMPT_CHARS = 1000;
 const MAX_STREAM_PARTS = 200;
 const MAX_REQUEST_JSON_CHARS = 2000;
-export const FIND_LIMIT = 20;
+export const FIND_LIMIT = 10;
 
 export const OPEN_SETTINGS_COMMAND = 'workbench.action.openGlobalSettings';
 export const KILL_SWITCH_COMMAND_ID = 'filemakerDataApiTools.toggleAiKillSwitch';
