@@ -285,10 +285,21 @@ async function runChecks() {
 
   // Scripts and logout.
   check('lists scripts', (await client.listScripts(profile)).includes('Echo'));
+  const logBefore = (await admin('/__admin/log')).log.length;
   const ran = await client
-    .runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParameter: 'hello' })
+    .runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: 'hello world' })
     .catch((e) => ({ error: String(e.message) }));
-  check('runs a script and returns its result', !ran.error, ran);
+  check('runs a script and returns its result', !ran.error && ran.response?.scriptResult === 'hello world', ran);
+  // The documented request, and nothing read as a side effect (Claris: GET .../script/<name>?script.param=).
+  const scriptLog = (await admin('/__admin/log')).log.slice(logBefore);
+  check(
+    'a script run is one GET to the script endpoint (no record or find request)',
+    scriptLog.length === 1 &&
+      scriptLog[0].method === 'GET' &&
+      scriptLog[0].path === '/layouts/Contacts/script/Echo' &&
+      scriptLog[0].query === '?script.param=hello+world',
+    scriptLog
+  );
   await client.deleteSession(profile);
   check('logout works', true);
 }

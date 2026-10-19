@@ -319,18 +319,20 @@ export class ScriptRunnerPanel {
 
     const apiBasePath = profile.apiBasePath ?? '/fmi/data';
     const versionPath = profile.apiVersionPath ?? 'vLatest';
+    const layoutUrl = `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${versionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(request.layout)}`;
+    const encode = encodeURIComponent;
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer <SESSION_TOKEN>' };
+    const param = request.scriptParam ? `&script.param=${encode(request.scriptParam)}` : '';
 
+    // The same requests the extension sends (see FMClient.runScript): the documented script endpoint, a GET
+    // with script.param in the URL; or, with a record in context, a GET of that record with the script attached.
+    if (request.recordId) {
+      return { method: 'GET', url: `${layoutUrl}/records/${encode(request.recordId)}?script=${encode(request.scriptName)}${param}`, headers };
+    }
     return {
-      method: 'POST',
-      url: `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${versionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(request.layout)}/script/${encodeURIComponent(request.scriptName)}`,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer <SESSION_TOKEN>'
-      },
-      body: {
-        scriptParam: request.scriptParam,
-        recordId: request.recordId
-      }
+      method: 'GET',
+      url: `${layoutUrl}/script/${encode(request.scriptName)}${request.scriptParam ? `?script.param=${encode(request.scriptParam)}` : ''}`,
+      headers
     };
   }
 
