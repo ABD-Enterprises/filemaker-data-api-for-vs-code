@@ -18,7 +18,7 @@ async function batchExport(s, layout, findJson, out) {
   fs.rmSync(out, { force: true });
   await s.closeAllEditors();
   await s.cmd('FileMaker: Batch Export (Find)');
-  await answerPickers(s, ['Mock Quality', layout], { max: 2 });
+  await answerPickers(s, ['Mock Quality', layout]);
   await s.inputBox(findJson, { timeout: 15000 });
   await s.inputBox('', { timeout: 10000, prompt: /Sort JSON/ }); // optional sort: skip
   await answerFileDialog(s, out, { timeout: 15000 });
@@ -102,7 +102,7 @@ export async function run(ctx) {
   const batchUpdate = async (file, mode) => {
     await s.closeAllEditors();
     await s.cmd('FileMaker: Batch Update from CSV/JSON');
-    await answerPickers(s, ['Mock Quality', 'Products'], { max: 2 });
+    await answerPickers(s, ['Mock Quality', 'Products']);
     await answerFileDialog(s, file, { timeout: 15000 });
     await s.quickInputOpen();
     await s.page.waitForTimeout(500);
