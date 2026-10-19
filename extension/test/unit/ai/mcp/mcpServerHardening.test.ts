@@ -101,14 +101,18 @@ describe('AiMcpServer hardening', () => {
   });
 
   describe('a flood of connections', () => {
-    it('a real client gets in at least 95% of the time while another process opens 50 silent connections per tick', async () => {
+    // A named pipe does not take the Unix socket's flood (every connect to a busy pipe server waits for
+    // a free pipe instance, and a connect can take seconds), so on Windows the flood is lighter; the
+    // property is the same: silent connections must not lock a real client out.
+    const flood = posix ? { perTick: 50, everyMs: 10, attempts: 100 } : { perTick: 5, everyMs: 50, attempts: 40 };
+    it(`a real client gets in at least 95% of the time while another process opens ${flood.perTick} silent connections every ${flood.everyMs} ms`, async () => {
       await start();
       const flooder = spawn(
         process.execPath,
         [
           '-e',
           `const net = require('net');
-           setInterval(() => { for (let i = 0; i < 50; i += 1) { const s = net.connect(process.argv[1]); s.on('error', () => {}); setTimeout(() => s.destroy(), 1500); } }, 10);
+           setInterval(() => { for (let i = 0; i < ${flood.perTick}; i += 1) { const s = net.connect(process.argv[1]); s.on('error', () => {}); setTimeout(() => s.destroy(), 1500); } }, ${flood.everyMs});
            console.log('flooding');`,
           endpoint
         ],
@@ -118,7 +122,7 @@ describe('AiMcpServer hardening', () => {
         await new Promise<void>((resolve) => flooder.stdout?.once('data', () => resolve()));
         await wait(300);
         let succeeded = 0;
-        const attempts = 100;
+        const attempts = flood.attempts;
         for (let i = 0; i < attempts; i += 1) {
           const c = await RawClient.connect(endpoint).catch(() => undefined);
           if (!c) continue;

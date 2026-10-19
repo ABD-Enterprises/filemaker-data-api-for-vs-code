@@ -28,6 +28,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- On Windows, **Write AI Context** and the FM Web runtime generator can now update a file that is marked read-only (for example by a version-control tool): the update used to fail with `EPERM`, where macOS and Linux replaced it. The file stays read-only afterwards.
+- On Windows, `npm run build` no longer needs `sh` on the PATH, and `npm run package:check` writes `filemaker-data-api-tools-<version>.vsix` instead of a file literally named `...-${npm_package_version}.vsix`; both steps are now Node scripts that behave the same in cmd.exe, PowerShell and a POSIX shell.
+- On Windows, a repository checked out with `core.autocrlf` (the Git for Windows default) no longer fails `npm run package:check` or the mock dataset check because generated files such as `THIRD_PARTY_NOTICES.txt` came out with CRLF line endings: `.gitattributes` now keeps LF in the working tree on every platform, and both checks also ignore CRLF.
+- The build commit shown by **About** is now found on Windows when the temp or checkout path contains an 8.3 short name or a different drive-letter case (it said `unknown`).
+- On Windows, the MCP shim waits up to 30 seconds (it was 8) for PowerShell to report the process start time before it gives up and refuses to connect: PowerShell takes about 2 seconds to start on an idle machine and much longer on a busy one.
+- An MCP client configured with `--workspace C:\Work\Alpha` now matches the window VS Code reports as `c:\work\alpha` (folder paths are compared without regard to case on Windows).
 - A malformed `filemaker.ai.hiddenFields` value no longer switches hiding off for the whole scope: non-text entries are ignored and the valid names in the same list still hide (a bare string counts as one name), and the Output panel says so once.
 - Refreshing a generated FM Web runtime file now keeps the file permissions of the file it replaces, and a write that fails part way (for example a full disk) no longer leaves a hidden `.tmp` file in the generated folder.
 - The AI server for external tools now writes a line to the Output panel when it rejects a socket folder (for example an `XDG_RUNTIME_DIR` that is open to other users) before falling back to the temp folder, and the error names each folder variable that was tried instead of only the last one (a too-long socket path now names the variable actually in use).
@@ -35,6 +41,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- New `cross-platform` CI job: build, lint, typecheck, unit tests with coverage and package check on `windows-latest` and `ubuntu-latest` (Node 22). It is not a required check. New Windows-only tests run a real named-pipe MCP server and clients, real directory junctions through the discovery, shim-install, path-confinement and FM Web generator checks, read-only file replacement, and an `icacls` check of the discovery file's access rights; several MCP discovery tests that were Unix-only now run on Windows too.
+- Tests no longer assume Unix: path separators in expectations, a regular file instead of `/dev/null` as an unwritable folder, backslashes in the mock TLS authority's OpenSSL configuration, and CRLF-tolerant reads of `.vscodeignore`.
 - Dependabot now also watches `tools/publish` (the pinned Marketplace publish tool), which has its own lockfile and was not covered before.
 
 ### [SECURITY]

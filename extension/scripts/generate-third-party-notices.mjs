@@ -217,7 +217,7 @@ async function main() {
 
   const text = renderNotices(packages);
   if (check) {
-    const current = existsSync(NOTICES_PATH) ? readFileSync(NOTICES_PATH, 'utf8') : '';
+    const current = existsSync(NOTICES_PATH) ? readFileSync(NOTICES_PATH, 'utf8').replace(/\r\n/g, '\n') : '';
     if (current !== text) {
       console.error('[notices] THIRD_PARTY_NOTICES.txt is out of date. Run "npm run notices" in extension/ and commit it.');
       process.exit(1);

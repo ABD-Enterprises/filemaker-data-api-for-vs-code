@@ -14,10 +14,12 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
+const WINDOWS_TIMEOUT_MS = 30_000;
+
 /** `ps` prints local time, so the time zone and locale are fixed: the host and the shim must read the same text. */
-function run(command: string, args: string[]): Promise<string | undefined> {
+function run(command: string, args: string[], timeoutMs = 8000): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile(command, args, { timeout: 8000, windowsHide: true, env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' } }, (error, stdout) => {
+    execFile(command, args, { timeout: timeoutMs, windowsHide: true, env: { ...process.env, LC_ALL: 'C', LANG: 'C', TZ: 'UTC' } }, (error, stdout) => {
       resolve(error ? undefined : String(stdout).trim());
     });
   });
@@ -47,12 +49,20 @@ export async function getProcessStartTime(pid: number, platform: NodeJS.Platform
   }
 
   if (platform === 'win32') {
-    const output = await run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`
-    ]);
+    // Starting PowerShell is slow on Windows (about 2 s the first time on an idle machine, much
+    // longer on a busy one), so it gets a long timeout: a timeout here makes the shim refuse to
+    // connect ("could not verify"), which is a worse outcome than waiting.
+    const output = await run(
+      'powershell.exe',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`
+      ],
+      WINDOWS_TIMEOUT_MS
+    );
     return output && /^\d{4}-\d{2}-\d{2}T/.test(output) ? `win:${output}` : undefined;
   }
 

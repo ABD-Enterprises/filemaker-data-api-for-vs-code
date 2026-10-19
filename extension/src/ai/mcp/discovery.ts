@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from 'fs/promises';
-import { basename, dirname, join, resolve } from 'path';
+import { basename, dirname, join, resolve, win32 } from 'path';
 
 import { isProcessAlive, getProcessStartTime } from './processInfo';
 
@@ -195,6 +195,16 @@ export async function scanDiscovery(directory: string, liveness: Liveness = REAL
 
 export type Selection = { ok: true; window: LiveWindow } | { ok: false; message: string };
 
+/**
+ * True when two folder paths name the same place. Windows file names are case-insensitive, and VS Code
+ * reports a drive letter in lower case (`c:\\work`) while a person types it in upper case (`C:\\work`).
+ */
+export function samePath(a: string, b: string, platform: NodeJS.Platform = process.platform): boolean {
+  const left = platform === 'win32' ? win32.resolve(a) : resolve(a);
+  const right = platform === 'win32' ? win32.resolve(b) : resolve(b);
+  return platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+}
+
 function describe(window: LiveWindow): string {
   return `  ${safeText(window.record.label, 80)} (process ${window.record.pid}; folders: ${window.record.workspaceFolders.map((folder) => safeText(folder, 120)).join(', ') || 'none'})`;
 }
@@ -223,7 +233,7 @@ export function selectWindow(live: readonly LiveWindow[], workspace: string | un
     ? live.filter(
         (window) =>
           window.record.label === wanted ||
-          window.record.workspaceFolders.some((folder) => resolve(folder) === resolve(wanted) || basename(folder) === wanted)
+          window.record.workspaceFolders.some((folder) => samePath(folder, wanted) || basename(folder) === wanted)
       )
     : [...live];
 
