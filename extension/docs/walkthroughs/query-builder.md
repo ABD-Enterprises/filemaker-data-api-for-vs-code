@@ -1,5 +1,7 @@
 # Step 3 — Run your first query
 
+![The Query Builder after a find](../marketplace/query-builder.png)
+
 With an active connection, you've got two paths:
 
 ## Quick: list layouts and pick a record
@@ -26,7 +28,7 @@ Run **FileMaker: Open Query Builder**, or right-click a layout and choose
   a row (or use **View** / **Edit**) to open that record
 - save the query for re-use, and export the results as CSV or JSON, or copy
   them as a table that pastes into a spreadsheet
-- copy the equivalent `curl` or `fetch` request for sharing or bug reports
+- copy the request as `curl`, `fetch()`, a `.http` file, a Postman collection or TypeScript for sharing or bug reports (the password and session token are never copied)
 
 Saved queries are scoped per workspace by default. Use
 **FileMaker: Export Saved Queries (JSON)** to share them with your team
