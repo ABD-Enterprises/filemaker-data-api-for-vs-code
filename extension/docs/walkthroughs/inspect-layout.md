@@ -1,6 +1,6 @@
 # Step 4 — Inspect a layout
 
-![A schema diff: one field added and one removed](../marketplace/schema-diff.png)
+![The FileMaker sidebar with a layout, its fields and the Layout Inspector](../marketplace/explorer.png)
 
 Open the **Layout Inspector** in the FileMaker sidebar, or run
 **FileMaker: Select Layout for Inspector** from the Command Palette. It shows

@@ -87,7 +87,7 @@ In an untrusted workspace this extension can browse, read metadata and run finds
 The extension runs on macOS, Windows and Linux desktops (VS Code 1.96 or newer). Things that differ:
 
 - **Shortcuts.** `Cmd` on macOS is `Ctrl` on Windows and Linux.
-- **Passwords** are kept in the operating system's keychain through VS Code: Keychain on macOS, Credential Manager on Windows, a keyring (such as GNOME Keyring) on Linux. A Linux desktop without a running keyring gives "Secret storage unavailable" (see [Troubleshooting](#signing-in)).
+- **Passwords** are kept in the operating system's keychain through VS Code: Keychain on macOS, Credential Manager on Windows, a keyring (such as GNOME Keyring) on Linux. A Linux desktop without a running keyring gives "SecretStorage unavailable (…)" (see [Troubleshooting](#signing-in)).
 - **AI server for MCP clients.** It listens on a local socket on macOS and Linux and on a named pipe on Windows. The client needs Node.js 18 or newer on its PATH. It does not run in remote windows (SSH, WSL, Dev Containers, Codespaces).
 - **Generated files.** File names avoid names Windows reserves (such as `CON` or `NUL`), and names that differ only in letter case can share a file on Windows and on macOS's default disk format. Generated files use LF line endings on every system. A generated file that is marked read-only (for example by a version-control tool) is still updated and stays read-only. A symbolic link or a directory junction in the way is refused.
 - **Copied commands.** **Copy as curl** produces a command for a POSIX shell (sh, bash, zsh); use the `.http`, fetch() or Postman formats in PowerShell or cmd.exe.
@@ -961,7 +961,7 @@ Connection errors name the step that failed and what to do. The most common firs
 | Error 1703, or a rejected sign-in on a FileMaker Cloud host | FileMaker Cloud normally uses Claris ID sign-in, which this extension does not support; an account name and password may not be accepted by your Cloud tenant (ask Claris or your administrator). The message on a Cloud host says the same. The same code on another server can mean external authentication. |
 | Error 802, or "unable to open file" | The file is closed or not hosted, or the account's privilege set lacks the `fmrest` extended privilege for it. Check the database name; ask the administrator. Connect does not retry this error. |
 | "Session expired" or error 952 | The Data API token timed out. The extension renews it and retries once on its own. If it keeps happening, disconnect and connect again. |
-| "Secret storage unavailable" | VS Code could not reach the OS keychain (common on Linux without a keyring, and in some remote windows). Install and unlock a keyring, or set `filemaker.secrets.fallback` (user settings). |
+| "SecretStorage unavailable (…)" | VS Code could not reach the OS keychain (common on Linux without a keyring, and in some remote windows). Install and unlock a keyring, or set `filemaker.secrets.fallback` (user settings). |
 | The wizard asks for the password again | You changed the server address, proxy address or user name. This is intended. |
 
 ### Data, privileges and batch jobs
