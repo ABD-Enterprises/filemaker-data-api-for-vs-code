@@ -101,6 +101,17 @@ describe('file writing', () => {
     expect(await readdir(join(dir, 'a', 'b'))).toEqual(['ai.md']);
   });
 
+  it.skipIf(process.platform === 'win32')('new context exports are owner-only even with a permissive umask', async () => {
+    const previous = process.umask(0);
+    try {
+      const target = join(dir, 'private.md');
+      await writeFileAtomic(target, 'private export');
+      expect((await stat(target)).mode & 0o7777).toBe(0o600);
+    } finally {
+      process.umask(previous);
+    }
+  });
+
   it('replaces a link at the target instead of writing through it', async () => {
     const victim = join(dir, 'victim.md');
     await writeFile(victim, 'untouched');

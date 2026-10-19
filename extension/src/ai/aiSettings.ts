@@ -43,12 +43,12 @@ function isStringListMap(value: unknown): value is Record<string, string[]> {
 
 /**
  * Called when `filemaker.ai.hiddenFields` holds something that is not a list of text names:
- * `entries-ignored` (a list with non-text entries; the text names still hide), `single-name`
- * (a bare string, read as one name) or `value-ignored` (neither a list nor text).
+ * `entries-ignored` (a list with non-text entries; the text names still hide) or
+ * `value-ignored` (not a list, including a bare string).
  */
 export type HiddenFieldsProblemReporter = (problem: {
   scope: string;
-  kind: 'entries-ignored' | 'single-name' | 'value-ignored';
+  kind: 'entries-ignored' | 'value-ignored';
   count: number;
 }) => void;
 
@@ -101,14 +101,7 @@ function readHiddenFields(configuration: Configuration, report?: HiddenFieldsPro
     if (value === undefined || value === null) {
       continue;
     }
-    // Fail closed: this setting only ever hides things, so one bad entry must not switch hiding off
-    // for the good names next to it. A bare string is read as one name; anything else that is not a
-    // list is ignored, and so is each non-text entry of a list. Each case is reported.
-    if (isString(value)) {
-      names.add(value);
-      report?.({ scope, kind: 'single-name', count: 1 });
-      continue;
-    }
+    // Keep valid names in mixed lists, but do not reinterpret a string as a list or one name.
     if (!Array.isArray(value)) {
       report?.({ scope, kind: 'value-ignored', count: 1 });
       continue;

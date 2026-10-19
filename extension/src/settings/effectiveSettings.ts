@@ -217,6 +217,12 @@ export async function collectExplanations(deps: Dependencies): Promise<Collected
   });
 
   const notes: string[] = [];
+  readAiSettings(config, ({ scope, kind, count }) => {
+    const problem = kind === 'value-ignored'
+      ? 'the value is not a list and was ignored; use an array of exact field names, for example ["SSN", "Password"]'
+      : `${count} non-text entries were ignored; valid names in the array still hide`;
+    notes.push(`filemaker.ai.hiddenFields (${scope}): ${problem}.`);
+  });
   if (!trusted) {
     notes.push('This workspace is in Restricted Mode: VS Code hides workspace values for the restricted settings, and the extension does not read the workspace settings files, so a workspace value for a User-only setting cannot be checked until you trust it.');
   }

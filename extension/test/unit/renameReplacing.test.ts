@@ -94,6 +94,22 @@ describe('renameReplacing', () => {
       expect(await readFile(target, 'utf8')).toBe('new');
     });
 
+    it.skipIf(process.platform === 'win32')('the retry copies only permission bits when clearing read-only', async () => {
+      const target = join(dir, 'special');
+      const source = join(dir, 'source');
+      await writeFile(target, 'old');
+      await writeFile(source, 'new');
+      await chmod(target, 0o1444);
+      const modes: number[] = [];
+      vi.mocked(fsp.rename).mockImplementation(async (from, to) => {
+        modes.push((await stat(target)).mode & 0o7777);
+        if (modes.length === 1) throw eperm();
+        return realRename(from, to);
+      });
+      await renameReplacing(source, target, 'win32');
+      expect(modes).toEqual([0o1444, 0o644]);
+    });
+
     it('puts the read-only bit back and reports the second error when the retry fails too', async () => {
       const target = join(dir, 'locked');
       const source = join(dir, 'fresh');

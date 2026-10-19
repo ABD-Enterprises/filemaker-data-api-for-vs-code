@@ -330,13 +330,13 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
       const child = spawn(process.execPath, [shimPath, '--dir', window.directory], { stdio: ['pipe', 'pipe', 'pipe'] });
       children.push(child);
       results.push(child);
-      await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    expect(results.filter((child) => child.exitCode === null)).toHaveLength(3);
-    expect(results.filter((child) => child.exitCode === 1)).toHaveLength(2);
-    expect(window.server.connectionCount()).toBe(3);
-  });
+    await expect.poll(() => ({
+      running: results.filter((child) => child.exitCode === null).length,
+      refused: results.filter((child) => child.exitCode === 1).length,
+      connected: window.server.connectionCount()
+    }), { timeout: 30_000, interval: 100 }).toEqual({ running: 3, refused: 2, connected: 3 });
+  }, 60_000);
 
   it('cleans up an idle connection: the shim ends and the server forgets it', async () => {
     const window = await openWindow(join(work, 'alpha'), { limits: { idleTimeoutMs: 300 } });

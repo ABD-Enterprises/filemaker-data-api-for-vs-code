@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as ts from 'typescript6';
@@ -170,3 +170,19 @@ function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
   return `${diagnostic.file.fileName}:${position.line + 1}:${position.character + 1} ${message}`;
 }
+
+  it('uses the default output folder for invisible selectors and keeps visible emoji folders exact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fm-typegen-folder-'));
+    try {
+      for (const [configured, expected] of [['out/\uFE0F', 'filemaker-types'], ['out/☀️', 'out/☀️']]) {
+        const schema = { getLayoutSchema: async () => ({ supported: true, fields: [], metadata: {} }) };
+        const service = new TypeGenService(schema as never, {} as never,
+          { debug() {}, info() {}, warn() {}, error() {} } as never,
+          { getOutputDir: () => configured!, getWorkspaceRoot: () => root, isWorkspaceTrusted: () => true });
+        const result = await service.generateTypesForLayout(createProfile(), 'Contacts');
+        expect(result.filePath).toBe(join(root, expected!, 'layouts', 'Contacts.ts'));
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });

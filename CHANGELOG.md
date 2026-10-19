@@ -29,8 +29,17 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
+- Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash, and API path segments are encoded so curl does not expand brackets or braces.
+- Temporary context and runtime export files start with owner-only permissions. Replaced files keep ordinary permissions without copying setuid, setgid or sticky bits.
+- Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. Show Effective Settings warns when `ai.hiddenFields` is a string instead of an array; array names stay exact.
+- Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
+
 
 ### [INTERNAL]
+
+- The MCP connection-capacity test polls for the expected counts instead of relying on startup sleeps. Tests also check pending connection limits and handshake expiry without opening sockets.
+- Correct the nested `why-is-node-running` lockfile entry to the exact version required by Vitest.
 
 
 ### [SECURITY]

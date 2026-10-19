@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- [FIX] Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
+- [FIX] Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash, and API path segments are encoded so curl does not expand brackets or braces.
+- [FIX] Temporary context and runtime export files start with owner-only permissions. Replaced files keep ordinary permissions without copying setuid, setgid or sticky bits.
+- [FIX] Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. Show Effective Settings warns when `ai.hiddenFields` is a string instead of an array; array names stay exact.
+- [FIX] Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
+- [INTERNAL] The MCP connection-capacity test waits for the expected counts on slow runners. Added tests for pending connection limits and handshake expiry, and corrected Vitest's nested dependency in the lockfile.
+
 - [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 
 ## 1.5.0

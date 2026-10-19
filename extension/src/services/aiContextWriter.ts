@@ -99,7 +99,7 @@ export async function writeFileAtomic(targetPath: string, text: string): Promise
   await mkdir(dirname(targetPath), { recursive: true });
   const temporary = join(dirname(targetPath), `.${randomBytes(6).toString('hex')}.tmp`);
   try {
-    await writeFile(temporary, text, { encoding: 'utf8', flag: 'wx', mode: 0o644 });
+    await writeFile(temporary, text, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     try {
       const existing = await stat(targetPath);
       await chmod(temporary, existing.mode & 0o777);

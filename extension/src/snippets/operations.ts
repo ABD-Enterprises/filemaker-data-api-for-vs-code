@@ -115,7 +115,7 @@ function titleFor(operation: SnippetOperation, redactor: Redactor): string {
 function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation, redactor: Redactor): RequestSpec {
   const host = cleanServerAddress(profile.serverUrl, 'server address');
   const version = (profile.apiVersionPath ?? 'vLatest').replace(/^\/+|\/+$/g, '');
-  const base = `${normalizePath(profile.apiBasePath ?? '/fmi/data')}/${version}/databases/${encodeComponent(redactor.text(profile.database))}`;
+  const base = `${normalizePath(profile.apiBasePath ?? '/fmi/data').split('/').map(encodeComponent).join('/')}/${version}/databases/${encodeComponent(redactor.text(profile.database))}`;
   const title = titleFor(operation, redactor);
   const notes: string[] = [];
   const layoutPath = (layout: string): string => `${base}/layouts/${encodeComponent(redactor.text(segment(layout, 'Layout', 'layout')))}`;
@@ -254,7 +254,7 @@ function repetitionOf(value: number | undefined): number {
 }
 
 function buildProxySpec(profile: ConnectionProfile, operation: SnippetOperation, redactor: Redactor): RequestSpec {
-  const endpoint = new URL(cleanServerAddress(required(profile.proxyEndpoint, 'The proxy endpoint'), 'proxy endpoint'));
+  const endpoint = new URL(cleanServerAddress(required(profile.proxyEndpoint, 'The proxy endpoint'), 'proxy endpoint', true));
   const proxyProfile = buildProxyProfilePayload(profile);
   const notes: string[] = [
     'Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.'

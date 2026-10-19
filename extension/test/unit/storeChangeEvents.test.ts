@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ProfileStore } from '../../src/services/profileStore';
 import { InMemoryMemento } from './mocks';
@@ -59,5 +59,33 @@ describe('ProfileStore change events (they keep the Command Palette context keys
     subscription.dispose();
     await store.upsertProfile({ ...profile, name: 'Again' });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('profiles changed by another window', () => {
+  afterEach(() => vi.useRealTimers());
+  it('observes shared Memento changes without a local save, once each, and stops when disposed', async () => {
+    vi.useFakeTimers();
+    const shared = new InMemoryMemento();
+    await shared.update('filemakerDataApiTools.profiles', [profile]);
+    const local = new ProfileStore(shared as never, new InMemoryMemento() as never);
+    const remote = new ProfileStore(shared as never, new InMemoryMemento() as never);
+    const listener = vi.fn();
+    local.onDidChange(listener);
+    // The optional call lets the regression prove that the previous implementation never observes the change.
+    const watching = (local as ProfileStore & { watchExternalChanges?: () => { dispose(): void } }).watchExternalChanges?.();
+    await remote.upsertProfile({ ...profile, name: 'Renamed elsewhere', aiAccess: 'read' });
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(await local.getProfile('p1')).toMatchObject({ name: 'Renamed elsewhere', aiAccess: 'read' });
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(listener).toHaveBeenCalledTimes(1);
+    await remote.setActiveProfileId('p1');
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(listener).toHaveBeenCalledTimes(2);
+    watching?.dispose();
+    await remote.removeProfile('p1');
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });

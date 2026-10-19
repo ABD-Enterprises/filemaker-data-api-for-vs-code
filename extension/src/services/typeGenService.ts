@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { isAbsolute, relative, resolve } from 'path';
 
+import { hasInvisiblePathCharacter } from '../utils/pathConfinement';
 import type { FMClient } from './fmClient';
 import type { Logger } from './logger';
 import type { SchemaService } from './schemaService';
@@ -661,7 +662,7 @@ function sanitizeRelativeOutputDir(value: string): string {
   const normalized = value.replace(/\\/g, '/').trim().replace(/^\/+|\/+$/g, '');
   // A colon also rules out Windows drive-relative paths such as "D:folder", which are not
   // "absolute" to isAbsolute() but still leave the workspace.
-  if (!normalized || normalized.includes('..') || normalized.includes(':') || isAbsolute(normalized)) {
+  if (hasInvisiblePathCharacter(value) || !normalized || normalized.includes('..') || normalized.includes(':') || isAbsolute(normalized)) {
     return 'filemaker-types';
   }
 
