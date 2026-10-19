@@ -192,8 +192,8 @@ describe('layout (and script and field) names are used exactly, ` Sales` is not 
       const a = await service.generateTypesForLayout(profile, 'Sales');
       const b = await service.generateTypesForLayout(profile, ' Sales');
       expect(a.filePath).not.toBe(b.filePath);
-      expect(a.filePath).toMatch(/layouts\/Sales\.ts$/);
-      expect(b.filePath).toMatch(/layouts\/Sales-[0-9a-f]{8}\.ts$/);
+      expect(a.filePath).toMatch(/layouts[\\/]Sales\.ts$/);
+      expect(b.filePath).toMatch(/layouts[\\/]Sales-[0-9a-f]{8}\.ts$/);
       expect((await readdir(join(root, 'types', 'layouts'))).sort()).toHaveLength(2);
     });
 
