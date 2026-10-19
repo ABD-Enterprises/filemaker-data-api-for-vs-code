@@ -40,7 +40,28 @@ describe('page stylesheets keep long layout names and controls inside the panel'
   });
 });
 
+describe('every webview stylesheet is well formed', () => {
+  // A missing closing brace is not an error to a browser: the open block runs to the end of the file and every rule after it
+  // is silently nested inside it. That is how the narrow-editor rules stopped applying to the Query Builder in 1.5.0.
+  for (const file of [
+    ...PAGES.map((page) => `src/webviews/${page}/ui/styles.css`),
+    'src/webviews/schemaDiff/ui/styles.css',
+    '../designer-ui/src/styles.css'
+  ]) {
+    it(`${file}: braces balance`, () => {
+      const css = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(css.split('{').length, file).toBe(css.split('}').length);
+    });
+  }
+});
+
 describe('Layout Mode and Diagnostics', () => {
+  it('Layout Mode field names cannot widen the page', () => {
+    const css = read('../designer-ui/src/styles.css');
+    expect(css).toMatch(/\.field-list \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
+    expect(css).toMatch(/\.field-chip \{[^}]*overflow-wrap: anywhere;/);
+  });
+
   it('Layout Mode narrows its three columns and stacks them in a narrow editor', () => {
     const css = read('../designer-ui/src/styles.css');
     expect(css).toMatch(/@media \(max-width: 1320px\)\s*\{\s*\.app-shell \{\s*grid-template-columns: 220px minmax\(0, 1fr\) 240px;/);

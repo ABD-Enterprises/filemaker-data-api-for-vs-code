@@ -166,6 +166,13 @@ export async function run(ctx) {
       await s.pick('Read');
       await s.clickToastButton('Use for AI Tools');
       await s.page.waitForTimeout(1500);
+      // The rate limit (30 calls a minute), the record quota and the layout approvals belong to one AI session per
+      // window, and the journeys before this one (J10a, J10b) use them up. Start from a fresh session, as a user would
+      // between tasks; the product limits stay as they are.
+      await s.cmd('FileMaker: Start New AI Session');
+      await s.waitModal(10000).catch(() => {});
+      if (await s.modalVisible()) await s.modal('Start New Session');
+      await s.page.waitForTimeout(800);
       const st = (await s.statusItem(/AI:/)) ?? '';
       assert(/read-only/.test(st), st);
       return st;
@@ -342,7 +349,8 @@ export async function run(ctx) {
     async () => {
       await s.cmd('FileMaker: Show AI Activity');
       await s.page.waitForTimeout(1500);
-      const text = await s.activeEditorText();
+      // The whole document, not the visible lines: J10a and J10b wrote many entries before this journey.
+      const text = (await s.helper('activeDocumentText')).text;
       assert(/chat participant/.test(text) && /fm_find_records/.test(text), text.slice(0, 300));
       assert(!/Ignore previous instructions/.test(text), 'record text in the log');
       await s.closeAllEditors();
@@ -374,6 +382,9 @@ export async function run(ctx) {
       assert(/Customers/.test(back.text), back.text.slice(0, 200));
     }
   );
+
+  // Leave the window as the next journey expects it: the Chat view is in the secondary side bar and takes width.
+  await s.helper('executeCommand', { command: 'workbench.action.closeAuxiliaryBar' }).catch(() => {});
 
   s.notTestable(
     J,

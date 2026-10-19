@@ -1,4 +1,4 @@
-import { markAsserted } from '../lib/session.mjs';
+import { assert, markAsserted } from '../lib/session.mjs';
 // Journey 14: responsive layout of every webview panel and of the tree views at editor widths of about 360, 480, 640, 770
 // and 1100 px, with the sidebar open, in a split editor, at zoom levels -2/0/+2 and in light, dark and high-contrast themes.
 // Each state is audited in the page (horizontal scroll, off-screen controls, truncated labels, overlaps, tables without
@@ -35,6 +35,10 @@ export async function run(ctx) {
     await createProfile(s, { name: 'Mock Quality', url: mock.baseUrl, database: 'Quality' });
     ctx.profileMain = true;
   }
+  // The widths below assume only the editor area is open. An earlier journey (the Chat view of J10c) can leave a
+  // secondary side bar or the bottom panel open, which takes about 160 px from every width.
+  for (const command of ['workbench.action.closeAuxiliaryBar', 'workbench.action.closePanel'])
+    await s.helper('executeCommand', { command }).catch(() => {});
   await ensureProfileCommands(s);
   if (!/Mock Quality/.test((await s.statusItem(/FileMaker:/)) ?? ''))
     await connect(s, 'Mock Quality');
@@ -321,6 +325,12 @@ export async function run(ctx) {
       await setWindow(s, 480, 520);
       await s.setSetting('filemaker.ai.enabled', true);
       await s.cmd('FileMaker: Start/Stop AI Server for External Tools');
+      // The command is a toggle: when an earlier journey (J10b) left the server running, the first run only stops it
+      // (a toast, no dialog). Run it again to get the start dialog this step is about.
+      if (!(await s.waitModal(4000).then(() => true, () => false))) {
+        await s.dismissToasts();
+        await s.cmd('FileMaker: Start/Stop AI Server for External Tools');
+      }
       await s.waitModal(15000);
       const box = await s.page.locator('.monaco-dialog-box').boundingBox();
       const vp = s.page.viewportSize() ?? { width: 480, height: 520 };
@@ -353,7 +363,7 @@ export async function run(ctx) {
           problems.push(
             `button "${b.t}" is outside the window (bottom ${b.bottom}/${win.h}, right ${b.right}/${win.w})`
           );
-      if (problems.length) throw new Error(problems.join('; '));
+      assert(problems.length === 0, problems.join('; '));
       return `dialog ${Math.round(box?.width ?? 0)}x${Math.round(box?.height ?? 0)} in ${win.w}x${win.h}; message scrollable: ${scrollable}`;
     }
   );

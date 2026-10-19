@@ -688,6 +688,7 @@ export class RecordEditorPanel {
       <h2>Field Data</h2>
       <p id="hiddenNote" class="status hidden" role="note"></p>
       <div id="fieldEditor"></div>
+      <p id="fieldsFootnote" class="status" role="note">Fields your account cannot see are not listed here.</p>
       <h3>Patch Preview</h3>
       <pre id="patchPreview" class="raw"></pre>
       <h3>Raw Record JSON</h3>
