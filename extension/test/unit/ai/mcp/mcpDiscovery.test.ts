@@ -380,6 +380,21 @@ describe('createEndpoint', () => {
   });
 });
 
+describe('selectWindow with Windows-style folder paths', () => {
+  const window = (folder: string) => ({ file: 'a.json', record: record({ workspaceFolders: [folder], label: 'win' }) });
+
+  // Only the comparison is under test; it must agree with samePath for the platform it runs on.
+  it.skipIf(posix)('matches c:\\work\\alpha with C:\\Work\\Alpha on Windows', () => {
+    expect(selectWindow([window('c:\\work\\alpha')], 'C:\\Work\\Alpha').ok).toBe(true);
+    expect(selectWindow([window('c:\\work\\alpha')], 'C:\\Work\\Beta').ok).toBe(false);
+  });
+
+  it.skipIf(!posix)('does not treat a different case as the same folder on Unix', () => {
+    expect(selectWindow([window('/work/alpha')], '/work/Alpha').ok).toBe(false);
+    expect(selectWindow([window('/work/alpha')], '/work/alpha/').ok).toBe(true);
+  });
+});
+
 describe('samePath', () => {
   it('ignores case on Windows (VS Code reports c:\\work, a person types C:\\Work) but not on other systems', () => {
     expect(samePath('c:\\work\\Alpha', 'C:\\Work\\alpha', 'win32')).toBe(true);
