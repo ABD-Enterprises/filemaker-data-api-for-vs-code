@@ -2,6 +2,8 @@
 
 This file is the operator-facing release ledger. Every pull request adds one
 line under `## Unreleased` with one of the allowed section labels, or
+
+- [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 applies the `changelog-skip` label for a purely no-impact change. See EAS
 §B2 Universal PR Essentials.
 

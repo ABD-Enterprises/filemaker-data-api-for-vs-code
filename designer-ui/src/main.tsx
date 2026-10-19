@@ -3,14 +3,22 @@ import { createRoot } from 'react-dom/client';
 
 import {
   createBlankLayout,
+  FIELD_LAYOUT,
   LayoutContainer,
   type BehaviorBinding,
   type FieldLayoutObject,
   type LayoutDefinition,
   type LayoutObject,
-  type PortalLayoutObject
+  type PortalLayoutObject,
+  type StandardFieldMetadata
 } from '@fmweb/shared';
 import {
+  arrangeStandardForm,
+  standardizeFields,
+  createStandardField,
+  createStarterTemplate,
+  type StarterTemplate,
+  type StandardPortalMetadata,
   clampRect,
   cloneLayout,
   computeDragInteraction,
@@ -38,6 +46,9 @@ type IncomingMessage =
       payload: {
         layout: LayoutDefinition;
         availableFields: string[];
+        availableFieldMetadata?: StandardFieldMetadata[];
+        isNewLayout?: boolean;
+        templateLayouts?: Array<{ layoutName: string; fields: StandardFieldMetadata[]; portals: StandardPortalMetadata[] }>;
         scripts: string[];
         projectName: string;
       };
@@ -145,6 +156,12 @@ interface ToolDragPayload {
 export function App(): React.JSX.Element {
   const [layout, setLayout] = React.useState<LayoutDefinition>(() => createBlankLayout('Untitled Layout'));
   const [fields, setFields] = React.useState<string[]>([]);
+  const [fieldMetadata, setFieldMetadata] = React.useState<StandardFieldMetadata[]>([]);
+  const [formColumns, setFormColumns] = React.useState<1 | 2>(1);
+  const [template, setTemplate] = React.useState<StarterTemplate>('blank');
+  const [templateSource, setTemplateSource] = React.useState('');
+  const [templateLayouts, setTemplateLayouts] = React.useState<NonNullable<Extract<IncomingMessage, { type: 'init' }>['payload']['templateLayouts']>>([]);
+  const [isNewLayout, setIsNewLayout] = React.useState(false);
   const [scripts, setScripts] = React.useState<string[]>([]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [groups, setGroups] = React.useState<Record<string, string[]>>({});
@@ -427,11 +444,12 @@ export function App(): React.JSX.Element {
           const object = createObjectFromTool(
             payload,
             {
-              x: point ? snapToGrid(point.x, current.canvas.gridSize) : 40,
-              y: point ? snapToGrid(point.y, current.canvas.gridSize) : 40
+              x: payload.type === 'field' ? point?.x ?? FIELD_LAYOUT.pageMargin : point ? snapToGrid(point.x, current.canvas.gridSize) : 40,
+              y: payload.type === 'field' ? point?.y ?? FIELD_LAYOUT.pageMargin : point ? snapToGrid(point.y, current.canvas.gridSize) : 40
             },
             current,
-            fields
+            fields,
+            fieldMetadata
           );
 
           setSelectedIds([object.id]);
@@ -443,7 +461,7 @@ export function App(): React.JSX.Element {
         }
       });
     },
-    [executeLayoutCommand, fields]
+    [executeLayoutCommand, fields, fieldMetadata]
   );
 
   const handleCanvasDrop = React.useCallback(
@@ -1271,6 +1289,10 @@ export function App(): React.JSX.Element {
         layoutRef.current = initialLayout;
         setLayout(initialLayout);
         setFields(message.payload.availableFields);
+        setFieldMetadata(message.payload.availableFieldMetadata ?? message.payload.availableFields.map((name) => ({ name })));
+        setIsNewLayout(message.payload.isNewLayout ?? false);
+        setTemplateLayouts(message.payload.templateLayouts ?? []);
+        setTemplateSource(message.payload.templateLayouts?.[0]?.layoutName ?? '');
         setScripts(message.payload.scripts);
         setProjectName(message.payload.projectName);
         setUndoStack([]);
@@ -1434,6 +1456,35 @@ export function App(): React.JSX.Element {
             <p>{layout.name}</p>
           </div>
           <div className="action-row">
+            {isNewLayout && layout.objects.length === 0 ? <>
+              <select aria-label="Starter template" value={template} onChange={(event) => setTemplate(event.target.value as StarterTemplate)}>
+                <option value="blank">Blank</option><option value="form">Form</option>
+                <option value="twoColumn">Two-column form</option><option value="formPortal">Form + first portal</option>
+              </select>
+              <select aria-label="Template FileMaker layout" value={templateSource} onChange={(event) => setTemplateSource(event.target.value)}>
+                {templateLayouts.map((entry) => <option key={entry.layoutName} value={entry.layoutName}>{entry.layoutName}</option>)}
+              </select>
+              <button type="button" disabled={template !== 'blank' && !templateLayouts.length} onClick={() => {
+                const source = templateLayouts.find((entry) => entry.layoutName === templateSource);
+                if (template === 'blank' || !source) return;
+                const portal = source.portals[0];
+                const ids = Array.from({ length: source.fields.length + 1 + (portal?.fields.length ?? 0) }, () => createObjectId());
+                executeLayoutCommand({ label: 'Apply starter template', apply: (current) => createStarterTemplate(
+                  { ...current, fmLayoutName: source.layoutName }, source.fields, template, ids, portal
+                ) });
+                setFields(source.fields.map((field) => field.name));
+                setFieldMetadata(source.fields);
+              }}>Apply starter template</button>
+            </> : null}
+            <select aria-label="Form columns" value={formColumns} onChange={(event) => setFormColumns(Number(event.target.value) as 1 | 2)}>
+              <option value={1}>One column</option><option value={2}>Two columns</option>
+            </select>
+            <button type="button" onClick={() => executeLayoutCommand({
+              label: 'Arrange standard form', apply: (current) => arrangeStandardForm(current, fieldMetadata, formColumns, selectedIds.length ? selectedIds : undefined)
+            })}>Arrange standard form</button>
+            <button type="button" onClick={() => executeLayoutCommand({
+              label: 'Standardize fields', apply: (current) => standardizeFields(current, fieldMetadata, selectedIds.length ? selectedIds : undefined)
+            })}>{selectedIds.length ? 'Standardize selected' : 'Standardize all'}</button>
             <button type="button" onClick={undo} disabled={undoStack.length === 0}>
               Undo
             </button>
@@ -2028,7 +2079,8 @@ function createObjectFromTool(
   payload: ToolDragPayload,
   point: Point,
   layout: LayoutDefinition,
-  fields: string[]
+  fields: string[],
+  metadata: StandardFieldMetadata[]
 ): LayoutObject {
   const zIndex = layout.objects.length === 0 ? 0 : Math.max(...layout.objects.map((item) => item.zIndex)) + 1;
   const base = {
@@ -2043,15 +2095,8 @@ function createObjectFromTool(
   };
 
   if (payload.type === 'field') {
-    return {
-      ...base,
-      type: 'field',
-      fmFieldName: payload.fieldName ?? fields[0] ?? 'Field',
-      displayType: 'editBox',
-      format: 'text',
-      labelPosition: 'top',
-      required: false
-    };
+    const name = payload.fieldName ?? fields[0] ?? 'Field';
+    return createStandardField(metadata.find((field) => field.name === name) ?? { name }, base.id, point, zIndex);
   }
 
   if (payload.type === 'text') {

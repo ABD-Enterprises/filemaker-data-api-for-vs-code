@@ -18,3 +18,6 @@ export type {
 
 export { LayoutContainer, applyAnchoredRuntimeRect, computePortalVisibleRange } from './ui-renderer';
 export type { LayoutRendererProps, RuntimeLayoutData } from './ui-renderer';
+
+export { FIELD_LAYOUT, standardFieldSize } from './field-standards';
+export type { StandardFieldMetadata } from './field-standards';

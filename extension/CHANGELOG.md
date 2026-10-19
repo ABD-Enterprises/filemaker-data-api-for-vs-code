@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
+
 ## 1.5.0
 
 _Released 2026-10-19._

@@ -133,6 +133,7 @@ export class LayoutModePanel {
       const project = await this.fmWebProjectService.ensureProjectInitialized();
       const loaded = await this.fmWebProjectService.loadOrCreateLayout(this.pendingLayoutId);
       const metadataCache = await this.fmWebProjectService.loadMetadataCache();
+      const designerLayouts = await this.fmWebProjectService.getDesignerLayouts();
       const availableFields = await this.fmWebProjectService.getAvailableFields(loaded.layout.fmLayoutName);
 
       await this.panel.webview.postMessage({
@@ -140,6 +141,11 @@ export class LayoutModePanel {
         payload: {
           layout: loaded.layout,
           availableFields,
+          availableFieldMetadata: loaded.layout.fmLayoutName
+            ? designerLayouts.find((entry) => entry.layoutName === loaded.layout.fmLayoutName)?.fields ?? []
+            : designerLayouts.flatMap((entry) => entry.fields),
+          templateLayouts: loaded.source === 'created' ? designerLayouts : undefined,
+          isNewLayout: loaded.source === 'created',
           scripts: metadataCache?.scripts ?? [],
           projectName: project.name
         }
