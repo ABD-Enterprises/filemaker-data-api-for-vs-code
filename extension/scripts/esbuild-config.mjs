@@ -14,6 +14,17 @@ export const extensionDir = path.resolve(import.meta.dirname, '..');
 //    commit builds to the same bytes.
 // Both are 'unknown' when this is not the root checkout of its own repository (a tarball
 // extracted inside some other git repository must not report that repository's commit).
+/**
+ * True when both paths name the same folder. `realpathSync.native` resolves Windows 8.3 short
+ * names (RUNNER~1) and drive-letter case, which git (it prints the long form with forward
+ * slashes) and `path.resolve` disagree on; the plain JS realpath does not.
+ */
+function samePath(a, b) {
+  const left = realpathSync.native(a);
+  const right = realpathSync.native(b);
+  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+}
+
 export function readBuildIdentity(dir, repoRoot = path.resolve(dir, '..')) {
   const unknown = { commit: 'unknown', date: 'unknown' };
   const git = (args) => {
@@ -25,7 +36,7 @@ export function readBuildIdentity(dir, repoRoot = path.resolve(dir, '..')) {
   };
   try {
     const top = git(['rev-parse', '--show-toplevel']);
-    if (!top || realpathSync(top) !== realpathSync(repoRoot)) {
+    if (!top || !samePath(top, repoRoot)) {
       return unknown;
     }
     const commit = git(['rev-parse', '--short=9', 'HEAD']);

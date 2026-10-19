@@ -1,10 +1,11 @@
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
-import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from 'fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 
 import { AI_CONTEXT_END_MARKER, AI_CONTEXT_START_MARKER } from './aiContextRenderer';
 import { resolveConfinedFile } from '../utils/pathConfinement';
+import { renameReplacing } from '../utils/renameReplacing';
 
 const MAX_EXISTING_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -105,7 +106,7 @@ export async function writeFileAtomic(targetPath: string, text: string): Promise
     } catch {
       // New file: keep the default mode.
     }
-    await rename(temporary, targetPath);
+    await renameReplacing(temporary, targetPath);
   } catch (error) {
     await rm(temporary, { force: true });
     throw error;
