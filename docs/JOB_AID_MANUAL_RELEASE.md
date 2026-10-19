@@ -9,6 +9,7 @@ Written for version `1.5.0` (the steps are the same for any version: replace the
 - The release pull request (`[patch] Release 1.5.0`) is **merged** and nothing else will merge before you finish. (Anything merged after it changes the VSIX; the release commit is the merge commit of that pull request, not a later one.)
 - You are signed in to `gh` (`gh auth status`) as an admin of `SureForgeTech/filemaker-data-api-for-vs-code`, and you can sign in at <https://marketplace.visualstudio.com/manage> as an owner of the publisher.
 - Node.js 22 or newer and `git`.
+- **The release date.** The notes say `_Released 2026-10-19._`: that is the day the release was prepared, not necessarily the day you publish. The Marketplace and GitHub show the real publish date. If you publish on a later day, leave the text as it is (changing it after the merge would mean another change on `main` and a different VSIX); if you want the date to match, merge a one-line change to that date in `extension/CHANGELOG.md` and `CHANGELOG.md` first and use that merge commit.
 
 ## 1. Build the VSIX from the merged commit
 
@@ -81,7 +82,8 @@ Checked 2026-10-19 (<https://cli.github.com/manual/gh_release_create>): without 
 
    ```bash
    bash tools/release-notes.sh v1.5.0 > artifacts/RELEASE_NOTES_v1.5.0.md
-   head -5 artifacts/RELEASE_NOTES_v1.5.0.md    # must show the 1.5.0 notes, not be empty
+   wc -l < artifacts/RELEASE_NOTES_v1.5.0.md                                   # about 47 lines (more than 40, never 0)
+   grep -c 'Upgrading from 1.4.0 to 1.5.0' artifacts/RELEASE_NOTES_v1.5.0.md   # must print 1
    gh release create v1.5.0 \
      --repo SureForgeTech/filemaker-data-api-for-vs-code \
      --verify-tag \
@@ -93,7 +95,7 @@ Checked 2026-10-19 (<https://cli.github.com/manual/gh_release_create>): without 
    ```
 
    Read the release on GitHub: notes, and the three files attached.
-4. Pushing the tag in step 2 started a `CI` run for `v1.5.0`. It runs `build-test` and `package` and then waits at `publish`. **Open the run, choose Review deployments, tick `marketplace`, and click Reject** (checked 2026-10-19 against <https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/reviewing-deployments>: the buttons are "Approve and deploy" and "Reject"; rejecting makes the run fail). The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
+4. Pushing the tag in step 2 started a `CI` run for `v1.5.0`. It runs `build-test` and `package` and then waits at `publish`. **The Reject button does not exist at first.** It appears only after the `build-test` and `package` jobs finish, a few minutes after the tag push (the run page then shows `publish` as waiting). Wait for it; do not approve in the meantime. Then **open the run, choose Review deployments, tick `marketplace`, and click Reject** (checked 2026-10-19 against <https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/reviewing-deployments>: the buttons are "Approve and deploy" and "Reject"; rejecting makes the run fail). The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
 5. The tag run also builds the VSIX in CI (artifact `extension-vsix`). Its bytes differ from yours (build time stamps), so compare the version and file list, not the hash.
 
 There is no supported way to avoid that red run with the current workflow (it only triggers on tags); the Entra setup removes the problem. A draft release or `--target` does not avoid it either, and when the tag appears in those cases is undocumented, so they are not used here.
@@ -121,13 +123,24 @@ git push origin v1.4.0
 mkdir -p artifacts
 git show "$SHA_140":extension/CHANGELOG.md > /tmp/changelog-1.4.0.md
 CHANGELOG_PATH=/tmp/changelog-1.4.0.md bash tools/release-notes.sh v1.4.0 > artifacts/RELEASE_NOTES_v1.4.0.md
-head -5 artifacts/RELEASE_NOTES_v1.4.0.md
+wc -l < artifacts/RELEASE_NOTES_v1.4.0.md                                  # about 83 lines
+grep -c 'Upgrading from 1.3.0 to 1.4.0' artifacts/RELEASE_NOTES_v1.4.0.md  # must print 1
+# ---- Version A: with the VSIX you uploaded (if you do not have it, stop here and use version B below) ----
+VSIX_140=/full/path/to/the-vsix-you-uploaded/filemaker-data-api-tools-1.4.0.vsix   # the exact file you uploaded
+shasum -a 256 "$VSIX_140"                                                           # note the hash
 gh release create v1.4.0 --repo SureForgeTech/filemaker-data-api-for-vs-code --verify-tag \
   --title v1.4.0 --notes-file artifacts/RELEASE_NOTES_v1.4.0.md --latest=false \
-  path/to/the-vsix-you-uploaded/filemaker-data-api-tools-1.4.0.vsix
+  "$VSIX_140"
 ```
 
-Pushing the tag starts a `CI` run; **Reject** its `marketplace` deployment exactly as in step 3.4. Leave out the last line's file if you no longer have the uploaded `.vsix`. Source maps for 1.4.0 are lost unless you kept the tarball; say so in the release notes if so.
+**Version B: without the VSIX** (you no longer have the uploaded file; run this instead of version A, not as well):
+
+```bash
+gh release create v1.4.0 --repo SureForgeTech/filemaker-data-api-for-vs-code --verify-tag \
+  --title v1.4.0 --notes-file artifacts/RELEASE_NOTES_v1.4.0.md --latest=false
+```
+
+Pushing the tag starts a `CI` run; **Reject** its `marketplace` deployment exactly as in step 3.4. Run only one of the two `gh release create` commands. Source maps for 1.4.0 are lost unless you kept the tarball; say so in the release notes if so.
 
 ## If something is wrong
 
