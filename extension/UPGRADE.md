@@ -2,6 +2,46 @@
 
 What to do, and what will look different, when you move from one version to the next. Each section lists only changes you can notice. For everything else, see the [Changelog](./CHANGELOG.md).
 
+## Upgrading from 1.4.0 to 1.5.0
+
+This is a minor release. Your profiles, saved queries, settings and stored data carry over unchanged, and no command or setting was removed or renamed. Nothing needs to be done for a normal install. These are the behavior changes you may notice.
+
+### 1. Scripts run with a single request, and return only the script's answer
+
+The extension now runs a script the way the Claris Data API Guide documents it: one `GET .../layouts/<layout>/script/<script>?script.param=<text>`. Before, it sent a `POST` that the Data API does not accept and then fell back to a find with the script attached, so every script run also read a record.
+
+- A script run now reads no record. The result you get back is the script's result and error code only. If something you built (a Layout Mode `runScript` behavior, a plugin, an AI tool call) relied on the record data that used to come back with a script run, fetch the record with a find instead.
+- A script parameter is sent percent-encoded exactly (a space is `%20`, never `+`). A parameter too long for a web address (about 2,000 characters) is sent in the body of a find limited to one record, which is the guide's other documented form. With a record ID and a parameter that long you get a clear error instead.
+- A script or layout named `.` or `..` is refused with a message before anything is sent.
+- **Copy as curl / fetch** in the Script Runner shows the same `GET` request.
+
+### 2. Names are no longer trimmed
+
+Layout, script and field names are now used exactly as the server lists them or as you typed them. A name with a leading or trailing space (for example ` Sales`) used to be turned into `Sales`, which could not be opened or, worse, pointed at a different layout. Layouts that differ only in spacing or case are now separate entries. Action: if you have a saved query, a generated type file or a snippet that was created for a layout whose name begins or ends with a space, check it still points where you expect. Names without such spaces are not affected.
+
+### 3. `@filemaker` in the Chat view (new, off until you switch AI tools on)
+
+VS Code's Chat view now lists a read-only `@filemaker` participant (`/layouts`, `/describe`, `/find`, `/explain`, `/help`). It reads the database only through the AI tools, so it does nothing until you turn those on (`filemaker.ai.enabled` and a connection chosen with **Set AI Access for Connection**; both are off by default), and it follows every AI setting, approval, limit, hidden-field rule and the kill switch. It has no command that changes a record or runs a script, even if you allowed writes and scripts for agent mode. In an untrusted workspace (Restricted Mode) it is listed but answers every request with "AI tools are not available right now" and reads nothing. It sends the language model only layout and field names and your own words, never record values or connection details. There is no new setting. See [Chat with @filemaker](./docs/USER_GUIDE.md#chat-with-filemaker).
+
+### 4. Copy a request as code
+
+**Copy request** in the Query Builder and Script Runner now offers curl, `fetch()`, a `.http` file (for the REST Client extension), a Postman collection and TypeScript, and the Record Viewer and Record Editor have **Copy request for this record**. A new command, **FileMaker: Copy Request as Code…**, copies a request for the active connection. Your password, session token and API key are never copied. The existing setting `filemaker.snippets.includeAuthByDefault` (default off) now covers all of these: with it on, copied requests show an `Authorization` header with a variable to fill in (for example `$FM_TOKEN`) instead of `<REDACTED>`. See [Copy a request as code](./docs/USER_GUIDE.md#copy-a-request-as-code).
+
+### Smaller changes
+
+- **Panels fit narrow editors.** Long layout names are clipped (full name in the tooltip) instead of widening the page; the Query Builder, Diagnostics and Layout Mode work from 360 px wide.
+- **Record Editor and Record Viewer.** The editor says when fields are not shown because your account cannot access them, and names fields the record has no value for. The viewer loads the record it was opened for, or shows a hint when opened without one.
+- **Connection wizard** shows a notice when the workspace is in Restricted Mode, with a **Manage Workspace Trust** button.
+- **Refresh Schema Cache** also clears the layout list, so the next refresh reads layouts from the server again.
+- A connection that drops while a reply is still arriving is reported as incomplete, not as a success.
+- **Windows and Linux.** Updating a file marked read-only (Write AI Context, the FM Web runtime) works on Windows; the MCP shim waits longer for PowerShell; folder paths from MCP clients match regardless of letter case on Windows.
+- Logs and diagnostics hide more secrets (single-quoted keys; `Cookie`, `Set-Cookie`, `Authorization` and `Proxy-Authorization` lines), and configured file paths now reject characters that render as blank.
+- A badly formed `filemaker.ai.hiddenFields` value no longer switches hiding off: the valid names still hide.
+
+### Rolling back
+
+Install the previous version from the Extensions view (**Install Specific Version...**) or from a [release](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/releases) (only tagged versions have one). Your data is not migrated, so nothing needs to be undone.
+
 ## Upgrading from 1.3.0 to 1.4.0
 
 This is a minor release. Your profiles, saved queries, settings and stored data carry over unchanged, and no command or setting was removed. Nothing needs to be done for a normal install. These are the behavior changes you may notice, and what to do about each.
