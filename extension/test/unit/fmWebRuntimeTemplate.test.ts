@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { link, lstat, mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
+import { chmod, link, lstat, mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -183,6 +183,36 @@ describe('FM Web runtime template', () => {
 
     expect(await readFile(original, 'utf8')).toBe('original');
     expect(await readFile(target, 'utf8')).toBe('fresh');
+  });
+
+  it.skipIf(process.platform === 'win32')('writeManagedFile keeps the permission bits of the file it replaces', async () => {
+    const executable = path.join(dir, 'run.sh');
+    await writeFile(executable, 'old');
+    await chmod(executable, 0o755);
+    const ownerOnly = path.join(dir, 'private.ts');
+    await writeFile(ownerOnly, 'old');
+    await chmod(ownerOnly, 0o600);
+
+    await writeManagedFile(executable, 'new');
+    await writeManagedFile(ownerOnly, 'new');
+
+    expect((await stat(executable)).mode & 0o777).toBe(0o755);
+    expect((await stat(ownerOnly)).mode & 0o777).toBe(0o600);
+    expect(await readFile(ownerOnly, 'utf8')).toBe('new');
+  });
+
+  it('writeManagedFile leaves no .tmp behind when the write fails part way, and the target is untouched', async () => {
+    const target = path.join(dir, 'managed.ts');
+    await writeFile(target, 'original');
+    async function* failing(): AsyncGenerator<string> {
+      yield 'partial';
+      throw new Error('disk full');
+    }
+
+    await expect(writeManagedFile(target, failing() as never)).rejects.toThrow('disk full');
+
+    expect((await readdir(dir)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+    expect(await readFile(target, 'utf8')).toBe('original');
   });
 
   it('a folder where a file belongs gets a plain message, not EISDIR (writeManagedFile and the generator)', async () => {

@@ -42,6 +42,21 @@ updates:
       # auto-bumps here (e.g. 1.96 -> 1.120) break the package/publish CI.
       # Bump this only in lockstep with a deliberate engines.vscode raise.
       - dependency-name: "@types/vscode"
+  # The Marketplace publish tool (@vscode/vsce) has its own minimal lockfile so the publish job installs
+  # a fixed tree; without this entry its security fixes would never be proposed.
+  - package-ecosystem: npm
+    directory: "/tools/publish"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    groups:
+      publish-tool:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

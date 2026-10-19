@@ -41,7 +41,18 @@ function isStringListMap(value: unknown): value is Record<string, string[]> {
   );
 }
 
-export function readAiSettings(configuration: Configuration): AiSettings {
+/**
+ * Called when `filemaker.ai.hiddenFields` holds something that is not a list of text names:
+ * `entries-ignored` (a list with non-text entries; the text names still hide), `single-name`
+ * (a bare string, read as one name) or `value-ignored` (neither a list nor text).
+ */
+export type HiddenFieldsProblemReporter = (problem: {
+  scope: string;
+  kind: 'entries-ignored' | 'single-name' | 'value-ignored';
+  count: number;
+}) => void;
+
+export function readAiSettings(configuration: Configuration, onHiddenFieldsProblem?: HiddenFieldsProblemReporter): AiSettings {
   const flag = (key: string): boolean => readUserScopeValue(configuration, key, isBoolean) === true;
   const connection = readUserScopeValue(configuration, 'ai.connection', isString)?.trim();
 
@@ -51,7 +62,7 @@ export function readAiSettings(configuration: Configuration): AiSettings {
     allowScripts: flag('ai.allowScripts'),
     scriptAllowlist: sanitizeMap(readUserScopeValue(configuration, 'ai.scriptAllowlist', isStringListMap)),
     readableLayouts: sanitizeMap(readUserScopeValue(configuration, 'ai.readableLayouts', isStringListMap)),
-    hiddenFields: readHiddenFields(configuration),
+    hiddenFields: readHiddenFields(configuration, onHiddenFieldsProblem),
     connection: connection ? connection : undefined
   };
 }
@@ -68,7 +79,7 @@ function sanitizeMap(map: Record<string, string[]> | undefined): Record<string, 
  * `filemaker.ai.hiddenFields` NARROWS what a model can see, so unlike the widening settings it
  * is the union of every scope: a workspace may add names, never remove one the user set.
  */
-function readHiddenFields(configuration: Configuration): string[] {
+function readHiddenFields(configuration: Configuration, report?: HiddenFieldsProblemReporter): string[] {
   const inspected =
     typeof configuration.inspect === 'function'
       ? (configuration.inspect<unknown>('ai.hiddenFields') as Record<string, unknown> | undefined)
@@ -87,10 +98,31 @@ function readHiddenFields(configuration: Configuration): string[] {
   const names = new Set<string>();
   for (const scope of scopes) {
     const value = inspected[scope];
-    if (isStringList(value)) {
-      for (const name of value) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    // Fail closed: this setting only ever hides things, so one bad entry must not switch hiding off
+    // for the good names next to it. A bare string is read as one name; anything else that is not a
+    // list is ignored, and so is each non-text entry of a list. Each case is reported.
+    if (isString(value)) {
+      names.add(value);
+      report?.({ scope, kind: 'single-name', count: 1 });
+      continue;
+    }
+    if (!Array.isArray(value)) {
+      report?.({ scope, kind: 'value-ignored', count: 1 });
+      continue;
+    }
+    let ignored = 0;
+    for (const name of value as unknown[]) {
+      if (isString(name)) {
         names.add(name);
+      } else {
+        ignored += 1;
       }
+    }
+    if (ignored > 0) {
+      report?.({ scope, kind: 'entries-ignored', count: ignored });
     }
   }
   return [...names];

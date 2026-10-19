@@ -87,4 +87,28 @@ describe('redact: places a secret used to slip through', () => {
     );
     expect(redactString('https://fm.example.com/fmi')).toBe('https://fm.example.com/fmi');
   });
+
+  it('redacts single-quoted keys as a printed object or dict shows them', () => {
+    expect(redactString("{'sessionToken': 'abc', 'name': 'ok', 'password': 123456}")).toBe("{'sessionToken': '***', 'name': 'ok', 'password': '***'}");
+    expect(redactString("{'api_key': 'it\\'s secret'}")).not.toMatch(/secret/);
+  });
+
+  it('redacts a Cookie, Set-Cookie or Authorization line printed as plain text', () => {
+    expect(redactString('Cookie: a=b; session=xyz\nHost: fm.example.com')).toBe('Cookie: ***\nHost: fm.example.com');
+    expect(redactString('Set-Cookie: sid=abc; Path=/; HttpOnly')).toBe('Set-Cookie: ***');
+    expect(redactString('request headers\r\nAuthorization: Digest username=bob\r\nAccept: */*')).toBe('request headers\r\nAuthorization: ***\r\nAccept: */*');
+    expect(redactString('Proxy-Authorization: Negotiate abcdef')).toBe('Proxy-Authorization: ***');
+    // Already redacted text is left as it is, and ordinary prose is not touched.
+    expect(redactString('Authorization: Bearer abc')).toBe('Authorization: Bearer ***');
+    expect(redactString('the cookie jar is full')).toBe('the cookie jar is full');
+  });
+
+  it('single-quote and header-line patterns stay fast on long hostile input', () => {
+    for (const piece of ["'token", "'a':", 'cookie', 'Cookie:', 'authorization :']) {
+      const input = piece.repeat(60_000);
+      const start = Date.now();
+      redactString(input);
+      expect(Date.now() - start).toBeLessThan(500);
+    }
+  });
 });

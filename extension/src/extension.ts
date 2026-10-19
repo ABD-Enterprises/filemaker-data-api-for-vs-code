@@ -18,7 +18,7 @@ import { registerSavedQueriesCommands } from './commands/savedQueries';
 import { registerSchemaCommands } from './commands/schema';
 import { AuditLog } from './ai/aiAudit';
 import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
-import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from './ai/aiSettings';
+import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings, type HiddenFieldsProblemReporter } from './ai/aiSettings';
 import { AiMcpController, PERMISSION_EPOCH_KEY, PERMISSION_SEEN_KEY, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
 import { AiToolService } from './ai/aiToolService';
 import { registerAiMcpCommands, watchExternalServerSetting } from './commands/aiMcp';
@@ -503,9 +503,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // AI tools (ADR-0004 phase 2). The core owns all policy; the controller only registers
   // language-model tools for what the core offers right now.
+  // A malformed `filemaker.ai.hiddenFields` still hides every valid name; say so once per problem.
+  const warnedHiddenFields = new Set<string>();
+  const reportHiddenFieldsProblem: HiddenFieldsProblemReporter = ({ scope, kind, count }) => {
+    const key = `${scope}:${kind}:${count}`;
+    if (warnedHiddenFields.has(key)) {
+      return;
+    }
+    warnedHiddenFields.add(key);
+    const what =
+      kind === 'entries-ignored'
+        ? `${count} entr${count === 1 ? 'y is' : 'ies are'} not text and ${count === 1 ? 'was' : 'were'} ignored; the other names still hide`
+        : kind === 'single-name'
+          ? 'the value is a single string, not a list, and was read as one field name'
+          : 'the value is not a list of names and was ignored';
+    logger.warn(`filemaker.ai.hiddenFields (${scope}): ${what}. Fix the setting to a list of field names.`);
+  };
   const aiAudit = new AuditLog(() => auditLogPath(context.globalStorageUri.fsPath));
   const aiService = new AiToolService({
-    settings: () => readAiSettings(vscode.workspace.getConfiguration('filemaker')),
+    settings: () => readAiSettings(vscode.workspace.getConfiguration('filemaker'), reportHiddenFieldsProblem),
     featureSwitchOn: () => isAiFeatureSwitchOn(vscode.workspace.getConfiguration('filemaker')),
     featureGuard: (feature) => roleGuard.getFeatureGuard(feature),
     isTrusted: () => vscode.workspace.isTrusted,

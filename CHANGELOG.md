@@ -28,6 +28,10 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- A malformed `filemaker.ai.hiddenFields` value no longer switches hiding off for the whole scope: non-text entries are ignored and the valid names in the same list still hide (a bare string counts as one name), and the Output panel says so once.
+- Refreshing a generated FM Web runtime file now keeps the file permissions of the file it replaces, and a write that fails part way (for example a full disk) no longer leaves a hidden `.tmp` file in the generated folder.
+- The AI server for external tools now writes a line to the Output panel when it rejects a socket folder (for example an `XDG_RUNTIME_DIR` that is open to other users) before falling back to the temp folder, and the error names each folder variable that was tried instead of only the last one (a too-long socket path now names the variable actually in use).
+- After an untrusted-certificate failure the extension looks at the server certificate once per server and failure for a minute (the result is remembered, including a look that got no answer), instead of paying up to 1.5 s on every failed request.
 - Mid-response connection drops are reported clearly instead of as (HTTP 200).
 - Refresh Schema Cache re-reads the layout list.
 - Layout names are no longer trimmed; spacing/case variants stay distinct.
@@ -38,11 +42,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
-- None.
+- Dependabot now also watches `tools/publish` (the pinned Marketplace publish tool), which has its own lockfile and was not covered before.
 
 ### [SECURITY]
 
-- None.
+- Log and diagnostics redaction now also covers single-quoted keys (`{'token': '...'}`) and plain-text `Cookie:`, `Set-Cookie:`, `Authorization:` and `Proxy-Authorization:` lines.
+- Configured file paths (for example `filemaker.ai.contextPath`) now also reject characters that render as blank (Hangul fillers, variation selectors, the combining grapheme joiner), so a path cannot look like a different one.
 
 ## 1.4.0 - 2026-10-18
 
