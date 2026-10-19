@@ -299,23 +299,24 @@ export async function run(ctx) {
       const tabs = await s.editorTabs();
       if (!tabs.some((t) => /Record Editor/.test(t)))
         return `no restored tab (tabs: ${tabs.join(', ') || 'none'})`;
-      const w = await s
-        .webview('#loadButton', { timeout: 10000, visible: false })
-        .catch(() => undefined);
-      if (!w) throw new Error('a "FileMaker Record Editor" tab was restored with no content');
-      await w
-        .locator('#loadButton')
-        .click({ force: true, timeout: 5000 })
-        .catch(() => {});
-      await s.page.waitForTimeout(3000);
-      const rows = await w.locator('#fieldEditor tbody tr').count();
-      const skeleton = await w.locator('.loading-skeleton').count();
+      // The restored tab is a static page that says it was closed by the reload and names the command to reopen it.
+      let reopenText;
+      for (let i = 0; i < 10 && !reopenText; i += 1) {
+        for (const f of s.page.frames()) {
+          if (!/vscode-webview:\/\/[^/]+\/fake\.html/.test(f.url())) continue;
+          try {
+            const t = await f.locator('body').innerText({ timeout: 1500 });
+            if (/Close this tab and open it again/.test(t)) reopenText = t;
+          } catch {
+            /* detached */
+          }
+        }
+        if (!reopenText) await s.page.waitForTimeout(1000);
+      }
       await s.closeAllEditors();
-      if (rows === 0)
-        throw new Error(
-          `the restored Record Editor tab is dead: after Load it still shows ${skeleton ? 'the loading skeleton' : 'no fields'} (no WebviewPanelSerializer is registered, so VS Code restores the page but nothing serves it)`
-        );
-      return `${rows} rows after Load`;
+      if (!reopenText)
+        throw new Error('a "FileMaker Record Editor" tab was restored with no content (a dead panel)');
+      return `restored tab shows: ${reopenText.replace(/\s+/g, ' ').slice(0, 140)}`;
     }
   );
   await s.closeAllEditors();
