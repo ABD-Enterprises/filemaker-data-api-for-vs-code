@@ -170,8 +170,8 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
     return undefined;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  // Names and parameters are used exactly as given; only an empty or all-blank value counts as missing.
+  return value.trim().length > 0 ? value : undefined;
 }
 
 function formatError(error: unknown): string {

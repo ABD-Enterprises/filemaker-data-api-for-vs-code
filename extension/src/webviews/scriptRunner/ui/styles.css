@@ -277,3 +277,52 @@ button:disabled {
   font-size: 11px;
   color: var(--vscode-descriptionForeground, #5f6c7b);
 }
+
+/* Narrow editors (a split editor, a narrow window, high zoom): nothing is wider than the panel.
+   A long layout name must not widen a <select>: it is clipped with an ellipsis and its full text is
+   in the option's tooltip. */
+select,
+input:not([type='checkbox']):not([type='radio']),
+textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+
+select {
+  width: 100%;
+  text-overflow: ellipsis;
+}
+
+.container,
+.panel,
+.row,
+.field,
+.actions,
+.header {
+  min-width: 0;
+}
+
+.actions,
+.inline-actions {
+  flex-wrap: wrap;
+}
+
+.status,
+.summary,
+td,
+th,
+code,
+label {
+  overflow-wrap: anywhere;
+}
+
+pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+button {
+  max-width: 100%;
+  white-space: normal;
+}

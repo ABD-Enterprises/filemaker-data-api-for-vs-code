@@ -1,4 +1,7 @@
-* text=auto
+# LF in the working tree on every platform: committed generated files (THIRD_PARTY_NOTICES.txt, the
+# mock dataset manifest), shell scripts and .vscodeignore are compared or executed byte for byte,
+# and a Windows checkout with autocrlf would turn them into CRLF.
+* text=auto eol=lf
 *.cmd text eol=crlf
 *.bat text eol=crlf
 *.ps1 text eol=lf

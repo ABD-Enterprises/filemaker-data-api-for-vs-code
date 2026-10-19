@@ -5,6 +5,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
+import { dotSegmentMessage, isDotSegment } from '../../utils/urlSegment';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
 import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
 import { buildWebviewCsp, createNonce } from '../common/csp';
@@ -319,18 +320,20 @@ export class ScriptRunnerPanel {
 
     const apiBasePath = profile.apiBasePath ?? '/fmi/data';
     const versionPath = profile.apiVersionPath ?? 'vLatest';
+    const layoutUrl = `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${versionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(request.layout)}`;
+    const encode = encodeURIComponent;
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer <SESSION_TOKEN>' };
+    const param = request.scriptParam ? `&script.param=${encode(request.scriptParam)}` : '';
 
+    // The same requests the extension sends (see FMClient.runScript): the documented script endpoint, a GET
+    // with script.param in the URL; or, with a record in context, a GET of that record with the script attached.
+    if (request.recordId) {
+      return { method: 'GET', url: `${layoutUrl}/records/${encode(request.recordId)}?script=${encode(request.scriptName)}${param}`, headers };
+    }
     return {
-      method: 'POST',
-      url: `${profile.serverUrl.replace(/\/+$/, '')}${apiBasePath}/${versionPath}/databases/${encodeURIComponent(profile.database)}/layouts/${encodeURIComponent(request.layout)}/script/${encodeURIComponent(request.scriptName)}`,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer <SESSION_TOKEN>'
-      },
-      body: {
-        scriptParam: request.scriptParam,
-        recordId: request.recordId
-      }
+      method: 'GET',
+      url: `${layoutUrl}/script/${encode(request.scriptName)}${request.scriptParam ? `?script.param=${encode(request.scriptParam)}` : ''}`,
+      headers
     };
   }
 
@@ -531,15 +534,19 @@ function parseCopyPayload(value: unknown): CopySnippetPayload | undefined {
 }
 
 function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
-  const scriptName = payload.scriptName.trim();
+  // Script and layout names are used exactly as given: a leading or trailing space is part of the name.
+  const scriptName = payload.scriptName;
 
-  if (!scriptName) {
+  if (!scriptName.trim()) {
     throw new FMClientError('Script name is required.');
   }
 
-  const layout = payload.layout.trim();
-  if (!layout) {
+  const layout = payload.layout;
+  if (!layout.trim()) {
     throw new FMClientError('Layout is required.');
+  }
+  if (isDotSegment(scriptName) || isDotSegment(layout)) {
+    throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout));
   }
 
   return {

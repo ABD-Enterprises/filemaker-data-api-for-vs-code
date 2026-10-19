@@ -94,6 +94,28 @@ describe('Script Runner: a script that ran but reported an error', () => {
       expect(document.body.textContent).not.toContain('Script execution completed');
     });
 
+    it('refuses a script or layout named "." or ".." in the page, before anything is posted', async () => {
+      const { html } = open(vi.fn());
+      const { document, send, posted } = loadPage(html, uiSource);
+      send({ type: 'init', payload: { profiles: [{ id: 'p1', name: 'Dev', database: 'Sales' }], activeProfileId: 'p1', scriptRunnerEnabled: true } });
+      send({ type: 'layoutsLoaded', payload: { profileId: 'p1', layouts: ['Contacts', '..'] } });
+      const set = (id: string, value: string) => ((document.getElementById(id) as unknown as { value: string }).value = value);
+      set('layoutSelect', 'Contacts');
+      for (const name of ['..', '.']) {
+        set('scriptNameInput', name);
+        document.getElementById('runButton')?.click();
+        expect(document.getElementById('status')?.textContent).toMatch(/named "\." or "\.\." cannot be used/);
+      }
+      set('scriptNameInput', 'Echo');
+      set('layoutSelect', '..');
+      document.getElementById('runButton')?.click();
+      expect(document.getElementById('status')?.textContent).toMatch(/cannot be used/);
+      expect(posted.filter((m) => m.type === 'runScript')).toHaveLength(0);
+      set('layoutSelect', 'Contacts');
+      document.getElementById('runButton')?.click();
+      expect(posted.filter((m) => m.type === 'runScript')).toHaveLength(1);
+    });
+
     it('still says completed, without the error styling, when the script worked', async () => {
       const document = await page({ scriptResult: 'ok' });
       expect(document.getElementById('status')?.textContent).toBe('Script execution completed.');

@@ -247,9 +247,10 @@ export class LayoutModePanel {
       return 'Running scripts is not allowed by your enterprise policy.';
     }
 
-    const scriptName = (payload.behavior.scriptName ?? '').trim();
-    const parameter = (payload.behavior.parameter ?? '').trim();
-    const layout = (payload.fmLayoutName ?? payload.layoutName ?? '').trim();
+    // Used exactly as stored: a space can be part of a script or layout name, and a parameter is passed verbatim.
+    const scriptName = payload.behavior.scriptName ?? '';
+    const parameter = payload.behavior.parameter ?? '';
+    const layout = payload.fmLayoutName ?? payload.layoutName ?? '';
     const target = profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl;
     const project = await this.fmWebProjectService.readProjectConfig();
     const userProfileId = this.profileStore.getActiveProfileId();

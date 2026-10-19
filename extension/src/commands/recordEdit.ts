@@ -253,7 +253,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
             profile,
             layout,
             recordId.trim(),
-            fieldName.trim(),
+            fieldName, // exactly as given: a leading or trailing space can be part of a field name
             file,
             {
               fieldRepetition: contextArg.fieldRepetition,
@@ -263,7 +263,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
           );
 
           vscode.window.showInformationMessage(
-            `Uploaded "${file.fileName}" to ${fieldName.trim()} on record ${result.recordId}.`
+            `Uploaded "${file.fileName}" to ${fieldName} on record ${result.recordId}.`
           );
           if (result.scriptErrors && result.scriptErrors.length > 0) {
             vscode.window.showWarningMessage(`The upload worked, but ${describeScriptErrors(result.scriptErrors)}.`);
@@ -321,5 +321,6 @@ async function promptForContainerFieldName(): Promise<string | undefined> {
       value.trim().length === 0 ? 'Container field name is required.' : undefined
   });
 
-  return fieldName?.trim() || undefined;
+  // Exactly as typed (a space can be part of the name); only a blank answer counts as none.
+  return fieldName && fieldName.trim().length > 0 ? fieldName : undefined;
 }

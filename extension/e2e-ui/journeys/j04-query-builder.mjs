@@ -206,7 +206,7 @@ export async function run(ctx) {
       const viewer = await s.webview('#fieldDataContainer', { visible: false });
       let loadedBy = 'automatically';
       const hasFields = async () =>
-        (await viewer.locator('.loading-skeleton').count()) === 0 &&
+        (await viewer.locator('.loading-skeleton:not(.hidden)').count()) === 0 &&
         /CustomerID/.test(await viewer.locator('body').innerText());
       for (let i = 0; i < 20 && !(await hasFields()); i += 1) await s.page.waitForTimeout(500);
       if (!(await hasFields())) {

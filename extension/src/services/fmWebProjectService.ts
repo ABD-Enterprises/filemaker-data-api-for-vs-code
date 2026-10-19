@@ -426,7 +426,7 @@ function parseEnvironmentProfiles(value: unknown): FmWebEnvironmentProfile[] {
       id,
       name,
       profileId,
-      database: typeof record.database === 'string' ? record.database.trim() || undefined : undefined
+      database: typeof record.database === 'string' ? record.database.trim() ? record.database : undefined : undefined
     });
   }
 
@@ -511,7 +511,7 @@ function extractFieldNames(metadata: Record<string, unknown>): string[] {
             : undefined;
 
       if (fieldName && fieldName.trim().length > 0) {
-        fields.add(fieldName.trim());
+        fields.add(fieldName);
       }
     }
   }

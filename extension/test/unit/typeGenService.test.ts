@@ -52,7 +52,7 @@ describe('TypeGenService', () => {
     });
 
     const artifact = await service.generateTypesForLayout(createProfile(), 'Contacts');
-    expect(artifact.filePath).toContain('filemaker-types/layouts/Contacts.ts');
+    expect(artifact.filePath).toContain(join('filemaker-types', 'layouts', 'Contacts.ts'));
     expect(artifact.content).toContain('export interface ContactsFieldData');
     expect(artifact.content).toContain('ContactsFieldNameMap');
 
@@ -74,7 +74,7 @@ describe('TypeGenService', () => {
     });
 
     const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contacts');
-    expect(snippets.filePath).toContain('snippets/filemaker-data-api.code-snippets');
+    expect(snippets.filePath).toContain(join('snippets', 'filemaker-data-api.code-snippets'));
     expect(snippets.content).toContain('Contacts Find Records');
   });
 
