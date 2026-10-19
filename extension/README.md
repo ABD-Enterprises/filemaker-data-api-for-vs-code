@@ -10,6 +10,7 @@ Work with a FileMaker database from VS Code: connect to a server, inspect layout
 - **Find** with a visual query builder or raw JSON, and page, sort and export the results.
 - **Edit** records (create, update, delete, container upload), in a trusted workspace. If someone else changed a record, your save is refused instead of overwriting theirs.
 - **Run scripts** with parameters and see the result.
+- **Copy any request as code**: curl, fetch(), a `.http` file, a Postman collection or TypeScript, from the Query Builder, Script Runner, record panels or the Command Palette. Passwords and tokens are never copied.
 - **Track schema**: capture snapshots, diff them, compare environments, and generate TypeScript types, a typed client and editor snippets.
 - **Batch**: export to JSONL or CSV, or update many records from a CSV or JSON file, with a dry run first.
 - **Control**: workspace trust, an enterprise mode with roles, an offline metadata mode, and confirmation before risky actions.
@@ -96,6 +97,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 | `FileMaker: Create Record`              | Create a record on a layout                                                         |
 | `FileMaker: Delete Record`              | Delete a record, with confirmation                                                  |
 | `FileMaker: Open Script Runner`         | Run a script with a parameter                                                       |
+| `FileMaker: Copy Request as Code…`      | Copy a Data API request as curl, fetch(), .http, Postman or TypeScript              |
 | `FileMaker: Capture Schema Snapshot`    | Save layout metadata for later diffing                                              |
 | `FileMaker: Diff Schema Snapshots`      | Compare two snapshots                                                               |
 | `FileMaker: Generate Types for Layout`  | Write a TypeScript interface for a layout                                           |

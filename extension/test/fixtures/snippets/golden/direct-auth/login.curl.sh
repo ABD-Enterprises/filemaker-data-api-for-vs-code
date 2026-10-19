@@ -1,0 +1,2 @@
+# Fill in the account name and password yourself (never copied). The response holds the session token.
+curl -X POST 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/sessions' -H 'Content-Type: application/json' -u "$FM_USERNAME:$FM_PASSWORD" --data-raw '{}'

@@ -277,3 +277,60 @@ button:disabled {
   font-size: 11px;
   color: var(--vscode-descriptionForeground, #5f6c7b);
 }
+
+/* The "Copy request" dropdown, built on <details> */
+details.menu {
+  position: relative;
+}
+
+details.menu > summary {
+  list-style: none;
+  user-select: none;
+  display: inline-block;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: var(--text);
+}
+
+details.menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.menu > summary::after {
+  content: ' ▾';
+}
+
+.menu-items {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.menu-items button {
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-weight: normal;
+  padding: 5px 10px;
+  white-space: normal;
+}
+
+.menu-items button:hover:not(:disabled),
+.menu-items button:focus-visible {
+  background: #e5e7eb;
+  color: var(--text);
+}

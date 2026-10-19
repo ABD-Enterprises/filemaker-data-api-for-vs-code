@@ -52,8 +52,6 @@ const exportEditorButton = document.getElementById('exportEditorButton');
 const exportJsonButton = document.getElementById('exportJsonButton');
 const exportCsvButton = document.getElementById('exportCsvButton');
 const copyTableButton = document.getElementById('copyTableButton');
-const copyFetchButton = document.getElementById('copyFetchButton');
-const copyCurlButton = document.getElementById('copyCurlButton');
 const uploadContainerButton = document.getElementById('uploadContainerButton');
 const savedQueriesSelect = document.getElementById('savedQueriesSelect');
 const loadSavedButton = document.getElementById('loadSavedButton');
@@ -561,24 +559,25 @@ copyTableButton.addEventListener('click', () => {
   vscode.postMessage({ type: 'copyText', text, label: 'results table' });
 });
 
-copyFetchButton.addEventListener('click', () => {
-  postSnippetRequest('copyFetchSnippet');
+// Every format button under "Copy request" names its format (and, for Save as .http, an editor destination).
+document.querySelectorAll('[data-copy-format]').forEach((button) => {
+  button.addEventListener('click', () => {
+    postSnippetRequest(button.dataset.copyFormat, button.dataset.copyDestination === 'editor' ? 'editor' : 'clipboard');
+  });
 });
 
-copyCurlButton.addEventListener('click', () => {
-  postSnippetRequest('copyCurlSnippet');
-});
-
-function postSnippetRequest(type) {
+function postSnippetRequest(format, destination) {
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
   vscode.postMessage({
-    type,
+    type: 'copyRequest',
     payload: {
       ...payload,
+      format,
+      destination,
       includeAuthHeader: includeAuthCheckbox.checked
     }
   });

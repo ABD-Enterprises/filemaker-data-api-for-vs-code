@@ -1,0 +1,6 @@
+# This deletes the record when sent.
+@host = https://fm.example.com
+
+### Delete record 42 from layout "Contacts"
+DELETE {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42
+Authorization: Bearer <REDACTED>

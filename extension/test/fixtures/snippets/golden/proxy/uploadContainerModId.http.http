@@ -1,0 +1,28 @@
+# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
+# Fill in the file name and the base64 text of the file.
+@host = https://proxy.example.com
+@modId = <modId>
+
+### Upload to container field "Photo" of record 42 (layout "Contacts")
+POST {{host}}/filemaker
+Content-Type: application/json
+Authorization: Bearer <REDACTED>
+
+{
+  "action": "uploadContainer",
+  "profile": {
+    "id": "profile-proxy",
+    "database": "Sales DB",
+    "serverUrl": "https://fm.example.com"
+  },
+  "payload": {
+    "layout": "Contacts",
+    "recordId": "42",
+    "fieldName": "Photo",
+    "fieldRepetition": 2,
+    "modId": "{{modId}}",
+    "fileName": "<file name>",
+    "contentType": "application/octet-stream",
+    "contentBase64": "<base64 of the file>"
+  }
+}

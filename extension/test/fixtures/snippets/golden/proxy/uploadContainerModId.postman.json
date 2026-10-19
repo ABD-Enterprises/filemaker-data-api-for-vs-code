@@ -1,0 +1,49 @@
+{
+  "info": {
+    "name": "Upload to container field \"Photo\" of record 42 (layout \"Contacts\")",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Upload to container field \"Photo\" of record 42 (layout \"Contacts\")",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer <REDACTED>",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/filemaker",
+        "description": "Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.\nFill in the file name and the base64 text of the file.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"uploadContainer\",\n  \"profile\": {\n    \"id\": \"profile-proxy\",\n    \"database\": \"Sales DB\",\n    \"serverUrl\": \"https://fm.example.com\"\n  },\n  \"payload\": {\n    \"layout\": \"Contacts\",\n    \"recordId\": \"42\",\n    \"fieldName\": \"Photo\",\n    \"fieldRepetition\": 2,\n    \"modId\": \"{{modId}}\",\n    \"fileName\": \"<file name>\",\n    \"contentType\": \"application/octet-stream\",\n    \"contentBase64\": \"<base64 of the file>\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://proxy.example.com",
+      "description": "The server address of the connection profile."
+    },
+    {
+      "key": "modId",
+      "value": "",
+      "description": "The modId of the record you read (fill in)."
+    }
+  ]
+}

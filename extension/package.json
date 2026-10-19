@@ -297,6 +297,11 @@
         "category": "FileMaker"
       },
       {
+        "command": "filemakerDataApiTools.copyRequestAsCode",
+        "title": "Copy Request as Code…",
+        "category": "FileMaker"
+      },
+      {
         "command": "filemakerDataApiTools.saveCurrentQuery",
         "title": "Save Current Query",
         "category": "FileMaker"
@@ -813,6 +818,10 @@
           "when": "filemaker.hasProfiles"
         },
         {
+          "command": "filemakerDataApiTools.copyRequestAsCode",
+          "when": "filemaker.hasProfiles"
+        },
+        {
           "command": "filemakerDataApiTools.openQueryBuilder",
           "when": "filemaker.hasProfiles"
         },
@@ -1157,8 +1166,8 @@
           "filemaker.snippets.includeAuthByDefault": {
             "type": "boolean",
             "default": false,
-            "description": "Per workspace. Whether generated curl/fetch snippets include authorization headers by default.",
-            "markdownDescription": "**Per workspace.** Whether generated curl/fetch snippets include authorization headers by default.",
+            "description": "Per workspace. Whether copied requests (curl, fetch(), .http, Postman, TypeScript) show an Authorization header with a variable to fill in (for example $FM_TOKEN) instead of <REDACTED>. A real session token, password or API key is never written, whatever this is set to.",
+            "markdownDescription": "**Per workspace.** Whether copied requests (curl, fetch(), `.http`, Postman, TypeScript) show an `Authorization` header with a variable to fill in (for example `$FM_TOKEN`) instead of `<REDACTED>`. A real session token, password or API key is never written, whatever this is set to.",
             "order": 2
           }
         }
