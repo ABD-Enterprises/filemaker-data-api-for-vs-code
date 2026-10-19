@@ -59,6 +59,8 @@ For guided steps, run **FileMaker: Open Getting Started Walkthrough**. The full 
 
 Off by default. Turn on `filemaker.ai.enabled` in your **user** settings (a workspace setting cannot), pick a connection with **FileMaker: Set AI Access for Connection**, and AI tools in VS Code (for example Copilot agent mode) can list layouts and scripts, describe a layout, find and read records, and explain error codes. With `filemaker.ai.allowWrites` they can also create, edit and delete one record at a time, and with `filemaker.ai.allowScripts` run scripts you put on `filemaker.ai.scriptAllowlist`. **FileMaker: Write AI Context** writes a short file of layout, field and script names that AI coding tools can load.
 
+**Chat with `@filemaker`.** In VS Code's Chat view, `@filemaker /layouts`, `/describe`, `/find` and `/explain` read the database through the same tools and rules, read only, with everything from the database shown as plain text. See the User Guide, "Chat with @filemaker".
+
 What protects you, and what does not:
 
 - **Read-only first.** Write and script tools are not offered until you switch them on. A connection has to be set to AI access "read" or "write" first. The status bar shows the effective state for the chosen connection.

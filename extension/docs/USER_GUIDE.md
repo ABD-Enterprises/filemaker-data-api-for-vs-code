@@ -592,6 +592,7 @@ There are three parts, and you can use them separately:
 | --- | --- | --- |
 | **Write AI Context** | Writes a Markdown file of layout, field and script names for AI coding tools to load | Only to the file you choose; no record data |
 | **AI tools in VS Code** | Lets agent mode in VS Code (for example Copilot) read records and, if allowed, change them | To the model provider VS Code uses |
+| **@filemaker chat** | Read-only commands in the Chat view: layouts, fields, finds, error codes | Names go to the model for plain-language finds; record values stay on screen |
 | **External MCP server** | Lets Claude Code, Cursor and other MCP clients use the same tools | To the provider behind that client |
 
 ### Minimum to try it
@@ -644,6 +645,29 @@ These are the controls the extension applies. They are the reasons it is safe to
 - **Hidden fields.** `filemaker.ai.hiddenFields` lists field names AI tools never see (case-insensitive, with or without `Table::`). **Write AI Context** honours it too: hidden fields are left out of the context file, and the file and the confirmation say how many were left out. This is by name only. It does not stop disclosure through a calculation, a summary field or a script result.
 - **Offline mode** blocks AI reads as well as writes. AI tools are not registered in an untrusted workspace.
 - **Left out of results:** container fields and URLs, and the server address. Text that looks like a secret is redacted, which can rewrite a field value that looks like one; writes refuse values that contain the redaction marker.
+
+### Chat with @filemaker
+
+`@filemaker` is a participant in VS Code's Chat view. It reads the database through the same AI tools and the same rules as agent mode, and it is **read only**: it has no command that edits, creates, deletes or runs a script, even if you switched writes and scripts on for agent mode. It needs the same setup: `filemaker.ai.enabled` in your user settings and a connection set with **FileMaker: Set AI Access for Connection**.
+
+Type `@filemaker` in the Chat view, then:
+
+| Command | What it does |
+| --- | --- |
+| `/layouts` | Lists the layouts of the connection chosen for AI. |
+| `/describe LAYOUT` | Shows the fields and their types. Hidden fields are left out. Value lists are not available through AI tools, so they are not shown. |
+| `/find LAYOUT criteria` | Finds records. `Name==Ada; City=Paris` (field names exactly as `/describe` shows them, separated by `;`) is sent as written. Any other text, such as `/find Customers people in Paris named Ada`, is turned into a search by the language model you picked in the chat; the extension checks the search exactly as it checks a tool call, and shows it before it runs. A `Field=value` search returns up to 10 records; at most 20 records are ever shown. |
+| `/explain CODE` | Explains a FileMaker error code. With no code it uses the last FileMaker error `@filemaker` saw. |
+| `/help` | Lists the commands. |
+
+What you will see:
+
+- The first time `@filemaker` reads a layout in a session, the extension asks you, as for any AI tool. The limits (50 records a call, 500 a session, 30 calls a minute) and the kill switch apply, and a `/find` is three tool calls.
+- Layout names, field names and record values are shown as plain text in boxes. Nothing from the database is shown as a link, image or button.
+- If AI tools are off, `@filemaker` says so and gives a button that opens the AI settings. The status bar kill switch, an untrusted workspace, offline mode and enterprise policy turn it off too, and it tells you which.
+- Calls from chat appear in **Show AI Activity** with the client `chat participant`.
+
+What is sent to the model: only for plain-language `/find`, the model you chose in the chat gets the layout name, that layout's field names (hidden fields removed) and the words you typed. It does not get record values, connection names, the server address or credentials, and it can only ask for one read-only search. Record values are shown in the chat and stay in the chat history of VS Code, which later chat messages (yours or another participant's) can send to a model. Field names are text from your database, so a hostile field name can still reach the model; use a read-only FileMaker account.
 
 ### Kill switch, sessions and activity
 

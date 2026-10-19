@@ -56,7 +56,7 @@ export interface Harness {
   records: Map<string, FileMakerRecord>;
   audit: AuditEntry[];
   confirms: ConfirmSpec[];
-  state: { trusted: boolean; offline: boolean; featureSwitch: boolean; denyFeatures: Set<string>; now: number };
+  state: { trusted: boolean; offline: boolean; featureSwitch: boolean; denyFeatures: Set<string>; denyReason?: string; now: number };
   confirm: ReturnType<typeof vi.fn>;
   input: ReturnType<typeof vi.fn>;
   notifyCancelled: ReturnType<typeof vi.fn>;
@@ -77,7 +77,7 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
   const records = makeRecords();
   const audit: AuditEntry[] = [];
   const confirms: ConfirmSpec[] = [];
-  const state = { trusted: true, offline: false, featureSwitch: true, denyFeatures: new Set<string>(), now: 1_000_000 };
+  const state: Harness['state'] = { trusted: true, offline: false, featureSwitch: true, denyFeatures: new Set<string>(), now: 1_000_000 };
   const layoutFields = [
     { name: 'Name', result: 'text' },
     { name: 'Email', result: 'text' },
@@ -134,7 +134,7 @@ export function makeHarness(options: { settings?: Partial<AiSettings>; profile?:
     settings: () => settings,
     featureSwitchOn: () => state.featureSwitch,
     featureGuard: (feature) =>
-      state.denyFeatures.has(feature) ? { allowed: false, reason: `${feature} is disabled by policy.` } : { allowed: true },
+      state.denyFeatures.has(feature) ? { allowed: false, reason: state.denyReason ?? `${feature} is disabled by policy.` } : { allowed: true },
     isTrusted: () => state.trusted,
     isOffline: () => state.offline,
     getProfile,

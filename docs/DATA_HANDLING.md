@@ -101,6 +101,15 @@ With `filemaker.ai.enabled` on (user settings only), language-model tools in VS 
 - The activity log is stored in the extension's storage folder, not the workspace, capped at 256 KB (reads and refusals are dropped before write entries). It records the tool, connection, layout, record ids, outcome and whether you confirmed. It does not record field values. Refused calls are logged at a limited rate.
 - Secrets: tools never put the server address, user name or credentials in results; secrets in values and error text are redacted. Redaction can rewrite text in a field that looks like a secret, so writes refuse values containing the redaction marker.
 
+## Chat Participant (@filemaker)
+
+The `@filemaker` participant in VS Code's Chat view (ADR-0005) is another front end to the same AI tools, read only, under the same switches, approvals, limits, hidden fields and audit log (client name `chat participant`).
+
+- **Sent to the language model chosen in the chat:** only for a `/find` written in plain words, one message with fixed instructions, the layout name, that layout's field names (hidden fields removed) and the user's own text. Never record values, connection or profile names, the server address, the user name or credentials. `/layouts`, `/describe`, `/explain` and a `/find` written as `Field=value` send nothing to a model.
+- **Shown in the chat:** layout and field names, record values (up to 20 records, values cut at 200 characters) and errors, as plain text in code blocks. They stay in VS Code's chat history on this machine and can reach a model if later chat messages include that history; the extension cannot control that.
+- **Not offered:** write and script tools are never offered to the model by the participant, whatever `allowWrites` and `allowScripts` say. Text the model writes is discarded; only a tool call that passes the tool's validation runs.
+- **Not stored or sent by the extension:** no telemetry, no extra files.
+
 ## AI Server for External Tools (MCP)
 
 When you run **FileMaker: Start/Stop AI Server for External Tools** in a window, a local server in that window lets MCP clients such as Claude Code and Cursor call the AI tools described above.

@@ -39,6 +39,12 @@ async function handle(req) {
         value: vscode.workspace.getConfiguration().get(req.key),
         inspect: vscode.workspace.getConfiguration().inspect(req.key)
       };
+    case 'readFile':
+      return {
+        text: fs.existsSync(path.join(dir, req.name))
+          ? fs.readFileSync(path.join(dir, req.name), 'utf8')
+          : ''
+      };
     case 'extensions':
       return vscode.extensions.all
         .filter((e) => !e.packageJSON.isBuiltin)
@@ -66,8 +72,73 @@ async function handle(req) {
   }
 }
 
+// A fake language model (stable API since VS Code 1.104; skipped on an older editor) so the @filemaker
+// participant can be driven without Copilot. It is deterministic: it turns "inject" requests into a hostile
+// reply (a markdown link and a call to a WRITE tool) and every other request into a find on the first field.
+function registerFakeModel(context) {
+  if (typeof vscode.lm?.registerLanguageModelChatProvider !== 'function' || !dir) return;
+  const info = {
+    id: 'fm-e2e-model',
+    name: 'FM E2E fake model',
+    family: 'fm-e2e',
+    version: '1',
+    maxInputTokens: 32000,
+    maxOutputTokens: 2000,
+    capabilities: { toolCalling: true }
+  };
+  const text = (m) =>
+    m.content.map((p) => (p instanceof vscode.LanguageModelTextPart ? p.value : '')).join('');
+  context.subscriptions.push(
+    vscode.lm.registerLanguageModelChatProvider('fme2e', {
+      provideLanguageModelChatInformation: async () => [info],
+      provideTokenCount: async (_model, t) =>
+        Math.ceil((typeof t === 'string' ? t : text(t)).length / 4),
+      provideLanguageModelChatResponse: async (_model, messages, options, progress) => {
+        const last = [...messages]
+          .reverse()
+          .find((m) => m.role === vscode.LanguageModelChatMessageRole.User);
+        const body = last ? text(last) : '';
+        fs.appendFileSync(
+          path.join(dir, 'model-log.jsonl'),
+          JSON.stringify({
+            body,
+            tools: (options.tools ?? []).map((t) => t.name),
+            toolMode: options.toolMode
+          }) + '\n'
+        );
+        let data = {};
+        try {
+          data = JSON.parse(body.slice(body.lastIndexOf('\n{')));
+        } catch {}
+        const fields = Array.isArray(data.fields) ? data.fields : [];
+        if (/inject/i.test(data.request ?? '')) {
+          progress.report(
+            new vscode.LanguageModelTextPart('[click me](command:workbench.action.reloadWindow)')
+          );
+          progress.report(
+            new vscode.LanguageModelToolCallPart('e1', 'fm_edit_record', {
+              layout: data.layout,
+              recordId: '1',
+              fields: { [fields[0] ?? 'x']: 'pwned' }
+            })
+          );
+          return;
+        }
+        progress.report(
+          new vscode.LanguageModelToolCallPart('f1', 'fm_find_records', {
+            layout: data.layout,
+            requests: [{ fields: { [fields[0] ?? 'x']: '*' } }],
+            limit: 3
+          })
+        );
+      }
+    })
+  );
+}
+
 function activate(context) {
   if (!dir) return;
+  registerFakeModel(context);
   fs.mkdirSync(path.join(dir, 'requests'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'responses'), { recursive: true });
   const seen = new Set();

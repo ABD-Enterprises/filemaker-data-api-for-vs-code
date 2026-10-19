@@ -12,5 +12,13 @@
   ],
   "extensionKind": [
     "workspace"
-  ]
+  ],
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "fme2e",
+        "displayName": "FM E2E fake model"
+      }
+    ]
+  }
 }
