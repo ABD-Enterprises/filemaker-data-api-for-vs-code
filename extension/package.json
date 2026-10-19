@@ -61,7 +61,8 @@
     "onWebviewPanel:filemakerSchemaDiff",
     "onWebviewPanel:filemakerEnvironmentCompare",
     "onWebviewPanel:filemakerDiagnosticsDashboard",
-    "onWebviewPanel:filemakerEffectiveSettings"
+    "onWebviewPanel:filemakerEffectiveSettings",
+    "onChatParticipant:filemaker-data-api-tools.filemaker"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -1992,6 +1993,37 @@
           ],
           "additionalProperties": false
         }
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "filemaker-data-api-tools.filemaker",
+        "name": "filemaker",
+        "fullName": "FileMaker",
+        "description": "Read a FileMaker database (read only, needs AI tools switched on)",
+        "isSticky": false,
+        "commands": [
+          {
+            "name": "layouts",
+            "description": "List the layouts of the connection chosen for AI"
+          },
+          {
+            "name": "describe",
+            "description": "Show the fields of a layout"
+          },
+          {
+            "name": "find",
+            "description": "Find records: LAYOUT then Field=value or plain words"
+          },
+          {
+            "name": "explain",
+            "description": "Explain a FileMaker error code"
+          },
+          {
+            "name": "help",
+            "description": "What @filemaker can do and how to turn it on"
+          }
+        ]
       }
     ]
   },

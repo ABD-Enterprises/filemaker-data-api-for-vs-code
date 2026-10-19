@@ -21,6 +21,7 @@ import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
 import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings, type HiddenFieldsProblemReporter } from './ai/aiSettings';
 import { AiMcpController, PERMISSION_EPOCH_KEY, PERMISSION_SEEN_KEY, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
 import { AiToolService } from './ai/aiToolService';
+import { registerChatParticipant } from './ai/chat/chatRegistration';
 import { registerAiMcpCommands, watchExternalServerSetting } from './commands/aiMcp';
 import { AiStatusBar, auditLogPath, registerAiToolCommands } from './commands/aiTools';
 import { registerAiContextCommands } from './commands/aiContext';
@@ -569,12 +570,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     log: (message) => logger.info(message),
     notify: (message) => void vscode.window.showInformationMessage(message)
   });
+  // @filemaker chat participant (ADR-0005): another thin front end to aiService; absent where VS Code has no chat API.
+  const chatParticipant = registerChatParticipant({ service: aiService });
   const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore }, aiMcp);
   const refreshAi = (): void => {
     aiController.refresh();
     void aiStatusBar.refresh();
   };
   const aiDisposables = [
+    ...(chatParticipant ? [chatParticipant] : []),
     aiController,
     aiMcp,
     aiStatusBar,

@@ -24,7 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- A read-only `@filemaker` chat participant for VS Code's Chat view (ADR-0005): `/layouts`, `/describe`, `/find` (`Field=value` or plain words that the chosen language model turns into a search, which the extension validates like any tool call) and `/explain`. It uses the AI tools through the same core, so every AI setting, approval, limit, hidden-field rule and the kill switch apply; it offers no write or script command and sends the model only layout and field names and your words, never record values or connection details. Everything from the database is shown as plain text in code blocks (never as a link, image or button), and calls are logged as client `chat participant`. No new setting; the editor floor stays 1.96. See the User Guide, "Chat with @filemaker".
 
 ### [FIX]
 
