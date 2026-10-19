@@ -428,6 +428,50 @@ button:disabled {
   padding: 8px;
 }
 
+/* Narrower editors: the three columns need about 1,300 px. Below that the side panes shrink, and in a
+   narrow editor everything stacks in one column that scrolls (toolbars already wrap). */
+@media (max-width: 1320px) {
+  .app-shell {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+  }
+}
+
+@media (max-width: 860px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    height: auto;
+  }
+
+  .console-pane {
+    grid-column: auto;
+  }
+
+  .center-pane {
+    min-height: 420px;
+  }
+
+  .pane {
+    overflow: visible;
+  }
+
+  .canvas-header h1,
+  .canvas-header p {
+    overflow-wrap: anywhere;
+  }
+
+  .inspector-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Version footer from the extension host (FileMaker: About / Show Version). Lives here because the
    packaged Layout Mode stylesheet is this bundle, not the extension's fallback copy. */
 .fm-version {

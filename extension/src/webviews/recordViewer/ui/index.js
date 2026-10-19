@@ -190,6 +190,7 @@ function renderLayouts(layouts, preferredLayout) {
     const option = document.createElement('option');
     option.value = layout;
     option.textContent = layout;
+    option.title = layout; // the full name, since a long one is clipped in the list
     layoutSelect.appendChild(option);
   }
 

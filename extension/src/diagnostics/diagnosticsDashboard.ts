@@ -89,16 +89,17 @@ export class DiagnosticsDashboardPanel {
   <title>Diagnostics Dashboard</title>
   <style nonce="${nonce}">
     body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f6f8fb; color: #1f2937; }
-    .wrap { padding: 16px; display: grid; gap: 14px; }
-    .card { background: #fff; border: 1px solid #d8e0eb; border-radius: 10px; padding: 12px; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .wrap { padding: 16px; display: grid; gap: 14px; min-width: 0; }
+    .card { background: #fff; border: 1px solid #d8e0eb; border-radius: 10px; padding: 12px; min-width: 0; }
+    .table-scroll { overflow-x: auto; max-width: 100%; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; }
     .stat { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
     .label { color: #64748b; font-size: 12px; }
-    .value { font-weight: 700; font-size: 18px; margin-top: 4px; }
+    .value { font-weight: 700; font-size: 18px; margin-top: 4px; overflow-wrap: anywhere; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #e2e8f0; text-align: left; padding: 6px 8px; font-size: 12px; }
     th { background: #f8fafc; }
-    .actions { display: flex; gap: 8px; margin-bottom: 8px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
     button { border: none; border-radius: 6px; background: #0f766e; color: #fff; padding: 7px 10px; cursor: pointer; }
     button:hover { background: #115e59; }
     .muted { color: #64748b; }
@@ -117,22 +118,22 @@ export class DiagnosticsDashboardPanel {
 
     <div class="card">
       <h3>Endpoint Metrics (Last 200 requests)</h3>
-      <table>
+      <div class="table-scroll"><table>
         <thead>
           <tr><th>Operation</th><th>Endpoint</th><th>Count</th><th>Avg ms</th><th>Success</th><th>Failure</th><th>401 Re-auth</th><th>Cache Hit %</th></tr>
         </thead>
         <tbody id="endpointsBody"></tbody>
-      </table>
+      </table></div>
     </div>
 
     <div class="card">
       <h3>Recent Request History</h3>
-      <table>
+      <div class="table-scroll"><table>
         <thead>
           <tr><th>Timestamp</th><th>Operation</th><th>Profile</th><th>Duration</th><th>Status</th><th>HTTP</th></tr>
         </thead>
         <tbody id="historyBody"></tbody>
-      </table>
+      </table></div>
     </div>
   </div>
   ${versionFooterHtml()}
