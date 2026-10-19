@@ -35,6 +35,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
+import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
 import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
@@ -49,6 +50,8 @@ interface RequestOptions {
   data?: unknown;
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean>;
+  /** Percent-encode the query exactly (a space is `%20`, never `+`), as the Claris guide shows for script parameters. */
+  strictQuery?: boolean;
   signal?: AbortSignal;
   /** Refuse a response body larger than this (axios maxContentLength). */
   maxResponseBytes?: number;
@@ -911,6 +914,26 @@ export class FMClient {
     );
   }
 
+  /**
+   * Runs a FileMaker script the way the Claris Data API Guide documents it ("Run a script",
+   * https://help.claris.com/en/data-api-guide/content/run-a-script.html):
+   *
+   *   GET /fmi/data/<version>/databases/<db>/layouts/<layout>/script/<script>?script.param=<text>
+   *
+   * The response carries `scriptError` (and `scriptResult` when the script exits with a result).
+   * Nothing else is requested: no record is read or changed.
+   *
+   * Two documented alternatives exist, used only where the plain call cannot be:
+   *  - a script that must run with a record in context, or that cannot run on the script endpoint
+   *    (an older server answers 405, 501 or a FileMaker 404), is attached to another request
+   *    ("Run a script with another request", .../run-script-with-another-request.html): a GET of
+   *    that one record, or, with no record, a find limited to one record;
+   *  - a parameter too long for a URL (the guide advises keeping a URL under 2000 characters,
+   *    .../url-data-format-notes.html) goes in the body of that find, because the script endpoint
+   *    takes `script.param` only in the URL.
+   * The find is the least harmful documented carrier: it changes nothing, and `limit: 1` keeps the
+   * data it returns to one record. It still reads that record, which is why it is not the first choice.
+   */
   public async runScript(
     profile: ConnectionProfile,
     request: RunScriptRequest,
@@ -921,7 +944,7 @@ export class FMClient {
         profileId: profile.id,
         operation: 'runScript',
         layout: request.layout,
-        endpoint: `POST /layouts/${request.layout}/script/${request.scriptName}`
+        endpoint: `GET /layouts/${request.layout}/script/${request.scriptName}`
       },
       async (trace) => {
         if (isProxyProfile(profile)) {
@@ -937,82 +960,111 @@ export class FMClient {
         if (!layout) {
           throw new FMClientError('Layout is required to run script.');
         }
+        if (isDotSegment(scriptName) || isDotSegment(layout)) {
+          throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout), {
+            code: 'NAME_NOT_USABLE_IN_URL',
+            kind: 'validation',
+            isRetryable: false
+          });
+        }
 
-        try {
+        const scriptParam = request.scriptParam !== undefined && request.scriptParam.length > 0 ? request.scriptParam : undefined;
+        const ifTooLong = (path: string, query: Record<string, string>): boolean =>
+          this.buildEndpoint(profile, path).length + 1 + strictQuerySerializer(query).length > MAX_SCRIPT_URL_LENGTH;
+
+        const attach = async (): Promise<RunScriptResult> => {
+          if (request.recordId) {
+            // GET: the script parameters are query parameters.
+            const recordPath = `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(request.recordId)}`;
+            const query = buildScriptParams(scriptName, scriptParam);
+            if (ifTooLong(recordPath, query as Record<string, string>)) {
+              throw tooLongScriptParameter();
+            }
+            const envelope = await this.requestWithAuth<Record<string, unknown>>(
+              profile,
+              { method: 'GET', path: recordPath, params: query, strictQuery: true, signal: control?.signal },
+              true,
+              trace
+            );
+            return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+          }
+          // POST: the script parameters are in the body, so a long one fits.
           const envelope = await this.requestWithAuth<Record<string, unknown>>(
             profile,
             {
               method: 'POST',
-              path: `/layouts/${encodeURIComponent(layout)}/script/${encodeURIComponent(scriptName)}`,
-              data: {
-                scriptParam: request.scriptParam,
-                recordId: request.recordId
-              },
+              path: `/layouts/${encodeURIComponent(layout)}/_find`,
+              data: { query: [{}], limit: 1, ...buildScriptParams(scriptName, scriptParam) },
               signal: control?.signal
             },
             true,
             trace
           );
+          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+        };
 
-          return {
-            response: envelope.response,
-            messages: envelope.messages
-          };
-        } catch (error) {
-          if (!isLikelyScriptUnsupportedError(error)) {
-            throw toFMClientError(
-              normalizeError(error, {
-                fallbackMessage: 'Failed to run FileMaker script.',
-                requestId: trace.requestId,
-                endpoint: `POST /layouts/${request.layout}/script/${request.scriptName}`
-              })
-            );
+        const failure = (error: unknown, endpoint: string): FMClientError =>
+          toFMClientError(
+            normalizeError(error, {
+              fallbackMessage: 'Failed to run FileMaker script.',
+              requestId: trace.requestId,
+              endpoint
+            })
+          );
+
+        // A record in context cannot be given to the script endpoint.
+        if (request.recordId) {
+          try {
+            return await attach();
+          } catch (error) {
+            if (error instanceof FMClientError && error.code === 'SCRIPT_PARAMETER_TOO_LONG') {
+              throw error;
+            }
+            if (isLikelyScriptUnsupportedError(error)) {
+              throw scriptUnsupported(error);
+            }
+            throw failure(error, `GET /layouts/${request.layout}/records/${request.recordId}`);
+          }
+        }
+
+        const scriptPath = `/layouts/${encodeURIComponent(layout)}/script/${encodeURIComponent(scriptName)}`;
+        const query: Record<string, string> = scriptParam === undefined ? {} : { 'script.param': scriptParam };
+
+        // Too long for a URL: use the documented body form from the start (no failed request first).
+        if (ifTooLong(scriptPath, query)) {
+          try {
+            return await attach();
+          } catch (error) {
+            if (isLikelyScriptUnsupportedError(error)) {
+              throw scriptUnsupported(error);
+            }
+            throw failure(error, `POST /layouts/${request.layout}/_find`);
           }
         }
 
         try {
-          const params = buildScriptParams(scriptName, request.scriptParam);
+          const envelope = await this.requestWithAuth<Record<string, unknown>>(
+            profile,
+            { method: 'GET', path: scriptPath, params: query, strictQuery: true, signal: control?.signal },
+            true,
+            trace
+          );
+          return { response: envelope.response, messages: envelope.messages };
+        } catch (error) {
+          if (!isLikelyScriptUnsupportedError(error)) {
+            throw failure(error, `GET /layouts/${request.layout}/script/${request.scriptName}`);
+          }
+        }
 
-          const fallbackEnvelope = request.recordId
-            ? await this.requestWithAuth<Record<string, unknown>>(profile, {
-                method: 'GET',
-                path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(request.recordId)}`,
-                params,
-                signal: control?.signal
-              }, true, trace)
-            : await this.requestWithAuth<Record<string, unknown>>(profile, {
-                method: 'POST',
-                path: `/layouts/${encodeURIComponent(layout)}/_find`,
-                data: {
-                  query: [{}],
-                  limit: 1
-                },
-                params,
-                signal: control?.signal
-              }, true, trace);
-
-          return {
-            response: fallbackEnvelope.response,
-            messages: fallbackEnvelope.messages
-          };
+        // The script endpoint was refused for a reason that is about the endpoint itself: use the documented
+        // "another request" form instead.
+        try {
+          return await attach();
         } catch (error) {
           if (isLikelyScriptUnsupportedError(error)) {
-            throw new FMClientError('Script runner is not supported on this server/profile.', {
-              code: 'SCRIPT_UNSUPPORTED',
-              status: getErrorStatus(error),
-              details: error
-            });
+            throw scriptUnsupported(error);
           }
-
-          throw toFMClientError(
-            normalizeError(error, {
-              fallbackMessage: 'Failed to run FileMaker script.',
-              requestId: trace.requestId,
-              endpoint: request.recordId
-                ? `GET /layouts/${request.layout}/records/${request.recordId}`
-                : `POST /layouts/${request.layout}/_find`
-            })
-          );
+          throw failure(error, `POST /layouts/${request.layout}/_find`);
         }
       }
     );
@@ -1446,6 +1498,7 @@ export class FMClient {
         },
         data: request.data,
         params: request.params,
+        ...(request.strictQuery ? { paramsSerializer: { serialize: strictQuerySerializer } } : {}),
         signal: request.signal,
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
@@ -1511,6 +1564,7 @@ export class FMClient {
         },
         data: request.data,
         params: request.params,
+        ...(request.strictQuery ? { paramsSerializer: { serialize: strictQuerySerializer } } : {}),
         signal: request.signal,
         timeout: this.timeoutMs,
         maxBodyLength: Infinity,
@@ -1745,6 +1799,44 @@ export class FMClient {
       this.logger.warn('Failed to persist request metrics entry.', { error });
     }
   }
+}
+
+/** The Claris guide advises keeping a Data API URL under 2000 characters (URL and data format notes). */
+export const MAX_SCRIPT_URL_LENGTH = 2000;
+
+/** `a=b&c=d` with every key and value percent-encoded (a space is `%20`, a `+` is `%2B`, a `|` is `%7C`). */
+function strictQuerySerializer(params: Record<string, unknown>): string {
+  return Object.entries(params)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+}
+
+/**
+ * A script run is not a data request. When the script is attached to a record or a find, that request's own
+ * record(s) (`data`, `dataInfo`) come back too; they are not part of the script's answer and are dropped, so no
+ * consumer (Layout Mode, the preview bridge, the AI tools, Script Runner) passes a record along by accident.
+ */
+function withoutRecordData(response: Record<string, unknown>): Record<string, unknown> {
+  const { data: _data, dataInfo: _dataInfo, ...rest } = response;
+  void _data;
+  void _dataInfo;
+  return rest;
+}
+
+function tooLongScriptParameter(): FMClientError {
+  return new FMClientError(
+    `The script parameter is too long to send in a web address (the limit is about ${MAX_SCRIPT_URL_LENGTH} characters including the server and script name). Shorten it, for example by passing an id or a key and letting the script read the rest.`,
+    { code: 'SCRIPT_PARAMETER_TOO_LONG', kind: 'validation', isRetryable: false }
+  );
+}
+
+function scriptUnsupported(error: unknown): FMClientError {
+  return new FMClientError('Script runner is not supported on this server/profile.', {
+    code: 'SCRIPT_UNSUPPORTED',
+    status: getErrorStatus(error),
+    details: error
+  });
 }
 
 function buildScriptParams(

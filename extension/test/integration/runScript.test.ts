@@ -46,8 +46,10 @@ describe('runScript integration (mocked HTTP)', () => {
       .post(`${apiBase}/sessions`)
       .reply(200, { response: { token: 'script-token-1' }, messages: [{ code: '0', message: 'OK' }] });
 
+    // Claris Data API Guide, "Run a script": GET .../script/<script>?script.param=<text>
     nock(server)
-      .post(`${apiBase}/layouts/Contacts/script/MyScript`)
+      .get(`${apiBase}/layouts/Contacts/script/MyScript`)
+      .query({ 'script.param': 'abc' })
       .reply(200, {
         response: {
           scriptResult: 'done'
@@ -74,14 +76,14 @@ describe('runScript integration (mocked HTTP)', () => {
       .reply(200, { response: { token: 'script-token-2' }, messages: [{ code: '0', message: 'OK' }] });
 
     nock(server)
-      .post(`${apiBase}/layouts/Contacts/script/MyScript`)
+      .get(`${apiBase}/layouts/Contacts/script/MyScript`)
       .reply(501, {
         messages: [{ code: '501', message: 'Not Implemented' }]
       });
 
+    // The documented "another request" form: the script is in the BODY of a find limited to one record.
     nock(server)
-      .post(`${apiBase}/layouts/Contacts/_find`)
-      .query((query) => query.script === 'MyScript')
+      .post(`${apiBase}/layouts/Contacts/_find`, (body: Record<string, unknown>) => body.script === 'MyScript' && body.limit === 1)
       .reply(501, {
         messages: [{ code: '501', message: 'Not Implemented' }]
       });
