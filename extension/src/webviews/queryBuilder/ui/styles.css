@@ -578,6 +578,8 @@ details.menu:not([open]) > .menu-items {
     max-width: none;
     margin-top: 6px;
     box-shadow: none;
+  }
+}
 
 /* Narrow editors (a split editor, a narrow window, high zoom): nothing is wider than the panel.
    A long layout name must not widen a <select>: it is clipped with an ellipsis and its full text is

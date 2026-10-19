@@ -92,6 +92,7 @@ button:disabled {
 .field-chip {
   width: 100%;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .center-pane {
@@ -261,10 +262,13 @@ button:disabled {
   margin: 0;
   padding: 0;
   display: grid;
+  /* One column that may shrink: without minmax(0, ...) a very long field name sets the column (and the page) width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 
 .field-list li {
+  min-width: 0;
   padding: 0;
   border-radius: 5px;
   font-size: 12px;

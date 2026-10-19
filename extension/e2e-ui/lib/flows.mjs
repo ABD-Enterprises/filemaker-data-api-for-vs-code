@@ -89,6 +89,7 @@ export async function answerPickers(s, labels, { max = 4 } = {}) {
     if (!(await s.pickerOpen())) return;
     const items = await s.pickerItems();
     if (!items.length) return; // an input box, not a pick list
+    if (items[0] === '..') return; // the file dialog (its first row is the parent folder), not a pick list: the caller answers it
     let want = labels.find((l) => items.some((it) => it.toLowerCase().includes(l.toLowerCase())));
     if (!want && items.length >= 8) {
       // a long list is virtualised: the wanted entry may be below the fold, so filter by typing

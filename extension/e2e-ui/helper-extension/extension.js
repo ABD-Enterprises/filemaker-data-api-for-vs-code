@@ -61,6 +61,9 @@ async function handle(req) {
       const all = await vscode.commands.getCommands(true);
       return all.filter((c) => c.toLowerCase().includes((req.filter ?? '').toLowerCase()));
     }
+    case 'activeDocumentText':
+      // The whole text of the active editor. The page only renders the visible lines of a long document.
+      return { text: vscode.window.activeTextEditor?.document.getText() ?? '' };
     case 'textDocuments':
       return vscode.workspace.textDocuments.map((d) => ({
         uri: d.uri.toString(),

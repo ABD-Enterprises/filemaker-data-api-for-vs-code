@@ -48,6 +48,13 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     expect(load({ Name: 'A' }, [])?.classList.contains('hidden')).toBe(true);
   });
 
+  it('always carries a quiet footnote, because a field the server also leaves out of the layout cannot be named', () => {
+    const { document } = loadPage(pageHtml(), uiSource);
+    const footnote = document.getElementById('fieldsFootnote');
+    expect(footnote?.textContent).toMatch(/cannot see/);
+    expect(footnote?.classList.contains('hidden')).toBe(false);
+  });
+
   it('hides the note again when the next record has nothing missing', () => {
     const { document, send } = loadPage(pageHtml(), uiSource);
     const record = (fieldData: Record<string, unknown>) => ({ type: 'recordLoaded', payload: { profileId: 'p', layout: 'C', record: { recordId: '1', modId: '1', fieldData }, fields: [{ name: 'Name' }, { name: 'Email' }], metadataSupported: true } });
