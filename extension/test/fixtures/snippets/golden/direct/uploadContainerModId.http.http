@@ -1,0 +1,16 @@
+# Replace ./file-to-upload with the path of the file to send.
+# Replace the modId with the one from the record you read.
+@host = https://fm.example.com
+@modId = <modId>
+
+### Upload to container field "Photo" of record 42 (layout "Contacts")
+POST {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42/containers/Photo/2?modId={{modId}}
+Content-Type: multipart/form-data; boundary=FileMakerUploadBoundary
+Authorization: Bearer <REDACTED>
+
+--FileMakerUploadBoundary
+Content-Disposition: form-data; name="upload"; filename="file-to-upload"
+Content-Type: application/octet-stream
+
+< ./file-to-upload
+--FileMakerUploadBoundary--

@@ -9,6 +9,13 @@ import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
+import {
+  deliverSnippet,
+  parseRecordRequestPayload,
+  recordOperation,
+  type RecordRequestPayload
+} from '../../snippets/deliver';
+import { copyRecordRequestMenuHtml } from '../../snippets/recordMenuHtml';
 import { describeScriptErrors } from '../../services/responseGuard';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
 import { versionFooterHtml } from '../../about/runtimeVersion';
@@ -53,7 +60,8 @@ type IncomingMessage =
   | { type: 'saveRecord'; payload: DraftPayload }
   | { type: 'createRecord'; payload: CreateRecordPayload }
   | { type: 'loadLayoutFields'; payload: { profileId: string; layout: string } }
-  | { type: 'exportRecord' };
+  | { type: 'exportRecord' }
+  | { type: 'copyRecordRequest'; payload: RecordRequestPayload };
 
 export class RecordEditorPanel {
   private static currentPanel: RecordEditorPanel | undefined;
@@ -183,6 +191,9 @@ export class RecordEditorPanel {
         break;
       case 'exportRecord':
         await this.exportCurrentRecord();
+        break;
+      case 'copyRecordRequest':
+        await this.copyRecordRequest(incoming.payload);
         break;
       case 'loadLayoutFields':
         await this.loadLayoutFields(incoming.payload);
@@ -571,6 +582,37 @@ export class RecordEditorPanel {
     await vscode.window.showTextDocument(document, { preview: false });
   }
 
+  private async copyRecordRequest(payload: RecordRequestPayload): Promise<void> {
+    const profile = await this.profileStore.getProfile(payload.profileId);
+    if (!profile) {
+      await this.postError('Selected profile was not found.');
+      return;
+    }
+
+    // The fields that changed come from the host's own copy of the loaded record compared with the form,
+    // so an edit request shows what Save would send. Without a loaded record it shows a field to fill in.
+    const loaded = this.loadedRecord;
+    const patch =
+      payload.kind === 'edit' &&
+      payload.draftFieldData &&
+      loaded &&
+      loaded.profileId === payload.profileId &&
+      loaded.layout === payload.layout &&
+      sameRecordId(loaded.record.recordId, payload.recordId)
+        ? this.recordEditService.previewPatch(loaded.record.fieldData, payload.draftFieldData).patch
+        : undefined;
+
+    try {
+      await deliverSnippet(
+        profile,
+        recordOperation(payload.kind, payload.layout, payload.recordId, patch),
+        payload.delivery
+      );
+    } catch (error) {
+      await this.postError(formatError(error));
+    }
+  }
+
   private layoutKey(profileId: string, layout: string): string {
     return `${profileId}::${layout}`;
   }
@@ -633,6 +675,7 @@ export class RecordEditorPanel {
         <button id="createButton" class="hidden">Create Record</button>
         <button id="discardButton">Discard Changes</button>
         <button id="exportButton">Export Record JSON</button>
+        ${copyRecordRequestMenuHtml()}
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
       <div id="conflictBanner" class="conflict hidden" role="alert">
@@ -684,6 +727,11 @@ function parseIncomingMessage(raw: unknown): IncomingMessage | undefined {
 
   if (type === 'exportRecord') {
     return { type };
+  }
+
+  if (type === 'copyRecordRequest') {
+    const payload = parseRecordRequestPayload(value.payload);
+    return payload ? { type, payload } : undefined;
   }
 
   if (type === 'loadLayoutFields' || type === 'createRecord') {

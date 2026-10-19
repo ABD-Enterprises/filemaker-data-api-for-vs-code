@@ -1,0 +1,49 @@
+{
+  "info": {
+    "name": "Find records in layout \"Contacts\"",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Find records in layout \"Contacts\"",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{proxyApiKey}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{baseUrl}}/filemaker",
+        "description": "Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"findRecords\",\n  \"profile\": {\n    \"id\": \"profile-proxy\",\n    \"database\": \"Sales DB\",\n    \"serverUrl\": \"https://fm.example.com\"\n  },\n  \"payload\": {\n    \"layout\": \"Contacts\",\n    \"body\": {\n      \"query\": [\n        {\n          \"City\": \"Portland\",\n          \"Status\": \"==Active\"\n        },\n        {\n          \"City\": \"Seattle\",\n          \"omit\": \"true\"\n        }\n      ],\n      \"sort\": [\n        {\n          \"fieldName\": \"Name\",\n          \"sortOrder\": \"ascend\"\n        }\n      ],\n      \"limit\": 25,\n      \"offset\": 26\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://proxy.example.com",
+      "description": "The server address of the connection profile."
+    },
+    {
+      "key": "proxyApiKey",
+      "value": "",
+      "description": "Proxy API key (fill in; never copied)."
+    }
+  ]
+}

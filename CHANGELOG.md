@@ -24,7 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Copy a request as curl, fetch(), a `.http` file, a Postman v2.1 collection or TypeScript from the Query Builder, Script Runner, Record Viewer, Record Editor and the new `FileMaker: Copy Request as Code…` command; secrets are never copied, values are escaped per format, and Run script is copied as the documented `GET`. User-facing notes: `extension/CHANGELOG.md`.
 
 ### [FIX]
 

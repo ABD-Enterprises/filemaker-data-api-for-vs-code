@@ -27,8 +27,6 @@ const applyParameterButton = document.getElementById('applyParameterButton');
 const closeParameterBuilderButton = document.getElementById('closeParameterBuilderButton');
 const includeAuthCheckbox = document.getElementById('includeAuthCheckbox');
 const runButton = document.getElementById('runButton');
-const copyCurlButton = document.getElementById('copyCurlButton');
-const copyFetchButton = document.getElementById('copyFetchButton');
 const status = document.getElementById('status');
 const summary = document.getElementById('summary');
 const rawResult = document.getElementById('rawResult');
@@ -106,35 +104,46 @@ runButton.addEventListener('click', () => {
   });
 });
 
-copyCurlButton.addEventListener('click', () => {
-  const payload = collectPayload();
-  if (!payload) {
-    return;
-  }
-
-  vscode.postMessage({
-    type: 'copyCurl',
-    payload: {
-      ...payload,
-      includeAuthHeader: includeAuthCheckbox.checked
+// Every format button under "Copy request" names its format (and, for Save as .http, an editor destination).
+document.querySelectorAll('[data-copy-format]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const payload = collectPayload();
+    if (!payload) {
+      return;
     }
+
+    vscode.postMessage({
+      type: 'copyRequest',
+      payload: {
+        ...payload,
+        format: button.dataset.copyFormat,
+        destination: button.dataset.copyDestination === 'editor' ? 'editor' : 'clipboard',
+        includeAuthHeader: includeAuthCheckbox.checked
+      }
+    });
   });
 });
 
-copyFetchButton.addEventListener('click', () => {
-  const payload = collectPayload();
-  if (!payload) {
-    return;
-  }
-
-  vscode.postMessage({
-    type: 'copyFetch',
-    payload: {
-      ...payload,
-      includeAuthHeader: includeAuthCheckbox.checked
+// The menu closes after a choice, on outside click, and on Escape.
+const copyRequestMenu = document.getElementById('copyRequestMenu');
+if (copyRequestMenu) {
+  copyRequestMenu.addEventListener('click', (event) => {
+    if (event.target instanceof HTMLButtonElement && event.target.closest('.menu-items')) {
+      copyRequestMenu.open = false;
     }
   });
-});
+  window.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element) || !event.target.closest('details.menu')) {
+      copyRequestMenu.open = false;
+    }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && copyRequestMenu.open) {
+      copyRequestMenu.open = false;
+      copyRequestMenu.querySelector('summary')?.focus();
+    }
+  });
+}
 
 function applyInit(payload) {
   state.profiles = Array.isArray(payload.profiles) ? payload.profiles : [];

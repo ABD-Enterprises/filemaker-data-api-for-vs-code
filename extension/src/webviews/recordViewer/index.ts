@@ -6,6 +6,13 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
+import {
+  deliverSnippet,
+  parseRecordRequestPayload,
+  recordOperation,
+  type RecordRequestPayload
+} from '../../snippets/deliver';
+import { copyRecordRequestMenuHtml } from '../../snippets/recordMenuHtml';
 import { versionFooterHtml } from '../../about/runtimeVersion';
 
 interface RecordViewerOpenOptions {
@@ -24,7 +31,8 @@ type IncomingMessage =
   | { type: 'ready' }
   | { type: 'loadLayouts'; profileId: string }
   | { type: 'loadRecord'; payload: LoadRecordPayload }
-  | { type: 'exportRecord' };
+  | { type: 'exportRecord' }
+  | { type: 'copyRecordRequest'; payload: RecordRequestPayload };
 
 export class RecordViewerPanel {
   private static currentPanel: RecordViewerPanel | undefined;
@@ -114,6 +122,10 @@ export class RecordViewerPanel {
         await this.exportRecord();
         break;
       }
+      case 'copyRecordRequest': {
+        await this.copyRecordRequest(message.payload);
+        break;
+      }
       default:
         break;
     }
@@ -180,6 +192,24 @@ export class RecordViewerPanel {
         type: 'recordLoaded',
         payload: this.lastRecord
       });
+    } catch (error) {
+      await this.postError(this.formatError(error));
+    }
+  }
+
+  private async copyRecordRequest(payload: RecordRequestPayload): Promise<void> {
+    const profile = await this.profileStore.getProfile(payload.profileId);
+    if (!profile) {
+      await this.postError('The selected profile no longer exists.');
+      return;
+    }
+
+    try {
+      await deliverSnippet(
+        profile,
+        recordOperation(payload.kind, payload.layout, payload.recordId),
+        payload.delivery
+      );
     } catch (error) {
       await this.postError(this.formatError(error));
     }
@@ -252,6 +282,10 @@ export class RecordViewerPanel {
       }
       case 'exportRecord':
         return { type };
+      case 'copyRecordRequest': {
+        const payload = parseRecordRequestPayload(value.payload);
+        return payload ? { type, payload } : undefined;
+      }
       default:
         return undefined;
     }
@@ -323,6 +357,7 @@ export class RecordViewerPanel {
       <div class="actions">
         <button id="loadButton">Load Record</button>
         <button id="exportButton">Export Record JSON</button>
+        ${copyRecordRequestMenuHtml()}
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>
