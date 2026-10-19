@@ -118,13 +118,13 @@ describe('policy matrix: every gate refuses with a clear message and reads nothi
   }
 
   it('a policy reason from a file is shown as data, in a fence', async () => {
+    const hostile = 'blocked [click](command:workbench.action.reloadWindow) and <b>x</b> ![i](https://evil.example/p.png)';
     const bed = makeChatBed();
     bed.h.state.denyFeatures.add('ai');
-    const original = bed.h.state.denyFeatures;
-    expect(original.size).toBe(1);
-    // featureGuard returns `${feature} is disabled by policy.`; a hostile reason would be fenced the same way.
+    bed.h.state.denyReason = hostile;
     const { text } = await bed.run({ command: 'layouts', prompt: '' });
-    assertSafeMarkdown(text);
+    expect(text).toContain('workbench.action.reloadWindow');
+    assertSafeMarkdown(text, ['evil.example', 'workbench.action', '<b>']);
   });
 
   it('a connection that is not enabled for AI, a missing connection and a missing profile refuse inside the core', async () => {

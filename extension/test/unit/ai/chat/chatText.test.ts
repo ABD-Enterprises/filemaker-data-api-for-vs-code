@@ -5,6 +5,8 @@ import {
   capOutput,
   fence,
   renderDescribe,
+  renderError,
+  renderExplain,
   renderLayouts,
   renderRecords,
   safeLine
@@ -82,6 +84,15 @@ describe('renderers with hostile data', () => {
       quota: { used: 1, limit: 500 }
     });
     for (const text of [layouts, described, records]) {
+      assertSafeMarkdown(text, ['evil.example', 'workbench.action', 'onerror']);
+    }
+  });
+
+  it('error text and the meaning of an error code never leave their fence', () => {
+    const explained = renderExplain({ code: 802, known: true, meaning: HOSTILE.join('\n') });
+    const failed = renderError(HOSTILE.join(' '));
+    for (const text of [explained, failed]) {
+      expect(text).toContain('workbench.action');
       assertSafeMarkdown(text, ['evil.example', 'workbench.action', 'onerror']);
     }
   });

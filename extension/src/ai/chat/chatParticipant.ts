@@ -269,8 +269,7 @@ export class FileMakerChatHandler {
   ): Promise<void> {
     const layout = prompt
       .trim()
-      .replace(/^"(.*)"$/s, '$1')
-      .trim();
+      .replace(/^"(.*)"$/s, '$1');
     if (layout === '') {
       out('Give a layout name: `/describe LAYOUT`. `/layouts` lists them.');
       return;
