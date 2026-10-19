@@ -39,6 +39,7 @@ const recordIdRow = document.getElementById('recordIdRow');
 const discardButton = document.getElementById('discardButton');
 const exportButton = document.getElementById('exportButton');
 const statusEl = document.getElementById('status');
+const hiddenNote = document.getElementById('hiddenNote');
 const conflictBanner = document.getElementById('conflictBanner');
 const conflictText = document.getElementById('conflictText');
 const reloadAfterConflictButton = document.getElementById('reloadAfterConflictButton');
@@ -304,7 +305,31 @@ function applyRecord(payload) {
   rawRecord.textContent = JSON.stringify(payload.record, null, 2);
   patchPreview.textContent = '';
   renderFieldEditor();
+  showHiddenFieldNote(payload);
   setStatus(`Loaded record ${payload.record.recordId}.`);
+}
+
+/**
+ * Fields the account cannot see are simply not in the answer. Say so, and name the fields the layout
+ * lists that this record has no value for (the only ones the page can know about).
+ */
+function showHiddenFieldNote(payload) {
+  if (!hiddenNote) {
+    return;
+  }
+  const present = new Set(Object.keys(payload.record.fieldData));
+  const listed = Array.isArray(payload.fields) ? payload.fields.map((field) => field && field.name).filter((name) => typeof name === 'string') : [];
+  const missing = listed.filter((name) => !present.has(name));
+  if (missing.length === 0) {
+    // Nothing is missing, so there is nothing to explain.
+    hiddenNote.textContent = '';
+    hiddenNote.classList.add('hidden');
+    return;
+  }
+  const names = missing.slice(0, 5).join(', ') + (missing.length > 5 ? `, and ${missing.length - 5} more` : '');
+  // textContent, never innerHTML: a field name is text from the database.
+  hiddenNote.textContent = `${missing.length} field${missing.length === 1 ? '' : 's'} on this layout ${missing.length === 1 ? 'is' : 'are'} not shown (hidden by your account or its privileges): ${names}. Fields your account has no access to are not shown here.`;
+  hiddenNote.classList.remove('hidden');
 }
 
 function applyValidation(payload) {
@@ -448,6 +473,7 @@ function renderLayouts(layouts, preferredLayout) {
     const option = document.createElement('option');
     option.value = layout;
     option.textContent = layout;
+    option.title = layout; // the full name, since a long one is clipped in the list
     layoutSelect.appendChild(option);
   }
 

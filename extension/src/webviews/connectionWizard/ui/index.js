@@ -129,6 +129,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (message.testPolicy === 'off' || message.testPolicy === 'warn' || message.testPolicy === 'block') {
           testPolicy = message.testPolicy;
         }
+        {
+          const notice = document.getElementById('restrictedNotice');
+          if (notice) {
+            notice.classList.toggle('hidden', message.restricted !== true);
+          }
+        }
         renderTestState();
         break;
 
@@ -208,6 +214,11 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
     }
   });
+
+  const manageTrustBtn = document.getElementById('manageTrustBtn');
+  if (manageTrustBtn) {
+    manageTrustBtn.addEventListener('click', () => vscode.postMessage({ type: 'manageWorkspaceTrust' }));
+  }
 
   // Certificate trust is kept by the extension host and changed only through its review dialog;
   // the page just shows it and asks for a review. It is never part of the form data.

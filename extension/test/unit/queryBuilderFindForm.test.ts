@@ -118,7 +118,7 @@ describe('Query Builder find form', () => {
       omit: false,
       criteria: [
         { field: 'Date', operator: 'gte', value: '1/1/2026', value2: '' },
-        { field: 'Date ', operator: 'lte', value: '12/31/2026', value2: '' }
+        { field: 'Date', operator: 'lte', value: '12/31/2026', value2: '' }
       ]
     };
     expect(FindForm.findDuplicateField(model)).toBe('Date');
@@ -185,5 +185,19 @@ describe('Query Builder find form', () => {
     const empty = FindForm.jsonToModel('[{}]');
     expect(empty.ok).toBe(true);
     expect(empty.model!.requests[0]?.criteria).toHaveLength(1);
+  });
+
+  it('keeps field names exactly in a find and a sort (a space can be part of a field name), and skips blank ones', () => {
+    const model = FindForm.createEmptyModel();
+    model.requests[0]!.criteria = [
+      { field: ' Name', operator: 'match', value: 'A', value2: '' },
+      { field: 'Name', operator: 'match', value: 'B', value2: '' },
+      { field: '   ', operator: 'match', value: 'ignored', value2: '' }
+    ];
+    model.sort = [{ fieldName: ' Name', sortOrder: 'descend' }, { fieldName: '  ', sortOrder: 'ascend' }];
+    expect(FindForm.modelToFindQuery(model)).toEqual([{ ' Name': 'A', Name: 'B' }]);
+    expect(FindForm.modelToSort(model)).toEqual([{ fieldName: ' Name', sortOrder: 'descend' }]);
+    // The duplicate check treats ` Name` and `Name` as two different fields.
+    expect(FindForm.findDuplicateField(model)).toBeUndefined();
   });
 });

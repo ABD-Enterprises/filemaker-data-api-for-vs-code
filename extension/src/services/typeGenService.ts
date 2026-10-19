@@ -325,8 +325,9 @@ function normalizeLayouts(layouts: string[]): string[] {
   const normalized: string[] = [];
 
   for (const layout of layouts) {
-    const value = layout.trim();
-    if (!value || seen.has(value)) {
+    // Exactly as the server named it: ` Sales` and `Sales` are different layouts. Only an identical name is listed once.
+    const value = layout;
+    if (!value.trim() || seen.has(value)) {
       continue;
     }
     seen.add(value);
@@ -651,7 +652,9 @@ function sanitizeLayoutFileName(layout: string): string {
 }
 
 function sanitizeSnippetKey(layout: string): string {
-  return layout.replace(/[^\w\s-]+/g, '').trim() || 'Layout';
+  // ` Sales` and `Sales` are different layouts, so they must not share a snippet key (one would replace the other);
+  // a name that changes when made safe gets a short hash, as file names do.
+  return distinctFileName(layout, layout.replace(/[^\w\s-]+/g, '').trim(), 'Layout');
 }
 
 function sanitizeRelativeOutputDir(value: string): string {

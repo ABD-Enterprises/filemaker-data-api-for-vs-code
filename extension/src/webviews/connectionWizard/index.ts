@@ -154,7 +154,12 @@ export class ConnectionWizardPanel {
     this.editingProfile = editingProfile;
     this.panel.webview.html = this.getHtmlForWebview(this.panel.webview);
 
+    // Trusting the workspace while the wizard is open removes the notice.
+    const trustListener = vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      void this.sendInit();
+    });
     this.panel.onDidDispose(() => {
+      trustListener.dispose();
       ConnectionWizardPanel.currentPanel = undefined;
     });
 
@@ -215,6 +220,9 @@ export class ConnectionWizardPanel {
         await this.sendInit();
         await this.sendLoadProfile();
         break;
+      case 'manageWorkspaceTrust':
+        await vscode.commands.executeCommand('workbench.trust.manage');
+        break;
       case 'save': {
         const data = parseFormData(record.payload);
         if (!data) {
@@ -259,7 +267,9 @@ export class ConnectionWizardPanel {
   private async sendInit(): Promise<void> {
     await this.panel.webview.postMessage({
       type: 'init',
-      testPolicy: this.options.getTestPolicy?.() ?? 'warn'
+      testPolicy: this.options.getTestPolicy?.() ?? 'warn',
+      // In Restricted Mode the page shows a notice at the top (see RESTRICTED_NOTICE in the page).
+      restricted: !vscode.workspace.isTrusted
     });
   }
 
@@ -890,6 +900,11 @@ export class ConnectionWizardPanel {
     on document.getElementById('wizardForm')).
   -->
   <form id="wizardForm" class="container">
+    <div id="restrictedNotice" class="restricted-notice hidden" role="note">
+      <strong>This workspace is in Restricted Mode.</strong>
+      <span>What is limited here: a profile template in the project (<code>.filemaker/profile-template.json</code>) is ignored, so nothing is filled in from the project, and workspace settings that change how connections and commands behave (offline mode, feature switches, enterprise settings, batch limits, output folders) are ignored until you trust the workspace. Your profile, password and test connection work as usual, and a profile you save is yours (it is not stored in the project).</span>
+      <button id="manageTrustBtn" type="button">Manage Workspace Trust</button>
+    </div>
     <h1>Connection Profile</h1>
     <p class="subtitle">Configure a connection to your FileMaker Server.</p>
 

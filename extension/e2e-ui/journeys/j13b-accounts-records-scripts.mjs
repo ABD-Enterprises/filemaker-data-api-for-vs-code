@@ -271,7 +271,7 @@ export async function run(ctx) {
     '3.11 script returns scriptError 3',
     'the error is visible and not shown as plain success',
     async () => {
-      const o = await runScript('Echo', 'x', { name: 'script-error', path: '/script/' });
+      const o = await runScript('Echo', 'x', { name: 'script-error', path: '/script/|/_find|/records/' });
       if (!/script error|scriptError.{0,6}[1-9]|error 3|\b3\b/.test(o.sum + ' ' + o.st))
         throw new Error(
           `scriptError 3 is only inside the raw JSON; the headline says "${o.st}" / "${o.sum}" (raw has it: ${/scriptError.{0,6}3/.test(o.raw)})`
@@ -284,7 +284,7 @@ export async function run(ctx) {
     '4.12 slow script (20 s) with a 2.5 s timeout',
     'timeout wording says the script may still be running on the server',
     async () => {
-      const o = await runScript('Echo', 'x', { name: 'script-slow', path: '/script/', count: 2 });
+      const o = await runScript('Echo', 'x', { name: 'script-slow', path: '/script/|/_find|/records/', count: 2 });
       const txt = `${o.st} ${o.sum} ${o.toasts.map((t) => t.text).join(' ')}`;
       if (!/still (be )?running|may still/i.test(txt))
         throw new Error(
@@ -313,19 +313,19 @@ export async function run(ctx) {
   await s.step(
     J,
     '4.2/N5 layouts with spaces, slashes, %, ?, Unicode and a duplicate name',
-    'each name is kept exactly and opens; duplicates are both reachable',
+    'each name is kept exactly (including a leading space) and opens; an identical name is listed once',
     async () => {
       const w = await openQueryBuilder(s, 'Customers');
       const opts = await w.locator('#layoutSelect option').allInnerTexts();
       const wants = ['A/B', ' Sales', 'Percent%20Layout', 'Ünïcode Layöut', 'Question?Mark'];
       const missing = wants.filter((n) => !opts.some((o) => o === n));
+      // An identical name (here "Customers" at the top level and in a folder) is one layout to the Data API,
+      // which addresses a layout by its exact name, so it is listed once.
       const customers = opts.filter((o) => o === 'Customers').length;
       const problems = [];
       if (missing.length) problems.push(`names altered or dropped: ${JSON.stringify(missing)}`);
-      if (customers < 2)
-        problems.push(
-          `the duplicate "Customers" (top level and in a folder) is collapsed to one entry`
-        );
+      if (customers !== 1)
+        problems.push(`the identical name "Customers" is listed ${customers} times (expected once)`);
       // open each that is listed
       const results = [];
       for (const n of wants.filter((x) => opts.includes(x) || opts.includes(x.trim()))) {

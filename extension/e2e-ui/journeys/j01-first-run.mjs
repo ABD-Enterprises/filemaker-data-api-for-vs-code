@@ -102,7 +102,11 @@ export async function run({ s }) {
       const toasts = await s.toasts();
       const tabs = await s.editorTabs();
       const opened = tabs.some((t) => /add connection profile|connection wizard/i.test(t));
-      const warned = toasts.some((t) => /trust|restricted|untrusted/i.test(t));
+      // The wizard states it in the page itself (a notice at the top with a Manage Workspace Trust button).
+      const page = opened ? await s.visibleWebviewText() : undefined;
+      const warned =
+        toasts.some((t) => /trust|restricted|untrusted/i.test(t)) ||
+        /Restricted Mode/.test(page?.text ?? '');
       assert(
         !opened || warned,
         `the connection wizard opened in an untrusted workspace with no warning (toasts: ${toasts.join(' || ') || 'none'}; tabs: ${tabs.join(', ')})`

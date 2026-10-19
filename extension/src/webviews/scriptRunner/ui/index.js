@@ -249,7 +249,7 @@ function renderLayouts(layouts, preferredLayout) {
 function collectPayload() {
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
-  const scriptName = scriptNameInput.value.trim();
+  const scriptName = scriptNameInput.value; // exactly as typed: a space can be part of a script name
 
   if (!profileId) {
     setStatus('Select a profile.', true);
@@ -659,6 +659,7 @@ function syncSelectOptions(select, items, getValue, getLabel, emptyLabel) {
     }
 
     option.textContent = label;
+    option.title = label; // the full text, since a long name is clipped in the list
 
     if (select.children[index] !== option) {
       select.insertBefore(option, select.children[index] || null);
