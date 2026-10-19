@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from 'crypto';
-import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from 'fs/promises';
+import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type * as vscode from 'vscode';
 
 import { migrateLayoutDefinition } from '../fmweb/layoutSchema';
+import { renameReplacing } from '../utils/renameReplacing';
 import type { Logger } from './logger';
 import type { FmWebProjectService } from './fmWebProjectService';
 
@@ -423,7 +424,7 @@ export async function writeManagedFile(target: string, content: Buffer | string)
     if (existing?.isFile()) {
       await chmod(temporary, existing.mode & 0o7777).catch(() => undefined);
     }
-    await rename(temporary, target);
+    await renameReplacing(temporary, target);
   } catch (error) {
     // Also reached when the write itself failed part way (disk full): never leave the .tmp behind.
     await rm(temporary, { force: true }).catch(() => undefined);
@@ -444,7 +445,7 @@ async function writeOwnerOnlyFile(target: string, content: string): Promise<void
   await writeFile(temporary, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try {
     await chmod(temporary, 0o600).catch(() => undefined);
-    await rename(temporary, target);
+    await renameReplacing(temporary, target);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;

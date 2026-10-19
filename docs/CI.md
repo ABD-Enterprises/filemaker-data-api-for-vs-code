@@ -6,13 +6,13 @@ What the project's automated checks are, the limits they enforce, and how depend
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `ci.yml` | pull requests, pushes to `main` and `codex/**`, tags `v*` | `build-test` always. For `v*` tags also `package`, `publish` (environment `marketplace`) and `release`. |
+| `ci.yml` | pull requests, pushes to `main` and `codex/**`, tags `v*` | `build-test` and `cross-platform` always. For `v*` tags also `package`, `publish` (environment `marketplace`) and `release`. |
 | `api-docs.yml` | push to `main` | Builds the TypeDoc API reference and deploys it to GitHub Pages: <https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/>. |
 | `dependency-auto-merge.yml` | Dependabot pull requests | Enables auto-merge for safe dev-dependency updates (see below). |
 | `entra-identity-id.yml` | manual | One-off helper for the Entra publishing setup ([job aid](./JOB_AID_ENTRA_PUBLISHING.md)). Delete it when the setup is done. |
 | `secret-rotation-reminder.yml` | monthly | A scaffold that does nothing yet; see [SECRETS.md](./SECRETS.md). |
 
-Every job's runner comes from the repository variable `LINUX_RUNNER_LABELS` (a JSON array of labels). It is currently `["ubuntu-latest"]`, a GitHub-hosted runner, which is free because this repository is public. Do not write a hosted label directly into a workflow; keep using the variable so the runner can change without editing workflows.
+Every job's runner comes from the repository variable `LINUX_RUNNER_LABELS` (a JSON array of labels), except `cross-platform`, which names its operating systems in its matrix. The variable is currently `["ubuntu-latest"]`, a GitHub-hosted runner, which is free because this repository is public. Do not write a hosted label directly into a workflow; keep using the variable so the runner can change without editing workflows. `cross-platform` is the one deliberate exception: it needs a Windows runner, GitHub-hosted runners are free for a public repository, and the self-hosted-only rule applies to private repositories. Do not copy it into a private repository.
 
 ## Required status check
 
@@ -31,6 +31,29 @@ npm run package:check
 ```
 
 If you add a check that should block merges, add its context to the branch protection rule for `main` in the same change, and update this page. A custom guardrail is worth adding when lint, the compiler and the tests cannot express the rule (for example a settings change that must come with a migration).
+
+## Cross-platform job
+
+`cross-platform` runs the same build and checks as `build-test` on `windows-latest` and on `ubuntu-latest` (Node 22, `fail-fast: false`, `permissions: contents: read`): `npm ci`, `npm run build`, `npm run lint`, `npm run typecheck`, `npm run test:coverage` and `npm run package:check`. It does not run the dependency audit or the VSIX size budget (those stay in `build-test`), and it never touches the release jobs.
+
+It is **not a required check**: branch protection still requires only `build-test`, so a failure that only happens on one operating system is visible on the pull request without blocking unrelated work. Treat a red `cross-platform` run as a real bug on that platform: fix the product code or the test, and skip a test on a platform only with a stated reason and a test that covers the same behaviour there. Do not rename `build-test`.
+
+Windows checks out with `core.autocrlf=true` (Git for Windows default), which is deliberate: that is what Windows contributors have. `.gitattributes` sets `eol=lf`, so the working tree still comes out with LF.
+
+What the Windows run exercises that the others cannot: a real named-pipe MCP server and clients, the real shim over that pipe, directory junctions (`fs.symlink(..., 'junction')`), read-only file replacement, access rights read with `icacls`, and PowerShell-based process start times. What it cannot show: Windows on ARM, a non-English Windows, a user who is not an administrator (the runner account is one, so a directory symbolic link can be created there), another user connecting to the pipe, and the real VS Code interface.
+
+To reproduce on your own Windows or Linux machine, use the same commands:
+
+```bash
+npm ci
+npm run build
+npm run lint
+npm run typecheck
+npm run test:coverage
+npm run package:check
+```
+
+On Windows, run them in PowerShell or cmd.exe with Node 22 and Git on the PATH (Git for Windows also provides the `openssl` that the mock server's TLS tests use; without it those tests skip). To run one platform-specific file: `npx vitest run test/unit/windowsFilesystem.test.ts` inside `extension/`. To watch the CI run from a terminal: `gh run watch` and, for a failure, `gh run view --log-failed`.
 
 ## Budgets
 

@@ -272,7 +272,7 @@ describe('FM Web runtime template', () => {
   });
 
   it('the VSIX really leaves the runtime template out (so the message above is what a Marketplace user sees)', async () => {
-    const ignore = (await readFile(path.join(extensionDir, '.vscodeignore'), 'utf8')).split('\n');
+    const ignore = (await readFile(path.join(extensionDir, '.vscodeignore'), 'utf8')).split(/\r?\n/);
     expect(ignore).toContain('../**');
   });
 

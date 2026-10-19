@@ -89,12 +89,14 @@ export function makeCerts(mode, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-
     fs.mkdirSync(path.join(adir, 'newcerts'), { recursive: true });
     fs.writeFileSync(path.join(adir, 'index.txt'), '');
     fs.writeFileSync(path.join(adir, 'serial'), '1000\n');
+    // openssl config files treat a backslash as an escape, so Windows paths go in with forward slashes.
+    const slash = (p) => p.replace(/\\/g, '/');
     const key = path.join(adir, 'key.pem');
     const cert = path.join(adir, 'cert.pem');
     const conf = path.join(adir, 'ca.cnf');
     fs.writeFileSync(
       conf,
-      `[ca]\ndefault_ca=CA\n[CA]\ndir=${adir}\ndatabase=${adir}/index.txt\nnew_certs_dir=${adir}/newcerts\nserial=${adir}/serial\nprivate_key=${key}\ncertificate=${cert}\ndefault_md=sha256\npolicy=pol\nunique_subject=no\ncopy_extensions=none\n[pol]\ncommonName=supplied\n[req]\ndistinguished_name=dn\nprompt=no\n[dn]\n${dnLines ?? `CN=${name}`}\n[v3_ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n`
+      `[ca]\ndefault_ca=CA\n[CA]\ndir=${slash(adir)}\ndatabase=${slash(adir)}/index.txt\nnew_certs_dir=${slash(adir)}/newcerts\nserial=${slash(adir)}/serial\nprivate_key=${slash(key)}\ncertificate=${slash(cert)}\ndefault_md=sha256\npolicy=pol\nunique_subject=no\ncopy_extensions=none\n[pol]\ncommonName=supplied\n[req]\ndistinguished_name=dn\nprompt=no\n[dn]\n${dnLines ?? `CN=${name}`}\n[v3_ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n`
     );
     if (!parent) {
       run(
