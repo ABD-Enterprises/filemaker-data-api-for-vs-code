@@ -34,7 +34,7 @@ The extension runs on macOS, Windows and Linux desktops (VS Code 1.96 or newer).
 | --- | --- | --- |
 | Windows (x64) | Every pull request and push to `main`: build, lint, type check, the unit and integration tests with coverage (including real named pipes, directory junctions, read-only files and the MCP shim), and the VSIX package check, on a GitHub-hosted `windows-latest` runner. | Not tested: Windows on ARM, other Windows versions than the runner's, a non-English Windows (the tests avoid parsing localized output, but nothing runs on one). |
 | Linux (x64) | The same, on `ubuntu-latest` (the required `build-test` check also runs there). | Not tested: other distributions, Linux on ARM, `XDG_RUNTIME_DIR` setups other than the runner's. |
-| macOS | Not in CI. It is the platform the extension is developed on, and the Unix-socket tests run there for every change. | Intel and Apple silicon are both expected to work. |
+| macOS | Not in CI. It is the platform the extension is developed on, so the tests are run there by hand; the Unix-socket tests also run on Linux in CI. | Intel and Apple silicon are both expected to work. |
 
 What no platform's automated run covers: the real VS Code user interface (the Playwright journeys in `extension/e2e-ui` are run by hand, on macOS), and a real FileMaker Server (the tests use the mock Data API).
 
