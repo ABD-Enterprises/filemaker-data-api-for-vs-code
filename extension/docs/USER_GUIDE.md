@@ -1,6 +1,6 @@
 # FileMaker Data API Tools: User Guide
 
-This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers the version in this repository: 1.4 plus the changes made since it was released (listed under [Added since 1.4.0](#added-since-140)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
+This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.5, including what changed since 1.4 (listed under [New in 1.5](#new-in-15)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
 
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
@@ -129,9 +129,9 @@ Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
 - A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
 
-### Added since 1.4.0
+### New in 1.5
 
-These changes are in the repository and arrive with the next release:
+These changes came after 1.4.0 (details in the [upgrade notes](../UPGRADE.md)):
 
 - **`@filemaker` in the Chat view.** A read-only participant: `/layouts`, `/describe`, `/find`, `/explain` and `/help`, under the same AI settings, approvals, limits and kill switch as the AI tools. See [Chat with @filemaker](#chat-with-filemaker).
 - **Copy a request as code, everywhere.** curl, fetch(), a `.http` file, a Postman collection and TypeScript, from the Query Builder, Script Runner, Record Viewer, Record Editor and the new **FileMaker: Copy Request as Code…** command. See [Copy a request as code](#copy-a-request-as-code).
