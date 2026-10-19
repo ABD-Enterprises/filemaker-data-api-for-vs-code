@@ -72,6 +72,8 @@ h1 {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  /* "AUTHENTICATION" in capitals is wider than a very narrow panel: break it rather than run out of the panel. */
+  overflow-wrap: anywhere;
 }
 
 .field {

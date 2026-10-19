@@ -49,11 +49,22 @@ export const AUDIT_SCRIPT = () => {
       sel.style.setProperty('min-width', '0', 'important');
     }
   }
-  if (doc.scrollWidth > vw + 1)
+  if (doc.scrollWidth > vw + 1) {
+    // Name the elements that reach furthest right, so the finding points at what to fix.
+    const widest = [...document.body.querySelectorAll('*')]
+      .map((el) => ({ el, right: Math.round(el.getBoundingClientRect().right) }))
+      .filter((x) => x.right > vw + 1)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 3)
+      .map(
+        ({ el, right }) =>
+          `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${typeof el.className === 'string' && el.className ? `.${el.className.trim().split(/\s+/).join('.')}` : ''} to ${right}px`
+      );
     issues.push({
       type: 'page-horizontal-scroll',
-      where: `document ${doc.scrollWidth}px wide in a ${vw}px viewport`
+      where: `document ${doc.scrollWidth}px wide in a ${vw}px viewport${widest.length ? ` (reaching furthest: ${widest.join('; ')})` : ''}`
     });
+  }
   const interactive = [
     ...document.querySelectorAll(
       'button, a[href], input:not([type=hidden]), select, textarea, summary, [role=tab], [role=button]'

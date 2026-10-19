@@ -148,7 +148,9 @@ export async function run(ctx) {
     'Copy as curl / fetch',
     'clipboard holds a request without the auth header unless asked',
     async () => {
-      await wv.locator('#copyCurlButton').click();
+      // Since 1.5 the formats live in the "Copy request" menu (a closed menu has no boxes to click).
+      await wv.locator('#copyRequestMenu summary').click();
+      await wv.getByRole('button', { name: 'Copy as curl', exact: true }).click();
       await s.page.waitForTimeout(800);
       const clip = await s.app.evaluate(({ clipboard }) => clipboard.readText());
       assert(/curl/.test(clip), clip.slice(0, 100));

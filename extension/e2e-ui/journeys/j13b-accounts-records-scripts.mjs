@@ -155,7 +155,7 @@ export async function run(ctx) {
       const before = (await mock.log()).filter((l) => l.method === 'PATCH').length;
       await s.closeAllEditors();
       await s.cmd('FileMaker: Batch Update from CSV/JSON');
-      await answerPickers(s, ['Sales Viewer', 'Contacts']);
+      await answerPickers(s, ['Sales Viewer', 'Contacts'], { max: 2 });
       await answerFileDialog(s, csv, { timeout: 15000 });
       await s.quickInputOpen();
       await s.page.waitForTimeout(500);
@@ -390,7 +390,7 @@ export async function run(ctx) {
       fs.rmSync(out, { force: true });
       await fault({ name: 'find-no-match-500', path: '/_find' });
       await s.cmd('FileMaker: Batch Export (Find)');
-      await answerPickers(s, ['Mock Quality', 'Big']);
+      await answerPickers(s, ['Mock Quality', 'Big'], { max: 2 });
       await s.inputBox('[{"Label":"*"}]', { timeout: 15000 });
       await s.inputBox('', { timeout: 10000, prompt: /Sort JSON/ });
       await answerFileDialog(s, out, { timeout: 15000 });
