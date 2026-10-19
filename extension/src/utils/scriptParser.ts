@@ -13,8 +13,8 @@ function toName(value: unknown): string | undefined {
     return undefined;
   }
 
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  // The name exactly as the server sent it; only a blank name is dropped.
+  return value.trim().length > 0 ? value : undefined;
 }
 
 function pushUnique(target: string[], seen: Set<string>, name: string): void {

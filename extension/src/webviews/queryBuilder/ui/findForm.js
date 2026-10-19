@@ -197,8 +197,9 @@
     for (const request of requests) {
       const entry = {};
       for (const criterion of request.criteria || []) {
-        const field = String(criterion.field || '').trim();
-        if (!field) {
+        // The field name exactly as chosen (a space can be part of a name); only a blank one is skipped.
+        const field = String(criterion.field || '');
+        if (!field.trim()) {
           continue;
         }
         entry[field] = criterionToFindValue(criterion);
@@ -223,8 +224,9 @@
     for (const request of requests) {
       const seen = new Set();
       for (const criterion of request.criteria || []) {
-        const field = String(criterion.field || '').trim();
-        if (!field) {
+        // The field name exactly as chosen (a space can be part of a name); only a blank one is skipped.
+        const field = String(criterion.field || '');
+        if (!field.trim()) {
           continue;
         }
         if (seen.has(field)) {
@@ -241,7 +243,7 @@
     return sort
       .filter((item) => String(item.fieldName || '').trim())
       .map((item) => ({
-        fieldName: String(item.fieldName).trim(),
+        fieldName: String(item.fieldName),
         sortOrder: item.sortOrder === 'descend' ? 'descend' : 'ascend'
       }));
   }

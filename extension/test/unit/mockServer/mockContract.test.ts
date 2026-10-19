@@ -296,6 +296,32 @@ describe('documented response shapes', () => {
       (await http.call('POST', `${L('Customers')}/script/Echo`, { token, body: {} })).status
     ).toBe(405);
   });
+  it('the script endpoint is GET only, takes script.param in the URL, and a script run reads no record', async () => {
+    const log = async () => ((await (await fetch(`${mock.adminUrl}/__admin/log`)).json()) as { log: Array<{ method: string; path: string; query: string }> }).log;
+    const before = (await log()).length;
+    const name = 'Run / Ünï';
+    const param = 'a b|c+d&e=f';
+    const r = await http.call('GET', `${L('Customers')}/script/${encodeURIComponent(name)}?script.param=${encodeURIComponent(param)}`, { token });
+    // Unknown script: FileMaker error 104 as the answer, still no record request.
+    expect(r.body.messages[0].code).toBe('104');
+    const echo = await http.call('GET', `${L('Customers')}/script/Echo?script.param=${encodeURIComponent(param)}`, { token });
+    expect(echo.body.response.scriptResult).toBe(param);
+    const noParam = await http.call('GET', `${L('Customers')}/script/Echo`, { token });
+    expect(noParam.body.response.scriptError).toBe('0');
+    for (const method of ['POST', 'PATCH', 'DELETE', 'PUT']) {
+      expect((await http.call(method, `${L('Customers')}/script/Echo`, { token, body: {} })).status, method).toBe(405);
+    }
+    const seen = (await log()).slice(before);
+    expect(seen.some((entry) => /\/records|_find/.test(entry.path))).toBe(false);
+    expect(seen.filter((entry) => entry.method === 'GET').every((entry) => /\/script\//.test(entry.path))).toBe(true);
+  });
+  it('a script can be attached to a find in the BODY (the documented form for a long parameter), limited to one record', async () => {
+    const param = 'x'.repeat(5000);
+    const r = await http.call('POST', `${L('Customers')}/_find`, { token, body: { query: [{}], limit: 1, script: 'Echo', 'script.param': param } });
+    expect(r.body.response.data).toHaveLength(1);
+    expect(r.body.response.scriptResult).toBe(param);
+    expect(r.body.response.scriptError).toBe('0');
+  });
   it('v1 and v2 URLs are accepted', async () => {
     for (const v of ['v1', 'v2']) {
       const h = api(mock.baseUrl, v);
