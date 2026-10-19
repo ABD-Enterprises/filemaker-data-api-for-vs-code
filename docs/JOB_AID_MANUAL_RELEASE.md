@@ -6,7 +6,7 @@ Written for version `1.5.0` (the steps are the same for any version: replace the
 
 ## Before you start
 
-- The release pull request (`[patch] Release 1.5.0`) is **merged** and nothing else will merge before you finish. (Anything merged after it changes the VSIX; the release commit is the merge commit of that pull request, not a later one.)
+- The release pull request (`[patch] Release 1.5.0`) is **merged**. The release commit for 1.5.0 is `e2f9aac6c8e0afc8897e647c735f40614892c458`, the merge commit of that pull request. Later merges to `main` do not matter, because the steps below pin that commit; a build from any later commit would be a different VSIX.
 - You are signed in to `gh` (`gh auth status`) as an admin of `SureForgeTech/filemaker-data-api-for-vs-code`, and you can sign in at <https://marketplace.visualstudio.com/manage> as an owner of the publisher.
 - Node.js 22 or newer and `git`.
 - **The release date.** The notes say `_Released 2026-10-19._`: that is the day the release was prepared, not necessarily the day you publish. The Marketplace and GitHub show the real publish date. If you publish on a later day, leave the text as it is (changing it after the merge would mean another change on `main` and a different VSIX); if you want the date to match, merge a one-line change to that date in `extension/CHANGELOG.md` and `CHANGELOG.md` first and use that merge commit.
@@ -17,9 +17,9 @@ Written for version `1.5.0` (the steps are the same for any version: replace the
 git clone https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.git release-1.5.0   # or use a clean checkout
 cd release-1.5.0
 git fetch origin
-# RELEASE_SHA is the merge commit of the release PR: copy it from the merged PR page on GitHub
-# (the "merged commit" link), and use this same value everywhere below.
-RELEASE_SHA=<paste the full 40-character SHA>
+# RELEASE_SHA is the merge commit of the release PR (PR 407). Confirm it matches the
+# "merged commit" link on the merged PR page on GitHub, and use this same value everywhere below.
+RELEASE_SHA=e2f9aac6c8e0afc8897e647c735f40614892c458
 git checkout --detach "$RELEASE_SHA"
 git log -1 --oneline                     # confirm: this is the release commit
 git merge-base --is-ancestor "$RELEASE_SHA" origin/main && echo "on main"
@@ -29,7 +29,7 @@ npm run build
 npm run package:check
 ```
 
-`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.5.0.vsix` (about 1.9 MB, 47 files; the 1.5.0 release branch measured 1,998,482 bytes, well under the 5 MiB budget; the size grew from 1.03 MB because the Marketplace page now has real screenshots).
+`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.5.0.vsix` (about 1.9 MB, 47 files; the size varies slightly by build, about 1,998,300 to 1,998,500 bytes, well under the 5 MiB budget; the size grew from 1.03 MB because the Marketplace page now has real screenshots).
 
 Verify it:
 
