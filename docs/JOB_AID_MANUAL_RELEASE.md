@@ -2,19 +2,19 @@
 
 **When:** the Microsoft Entra publishing setup ([JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md)) is not done, so the `publish` job in CI cannot run. You build the `.vsix` yourself, upload it to the Marketplace, and create the GitHub release from the same file. **Time:** about 20 minutes. **Who:** a repository admin who is also an owner of the SureForgeTech publisher.
 
-Written for version `1.4.0`; replace the version where it appears. "Checked" below means checked against the named page on 2026-10-18; anything not on an official page is marked **unverified**.
+Written for version `1.5.0` (the steps are the same for any version: replace the number). "Checked" below means checked against the named page on 2026-10-19; anything not on an official page is marked **unverified**.
 
 ## Before you start
 
-- The release pull request (`[patch] Release 1.4.0`) is **merged** and nothing else will merge before you finish.
+- The release pull request (`[patch] Release 1.5.0`) is **merged** and nothing else will merge before you finish. (Anything merged after it changes the VSIX; the release commit is the merge commit of that pull request, not a later one.)
 - You are signed in to `gh` (`gh auth status`) as an admin of `SureForgeTech/filemaker-data-api-for-vs-code`, and you can sign in at <https://marketplace.visualstudio.com/manage> as an owner of the publisher.
 - Node.js 22 or newer and `git`.
 
 ## 1. Build the VSIX from the merged commit
 
 ```bash
-git clone https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.git release-1.4.0   # or use a clean checkout
-cd release-1.4.0
+git clone https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.git release-1.5.0   # or use a clean checkout
+cd release-1.5.0
 git fetch origin
 # RELEASE_SHA is the merge commit of the release PR: copy it from the merged PR page on GitHub
 # (the "merged commit" link), and use this same value everywhere below.
@@ -22,50 +22,50 @@ RELEASE_SHA=<paste the full 40-character SHA>
 git checkout --detach "$RELEASE_SHA"
 git log -1 --oneline                     # confirm: this is the release commit
 git merge-base --is-ancestor "$RELEASE_SHA" origin/main && echo "on main"
-grep '"version"' extension/package.json  # must say 1.4.0
+grep '"version"' extension/package.json  # must say 1.5.0
 npm ci
 npm run build
 npm run package:check
 ```
 
-`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.4.0.vsix` (1.03 MB, 41 files; about 1,080,000 bytes for the release commit).
+`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.5.0.vsix` (about 1.9 MB, 47 files; the 1.5.0 release branch measured 1,997,866 bytes, well under the 5 MiB budget; the size grew from 1.03 MB because the Marketplace page now has real screenshots).
 
 Verify it:
 
 ```bash
 ls -l artifacts/*.vsix
-(cd artifacts && shasum -a 256 filemaker-data-api-tools-1.4.0.vsix > SHA256SUMS.txt && cat SHA256SUMS.txt)   # on Linux: sha256sum
+(cd artifacts && shasum -a 256 filemaker-data-api-tools-1.5.0.vsix > SHA256SUMS.txt && cat SHA256SUMS.txt)   # on Linux: sha256sum
 (cd artifacts && shasum -a 256 -c SHA256SUMS.txt)                                                              # must print: ...vsix: OK
-unzip -p artifacts/filemaker-data-api-tools-1.4.0.vsix extension/package.json | grep '"version"'   # "version": "1.4.0"
-unzip -l artifacts/filemaker-data-api-tools-1.4.0.vsix | grep -c '\.map$'                         # 0: no source maps in the VSIX
+unzip -p artifacts/filemaker-data-api-tools-1.5.0.vsix extension/package.json | grep '"version"'   # "version": "1.5.0"
+unzip -l artifacts/filemaker-data-api-tools-1.5.0.vsix | grep -c '\.map$'                         # 0: no source maps in the VSIX
 ```
 
 Also make the source-map archive (the same command the CI job runs; it is the only way to read a stack trace from the minified bundle, so keep it):
 
 ```bash
 mkdir -p artifacts/maps
-(cd extension/dist && tar -czf ../../artifacts/maps/sourcemaps-v1.4.0.tgz ./*.map)
+(cd extension/dist && tar -czf ../../artifacts/maps/sourcemaps-v1.5.0.tgz ./*.map)
 ```
 
 Do not rebuild between steps 1 and 3: the file you upload to the Marketplace and attach to the GitHub release must be the same bytes (compare the sha256).
 
-Sources: <https://code.visualstudio.com/api/working-with-extensions/publishing-extension> (checked: `vsce package` creates the `.vsix`).
+Sources: <https://code.visualstudio.com/api/working-with-extensions/publishing-extension> (checked 2026-10-19: `vsce package` creates the `.vsix`; the manual upload goes to the publisher management page, and the page gives no menu names).
 
 ## 2. Upload the VSIX to the Marketplace by hand
 
 1. Open <https://marketplace.visualstudio.com/manage> and sign in with the Microsoft account that owns the **SureForgeTech** publisher.
-2. Open the **FileMaker Data API Tools** extension. Choose the action to update it with a new package and select `artifacts/filemaker-data-api-tools-1.4.0.vsix`.
+2. Open the **FileMaker Data API Tools** extension. Choose the action to update it with a new package and select `artifacts/filemaker-data-api-tools-1.5.0.vsix`.
 3. Wait for verification to finish. The Marketplace validates the package and then shows the new version.
 
-What Microsoft documents: the publishing guide only says to upload the `.vsix` on the "Visual Studio Marketplace publisher management page" and shows a screenshot titled "Add an extension through management page". **The exact menu and button names for updating an existing extension (typically a "..." menu on the extension row with an update action) are unverified**: follow what the page shows. Use a version number that has not been used: the guide says a deleted version's number cannot be reused (checked). That `1.4.0` has to be higher than the published `1.3.0` is the normal rule but is not stated on that page (**unverified**).
+What Microsoft documents: the publishing guide only says to upload the `.vsix` on the "Visual Studio Marketplace publisher management page" and shows a screenshot titled "Add an extension through management page". **The exact menu and button names for updating an existing extension (typically a "..." menu on the extension row with an update action) are unverified**: follow what the page shows. Use a version number that has not been used: the guide says a deleted version's number cannot be reused (checked). That `1.5.0` has to be higher than the published `1.4.0` (the Marketplace lists 1.4.0 and 1.3.0 as of 2026-10-19) is the normal rule but is not stated on that page (**unverified**).
 
 If the upload is rejected, read the message on the page. A version that is not higher, a missing icon, or a manifest error are the usual causes; do not change the version to get around it without telling the team.
 
 ## 3. Create the GitHub release without a failing publish run
 
-**What a tag does here.** `ci.yml` runs on every pushed `v*` tag: `build-test`, then `package`, then `publish` (which waits for the `marketplace` environment's approval, then fails at "Require the Azure identity settings" because `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` are not set), then `release` (skipped when `publish` fails). So **any `v1.4.0` tag, however created, starts that run**. Only repository admins can create `v*` tags (ruleset `release-tags`); you are one.
+**What a tag does here.** `ci.yml` runs on every pushed `v*` tag: `build-test`, then `package`, then `publish` (which waits for the `marketplace` environment's approval, then fails at "Require the Azure identity settings" because `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` are not set), then `release` (skipped when `publish` fails). So **any `v1.5.0` tag, however created, starts that run**. Only repository admins can create `v*` tags (ruleset `release-tags`); you are one.
 
-`gh release create` makes the tag itself when it does not exist, and GitHub's events page does not say whether such a tag fires the `push` trigger (unverified). So the sequence below creates the tag first, on purpose, and then attaches the release to it with `--verify-tag`.
+Checked 2026-10-19 (<https://cli.github.com/manual/gh_release_create>): without `--verify-tag`, `gh release create` creates a missing tag itself from the default branch's latest state, which is the wrong commit if `main` has moved. `gh release create` makes the tag itself when it does not exist, and GitHub's events page does not say whether such a tag fires the `push` trigger (unverified). So the sequence below creates the tag first, on purpose, and then attaches the release to it with `--verify-tag`.
 
 **Safest sequence** (kept simple because whether a release creates its tag early or late is not documented)
 
@@ -73,38 +73,61 @@ If the upload is rejected, read the message on the page. A version that is not h
 2. Create the tag yourself, at the release commit (an admin bypasses the `release-tags` ruleset):
 
    ```bash
-   git tag -a v1.4.0 -m "v1.4.0" "$RELEASE_SHA"
-   git push origin v1.4.0
+   git tag -a v1.5.0 -m "v1.5.0" "$RELEASE_SHA"
+   git push origin v1.5.0
    ```
 
 3. Create the release on that existing tag. `--verify-tag` makes `gh` stop instead of creating a tag if it is missing (checked: <https://cli.github.com/manual/gh_release_create>):
 
    ```bash
-   bash tools/release-notes.sh v1.4.0 > artifacts/release-notes.md
-   head -5 artifacts/release-notes.md    # must show the 1.4.0 notes, not be empty
-   gh release create v1.4.0 \
+   bash tools/release-notes.sh v1.5.0 > artifacts/RELEASE_NOTES_v1.5.0.md
+   head -5 artifacts/RELEASE_NOTES_v1.5.0.md    # must show the 1.5.0 notes, not be empty
+   gh release create v1.5.0 \
      --repo SureForgeTech/filemaker-data-api-for-vs-code \
      --verify-tag \
-     --title v1.4.0 \
-     --notes-file artifacts/release-notes.md \
-     artifacts/filemaker-data-api-tools-1.4.0.vsix \
-     artifacts/maps/sourcemaps-v1.4.0.tgz \
+     --title v1.5.0 \
+     --notes-file artifacts/RELEASE_NOTES_v1.5.0.md \
+     artifacts/filemaker-data-api-tools-1.5.0.vsix \
+     artifacts/maps/sourcemaps-v1.5.0.tgz \
      artifacts/SHA256SUMS.txt
    ```
 
    Read the release on GitHub: notes, and the three files attached.
-4. Pushing the tag in step 2 started a `CI` run for `v1.4.0`. It runs `build-test` and `package` and then waits at `publish`. **Open the run, choose Review deployments, tick `marketplace`, and Reject.** The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
+4. Pushing the tag in step 2 started a `CI` run for `v1.5.0`. It runs `build-test` and `package` and then waits at `publish`. **Open the run, choose Review deployments, tick `marketplace`, and click Reject** (checked 2026-10-19 against <https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/reviewing-deployments>: the buttons are "Approve and deploy" and "Reject"; rejecting makes the run fail). The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
 5. The tag run also builds the VSIX in CI (artifact `extension-vsix`). Its bytes differ from yours (build time stamps), so compare the version and file list, not the hash.
 
 There is no supported way to avoid that red run with the current workflow (it only triggers on tags); the Entra setup removes the problem. A draft release or `--target` does not avoid it either, and when the tag appears in those cases is undocumented, so they are not used here.
 
 ## 4. After publishing
 
-- <https://marketplace.visualstudio.com/items?itemName=SureForgeTech.filemaker-data-api-tools> shows **1.4.0** (it can take several minutes) and its **Changelog** tab shows the 1.4.0 section. Or run `npx @vscode/vsce show SureForgeTech.filemaker-data-api-tools` (checked: `vsce show <extensionid>` exists in vsce 4.0.0).
-- In a clean VS Code profile, install it from the Marketplace and run **FileMaker: About / Show Version**: it must say 1.4.0 and a build. (`code --user-data-dir /tmp/fm-user --extensions-dir /tmp/fm-ext --install-extension SureForgeTech.filemaker-data-api-tools`.)
+- <https://marketplace.visualstudio.com/items?itemName=SureForgeTech.filemaker-data-api-tools> shows **1.5.0** (it can take several minutes) and its **Changelog** tab shows the 1.5.0 section. Or run `npx @vscode/vsce show SureForgeTech.filemaker-data-api-tools` (checked: `vsce show <extensionid>` exists in vsce 4.0.0).
+- In a clean VS Code profile, install it from the Marketplace and run **FileMaker: About / Show Version**: it must say 1.5.0 and a build. (`code --user-data-dir /tmp/fm-user --extensions-dir /tmp/fm-ext --install-extension SureForgeTech.filemaker-data-api-tools`.)
 - Run the [smoke test](../extension/docs/QA/SMOKE_TEST.md) checks 1 to 12 against a real FileMaker Server.
 - Watch issues and the Marketplace Q&A for a week (see [RELEASE.md](./RELEASE.md), step 6).
 - Record in the release pull request that the release was published by hand, with the sha256 and the release commit SHA.
+
+## Still outstanding from 1.4.0: the tag and GitHub release
+
+1.4.0 is on the Marketplace (uploaded by hand 2026-10-18) but **no `v1.4.0` tag and no GitHub release exist** (checked 2026-10-19: the repository has only `v1.0.0` and `v1.1.0`). They are not needed for 1.5.0 to publish. They matter because [ROLLBACK.md](./ROLLBACK.md) and UPGRADE.md send users to GitHub releases to get an older version, and a release is where the source maps for 1.4.0 are kept. Do this **before** the 1.5.0 steps above, or skip it and accept that 1.4.0 has no release.
+
+You need the commit that the uploaded 1.4.0 `.vsix` was built from. If you built from the merge commit of the 1.4.0 release pull request, that is `8fcc2341551129641334b4c6325a1ff2139db0d8` (its `extension/package.json` says 1.4.0). If you built from a later commit, use that one; the Marketplace does not record it. If you still have the exact `.vsix` you uploaded, attach that file. Do not rebuild it now: a rebuilt file has a different hash than the published one.
+
+```bash
+git fetch origin --tags
+SHA_140=8fcc2341551129641334b4c6325a1ff2139db0d8     # change if you built from another commit
+git show "$SHA_140":extension/package.json | grep '"version"'   # must say 1.4.0
+git tag -a v1.4.0 -m "v1.4.0" "$SHA_140"
+git push origin v1.4.0
+mkdir -p artifacts
+git show "$SHA_140":extension/CHANGELOG.md > /tmp/changelog-1.4.0.md
+CHANGELOG_PATH=/tmp/changelog-1.4.0.md bash tools/release-notes.sh v1.4.0 > artifacts/RELEASE_NOTES_v1.4.0.md
+head -5 artifacts/RELEASE_NOTES_v1.4.0.md
+gh release create v1.4.0 --repo SureForgeTech/filemaker-data-api-for-vs-code --verify-tag \
+  --title v1.4.0 --notes-file artifacts/RELEASE_NOTES_v1.4.0.md --latest=false \
+  path/to/the-vsix-you-uploaded/filemaker-data-api-tools-1.4.0.vsix
+```
+
+Pushing the tag starts a `CI` run; **Reject** its `marketplace` deployment exactly as in step 3.4. Leave out the last line's file if you no longer have the uploaded `.vsix`. Source maps for 1.4.0 are lost unless you kept the tarball; say so in the release notes if so.
 
 ## If something is wrong
 
