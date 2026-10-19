@@ -365,7 +365,9 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
   it('does not use a discovery file that names a socket this extension would not create, and never connects to it', async () => {
     const directory = join(work, 'evil');
     let attempts = 0;
-    const decoyPath = join(work, 'decoy.sock');
+    // A Unix socket in a temp folder, or on Windows (where `listen` on a file path is refused) a pipe
+    // whose name is not one the extension creates.
+    const decoyPath = posix ? join(work, 'decoy.sock') : `\\\\.\\pipe\\decoy-${newToken().slice(0, 16)}`;
     const decoy = net.createServer(() => void (attempts += 1));
     await new Promise<void>((resolve) => decoy.listen(decoyPath, resolve));
     try {

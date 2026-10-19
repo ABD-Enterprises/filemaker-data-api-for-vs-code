@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
-import os, { tmpdir } from 'os';
+import { tmpdir } from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
@@ -13,7 +13,7 @@ function git(cwd: string, args: string[], env: Record<string, string> = {}): str
   return execFileSync('git', args, {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull, ...env }
+    env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', ...env }
   }).trim();
 }
 

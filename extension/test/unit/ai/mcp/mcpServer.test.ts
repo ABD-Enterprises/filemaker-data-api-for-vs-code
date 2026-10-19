@@ -79,7 +79,7 @@ describe('AiMcpServer', () => {
       expect(core.invoke).not.toHaveBeenCalled();
     });
 
-    it.skipIf(!posix)('never serves a request before the hello, even if sent in the same write', async () => {
+    it('never serves a request before the hello, even if sent in the same write', async () => {
       await start();
       const c = await client(false);
       c.write(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n`);

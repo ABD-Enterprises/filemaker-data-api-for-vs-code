@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import { basename, dirname, join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { newToken } from '../../../../src/ai/mcp/auth';
@@ -24,7 +24,10 @@ import { createEndpoint, socketFolderName } from '../../../../src/ai/mcp/socketP
 const posix = process.platform !== 'win32';
 
 const uid = process.getuid?.() ?? 0;
-const socketPath = (name = 'abcdef012345'): string => `/tmp/${socketFolderName(uid, 'storage-a')}/${name}.sock`;
+// Windows has no socket folders: the endpoint is a named pipe, and the 12 hex digits of the name
+// make the pipe name 32 hex digits long.
+const socketPath = (name = 'abcdef012345'): string =>
+  posix ? `/tmp/${socketFolderName(uid, 'storage-a')}/${name}.sock` : `\\\\.\\pipe\\fm-ai-${name.padEnd(32, '0')}`;
 
 function record(overrides: Partial<DiscoveryRecord> = {}): DiscoveryRecord {
   return {
@@ -85,11 +88,14 @@ describe('files on disk', () => {
     await rm(base, { recursive: true, force: true });
   });
 
-  it.skipIf(!posix)('writes the folder 0700 and the file 0600, and removes it', async () => {
+  it('writes the folder 0700 and the file 0600 (Unix), and removes it', async () => {
     const directory = join(base, 'ai-mcp');
     const file = await writeDiscovery(directory, 'a.json', record());
-    expect((await stat(directory)).mode & 0o777).toBe(0o700);
-    expect((await stat(file)).mode & 0o777).toBe(0o600);
+    if (posix) {
+      // Windows reports 0666/0777 for every file whatever its ACL, so the modes mean nothing there.
+      expect((await stat(directory)).mode & 0o777).toBe(0o700);
+      expect((await stat(file)).mode & 0o777).toBe(0o600);
+    }
     expect(parseDiscovery(await readFile(file, 'utf8'))).toBeDefined();
     await removeDiscovery(file);
     await expect(stat(file)).rejects.toThrow();
@@ -114,7 +120,7 @@ describe('files on disk', () => {
     await expect(assertOwnerOnly(file, 'directory')).rejects.toThrow(/not a directory/);
   });
 
-  it.skipIf(!posix)('scan: live, stale (dead pid, other run), and unsafe files are told apart and nothing is deleted', async () => {
+  it('scan: live, stale (dead pid, other run), and unsafe files are told apart and nothing is deleted', async () => {
     const directory = join(base, 'ai-mcp');
     const live = record({ pid: 1, startTime: 'A', label: 'live' });
     const dead = record({ pid: 2, startTime: 'B', label: 'dead' });
@@ -123,17 +129,20 @@ describe('files on disk', () => {
     await writeDiscovery(directory, 'dead.json', dead);
     await writeDiscovery(directory, 'reused.json', reused);
     await writeFile(join(directory, 'junk.json'), 'not json', { mode: 0o600 });
-    await writeFile(join(directory, 'loose.json'), JSON.stringify(record()), { mode: 0o644 });
-    await chmod(join(directory, 'loose.json'), 0o644);
+    if (posix) {
+      await writeFile(join(directory, 'loose.json'), JSON.stringify(record()), { mode: 0o644 });
+      await chmod(join(directory, 'loose.json'), 0o644);
+    }
 
     const scan = await scanDiscovery(directory, liveness([1, 3], { 1: 'A', 3: 'new' }));
     expect(scan.live.map((window) => window.record.label)).toEqual(['live']);
-    expect(scan.stale.map((file) => file.split('/').pop()).sort()).toEqual(['dead.json', 'reused.json']);
-    expect(scan.unsafe.map((entry) => entry.file.split('/').pop()).sort()).toEqual(['junk.json', 'loose.json']);
+    expect(scan.stale.map((file) => basename(file)).sort()).toEqual(['dead.json', 'reused.json']);
+    // The world-readable file is only unsafe where file modes exist.
+    expect(scan.unsafe.map((entry) => basename(entry.file)).sort()).toEqual(posix ? ['junk.json', 'loose.json'] : ['junk.json']);
     await expect(stat(join(directory, 'dead.json'))).resolves.toBeDefined();
   });
 
-  it.skipIf(!posix)('a pid that is not alive is stale even if a start time can still be read for it', async () => {
+  it('a pid that is not alive is stale even if a start time can still be read for it', async () => {
     const directory = join(base, 'ai-mcp');
     await writeDiscovery(directory, 'a.json', record({ pid: 7, startTime: 'S' }));
     const scan = await scanDiscovery(directory, { alive: () => false, startTime: async () => 'S' });
@@ -150,7 +159,7 @@ describe('files on disk', () => {
     await expect(assertOwnerOnly(file, 'file', mine)).resolves.toBeUndefined();
   });
 
-  it.skipIf(!posix)('a running process whose start time cannot be read is unverified: not live, and NOT stale', async () => {
+  it('a running process whose start time cannot be read is unverified: not live, and NOT stale', async () => {
     const directory = join(base, 'ai-mcp');
     await writeDiscovery(directory, 'a.json', record({ pid: 9 }));
     const scan = await scanDiscovery(directory, liveness([9], {}));
@@ -159,7 +168,7 @@ describe('files on disk', () => {
     expect(scan.unverified.map((window) => window.record.pid)).toEqual([9]);
   });
 
-  it.skipIf(!posix)('a file that names a socket this extension would not create is unsafe', async () => {
+  it('a file that names a socket this extension would not create is unsafe', async () => {
     const directory = join(base, 'ai-mcp');
     await writeDiscovery(directory, 'a.json', record({ pid: 1, startTime: 'A', socketPath: '/tmp/evil.sock' }));
     await writeDiscovery(directory, 'b.json', record({ pid: 1, startTime: 'A', socketPath: `/etc/${socketFolderName(uid, 'storage-a')}/../x.sock` }));

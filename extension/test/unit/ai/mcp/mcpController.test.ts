@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, readdir, realpath, readFile, rm, stat, symlink, 
 import net from 'net';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
 import { AI_TOOL_DEFINITIONS } from '../../../../src/ai/aiToolDefinitions';
@@ -57,6 +57,13 @@ describe('AiMcpController', () => {
     });
   }
 
+  // Reading a process start time starts PowerShell on Windows (seconds under load), which would make
+  // every controller test race its own timeout. Read it once; the tests that care override it.
+  let realStartTime: string | undefined;
+  beforeAll(async () => {
+    realStartTime = await getProcessStartTime(process.pid);
+  }, 60_000);
+
   beforeEach(async () => {
     storage = await mkdtemp(join(tmpdir(), 'fmc-'));
     enabled = true;
@@ -65,7 +72,7 @@ describe('AiMcpController', () => {
     epoch = 0;
     seen = undefined;
     notify = vi.fn();
-    startTimeOverride = undefined;
+    startTimeOverride = async () => realStartTime;
     controller = make();
   });
 
@@ -303,7 +310,7 @@ describe('AiMcpController', () => {
   describe('stale files', () => {
     it('removes discovery files of dead processes, keeps live ones and ones it cannot verify', async () => {
       const directory = discoveryDirectory(storage);
-      const base = { version: DISCOVERY_VERSION as 1, socketPath: `/tmp/${socketFolderName(process.getuid?.() ?? 0, undefined)}/abcdef012345.sock`, token: newToken(), workspaceFolders: [], created: 'x' };
+      const base = { version: DISCOVERY_VERSION as 1, socketPath: posix ? `/tmp/${socketFolderName(process.getuid?.() ?? 0, undefined)}/abcdef012345.sock` : `\\\\.\\pipe\\fm-ai-${'ab'.repeat(16)}`, token: newToken(), workspaceFolders: [], created: 'x' };
       await writeDiscovery(directory, 'dead.json', { ...base, pid: 2_147_483_000, startTime: 'x', label: 'dead' });
       await writeDiscovery(directory, 'other-run.json', { ...base, pid: process.pid, startTime: 'not-this-run', label: 'other-run' });
       await controller.start();
