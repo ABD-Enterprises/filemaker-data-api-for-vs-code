@@ -6,10 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Wraps the real rename so a test can make it fail the way Windows does.
 vi.mock('fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs/promises')>();
+  const actual = await importOriginal<typeof FsPromises>();
   return { ...actual, rename: vi.fn(actual.rename) };
 });
 import * as fsp from 'fs/promises';
+import type * as FsPromises from 'fs/promises';
 
 import { renameReplacing } from '../../src/utils/renameReplacing';
 
@@ -61,7 +62,7 @@ describe('renameReplacing', () => {
   describe('the Windows retry branch (platform injected, rename made to fail with EPERM)', () => {
     const eperm = (): NodeJS.ErrnoException => Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' });
     const realRename = async (from: unknown, to: unknown): Promise<void> => {
-      const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+      const actual = await vi.importActual<typeof FsPromises>('fs/promises');
       return actual.rename(String(from), String(to));
     };
     beforeEach(() => {
