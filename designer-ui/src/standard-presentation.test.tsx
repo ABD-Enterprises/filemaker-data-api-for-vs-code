@@ -31,15 +31,44 @@ describe('shared designer and runtime presentation', () => {
     const layout = fixture();
     const { container } = render(<LayoutContainer layout={layout} mode="runtime" runtimeData={{ viewport: { width: 220, height: 200 } }} />);
     let y = 24;
-    ids.forEach((id, i) => {
-      const field = container.querySelector<HTMLElement>(`[data-fm-field-id="${id}"]`)!;
+    [...layout.objects].sort((a, b) => a.y - b.y || a.x - b.x).forEach((object) => {
+      const field = container.querySelector<HTMLElement>(`[data-fm-field-id="${object.id}"]`)!;
       expect(field.style.left).toBe('24px');
       expect(field.style.top).toBe(`${y}px`);
       expect(Number.parseFloat(field.style.width)).toBeLessThanOrEqual(172);
-      y += layout.objects[i].height + 24 + 16;
+      y += object.height + 24 + 16;
     });
     expect(Number.parseFloat((container.firstChild as HTMLElement).style.height)).toBe(y + 24);
     expect(FIELD_LAYOUT).toMatchObject({ pageMargin: 24, rowGap: 16, columnGap: 24 });
+  });
+
+  it('narrow runtime uses visual y/x order for controls only, preserving decorative geometry and paint order', () => {
+    const layout = fixture();
+    const base = layout.objects[0];
+    const anchors = { top: true, left: true, right: false, bottom: false };
+    layout.objects = [
+      { ...base, id: 'bottom', y: 400, x: 24, zIndex: 0 },
+      { ...base, id: 'right', y: 40, x: 300, zIndex: 1 },
+      { ...base, id: 'left', y: 40, x: 24, zIndex: 2 },
+      { ...base, id: 'button', type: 'button', label: 'Action', y: 200, x: 24, height: 34, zIndex: 3 },
+      { ...base, id: 'portal', type: 'portal', relatedContext: 'Related', columns: [], rowCount: 1, scroll: true, selectableRows: false, y: 300, x: 24, height: 160, zIndex: 4 },
+      { ...base, id: 'text', type: 'text', text: 'Decoration', y: 10, x: 80, width: 300, height: 20, zIndex: 5, anchors },
+      { ...base, id: 'shape', type: 'rectangle', cornerRadius: 0, y: 12, x: 82, width: 300, height: 22, zIndex: -1, anchors }
+    ] as typeof layout.objects;
+    const { container } = render(<LayoutContainer layout={layout} mode="runtime" runtimeData={{ viewport: { width: 400, height: 100 } }} />);
+    const fields = ['left', 'right', 'bottom'].map((id) => container.querySelector<HTMLElement>(`[data-fm-field-id="${id}"]`)!);
+    expect(fields.map((field) => field.style.top)).toEqual(['24px', '98px', '398px']);
+    const button = container.querySelector('button')!;
+    expect(button.style.top).toBe('172px');
+    const portal = container.querySelector<HTMLElement>('[data-fm-portal-id]')!;
+    expect(portal.style.top).toBe('222px');
+    const text = [...container.querySelectorAll('div')].find((element) => element.textContent === 'Decoration')!;
+    expect([text.style.left, text.style.top, text.style.width]).toEqual(['80px', '10px', '300px']);
+    const shape = (container.firstChild as HTMLElement).firstChild as HTMLElement;
+    expect([shape.style.left, shape.style.top, shape.style.width]).toEqual(['82px', '12px', '300px']);
+    // Reflow does not change z-order or mutate the saved layout.
+    expect([...container.querySelectorAll('[data-fm-field-id]')].map((element) => element.getAttribute('data-fm-field-id'))).toEqual(['bottom', 'right', 'left']);
+    expect(layout.objects[0].y).toBe(400);
   });
 
   it('wide runtime preserves designer geometry including intentional overrides', () => {

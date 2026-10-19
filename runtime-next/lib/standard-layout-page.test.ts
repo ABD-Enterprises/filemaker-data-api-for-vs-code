@@ -1,14 +1,17 @@
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBlankLayout, FIELD_LAYOUT, standardFieldSize, type LayoutDefinition } from '@fmweb/shared';
 import { loadLayoutDefinition } from './layout-loader';
 import LayoutPage from '../app/layouts/[id]/page';
 
+let viewport: { width: number; height: number } | undefined;
+beforeEach(() => { viewport = undefined; });
+
 vi.mock('./layout-loader', () => ({ loadLayoutDefinition: vi.fn() }));
 vi.mock('../app/layouts/[id]/runtime-layout-client', async () => {
   const { LayoutContainer } = await import('@fmweb/shared');
-  return { RuntimeLayoutClient: ({ layout }: { layout: LayoutDefinition }) => React.createElement(LayoutContainer, { layout, mode: 'runtime' }) };
+  return { RuntimeLayoutClient: ({ layout }: { layout: LayoutDefinition }) => React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: { viewport } }) };
 });
 
 function fixture(): LayoutDefinition {
@@ -36,4 +39,19 @@ describe('web layout view page', () => {
     expect(markup).toContain('gap: 16px 24px');
     expect(markup).toMatch(/@media \(max-width: 640px\)[\s\S]*flex-direction: column/);
   });
+  it('the runtime page stacks fields by visual position rather than z-order at narrow widths', async () => {
+    const layout = fixture();
+    layout.objects = [
+      { ...layout.objects[0], id: 'bottom', y: 400, zIndex: 0 },
+      { ...layout.objects[0], id: 'right', x: 300, y: 24, zIndex: 1 },
+      { ...layout.objects[0], id: 'left', x: 24, y: 24, zIndex: 2 }
+    ];
+    viewport = { width: 400, height: 200 };
+    vi.mocked(loadLayoutDefinition).mockResolvedValue(layout);
+    const markup = renderToStaticMarkup(await LayoutPage({ params: { id: 'layout' } }));
+    for (const [id, y] of [['left', 24], ['right', 98], ['bottom', 172]]) {
+      expect(markup).toMatch(new RegExp(`<div style="[^"]*left:24px;top:${y}px;[^"]*"[^>]*data-fm-field-id="${id}"`));
+    }
+  });
+
 });

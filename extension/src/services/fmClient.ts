@@ -58,6 +58,7 @@ interface RequestOptions {
 }
 
 interface HistoryContext {
+  recordHistory?: boolean;
   profileId: string;
   operation: string;
   layout?: string;
@@ -583,12 +584,16 @@ export class FMClient {
   public async getLayoutMetadata(
     profile: ConnectionProfile,
     layout: string,
-    control?: ClientRequestControl
+    control?: ClientRequestControl & {
+      /** Ancillary presentation lookups omit user history; metrics still record them. */
+      recordHistory?: boolean;
+    }
   ): Promise<Record<string, unknown>> {
     return this.withHistory(
       {
         profileId: profile.id,
         operation: 'getLayoutMetadata',
+        recordHistory: control?.recordHistory,
         layout,
         endpoint: `GET /layouts/${layout}`
       },
@@ -1699,7 +1704,7 @@ export class FMClient {
         reauthCount: trace.reauthCount,
         cacheHit: trace.cacheHit
       });
-      await this.recordHistory({
+      if (context.recordHistory !== false) await this.recordHistory({
         requestId: trace.requestId,
         profileId: context.profileId,
         layout: context.layout,
@@ -1734,7 +1739,7 @@ export class FMClient {
         cacheHit: trace.cacheHit,
         error
       });
-      await this.recordHistory({
+      if (context.recordHistory !== false) await this.recordHistory({
         requestId: trace.requestId,
         profileId: context.profileId,
         layout: context.layout,

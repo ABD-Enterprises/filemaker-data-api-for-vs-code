@@ -109,6 +109,23 @@ describe('FM Web runtime template', () => {
     expect(second.updated).toEqual([]);
   });
 
+  it('keeps the original page.tsx hash managed: refreshes old generated pages and preserves edits', async () => {
+    const legacy = await readFile(path.join(extensionDir, 'test/fixtures/legacy-runtime-page.tsx.txt'));
+    // Pin this historical file independently of the current template hash list.
+    expect(normalizedHash(legacy)).toBe('0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266');
+    const page = path.join(dir, 'runtime-next', 'app/layouts/[id]/page.tsx');
+    await mkdir(path.dirname(page), { recursive: true });
+    await writeFile(page, legacy);
+    const first = await generator().generateRuntimeAppTemplate();
+    expect(first.updated).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(await readFile(page, 'utf8')).toBe(await readFile(path.join(extensionDir, '../runtime-next/app/layouts/[id]/page.tsx'), 'utf8'));
+    const edited = Buffer.concat([legacy, Buffer.from('\n// my application change\n')]);
+    await writeFile(page, edited);
+    const second = await generator().generateRuntimeAppTemplate();
+    expect(second.needsManualUpdate).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(await readFile(page)).toEqual(edited);
+  });
+
   it('does not overwrite a user-edited file that still carries an older marker: it is left alone and named', async () => {
     await mkdir(path.dirname(bridgeClientPath()), { recursive: true });
     const edited = '// fmweb-managed: runtime template v1\nexport const mine = true;\n';

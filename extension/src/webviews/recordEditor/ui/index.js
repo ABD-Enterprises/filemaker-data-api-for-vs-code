@@ -582,7 +582,7 @@ function buildFieldEditor(keys) {
   wrapper.className = 'table-scroll-wrapper';
 
   const table = document.createElement('table');
-  table.className = 'fm-field-table';
+  if (typeof FieldStandards !== 'undefined') table.className = 'fm-field-table';
   const thead = document.createElement('thead');
   thead.className = 'visually-hidden';
   const headerRow = document.createElement('tr');
@@ -597,14 +597,14 @@ function buildFieldEditor(keys) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
-  tbody.className = 'fm-fields';
+  if (typeof FieldStandards !== 'undefined') tbody.className = 'fm-fields';
   for (const key of keys) {
     const tr = document.createElement('tr');
-    tr.className = 'fm-field';
-    FieldStandards.applyStandardField(tr, fieldPresentation(key));
+    if (typeof FieldStandards !== 'undefined') tr.className = 'fm-field';
+    if (typeof FieldStandards !== 'undefined') FieldStandards.applyStandardField(tr, fieldPresentation(key));
 
     const labelCell = document.createElement('td');
-    labelCell.className = 'fm-field-label';
+    if (typeof FieldStandards !== 'undefined') labelCell.className = 'fm-field-label';
     labelCell.id = `record-field-label-${fieldInputs.size}`;
     labelCell.textContent = key;
     tr.appendChild(labelCell);
@@ -645,7 +645,7 @@ function updateFieldEditorValues(keys) {
     }
 
     input.value = toEditableValue(state.draftFieldData[key]);
-    FieldStandards.applyStandardField(input.closest('tr'), fieldPresentation(key));
+    if (typeof FieldStandards !== 'undefined') FieldStandards.applyStandardField(input.closest('tr'), fieldPresentation(key));
   }
 }
 

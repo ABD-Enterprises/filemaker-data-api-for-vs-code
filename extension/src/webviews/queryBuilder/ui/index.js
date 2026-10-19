@@ -299,7 +299,7 @@ function renderRequest(request, requestIndex) {
 
 function renderCriterion(request, criterion, requestIndex, criterionIndex) {
   const row = document.createElement('div');
-  row.className = 'criterion-row fm-fields';
+  row.className = typeof FieldStandards !== 'undefined' ? 'criterion-row fm-fields' : 'criterion-row';
   const idPrefix = `req${requestIndex}-crit${criterionIndex}`;
 
   const field = document.createElement('input');
@@ -337,7 +337,9 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
   row.append(labelControl(field, 'Field'), labelControl(operator, 'Condition'));
   function sizeValues() {
     const metadata = state.fieldMetadata.find((entry) => entry.name === criterion.field);
-    row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+    if (typeof FieldStandards !== 'undefined') {
+      row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+    }
   }
 
   const definition = FindForm.getOperator(criterion.operator);
@@ -390,6 +392,7 @@ function makeValueInput(value, label, onInput) {
 }
 
 function labelControl(control, text) {
+  if (typeof FieldStandards === 'undefined') return control;
   const wrapper = document.createElement('label');
   wrapper.className = 'fm-field';
   const label = document.createElement('span');
@@ -397,7 +400,7 @@ function labelControl(control, text) {
   label.textContent = text;
   control.classList.add('fm-field-control');
   wrapper.append(label, control);
-  FieldStandards.applyStandardField(wrapper);
+  if (typeof FieldStandards !== 'undefined') FieldStandards.applyStandardField(wrapper);
   return wrapper;
 }
 
@@ -492,7 +495,9 @@ function applyFieldNames(payload) {
   requestList.querySelectorAll('.criterion-row').forEach((row) => {
     const field = row.querySelector('.criterion-field');
     const metadata = state.fieldMetadata.find((entry) => entry.name === field.value);
-    row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+    if (typeof FieldStandards !== 'undefined') {
+      row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
+    }
   });
   fieldNamesHint.classList.remove('error');
   if (payload && payload.error) {

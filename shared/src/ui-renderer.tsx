@@ -39,14 +39,19 @@ export function LayoutContainer({
     [layout, viewport]
   );
 
-  // Wide views retain saved geometry. Narrow views flow objects in saved order so controls stay reachable.
+  // Stack controls in the designer's visual order, while retaining paint order and decorative geometry.
   let flowY = FIELD_LAYOUT.pageMargin;
-  const visibleObjects = narrow ? renderedObjects.map((object) => {
-    const next = { ...object, x: FIELD_LAYOUT.pageMargin, y: flowY,
-      width: Math.min(object.width, Math.max(1, containerWidth - FIELD_LAYOUT.pageMargin * 2)) };
-    flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.rowGap;
-    return next;
-  }) : renderedObjects;
+  const positions = new Map<string, LayoutObject>();
+  if (narrow) {
+    layout.objects.filter((object) => ['field', 'portal', 'button'].includes(object.type))
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .forEach((object) => {
+        positions.set(object.id, { ...object, x: FIELD_LAYOUT.pageMargin, y: flowY,
+          width: Math.min(object.width, Math.max(1, containerWidth - FIELD_LAYOUT.pageMargin * 2)) });
+        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.rowGap;
+      });
+  }
+  const visibleObjects = renderedObjects.map((object) => positions.get(object.id) ?? object);
 
   return (
     <div
