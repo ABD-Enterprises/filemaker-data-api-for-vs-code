@@ -1,6 +1,6 @@
 # Step 1 — Add a connection profile
 
-![FileMaker Explorer sidebar with a saved profile and layouts](../marketplace/explorer-overview.png)
+![The connection wizard filled in with example values](../marketplace/connection-setup.png)
 
 A **connection profile** stores how to reach your FileMaker server and which
 database to talk to. Passwords are stored in your OS keychain via VS Code's

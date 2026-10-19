@@ -1,6 +1,6 @@
 # FileMaker Data API Tools: User Guide
 
-This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers the version in this repository (1.4). You can open it from VS Code with **FileMaker: Open User Guide**.
+This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers the version in this repository: 1.4 plus the changes made since it was released (listed under [Added since 1.4.0](#added-since-140)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
 
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
@@ -78,7 +78,21 @@ Use a dedicated account for this work, with only the access you need. A FileMake
 
 VS Code has a safety feature called Workspace Trust. When you open a folder you have not trusted, VS Code runs in **Restricted Mode** (a banner says so) and extensions must limit themselves. Choose **Yes, I trust the authors** in the banner or dialog when the folder is yours or comes from a source you trust. You can review it with **Workspaces: Manage Workspace Trust**.
 
+In Restricted Mode the connection wizard shows a notice at the top (with a **Manage Workspace Trust** button) that says what is limited: a profile template in the project is ignored, and workspace settings that change how connections and commands behave are ignored until you trust the workspace. Your own profile, password and Test Connection work as usual, and a profile you save is yours (it is not stored in the project). The notice goes away when you trust the workspace.
+
 In an untrusted workspace this extension can browse, read metadata and run finds. It will not edit, create or delete records, upload to containers, run scripts, write generated files, run batch jobs, load plugins, start the FM Web preview, or register AI tools, and it ignores a `.filemaker/profile-template.json`. Trust is checked each time, and a panel that is already open refuses changes if trust is lost. A trusted workspace is also not a free pass: the extension still asks before risky actions. See [Security behavior you will notice](#security-behavior-you-will-notice).
+
+### Windows, Linux and macOS
+
+The extension runs on macOS, Windows and Linux desktops (VS Code 1.96 or newer). Things that differ:
+
+- **Shortcuts.** `Cmd` on macOS is `Ctrl` on Windows and Linux.
+- **Passwords** are kept in the operating system's keychain through VS Code: Keychain on macOS, Credential Manager on Windows, a keyring (such as GNOME Keyring) on Linux. A Linux desktop without a running keyring gives "Secret storage unavailable" (see [Troubleshooting](#signing-in)).
+- **AI server for MCP clients.** It listens on a local socket on macOS and Linux and on a named pipe on Windows. The client needs Node.js 18 or newer on its PATH. It does not run in remote windows (SSH, WSL, Dev Containers, Codespaces).
+- **Generated files.** File names avoid names Windows reserves (such as `CON` or `NUL`), and names that differ only in letter case can share a file on Windows and on macOS's default disk format. Generated files use LF line endings on every system. A generated file that is marked read-only (for example by a version-control tool) is still updated and stays read-only. A symbolic link or a directory junction in the way is refused.
+- **Copied commands.** **Copy as curl** produces a command for a POSIX shell (sh, bash, zsh); use the `.http`, fetch() or Postman formats in PowerShell or cmd.exe.
+
+What has been checked: build, lint, type check and the unit tests run on Windows and Linux on every change. The real VS Code screens have been driven by the UI test suite on macOS only, and no automated test runs against a real FileMaker Server (the tests use a mock of the Data API). See [Compatibility](./COMPATIBILITY.md) for details and what is not tested.
 
 ### Opening your user settings
 
@@ -115,6 +129,17 @@ Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
 - A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
 
+### Added since 1.4.0
+
+These changes are in the repository and arrive with the next release:
+
+- **`@filemaker` in the Chat view.** A read-only participant: `/layouts`, `/describe`, `/find`, `/explain` and `/help`, under the same AI settings, approvals, limits and kill switch as the AI tools. See [Chat with @filemaker](#chat-with-filemaker).
+- **Copy a request as code, everywhere.** curl, fetch(), a `.http` file, a Postman collection and TypeScript, from the Query Builder, Script Runner, Record Viewer, Record Editor and the new **FileMaker: Copy Request as Code…** command. See [Copy a request as code](#copy-a-request-as-code).
+- **Scripts run with the request the Claris guide documents.** A `GET` with `script.param` in the address, one request that reads no record. See [Run scripts](#run-scripts).
+- **Names are used exactly as typed or listed.** A leading or trailing space is part of a layout, script or field name and is no longer removed. See [Names are used exactly](#names-are-used-exactly).
+- **Restricted Mode notice in the connection wizard**, panels that fit narrow editors, a Record Editor note when your account cannot see some fields, and a Record Viewer that loads the record it was opened for.
+- **Windows and Linux** fixes found by running the tests on both (updating a read-only file, matching folder names regardless of letter case, the MCP shim on Windows). See [Windows, Linux and macOS](#windows-linux-and-macos).
+
 ---
 
 ## Install
@@ -133,6 +158,8 @@ To check the install, open the Command Palette and type `FileMaker:`. Run **File
 ## Connect to a server
 
 A **connection profile** holds the server address, the database name and how you sign in. Profiles belong to your VS Code install and follow you between workspaces. Passwords never go into a settings file.
+
+![The connection wizard filled in with example values](./marketplace/connection-setup.png)
 
 ### Add a profile
 
@@ -258,7 +285,15 @@ Right-click a layout for the common actions: open the Query Builder, open or edi
 
 **Layout Inspector** shows the fields, portals, value lists and field validation rules of one layout. Select a layout in Connections, or run **FileMaker: Select Layout for Inspector**.
 
+![The FileMaker sidebar with a connection, a layout, its fields and the Layout Inspector](./marketplace/explorer.png)
+
 **FileMaker: Refresh Connections** reloads the tree. **FileMaker: Refresh Schema Cache** drops the cached layout metadata (kept for `filemaker.schema.cacheTtlSeconds`, default 300 seconds).
+
+### Names are used exactly
+
+Layout, script and field names are sent to FileMaker exactly as the server lists them or as you type them. A leading or trailing space is part of the name, so the layouts `Sales` and ` Sales` (with a space in front) are two layouts, the sidebar lists both, and choosing one never turns into the other. This holds in the Query Builder (find and sort fields), Script Runner, container upload, global fields, saved queries, type generation, Layout Mode and the AI tool that runs scripts. For scripts and layouts, only an empty name or one that is all spaces is refused. A name that is just `.` or `..` is refused for a script or layout, because a web address would resolve it away and send a different request. Generated file names and TypeScript identifiers for such names stay different from each other (see [file names](#generate-types-a-client-and-snippets)).
+
+If a name seems not to work, check for a space at either end: copy it from the sidebar rather than typing it.
 
 Some commands are hidden from the Command Palette until you need them:
 
@@ -275,6 +310,8 @@ Some commands are hidden from the Command Palette until you need them:
 3. On the **Form** tab, build the find: choose a field (field names autocomplete), a condition, and a value. Conditions include *matches*, *equals (whole field)*, *begins with*, *contains phrase*, *greater than*, *at least*, *less than*, *at most*, *between*, *is empty* and *is not empty*.
 4. Select **Add request (OR)** for an alternative set of criteria. Tick **Omit** on a request to exclude its matches. Use **Add sort field** to sort.
 5. Select **Run** (or press `Ctrl+Enter` / `Cmd+Enter`).
+
+![The Query Builder after a find: Status Open and Region East, sorted by last name](./marketplace/query-builder.png)
 
 The **JSON** tab shows the same request as a Data API find body, and you can edit it directly. For example, `[{ "Status": "Active", "City": "Portland" }]` means Active AND Portland; `[{ "City": "Portland" }, { "City": "Seattle" }]` means Portland OR Seattle; a request with `"omit": "true"` excludes its matches.
 
@@ -303,6 +340,8 @@ A **record ID** is FileMaker's internal record number for a row on a layout (wha
 Run **FileMaker: Get Record by ID** or **FileMaker: Open Record Viewer**, choose a profile and layout, and enter the record ID (or use **View** on a row in the Query Builder). The viewer shows the fields, portal data and container fields (images are previewed). **Export Record JSON** saves the record.
 
 ### Edit a record
+
+![The Record Editor with record 1003 loaded](./marketplace/record-editor.png)
 
 1. Run **FileMaker: Open Record Editor** or **FileMaker: Edit Record by ID**, or select **Edit** in the Query Builder.
 2. Choose a profile and layout and enter the record ID, or skip this and use **Edit** on a row in the Query Builder (the editor then opens with the record loaded). In the editor, **Load** fetches the record.
@@ -380,6 +419,16 @@ Batch update is blocked in offline mode, for the `viewer` role, and when `filema
 3. Type the script name exactly as it appears in FileMaker. Add a record ID and a parameter if the script needs them. **Build Parameter** helps you assemble a JSON parameter.
 4. Select **Run Script**. The result appears below. Under **Copy request** the same formats as in the Query Builder copy the request without running it (see [Copy a request as code](#copy-a-request-as-code)).
 
+**What is sent.** The script runs with the request the Claris Data API Guide documents for it: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<parameter>`. It is one request and it reads no record. The script name, layout name and parameter are percent-encoded exactly (a space is `%20`, never `+`; accented letters, `|`, `&` and `/` arrive as typed). The answer carries the script's error number and, if the script exits with a result, that result; if a record or find was part of the request, its data is not shown.
+
+**Parameter length.** A web address should stay under about 2,000 characters (the guide's advice), and this count includes the server address, layout and script name. A longer parameter cannot go in the address, so the extension sends it in the body of a find limited to one record, which is the guide's other documented form. That request reads that one record and has your script attached to it. If you also gave a **Record ID** and the parameter is too long, the run is refused with a message; shorten the parameter (pass an id or a key and let the script read the rest).
+
+**With a record ID.** The script is attached to a request for that record (`?script=<name>&script.param=<parameter>`), because the script endpoint cannot take a record in context.
+
+**Older servers.** If the server answers the script endpoint with 405, 501 or a FileMaker 404, the extension uses the attach-to-another-request form instead and, if that is refused too, says "Script runner is not supported on this server/profile." A bare 404 with no FileMaker error code means a wrong address or a Data API that is turned off, not unsupported scripts.
+
+Script and layout names are used exactly as typed (see [Names are used exactly](#names-are-used-exactly)); a name that is only `.` or `..` is refused before anything is sent.
+
 The Script Runner does not ask for confirmation, so check the script name before you run it. Running scripts is blocked in offline mode, for the `viewer` role, and when `filemaker.features.scriptRunner.enabled` is off. A workspace setting can only switch this off, never on.
 
 ---
@@ -387,6 +436,8 @@ The Script Runner does not ask for confirmation, so check the script name before
 ## Copy a request as code
 
 Any request the extension sends can be copied as text, to try it in a terminal, put it in a repository, share it with a colleague or move it to Postman. Nothing is sent when you copy.
+
+![The Copy request menu open in the Query Builder](./marketplace/copy-as-code.png)
 
 **Where.** Query Builder and Script Runner: **Copy request** (next to Export). Record Viewer and Record Editor: **Copy request for this record** (choose **Get**, **Edit** or **Delete**, and a format). Command Palette: **FileMaker: Copy Request as Code…** asks for the request (log in, find, get, create, edit, delete, run a script, list layouts, list scripts, layout metadata, container upload), then the layout and details it needs, then the format, for the active connection.
 
@@ -463,6 +514,8 @@ A snapshot records a layout's fields and metadata at a moment in time, so you ca
 2. Later, choose **Diff Against Latest Snapshot** on the layout, or **FileMaker: Diff Schema Snapshots** to compare any two.
 3. The **Schema Diff** panel shows added, removed and changed fields side by side or as a tree. **Export Diff JSON** saves it.
 
+![The Schema Diff panel with a field added and a field removed](./marketplace/schema-diff.png)
+
 Layout names that contain `..` (for example `Q1..Q2`) are supported in snapshots and the offline cache. Snapshots are stored in `.vscode/filemaker/snapshots/` in a trusted workspace (`filemaker.schema.snapshots.storage` = `workspaceFiles`, the default), or in VS Code workspace storage in an untrusted one. The newest 20 per layout are kept (`filemaker.schema.snapshots.maxPerLayout`). Treat the files as internal project data: they contain your layout and field names.
 
 With `filemaker.schema.diagnostics.enabled`, changes found by **Diff Against Latest Snapshot** are also listed in the Problems panel.
@@ -495,6 +548,8 @@ Regenerate after a schema change, and use a [schema diff](#schema-snapshots-and-
 ## FM Web and Layout Mode
 
 FM Web is an experimental workflow for designing web layouts that sit on top of your FileMaker data and generating a small Next.js app from them. Everything is under `.fmweb/` in the workspace and needs a trusted workspace.
+
+![Layout Mode with six fields placed on a layout](./marketplace/layout-mode.png)
 
 1. **FileMaker: Initialize FM Web Project** creates `.fmweb/`.
 2. **FileMaker: Select Active Profile** and **FileMaker: Sync FM Web Project Metadata** copy layout, field and script metadata into `.fmweb/metadata`.
@@ -586,7 +641,7 @@ AI features are **off by default**. Nothing is read by an AI tool until you turn
 
 > **Read this first.** Anything an AI tool reads is sent to the AI model provider you use, and it can leave through any shell, web or git tool the same agent has. Field values and names are text from your database; a hostile value or name can try to steer an agent. The controls below reduce this. They do not remove it. Connect with a dedicated FileMaker account that has a read-only privilege set: it is the only control that does not depend on the model or on you.
 
-There are three parts, and you can use them separately:
+There are four parts, and you can use them separately:
 
 | Part | What it does | Where the data goes |
 | --- | --- | --- |
@@ -650,6 +705,8 @@ These are the controls the extension applies. They are the reasons it is safe to
 
 `@filemaker` is a participant in VS Code's Chat view. It reads the database through the same AI tools and the same rules as agent mode, and it is **read only**: it has no command that edits, creates, deletes or runs a script, even if you switched writes and scripts on for agent mode. It needs the same setup: `filemaker.ai.enabled` in your user settings and a connection set with **FileMaker: Set AI Access for Connection**.
 
+![@filemaker answering a find in the Chat view (made with a stand-in language model)](./marketplace/chat-participant.png)
+
 Type `@filemaker` in the Chat view, then:
 
 | Command | What it does |
@@ -660,8 +717,12 @@ Type `@filemaker` in the Chat view, then:
 | `/explain CODE` | Explains a FileMaker error code. With no code it uses the last FileMaker error `@filemaker` saw. |
 | `/help` | Lists the commands. |
 
+Which settings matter: `filemaker.ai.enabled`, the connection chosen with **Set AI Access for Connection** (`filemaker.ai.connection`), `filemaker.ai.hiddenFields` and `filemaker.ai.readableLayouts`. `filemaker.ai.allowWrites`, `filemaker.ai.allowScripts` and the script allowlist do not matter here: the participant never offers a write or a script.
+
 What you will see:
 
+- In an **untrusted workspace** (Restricted Mode) the AI tools are not registered, but `@filemaker` is still listed. It answers every request with "AI tools are not available right now" and the reason ("AI tools are unavailable in an untrusted workspace"), and reads nothing. Trust the workspace to use it. Offline mode and an enterprise policy that switches AI off give the same kind of answer, naming the reason.
+- A request longer than 1,000 characters is refused.
 - The first time `@filemaker` reads a layout in a session, the extension asks you, as for any AI tool. The limits (50 records a call, 500 a session, 30 calls a minute) and the kill switch apply, and a `/find` is three tool calls.
 - Layout names, field names and record values are shown as plain text in boxes. Nothing from the database is shown as a link, image or button.
 - If AI tools are off, `@filemaker` says so and gives a button that opens the AI settings. The status bar kill switch, an untrusted workspace, offline mode and enterprise policy turn it off too, and it tells you which.
@@ -909,6 +970,8 @@ Connection errors name the step that failed and what to do. The most common firs
 | --- | --- |
 | A find returns nothing | FileMaker reports "no records match" as error code 401 (sent with HTTP 404 or 500, whatever the HTTP status), and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
 | Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
+| "The script parameter is too long to send in a web address" | A script run with a record ID and a parameter longer than about 2,000 characters (the address limit, including the server and script name). Shorten the parameter, or run the script without a record ID (then it is sent in the body of a find). See [Run scripts](#run-scripts). |
+| "Script runner is not supported on this server/profile." | The server refused both the script endpoint and the attach-to-another-request form (405, 501 or a FileMaker 404). Check the layout and script exist for the account and the server version supports the Data API script calls. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
 | Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |
 | Error 301 (record in use) | Another user or a script has the record open. Try again shortly. |
@@ -925,6 +988,8 @@ Connection errors name the step that failed and what to do. The most common firs
 | A setting seems to do nothing | A workspace value may be ignored. Run **FileMaker: Show Effective Settings**, which covers the 24 policy-related settings; for any other setting the Settings editor's badge (**Per workspace**) tells you it works as typed. |
 
 ### Which version am I running?
+
+![The About message](./marketplace/about.png)
 
 Run **FileMaker: About / Show Version** from the Command Palette. It shows the extension version, the build (commit and date), your VS Code version, the **Extension host** line (`Node x, Electron y`: use it to check whether your Node is 22.15 or newer, which the operating system certificate store needs), operating system, remote window, workspace trust and language. The same version appears without running anything: in the tooltip of the **FileMaker** status bar item, next to the **FileMaker Explorer** title (for example `v1.4.0`), at the bottom of each panel, and in the first line the extension writes to the Output panel when it starts.
 

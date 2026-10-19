@@ -54,6 +54,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Marketplace page and User Guide refreshed for the changes since 1.4.0: real screenshots from the real-VS-Code UI harness against the mock Data API (new journey `e2e-ui/journeys/j16-marketplace-screenshots.mjs`, run by hand with `E2E_MARKETPLACE=1`) replace the three drawn mock-ups, and the guide describes the `@filemaker` participant, copy as code, the documented script `GET` and its 2,000-character limit, exact names, the Restricted Mode notice and Windows/Linux notes. User-facing notes: `extension/CHANGELOG.md`.
 - New `cross-platform` CI job: build, lint, typecheck, unit tests with coverage and package check on `windows-latest` and `ubuntu-latest` (Node 22). It is not a required check. New Windows-only tests run a real named-pipe MCP server and clients, real directory junctions through the discovery, shim-install, path-confinement and FM Web generator checks, read-only file replacement, and an `icacls` check of the discovery file's access rights; several MCP discovery tests that were Unix-only now run on Windows too.
 - Tests no longer assume Unix: path separators in expectations, a regular file instead of `/dev/null` as an unwritable folder, backslashes in the mock TLS authority's OpenSSL configuration, and CRLF-tolerant reads of `.vscodeignore`.
 - Dependabot now also watches `tools/publish` (the pinned Marketplace publish tool), which has its own lockfile and was not covered before.

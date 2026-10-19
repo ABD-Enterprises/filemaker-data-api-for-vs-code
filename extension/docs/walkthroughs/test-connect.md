@@ -1,6 +1,6 @@
 # Step 2 — Connect
 
-![Schema and batch tooling visible after connecting](../marketplace/schema-and-batch.png)
+![The FileMaker sidebar after connecting: a layout, its fields and the Layout Inspector](../marketplace/explorer.png)
 
 Right after you save a profile, the wizard offers a **Connect Now** action —
 click it to open a session immediately. You can also connect later: use the
