@@ -12,6 +12,7 @@ import {
   safeText,
   ensureOwnerOnlyDirectory,
   parseDiscovery,
+  samePath,
   removeDiscovery,
   scanDiscovery,
   selectWindow,
@@ -376,5 +377,15 @@ describe('createEndpoint', () => {
     expect(a.path).toMatch(/^\\\\\.\\pipe\\fm-ai-[0-9a-f]{32}$/);
     expect(a.path).not.toBe(b.path);
     expect(a.isPipe).toBe(true);
+  });
+});
+
+describe('samePath', () => {
+  it('ignores case on Windows (VS Code reports c:\\work, a person types C:\\Work) but not on other systems', () => {
+    expect(samePath('c:\\work\\Alpha', 'C:\\Work\\alpha', 'win32')).toBe(true);
+    expect(samePath('c:\\work\\alpha\\', 'C:\\work\\alpha', 'win32')).toBe(true);
+    expect(samePath('c:\\work\\alpha', 'c:\\work\\beta', 'win32')).toBe(false);
+    expect(samePath('/work/Alpha', '/work/alpha', 'linux')).toBe(false);
+    expect(samePath('/work/alpha/', '/work/alpha', 'linux')).toBe(true);
   });
 });
