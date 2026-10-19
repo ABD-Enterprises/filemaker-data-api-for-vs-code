@@ -35,6 +35,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
+import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
 import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
@@ -959,6 +960,13 @@ export class FMClient {
         if (!layout) {
           throw new FMClientError('Layout is required to run script.');
         }
+        if (isDotSegment(scriptName) || isDotSegment(layout)) {
+          throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout), {
+            code: 'NAME_NOT_USABLE_IN_URL',
+            kind: 'validation',
+            isRetryable: false
+          });
+        }
 
         const scriptParam = request.scriptParam !== undefined && request.scriptParam.length > 0 ? request.scriptParam : undefined;
         const ifTooLong = (path: string, query: Record<string, string>): boolean =>
@@ -978,7 +986,7 @@ export class FMClient {
               true,
               trace
             );
-            return { response: envelope.response, messages: envelope.messages };
+            return { response: withoutRecordData(envelope.response), messages: envelope.messages };
           }
           // POST: the script parameters are in the body, so a long one fits.
           const envelope = await this.requestWithAuth<Record<string, unknown>>(
@@ -992,7 +1000,7 @@ export class FMClient {
             true,
             trace
           );
-          return { response: envelope.response, messages: envelope.messages };
+          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
         };
 
         const failure = (error: unknown, endpoint: string): FMClientError =>
@@ -1802,6 +1810,18 @@ function strictQuerySerializer(params: Record<string, unknown>): string {
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
     .join('&');
+}
+
+/**
+ * A script run is not a data request. When the script is attached to a record or a find, that request's own
+ * record(s) (`data`, `dataInfo`) come back too; they are not part of the script's answer and are dropped, so no
+ * consumer (Layout Mode, the preview bridge, the AI tools, Script Runner) passes a record along by accident.
+ */
+function withoutRecordData(response: Record<string, unknown>): Record<string, unknown> {
+  const { data: _data, dataInfo: _dataInfo, ...rest } = response;
+  void _data;
+  void _dataInfo;
+  return rest;
 }
 
 function tooLongScriptParameter(): FMClientError {

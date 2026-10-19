@@ -266,6 +266,12 @@ function collectPayload() {
     return undefined;
   }
 
+  if (scriptName === '.' || scriptName === '..' || layout === '.' || layout === '..') {
+    // A web address treats these as folder references, so the request would be a different one.
+    setStatus('A script or layout named "." or ".." cannot be used in a request. Rename it in FileMaker.', true);
+    return undefined;
+  }
+
   return {
     profileId,
     layout,

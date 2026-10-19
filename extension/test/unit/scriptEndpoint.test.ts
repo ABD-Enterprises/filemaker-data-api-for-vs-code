@@ -289,6 +289,145 @@ describe('running a script uses the documented endpoint', () => {
     });
   });
 
+  describe('script and layout names that are dot segments', () => {
+    it.each([['..', 'L'], ['.', 'L'], ['S', '..'], ['S', '.']])('script %s on layout %s is refused before anything is sent', async (scriptName, layout) => {
+      const server = await serve(withLogin(scriptOk));
+      const { fm, profile } = await client(server.url);
+      const error = (await fm.runScript(profile, { layout, scriptName, scriptParam: 'x' }).catch((e: FMClientError) => e)) as FMClientError;
+      expect(error.code).toBe('NAME_NOT_USABLE_IN_URL');
+      expect(error.message).toMatch(/cannot be used in a request/);
+      expect(calls(server.seen)).toHaveLength(0);
+    });
+
+    it('names that merely contain dots are ordinary names and are sent', async () => {
+      const server = await serve(withLogin(scriptOk));
+      const { fm, profile } = await client(server.url);
+      for (const scriptName of ['...', 'a..b', '.hidden']) {
+        await fm.runScript(profile, { layout: 'L', scriptName });
+      }
+      expect(calls(server.seen)).toHaveLength(3);
+      expect(calls(server.seen)[0]?.path).toMatch(/\/script\/\.\.\.$/);
+    });
+
+    it('Script Runner: the panel answers with an error and sends nothing', async () => {
+      let onMessage: ((message: unknown) => void) | undefined;
+      const posted: Array<Record<string, unknown>> = [];
+      vi.mocked(vscode.window.createWebviewPanel).mockReturnValue({
+        webview: { html: '', cspSource: 'x', asWebviewUri: (u: unknown) => u, postMessage: vi.fn(async (m: Record<string, unknown>) => (posted.push(m), true)), onDidReceiveMessage: (cb: (m: unknown) => void) => ((onMessage = cb), { dispose: vi.fn() }) },
+        onDidDispose: vi.fn(() => ({ dispose: vi.fn() })),
+        reveal: vi.fn(),
+        dispose: vi.fn()
+      } as never);
+      (vscode.workspace as unknown as { isTrusted: boolean }).isTrusted = true;
+      (ScriptRunnerPanel as unknown as { currentPanel: unknown }).currentPanel = undefined;
+      const server = await serve(withLogin(scriptOk));
+      const { fm, profile } = await client(server.url);
+      const runScript = vi.fn((p: ConnectionProfile, r: never) => fm.runScript(p, r));
+      ScriptRunnerPanel.createOrShow(
+        { extensionUri: { fsPath: '/ext' }, workspaceState: new InMemoryMemento() } as never,
+        { listProfiles: async () => [profile], getProfile: async () => profile, getActiveProfileId: () => 'p1' } as never,
+        { listLayouts: async () => ['L'], listScripts: async () => [], runScript } as never,
+        logger
+      );
+      onMessage?.({ type: 'runScript', payload: { profileId: 'p1', layout: 'L', scriptName: '..' } });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(runScript).not.toHaveBeenCalled();
+      expect(posted.some((m) => m.type === 'error' && /cannot be used in a request/.test(String(m.message)))).toBe(true);
+      expect(calls(server.seen)).toHaveLength(0);
+    });
+
+    it('the AI tool refuses them even if the script is on the allowlist', async () => {
+      const h = makeHarness({ settings: { scriptAllowlist: { p1: ['..'] } } });
+      h.client.listScripts.mockResolvedValue(['..']);
+      h.client.listLayouts.mockResolvedValue(['L', '..']);
+      h.confirm.mockResolvedValue(true);
+      h.state.now += 120_000;
+      await expect(h.service.invoke('fm_run_script', { layout: 'L', script: '..' })).rejects.toThrow(/cannot be used in a request/);
+      await expect(h.service.invoke('fm_run_script', { layout: '..', script: '..' })).rejects.toThrow(/cannot be used in a request/);
+      expect(h.client.runScript).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a script run returns the script\'s answer, not a record', () => {
+    const withRecord: Handler = (entry, response) => {
+      if (entry.method === 'GET' && /\/script\//.test(entry.path)) {
+        response.statusCode = 405;
+        response.end('{"messages":[{"code":"-1","message":"Method not allowed"}]}');
+        return;
+      }
+      response.end(ok({ data: [{ recordId: '1', modId: '0', fieldData: { Secret: 'top secret' } }], dataInfo: { foundCount: 1 }, scriptResult: 'r', scriptError: '0' }));
+    };
+
+    it('after the fallback to a find, FMClient drops data and dataInfo and keeps the script keys', async () => {
+      const server = await serve(withLogin(withRecord));
+      const { fm, profile } = await client(server.url);
+      const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S' });
+      expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
+      expect(JSON.stringify(result)).not.toContain('top secret');
+    });
+
+    it('with a record id (GET of that record) as well', async () => {
+      const server = await serve(withLogin(withRecord));
+      const { fm, profile } = await client(server.url);
+      const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S', recordId: '1' });
+      expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
+    });
+
+    it('with a long parameter (body form) as well', async () => {
+      const server = await serve(withLogin(withRecord));
+      const { fm, profile } = await client(server.url);
+      const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) });
+      expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
+    });
+
+    it('Layout Mode\'s result detail and the preview bridge\'s reply carry no record', async () => {
+      const server = await serve(withLogin(withRecord));
+      const { fm, profile } = await client(server.url);
+      const layoutMode = await executeBehaviorBinding({
+        behavior: { type: 'runScript', scriptName: 'S' },
+        objectName: 'B',
+        layoutName: 'L',
+        fmLayoutName: 'L',
+        profile,
+        runScript: (p, r) => fm.runScript(p, r)
+      });
+      expect(JSON.stringify(layoutMode)).not.toContain('top secret');
+      expect(layoutMode.ok).toBe(true);
+
+      const bridge = new FmBridgeServer(
+        { getActiveProfileId: () => profile.id, getProfile: async () => profile } as never,
+        fm as never,
+        { isWorkspaceTrusted: () => true, readProjectConfig: async () => ({ schemaVersion: 1, name: 'P', activeProfileId: profile.id, environments: [], featureFlags: { runtimeGenerationEnabled: true, bridgeServerEnabled: true, commercialModeEnabled: false } }) } as never,
+        logger
+      );
+      (bridge as unknown as { sessionToken: string }).sessionToken = 't';
+      const readable = new Readable({ read() {} }) as IncomingMessage;
+      readable.method = 'POST';
+      readable.url = '/fm/runScript';
+      readable.headers = { 'content-type': 'application/json', origin: 'http://localhost:3000', 'x-fm-bridge-token': 't' };
+      (readable as unknown as { socket: unknown }).socket = { remoteAddress: '127.0.0.1' };
+      readable.push(JSON.stringify({ layout: 'L', scriptName: 'S', recordId: '1' }));
+      readable.push(null);
+      const out = { status: 200, body: '' };
+      const response = {
+        get statusCode() {
+          return out.status;
+        },
+        set statusCode(v: number) {
+          out.status = v;
+        },
+        headersSent: false,
+        setHeader: () => response,
+        end: (chunk?: string) => ((out.body += chunk ?? ''), response)
+      } as unknown as ServerResponse;
+      await (bridge as unknown as { handleRequest: (a: IncomingMessage, b: ServerResponse) => Promise<void> }).handleRequest(readable, response);
+      expect(out.status).toBe(200);
+      expect(out.body).toContain('"scriptResult":"r"');
+      expect(out.body).not.toContain('top secret');
+      expect(out.body).not.toContain('"data"');
+    });
+  });
+
   describe('every way of running a script goes through it', () => {
     const run = async (use: (fm: FMClient, profile: ConnectionProfile) => Promise<unknown>) => {
       const server = await serve(withLogin((_entry, response) => response.end(ok({ scriptResult: 'done', scriptError: '0' }))));

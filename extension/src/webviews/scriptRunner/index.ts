@@ -5,6 +5,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
+import { dotSegmentMessage, isDotSegment } from '../../utils/urlSegment';
 import type { ConnectionProfile, RunScriptRequest } from '../../types/fm';
 import { generateCurlSnippet, generateFetchSnippet, type SnippetRequest } from '../../utils/snippetGen';
 import { buildWebviewCsp, createNonce } from '../common/csp';
@@ -542,6 +543,9 @@ function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
   const layout = payload.layout.trim();
   if (!layout) {
     throw new FMClientError('Layout is required.');
+  }
+  if (isDotSegment(scriptName) || isDotSegment(layout)) {
+    throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout));
   }
 
   return {
