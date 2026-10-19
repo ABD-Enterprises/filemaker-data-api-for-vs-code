@@ -340,7 +340,7 @@ describe('/find: the closed grammar', () => {
       { requests: [{ fields: { Name: 'x' }, omit: true }] },
       /must not be an omit/
     ],
-    ['a limit over 50', { requests: [{ fields: { Name: 'x' } }], limit: 5000 }, /Invalid input/],
+    ['a limit of zero', { requests: [{ fields: { Name: 'x' } }], limit: 0 }, /Invalid input/],
     [
       'a __proto__ field',
       JSON.parse('{"requests":[{"fields":{"__proto__":"x"}}]}'),
@@ -649,5 +649,66 @@ describe('cancellation and errors', () => {
     expect(text).toContain('FileMaker error 802');
     expect(text).not.toContain(SECRET_HOST);
     expect(text).not.toContain('sk0123456789abcdefghij');
+  });
+});
+
+describe('review fixes', () => {
+  it('parts of one reply are joined without anything between them and the output stays well formed', async () => {
+    const bed = makeChatBed();
+    bed.h.layoutFields.push({ name: '```', result: 'text' });
+    bed.h.client.findRecords.mockResolvedValue({
+      data: [{ recordId: '5', modId: '0', fieldData: { Name: '```\n[a](command:x)' } }],
+      dataInfo: { foundCount: 1 }
+    });
+    const { text, captured } = await bed.run({
+      command: 'find',
+      prompt: 'Contacts Name==```; Email=```'
+    });
+    expect(captured.markdown.length).toBeGreaterThanOrEqual(2);
+    // every part ends with a blank line, so a later part never starts on the line of a closing fence
+    for (const part of captured.markdown) expect(part.endsWith('\n\n')).toBe(true);
+    assertSafeMarkdown(text, ['command:x']);
+  });
+
+  it('the model cannot ask for more than the direct search returns', async () => {
+    const bed = makeChatBed();
+    for (const [asked, sent] of [
+      [50, 10],
+      [3, 3],
+      [undefined, 10]
+    ] as const) {
+      bed.h.client.findRecords.mockClear();
+      const model = makeModel([
+        toolCall('fm_find_records', {
+          requests: [{ fields: { Name: 'x' } }],
+          ...(asked === undefined ? {} : { limit: asked })
+        })
+      ]);
+      await bed.run({ command: 'find', prompt: 'Contacts anything', model });
+      expect((bed.h.client.findRecords.mock.calls[0]?.[2] as { limit: number }).limit).toBe(sent);
+    }
+    // a limit of the wrong type is still the core's to refuse
+    const bad = makeModel([
+      toolCall('fm_find_records', { requests: [{ fields: { Name: 'x' } }], limit: 'all' })
+    ]);
+    expect(
+      (await bed.run({ command: 'find', prompt: 'Contacts anything', model: bad })).text
+    ).toContain('Invalid input');
+  });
+
+  it("a cancel that arrives with the model's answer shows no find request and runs nothing", async () => {
+    const bed = makeChatBed();
+    const { token, cancel } = makeToken();
+    const model = makeModel(async function* () {
+      yield toolCall('fm_find_records', { requests: [{ fields: { Name: 'x' } }] });
+      cancel();
+    });
+    const { text, result } = await bed.run(
+      { command: 'find', prompt: 'Contacts anything', model },
+      token
+    );
+    expect(result.metadata.outcome).toBe('cancelled');
+    expect(text).not.toContain('Find request');
+    expect(bed.invoked.map((call) => call.name)).not.toContain('fm_find_records');
   });
 });

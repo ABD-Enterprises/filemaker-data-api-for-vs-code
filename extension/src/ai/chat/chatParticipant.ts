@@ -160,7 +160,8 @@ export class FileMakerChatHandler {
     const done = (outcome: ChatResultLike['metadata']['outcome']): ChatResultLike => ({
       metadata: { command, outcome }
     });
-    const out = (markdown: string): void => stream.markdown(capOutput(markdown));
+    // Each part ends with a blank line: VS Code may join parts with nothing between them, and text glued to a closing fence would leave the block open.
+    const out = (markdown: string): void => stream.markdown(`${capOutput(markdown)}\n\n`);
 
     if (token.isCancellationRequested) {
       out('The request was cancelled.');
@@ -338,6 +339,9 @@ export class FileMakerChatHandler {
     } else {
       stream.progress('Asking the language model to build the find request...');
       input = await this.askModel(request, split.layout, names, split.rest, token);
+      if (token.isCancellationRequested) {
+        throw new AiToolError('The request was cancelled.', 'error');
+      }
     }
 
     out(
@@ -430,6 +434,17 @@ export class FileMakerChatHandler {
       );
     }
     // The layout is the one the user named, whatever the model wrote. Everything else is validated by the tool core.
-    return { ...(first.input as Obj), layout };
+    const given = (first.input as Obj).limit;
+    // The layout is the user's, and the model cannot ask for more than a direct search returns (the core still validates it all).
+    return {
+      ...(first.input as Obj),
+      layout,
+      limit:
+        given === undefined
+          ? FIND_LIMIT
+          : typeof given === 'number'
+            ? Math.min(given, FIND_LIMIT)
+            : given
+    };
   }
 }

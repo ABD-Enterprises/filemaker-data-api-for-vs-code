@@ -122,7 +122,7 @@ export function makeChatBed(options?: Parameters<typeof makeHarness>[0]): ChatTe
     run: async (request, token) => {
       const { stream, captured } = makeStream();
       const result = await handler.handle(request, stream, token ?? makeToken().token);
-      return { result, text: captured.markdown.join('\n\n'), captured };
+      return { result, text: captured.markdown.join(''), captured };
     }
   };
 }
