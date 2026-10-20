@@ -48,7 +48,7 @@ Capture schema snapshots and compare them to see which fields were added, remove
 
 ![Layout Mode with six fields placed on a layout](docs/marketplace/layout-mode.png)
 
-Layout Mode places fields from a synced layout on a canvas for an FM Web project.
+Layout Mode places fields from a synced layout on a canvas for an FM Web project. Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step) and blank, form, two-column and first-portal starter templates keep layouts tidy. The find form, Record Editor and Record Viewer show fields the same way.
 
 ![@filemaker in the Chat view answering a find](docs/marketplace/chat-participant.png)
 
