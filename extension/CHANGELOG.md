@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] The mock server's `claris-default-cert` mode now presents the default certificate exactly as a real FileMaker Server 22 does, read from a real server: an X.509 version 1 leaf with no extensions (serial 1, sha256WithRSA, 2048-bit), the real subject and issuer names, one certificate sent, TLS 1.2 only. The leaf is encoded in the mock itself, because not every OpenSSL build can make a version 1 certificate. A new end-to-end test connects by IP address through the extension's real code: refused in plain words, the trust dialog (identical to the one seen on a real server), trust by fingerprint, sign-in, and refusal of a different certificate.
 - [FIX] Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
 - [FIX] The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
 - [FIX] Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.

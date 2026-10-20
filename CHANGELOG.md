@@ -39,6 +39,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- The mock server's `claris-default-cert` mode now presents the default certificate exactly as a real FileMaker Server 22 does, read from a real server: an X.509 version 1 leaf with no extensions (serial 1, sha256WithRSA, 2048-bit), the real subject and issuer names, one certificate sent, TLS 1.2 only. The leaf is encoded in the mock itself, because not every OpenSSL build can make a version 1 certificate. A new end-to-end test connects by IP address through the extension's real code: refused in plain words, the trust dialog (identical to the one seen on a real server), trust by fingerprint, sign-in, and refusal of a different certificate.
 - The MCP connection-capacity test polls for the expected counts instead of relying on startup sleeps. Tests also check pending connection limits and handshake expiry without opening sockets.
 - Correct the nested `why-is-node-running` lockfile entry to the exact version required by Vitest.
 - The API Docs workflow now builds the shared package before running typedoc (it failed on `main` since the field-standards import landed, with `Cannot find module '@fmweb/shared/dist/field-standards'`). The manual release job aid names the 1.5.0 release commit (`e2f9aac`) and sets it as the default `RELEASE_SHA`, drops the untrue claim that nothing else merges meanwhile, and gives the VSIX size as a range. No user-facing change.
