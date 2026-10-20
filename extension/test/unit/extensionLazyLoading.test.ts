@@ -95,10 +95,15 @@ vi.mock('../../src/utils/backoff', () => {
 });
 
 describe('extension lazy FM runtime loading', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
     installActivationVsCodeMocks();
+    // Avoid filesystem reads from an earlier activation completing during the next test.
+    const { FmWebProjectService } = await import('../../src/services/fmWebProjectService');
+    const { SchemaSnapshotStore } = await import('../../src/services/schemaSnapshotStore');
+    vi.spyOn(FmWebProjectService.prototype, 'readProjectConfig').mockResolvedValue(undefined);
+    vi.spyOn(SchemaSnapshotStore.prototype, 'listSnapshots').mockResolvedValue([]);
   });
 
   it('does not load FM client, retry, batch, or circuit-breaker modules during activation', async () => {
@@ -259,19 +264,20 @@ describe('extension lazy FM runtime loading', () => {
     await activate(context);
     const keyCalls = (key: string) =>
       vi.mocked(vscode.commands.executeCommand).mock.calls.filter(([command, name]) => command === 'setContext' && name === key).length;
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await vi.waitFor(() => {
+      expect(keyCalls('filemaker.hasProfiles')).toBeGreaterThan(0);
+      expect(keyCalls('filemaker.fmWebProjectInitialized')).toBeGreaterThan(0);
+    });
 
     expect(profileListeners).toHaveLength(1);
     expect(projectListeners).toHaveLength(1);
     const profileKeyBefore = keyCalls('filemaker.hasProfiles');
     profileListeners[0]?.();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(keyCalls('filemaker.hasProfiles')).toBe(profileKeyBefore + 1);
+    await vi.waitFor(() => expect(keyCalls('filemaker.hasProfiles')).toBe(profileKeyBefore + 1));
 
     const projectKeyBefore = keyCalls('filemaker.fmWebProjectInitialized');
     projectListeners[0]?.();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(keyCalls('filemaker.fmWebProjectInitialized')).toBe(projectKeyBefore + 1);
+    await vi.waitFor(() => expect(keyCalls('filemaker.fmWebProjectInitialized')).toBe(projectKeyBefore + 1));
 
     // A project.json created, changed or deleted outside the extension is noticed as well.
     const watcherCalls = vi.mocked(vscode.workspace.createFileSystemWatcher).mock.calls.map(([pattern]) => String(pattern));
@@ -284,8 +290,7 @@ describe('extension lazy FM runtime loading', () => {
       expect(callback, event).toBeTypeOf('function');
       const before = keyCalls('filemaker.fmWebProjectInitialized');
       callback?.();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(keyCalls('filemaker.fmWebProjectInitialized'), event).toBe(before + 1);
+      await vi.waitFor(() => expect(keyCalls('filemaker.fmWebProjectInitialized'), event).toBe(before + 1));
     }
     disposeSubscriptions(context);
     vi.restoreAllMocks();
