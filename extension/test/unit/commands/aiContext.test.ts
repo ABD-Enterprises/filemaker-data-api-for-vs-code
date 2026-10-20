@@ -398,6 +398,20 @@ describe('FileMaker: Write AI Context', () => {
       expect(summary).toContain('8 fields left out by filemaker.ai.hiddenFields');
     });
 
+    it.each(['SSN', 'SSN, Password'])('a bare string still hides the whole field name %s', async (name) => {
+      vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+        get: (_key: string, fallback?: unknown) => fallback,
+        inspect: (key: string) => key === 'ai.hiddenFields' ? { globalValue: name } : undefined
+      } as never);
+      fields(name, 'Name', 'Password');
+      await run();
+      const text = await readFile(defaultFile(), 'utf8');
+      expect(text).not.toContain(`"name": "${name}"`);
+      expect(text).toContain('"name": "Name"');
+      expect(text).toContain('"name": "Password"');
+      expect(text).toContain("Fields left out because the user's settings hide them from AI tools: 1.");
+    });
+
     it('a workspace can add names but never remove one the user set (same union the AI tools use)', async () => {
       inspected = { globalValue: ['SSN'], workspaceValue: ['Salary'], workspaceFolderValue: [] };
       fields('SSN', 'Salary', 'Name');

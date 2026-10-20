@@ -168,7 +168,7 @@ function valueNotes(setting: PolicySetting, values: ScopeValues, restrictedMode:
     const inForce = restrictedMode ? values.user : (values.workspaceFolder ?? values.workspace ?? values.workspaceFile ?? values.user);
     if (typeof inForce === 'string' && usableRelativeDir(inForce) === undefined) {
       notes.push(
-        `The value ${fmt(inForce)} is not a folder inside the workspace (it is empty, absolute, or contains ".."), so the default ${fmt(values.default)} is used.`
+        `The value ${fmt(inForce)} is not a folder inside the workspace (it is empty, absolute, contains "..", or has a control or invisible character), so the default ${fmt(values.default)} is used.`
       );
     }
   }

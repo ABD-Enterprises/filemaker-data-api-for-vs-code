@@ -517,10 +517,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const what =
       kind === 'entries-ignored'
         ? `${count} entr${count === 1 ? 'y is' : 'ies are'} not text and ${count === 1 ? 'was' : 'were'} ignored; the other names still hide`
-        : kind === 'single-name'
-          ? 'the value is a single string, not a list, and was read as one field name'
+        : kind === 'string-as-name'
+          ? 'the value is a string, so it still hides one exact field name (commas are not separators)'
           : 'the value is not a list of names and was ignored';
-    logger.warn(`filemaker.ai.hiddenFields (${scope}): ${what}. Fix the setting to a list of field names.`);
+    logger.warn(`filemaker.ai.hiddenFields (${scope}): ${what}. Fix the setting to a list of field names, for example ["SSN", "Password"].`);
   };
   const aiAudit = new AuditLog(() => auditLogPath(context.globalStorageUri.fsPath));
   const aiService = new AiToolService({
@@ -611,6 +611,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(refreshAi),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      profileStore.checkForExternalChanges();
       if (
         event.affectsConfiguration('filemaker.ai') ||
         event.affectsConfiguration('filemaker.features.ai') ||
@@ -826,13 +827,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // outside the extension). Without this, Connect and the FM Web commands stay missing until a reload.
   const projectFileWatcher = vscode.workspace.createFileSystemWatcher('**/.fmweb/project.json');
   context.subscriptions.push(
-    profileStore.onDidChange(() => void refreshPaletteContexts()),
+    profileStore.watchExternalChanges(),
+    profileStore.onDidChange(() => {
+      connectionStatusBar.refresh();
+      refreshAi();
+      refreshExplorer();
+    }),
     fmWebProjectService.onDidChangeProject(() => void refreshPaletteContexts()),
     projectFileWatcher,
     projectFileWatcher.onDidCreate(() => void refreshPaletteContexts()),
     projectFileWatcher.onDidDelete(() => void refreshPaletteContexts()),
     projectFileWatcher.onDidChange(() => void refreshPaletteContexts())
   );
+  const secretChanges = context.secrets.onDidChange(() => {
+    profileStore.checkForExternalChanges();
+    connectionStatusBar.refresh();
+    refreshAi();
+  });
+  if (secretChanges) context.subscriptions.push(secretChanges);
   // Hide the preview commands in an installation that has no runtime template (the Marketplace
   // package); computed the same way the generator resolves it.
   void publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>

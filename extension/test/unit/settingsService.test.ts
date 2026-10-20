@@ -1,3 +1,4 @@
+import { usableRelativeDir } from '../../src/utils/relativeDir';
 import { describe, expect, it } from 'vitest';
 
 import { SettingsService } from '../../src/services/settingsService';
@@ -293,6 +294,15 @@ describe('SettingsService legacy resolution across workspaces', () => {
         (scope) => scope?.filemakerDataApiTools?.requestTimeoutMs !== undefined
       );
       expect(leftover, `legacy value left behind, mask ${mask}`).toBe(false);
+    }
+  });
+});
+
+describe('configured output folder text', () => {
+  it('keeps emoji presentation selectors but refuses invisible standalone selectors', () => {
+    expect(usableRelativeDir('out/☀️')).toBe('out/☀️');
+    for (const value of ['out/\uFE0F', 'out/a\uFE0Fb', 'out/\u3164', 'out/a\u200Bb']) {
+      expect(usableRelativeDir(value), value).toBeUndefined();
     }
   });
 });

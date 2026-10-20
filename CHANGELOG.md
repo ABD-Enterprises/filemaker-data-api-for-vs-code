@@ -29,10 +29,18 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
+- The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
+- Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.
+- Temporary context and runtime export files start with owner-only permissions. Replaced files keep ordinary permissions without copying setuid, setgid or sticky bits.
+- Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. The Output panel and Show Effective Settings now warn when `ai.hiddenFields` is a string instead of a list; hiding is unchanged: the whole string still counts as one field name, even with commas.
+- Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
 - [FIX] Layout Mode keeps standardized fields on canvas, arranges selections without covering other objects, sizes Data API option controls from value lists, restores template palettes on Undo, and loads template metadata on demand.
 
 ### [INTERNAL]
 
+- The MCP connection-capacity test polls for the expected counts instead of relying on startup sleeps. Tests also check pending connection limits and handshake expiry without opening sockets.
+- Correct the nested `why-is-node-running` lockfile entry to the exact version required by Vitest.
 - The API Docs workflow now builds the shared package before running typedoc (it failed on `main` since the field-standards import landed, with `Cannot find module '@fmweb/shared/dist/field-standards'`). The manual release job aid names the 1.5.0 release commit (`e2f9aac`) and sets it as the default `RELEASE_SHA`, drops the untrue claim that nothing else merges meanwhile, and gives the VSIX size as a range. No user-facing change.
 
 ### [SECURITY]

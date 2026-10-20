@@ -5,7 +5,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
-import { dotSegmentMessage, isDotSegment } from '../../utils/urlSegment';
+import { assertUsableUrlName } from '../../utils/urlSegment';
 import type { RunScriptRequest } from '../../types/fm';
 import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
 import type { SnippetFormat } from '../../snippets/model';
@@ -483,9 +483,8 @@ function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
   if (!layout.trim()) {
     throw new FMClientError('Layout is required.');
   }
-  if (isDotSegment(scriptName) || isDotSegment(layout)) {
-    throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout));
-  }
+  assertUsableUrlName(scriptName, 'script');
+  assertUsableUrlName(layout, 'layout');
 
   return {
     layout,

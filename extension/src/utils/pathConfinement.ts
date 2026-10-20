@@ -11,9 +11,15 @@ export class PathConfinementError extends Error {
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const WINDOWS_DRIVE_ABSOLUTE = /^[A-Za-z]:[\\/]/;
 
+/** Presentation selectors attached to a visible pictograph are part of its name, not hidden text. */
+export function hasInvisiblePathCharacter(value: string): boolean {
+  const visible = value.replace(/(\p{Extended_Pictographic})[\uFE0E\uFE0F]/gu, '$1');
+  return /\p{C}|\u2028|\u2029|\p{Default_Ignorable_Code_Point}/u.test(visible);
+}
+
 /**
  * Checks the text of a configured path before it is resolved. Rejects: empty text, NUL,
- * `..` segments, `.git` segments, control or invisible characters (including the default-ignorable ones such as Hangul fillers, variation selectors and the combining grapheme joiner), a segment ending in a dot or space, a
+ * `..` segments, `.git` segments, control or invisible characters (including the default-ignorable ones such as Hangul fillers, standalone variation selectors and the combining grapheme joiner; visible emoji presentation selectors are allowed), a segment ending in a dot or space, a
  * `~1` style short name, a reserved Windows device name, a colon anywhere except in the drive of a Windows absolute
  * path (`C:\x`; this also rules out drive-relative `C:x`), and a drive path on a system
  * without drives. Returns the trimmed text.
@@ -35,7 +41,7 @@ export function validateConfiguredPath(raw: string, platform: NodeJS.Platform = 
     throw new PathConfinementError('The path contains a colon (drive-relative Windows paths are not allowed).');
   }
 
-  if (/\p{C}|\u2028|\u2029|\p{Default_Ignorable_Code_Point}/u.test(text)) {
+  if (hasInvisiblePathCharacter(text)) {
     throw new PathConfinementError('The path contains a control or invisible character.');
   }
 

@@ -420,11 +420,11 @@ export async function writeManagedFile(target: string, content: Buffer | string)
   }
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`);
   try {
-    await writeFile(temporary, content, { flag: 'wx' });
+    await writeFile(temporary, content, { flag: 'wx', mode: 0o600 });
     // The replacement keeps the permission bits of the file it replaces (an executable stays one, a
-    // file the user made owner-only stays owner-only); a new file gets the usual default.
+    // file the user made owner-only stays owner-only); a new file is owner-only.
     if (existing?.isFile()) {
-      await chmod(temporary, existing.mode & 0o7777).catch(() => undefined);
+      await chmod(temporary, existing.mode & 0o777).catch(() => undefined);
     }
     await renameReplacing(temporary, target);
   } catch (error) {

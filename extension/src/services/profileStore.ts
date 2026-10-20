@@ -12,10 +12,31 @@ const SAVED_QUERIES_KEY = 'filemakerDataApiTools.savedQueries';
 export class ProfileStore {
   private readonly changeListeners = new Set<() => void>();
 
+  private observedState: string;
+
   public constructor(
     private readonly globalState: vscode.Memento,
     private readonly workspaceState: vscode.Memento
-  ) {}
+  ) {
+    this.observedState = this.profileState();
+  }
+
+  private profileState(): string {
+    return JSON.stringify([this.globalState.get(PROFILES_KEY), this.globalState.get(ACTIVE_PROFILE_KEY)]);
+  }
+
+  /** Memento has no public change event; observe updates delivered from other VS Code windows. */
+  public watchExternalChanges(): { dispose(): void } {
+    const timer = setInterval(() => this.checkForExternalChanges(), 2000);
+    timer.unref();
+    return { dispose: () => clearInterval(timer) };
+  }
+
+  public checkForExternalChanges(): void {
+    if (this.profileState() !== this.observedState) {
+      this.fireChange();
+    }
+  }
 
   /** Calls `listener` after profiles are added, changed or removed, or the active profile changes. */
   public onDidChange(listener: () => void): { dispose(): void } {
@@ -24,6 +45,7 @@ export class ProfileStore {
   }
 
   private fireChange(): void {
+    this.observedState = this.profileState();
     for (const listener of [...this.changeListeners]) {
       try {
         listener();

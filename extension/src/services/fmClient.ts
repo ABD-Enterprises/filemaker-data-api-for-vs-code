@@ -35,7 +35,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
-import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
+import { assertUsableUrlName } from '../utils/urlSegment';
 import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
@@ -471,6 +471,7 @@ export class FMClient {
         endpoint: `GET /layouts/${layout}/records/${recordId}`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.getRecord(profile, layout, recordId, control?.signal);
         }
@@ -521,6 +522,7 @@ export class FMClient {
         endpoint: `POST /layouts/${layout}/_find`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           try {
             return await this.proxyClient.findRecords(profile, layout, body, control?.signal);
@@ -598,6 +600,7 @@ export class FMClient {
         endpoint: `GET /layouts/${layout}`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.getLayoutMetadata(profile, layout, control?.signal);
         }
@@ -658,6 +661,7 @@ export class FMClient {
         endpoint: `PATCH /layouts/${layout}/records/${recordId}`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.editRecord(
             profile,
@@ -721,6 +725,7 @@ export class FMClient {
         endpoint: `POST /layouts/${layout}/records`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.createRecord(profile, layout, fieldData, control?.signal);
         }
@@ -784,6 +789,7 @@ export class FMClient {
         endpoint: `DELETE /layouts/${layout}/records/${recordId}`
       },
       async (trace) => {
+        assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.deleteRecord(profile, layout, recordId, control?.signal);
         }
@@ -829,6 +835,8 @@ export class FMClient {
     const normalizedLayout = layout;
     const normalizedRecordId = recordId.trim();
     const normalizedFieldName = fieldName;
+    assertUsableUrlName(normalizedLayout, 'layout');
+    assertUsableUrlName(normalizedFieldName, 'field');
     const normalizedFileName = file.fileName.trim();
     const content = normalizeUploadContent(file.content);
 
@@ -954,6 +962,8 @@ export class FMClient {
         endpoint: `GET /layouts/${request.layout}/script/${request.scriptName}`
       },
       async (trace) => {
+        assertUsableUrlName(request.scriptName, 'script');
+        assertUsableUrlName(request.layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.runScript(profile, request, control?.signal);
         }
@@ -967,13 +977,6 @@ export class FMClient {
         const layout = request.layout;
         if (!layout.trim()) {
           throw new FMClientError('Layout is required to run script.');
-        }
-        if (isDotSegment(scriptName) || isDotSegment(layout)) {
-          throw new FMClientError(dotSegmentMessage(isDotSegment(scriptName) ? 'script' : 'layout', isDotSegment(scriptName) ? scriptName : layout), {
-            code: 'NAME_NOT_USABLE_IN_URL',
-            kind: 'validation',
-            isRetryable: false
-          });
         }
 
         const scriptParam = request.scriptParam !== undefined && request.scriptParam.length > 0 ? request.scriptParam : undefined;
@@ -1057,7 +1060,7 @@ export class FMClient {
             true,
             trace
           );
-          return { response: envelope.response, messages: envelope.messages };
+          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
         } catch (error) {
           if (!isLikelyScriptUnsupportedError(error)) {
             throw failure(error, `GET /layouts/${request.layout}/script/${request.scriptName}`);

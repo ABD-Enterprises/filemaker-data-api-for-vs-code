@@ -655,3 +655,16 @@ describe('the view refreshes when the situation changes', () => {
     expect(vi.mocked(vscode.workspace.createFileSystemWatcher)).toHaveBeenCalledTimes(1);
   });
 });
+
+  it('Show Effective Settings warns that a bare hiddenFields string still hides one exact name', async () => {
+    const deps = setup({ layers: { 'ai.hiddenFields': { user: 'SSN, Password', workspace: [' Exact '] } } });
+    const collected = await collectExplanations(deps);
+    const row = collected.rows.find((r) => r.key === 'filemaker.ai.hiddenFields');
+    expect(row?.effective).toEqual(['SSN, Password', ' Exact ']);
+    const html = renderEffectiveSettingsHtml(collected, 'csp', 'nonce');
+    expect(html).toContain('filemaker.ai.hiddenFields');
+    expect(html).toContain('still hides one exact field name');
+    expect(html).toContain('commas are not separators');
+    expect(collected.notes.join(' ')).toContain('["SSN", "Password"]');
+    expect(html).toContain('array');
+  });

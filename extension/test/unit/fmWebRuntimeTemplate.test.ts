@@ -250,6 +250,32 @@ describe('FM Web runtime template', () => {
     expect(await readFile(ownerOnly, 'utf8')).toBe('new');
   });
 
+  it.skipIf(process.platform === 'win32')('writeManagedFile drops setuid, setgid and sticky bits', async () => {
+    const target = path.join(dir, 'special.sh');
+    await writeFile(target, 'old');
+    await chmod(target, 0o7755);
+    expect((await stat(target)).mode & 0o7000).not.toBe(0);
+    await writeManagedFile(target, 'new');
+    expect((await stat(target)).mode & 0o7777).toBe(0o755);
+  });
+
+  it.skipIf(process.platform === 'win32')('writeManagedFile creates temporary exports owner-only even with a permissive umask', async () => {
+    const target = path.join(dir, 'export.json');
+    const oldMask = process.umask(0);
+    try {
+      async function* content(): AsyncGenerator<string> {
+        const temporary = (await readdir(dir)).find((name) => name.endsWith('.tmp'));
+        expect(temporary).toBeDefined();
+        expect((await stat(path.join(dir, temporary!))).mode & 0o7777).toBe(0o600);
+        yield 'private export';
+      }
+      await writeManagedFile(target, content() as never);
+      expect((await stat(target)).mode & 0o7777).toBe(0o600);
+    } finally {
+      process.umask(oldMask);
+    }
+  });
+
   it('writeManagedFile leaves no .tmp behind when the write fails part way, and the target is untouched', async () => {
     const target = path.join(dir, 'managed.ts');
     await writeFile(target, 'original');

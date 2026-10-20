@@ -24,7 +24,7 @@ export async function renameReplacing(source: string, target: string, platform: 
     if (!existing?.isFile() || (existing.mode & 0o200) !== 0) {
       throw error;
     }
-    await chmod(target, existing.mode | 0o200);
+    await chmod(target, (existing.mode & 0o777) | 0o200);
     try {
       await rename(source, target);
     } catch (second) {

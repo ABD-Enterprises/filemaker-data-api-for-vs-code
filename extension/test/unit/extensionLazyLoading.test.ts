@@ -187,6 +187,41 @@ describe('extension lazy FM runtime loading', () => {
     vi.restoreAllMocks();
   });
 
+  it('refreshes connection status and AI tools when another window changes a profile or a secret', async () => {
+    const { ProfileStore } = await import('../../src/services/profileStore');
+    const { ConnectionStatusBar } = await import('../../src/views/connectionStatusBar');
+    const { AiToolsController } = await import('../../src/ai/aiRegistration');
+    const status = vi.spyOn(ConnectionStatusBar.prototype, 'refresh');
+    const ai = vi.spyOn(AiToolsController.prototype, 'refresh');
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    status.mockClear();
+    ai.mockClear();
+    const profiles = [{ id: 'p2', name: 'Changed elsewhere', authMode: 'direct', serverUrl: 'https://fm.example.test', database: 'Other', aiAccess: 'none' }];
+    vi.mocked(context.globalState.get).mockImplementation(((key: string, fallback: unknown) =>
+      key === 'filemakerDataApiTools.profiles' ? profiles : key === 'filemakerDataApiTools.activeProfileId' ? 'p2' : fallback) as never);
+    // Configuration and secret events also check shared state; a timer handles profile-only changes.
+    const check = vi.spyOn(ProfileStore.prototype, 'checkForExternalChanges');
+    for (const [listener] of vi.mocked(vscode.workspace.onDidChangeConfiguration).mock.calls) {
+      listener({ affectsConfiguration: () => false } as never);
+    }
+    expect(check).toHaveBeenCalled();
+    expect(status).toHaveBeenCalled();
+    expect(ai).toHaveBeenCalled();
+    await expect.poll(() => vi.mocked(vscode.window.createStatusBarItem).mock.results
+      .some((r) => String((r.value as { text: string }).text).includes('Changed elsewhere'))).toBe(true);
+    status.mockClear();
+    ai.mockClear();
+    const secretListener = vi.mocked(context.secrets.onDidChange).mock.calls[0]?.[0];
+    expect(secretListener).toBeTypeOf('function');
+    secretListener?.({ key: 'filemakerDataApiTools.profile.password.p2' });
+    expect(status).toHaveBeenCalled();
+    expect(ai).toHaveBeenCalled();
+    disposeSubscriptions(context);
+    vi.restoreAllMocks();
+  });
+
   it('loads and caches the FM client module on the first Connect command', async () => {
     const { activate } = await import('../../src/extension');
     const context = createActivationContext();

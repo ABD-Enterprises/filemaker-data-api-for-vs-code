@@ -6,7 +6,9 @@ const STYLE = { modId: '<modId>' };
 
 export function renderCurl(spec: RequestSpec, options: SnippetOptions = {}): string {
   const lines: string[] = [...spec.notes.map((note) => shellComment(note))];
-  const parts: string[] = ['curl', '-X', spec.method, shellQuote(`${spec.host}${pathAndQuery(spec, STYLE)}`)];
+  const url = `${spec.host}${pathAndQuery(spec, STYLE)}`;
+  // Preserve the configured URL while disabling curl's bracket/brace expansion.
+  const parts: string[] = ['curl', ...(/[[\]{}]/.test(url) ? ['--globoff'] : []), '-X', spec.method, shellQuote(url)];
 
   if (spec.body?.kind === 'json') {
     parts.push('-H', shellQuote('Content-Type: application/json'));

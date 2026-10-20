@@ -1,7 +1,7 @@
 import { SnippetError } from './model';
 
 /** `https://host[/prefix]` without user name, password, query or fragment, or a clear error. */
-export function cleanServerAddress(address: string, what: string): string {
+export function cleanServerAddress(address: string, what: string, preserveTrailingSlash = false): string {
   let parsed: URL;
   try {
     parsed = new URL(address.trim());
@@ -12,6 +12,6 @@ export function cleanServerAddress(address: string, what: string): string {
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new SnippetError(`The ${what} must start with https:// or http://.`);
   }
-  return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+  return `${parsed.protocol}//${parsed.host}${preserveTrailingSlash ? parsed.pathname : parsed.pathname.replace(/\/+$/, '')}`;
 }
 

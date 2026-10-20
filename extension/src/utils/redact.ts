@@ -57,7 +57,7 @@ function redactValueInternal(value: unknown, depth: number): unknown {
   }
 
   const record = value as Record<string, unknown>;
-  const output: Record<string, unknown> = {};
+  const output: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   for (const [key, item] of Object.entries(record)) {
     if (SECRET_KEY_PATTERN.test(key)) {

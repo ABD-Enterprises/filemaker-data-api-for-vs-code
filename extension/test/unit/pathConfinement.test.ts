@@ -15,6 +15,11 @@ describe('validateConfiguredPath', () => {
     expect(validateConfiguredPath('/home/me/ws/AGENTS.md')).toBe('/home/me/ws/AGENTS.md');
   });
 
+  it('accepts an emoji presentation selector after a pictograph, without dropping it', () => {
+    expect(validateConfiguredPath('exports/☀️/ai.md')).toBe('exports/☀️/ai.md');
+    expect(validateConfiguredPath('exports/☀︎/ai.md')).toBe('exports/☀︎/ai.md');
+  });
+
   it.each([
     ['empty', ''],
     ['blank', '   '],

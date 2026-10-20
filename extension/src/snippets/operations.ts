@@ -254,7 +254,7 @@ function repetitionOf(value: number | undefined): number {
 }
 
 function buildProxySpec(profile: ConnectionProfile, operation: SnippetOperation, redactor: Redactor): RequestSpec {
-  const endpoint = new URL(cleanServerAddress(required(profile.proxyEndpoint, 'The proxy endpoint'), 'proxy endpoint'));
+  const endpoint = new URL(cleanServerAddress(required(profile.proxyEndpoint, 'The proxy endpoint'), 'proxy endpoint', true));
   const proxyProfile = buildProxyProfilePayload(profile);
   const notes: string[] = [
     'Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.'
