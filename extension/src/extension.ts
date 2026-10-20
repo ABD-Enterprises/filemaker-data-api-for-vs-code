@@ -234,9 +234,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return Promise.resolve(loadedFmClient);
     }
 
-    fmClientLoad ??= Promise.all([import('./services/fmClient'), import('./services/tlsAgent')])
-      .then(([{ FMClient }, tlsAgent]) => {
-        const { setAgentReplacedPolicy, setSystemCertificatePolicy, warmSystemCertificates } = tlsAgent;
+    fmClientLoad ??= Promise.all([import('./services/fmClient'), import('./services/tlsAgent'), import('./services/proxySupport')])
+      .then(([{ FMClient }, tlsAgent, proxySupport]) => {
+        const { setSystemCertificatePolicy, warmSystemCertificates } = tlsAgent;
         tlsAgentModule = tlsAgent;
         // Trust the operating system's certificates as VS Code does, unless http.systemCertificates is off.
         setSystemCertificatePolicy(() =>
@@ -244,9 +244,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         );
         // http.proxySupport "override" (VS Code's default) replaces the extension's agent, so a
         // pinned certificate could not be checked; pinned requests are then refused with the fix.
-        setAgentReplacedPolicy(
-          () => vscode.workspace.getConfiguration('http').get<string>('proxySupport', 'override') === 'override'
-        );
+        proxySupport.installAgentReplacedPolicy();
         warmSystemCertificates();
         loadedFmClient = new FMClient(
           secretStore,

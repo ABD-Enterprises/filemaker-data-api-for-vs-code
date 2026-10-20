@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { ConnectionProfile } from '../types/fm';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { certificateTargetUrl, formatFingerprint, inspectServerCertificate, type ServerCertificateInfo } from './certificateInspect';
+import { installAgentReplacedPolicy } from './proxySupport';
 import { environmentProxyFor, hostReplacesAgentFor, normalizeSha256 } from './tlsAgent';
 
 export { certificateTargetUrl, inspectServerCertificate, type ServerCertificateInfo };
@@ -70,6 +71,8 @@ export async function reviewAndTrustCertificate(
   if (!url) {
     return undefined;
   }
+  // The dialog says whether trusting can take effect, which depends on a VS Code setting; this can open before any request.
+  installAgentReplacedPolicy();
   const inspect = deps.inspect ?? inspectServerCertificate;
   const confirm =
     deps.confirm ??

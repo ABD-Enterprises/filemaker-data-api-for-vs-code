@@ -324,3 +324,49 @@ describe('the trust dialog tells the truth about what trusting will do', () => {
     expect(await detailFor('https://localhost:8443')).toMatch(/warn you if it ever changes/);
   });
 });
+
+describe("the dialog learns VS Code's setting by itself, before any request has been made", () => {
+  const info = {
+    host: 'fms.example.test',
+    port: '443',
+    subject: 'CN=x',
+    issuer: 'CN=y',
+    altNames: [],
+    validFrom: 'a',
+    validTo: 'b',
+    sha256: 'c'.repeat(64),
+    expired: false,
+    notYetValid: false,
+    selfSigned: true
+  };
+  // A fresh module state each time: nothing has installed a policy, as when "Review server certificate" is the first thing used.
+  it.each([
+    ['override', true],
+    [undefined, true],
+    ['fallback', false],
+    ['off', false],
+    ['on', false]
+  ])('http.proxySupport = %s: trust cannot take effect = %s', async (setting, cannotTakeEffect) => {
+    vi.resetModules();
+    const vscode = await import('vscode');
+    vi.mocked(vscode.workspace.getConfiguration).mockImplementation((() => ({
+      get: (key: string, fallback?: unknown) =>
+        key === 'proxySupport' && setting !== undefined ? setting : fallback
+    })) as never);
+    const { reviewAndTrustCertificate } = await import('../../src/services/certificateTrust');
+    let detail = '';
+    await reviewAndTrustCertificate(
+      { name: 'T', authMode: 'direct', serverUrl: 'https://fms.example.test' },
+      {},
+      {
+        inspect: async () => ({ ...info }),
+        confirm: async (_message, text) => {
+          detail = text;
+          return undefined;
+        }
+      }
+    );
+    expect(detail.includes('warn you if it ever changes')).toBe(!cannotTakeEffect);
+    expect(/http\.proxySupport/.test(detail)).toBe(cannotTakeEffect);
+  });
+});

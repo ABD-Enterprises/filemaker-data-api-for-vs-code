@@ -265,9 +265,18 @@ export class PinnedCertificateAgent extends Agent {
  * extension injects the real setting, so plain Node (unit tests, tools) is unaffected.
  */
 let agentIsReplacedByHost: () => boolean = () => false;
+let agentPolicyInstalled = false;
 
 export function setAgentReplacedPolicy(policy: () => boolean): void {
   agentIsReplacedByHost = policy;
+  agentPolicyInstalled = true;
+}
+
+/** Installs the policy unless one was installed already (by the extension's start-up or by a test). */
+export function ensureAgentReplacedPolicy(policy: () => boolean): void {
+  if (!agentPolicyInstalled) {
+    setAgentReplacedPolicy(policy);
+  }
 }
 
 /**

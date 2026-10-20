@@ -58,7 +58,7 @@ Layout Mode places fields from a synced layout on a canvas for an FM Web project
 
 - FileMaker Server with the **Data API** enabled, reachable over HTTPS. FileMaker Cloud is untested: the extension has no Claris ID login, and whether a tenant accepts an account name and password is not confirmed.
 - A FileMaker account whose privilege set has the **`fmrest`** extended privilege.
-- A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file).
+- A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file). Trusting a certificate by hand needs VS Code's `http.proxySupport` setting on `fallback` or `off`; with its default, `override`, VS Code replaces the extension's own connection (see the User Guide, Certificates).
 - VS Code 1.96 or newer on a macOS, Windows or Linux desktop, with a folder open (virtual workspaces such as github.dev are not supported). The AI server for MCP clients does not run in remote windows (SSH, WSL, Dev Containers, Codespaces).
 
 See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for server versions, operating systems and what has and has not been tested. The automated tests run against a mock of the Data API built from Claris's documentation.
@@ -139,7 +139,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 - Passwords, API keys and session tokens live in VS Code SecretStorage (your OS keychain), not in settings or logs.
 - Logs, history and error details hide authorization headers, tokens and passwords.
 - Editing, creating and deleting records, uploading, the Script Runner, batch jobs, writing generated files and plugins need a trusted workspace. Virtual workspaces (such as github.dev) are not supported. A repository can make the extension's policy stricter but never looser.
-- The server certificate is checked. To use FileMaker Server's default certificate or a private authority's, the wizard shows the certificate and you trust that one certificate by its SHA-256 fingerprint (never from a workspace file); a different certificate later is refused (unless VS Code's `http.proxySupport` setting is `override` (its default), which replaces the extension's own connection; see the User Guide). A pin is trust on first use: it detects a change, it does not prove who you reached the first time.
+- The server certificate is checked. To use FileMaker Server's default certificate or a private authority's, the wizard shows the certificate and you trust that one certificate by its SHA-256 fingerprint (never from a workspace file); a different certificate later is refused (unless VS Code's `http.proxySupport` setting is `override` (its default), which replaces the extension's own connection; see the User Guide). A pin is trust on first use: it detects a change (while the pin is applied, see above), it does not prove who you reached the first time.
 - In Restricted Mode (an untrusted folder) you can browse, read metadata and run finds. The connection wizard says so and offers **Manage Workspace Trust**.
 - The extension collects no telemetry. It talks only to your FileMaker server or your proxy.
 

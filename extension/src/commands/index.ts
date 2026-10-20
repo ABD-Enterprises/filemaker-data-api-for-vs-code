@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
-import { reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
+import { certificateTargetUrl, reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
+import { hostReplacesAgentFor } from '../services/tlsAgent';
 import { FMClientError } from '../services/errors';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
@@ -245,6 +246,16 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       await profileStore.upsertProfile(withPinnedCertificate(profile, decision));
       fmClient.clearAuthPause(profile.id);
       refreshExplorer();
+      if (hostReplacesAgentFor(certificateTargetUrl(profile))) {
+        const open = await vscode.window.showWarningMessage(
+          `Certificate trusted for "${profile.name}", but it cannot take effect yet: VS Code's "http.proxySupport" setting is "override" (its default), which replaces this extension's own connection. Set it to "fallback", then connect.`,
+          'Open Settings'
+        );
+        if (open === 'Open Settings') {
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'http.proxySupport');
+        }
+        return;
+      }
       const connect = await vscode.window.showInformationMessage(
         `Certificate trusted for "${profile.name}". Connect now?`,
         'Connect'
