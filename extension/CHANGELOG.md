@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.6.0
+
+_Released 2026-10-19._
+
+This is a minor release. Your profiles, saved queries, settings and stored data carry over unchanged, and no command or setting was removed. Nothing needs to be done for a normal install. **Read [UPGRADE.md](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/UPGRADE.md) ("Upgrading from 1.5.0 to 1.6.0")** for the few behavior changes you may notice.
+
+In short:
+
+- **New:** Layout Mode has standard field sizes and spacing, arranging and standardizing a layout (each undone in one step), and starter templates. The find form, Record Editor, Record Viewer and generated web layout views now show fields the same way.
+- **Fixed:** a certificate you trusted could still fail with a misleading "not trusted" error under VS Code's default network setting; the message now says why and names the setting to change. Script runs return only the script's answer, copy-as-code is more exact, and profile changes made in another VS Code window show up within two seconds.
+
 
 - [FIX] A trusted (pinned) certificate failed with a misleading "not trusted" error right after being trusted when VS Code's `http.proxySupport` setting is `"override"` (its default): VS Code's networking replaces the extension's own connection, so the fingerprint check cannot run and VS Code's normal certificate check applies instead. A server whose certificate VS Code trusts anyway, such as one from a public authority, keeps working with or without a pin. Note that under `"override"` the pin is not enforced as a restriction: a different certificate that VS Code trusts would be accepted too. When the connection fails with a certificate problem the pin would have covered (not trusted, wrong host name, outside its dates), on any kind of request including proxy connections, the message now says why and names the fix: set `http.proxySupport` to `"fallback"` (which enforces the pin), or install a public certificate on the server and choose **Forget trusted certificate**. The `"on"` value was not tested. Found and verified in a real VS Code window.
 - [INTERNAL] The mock server's `claris-default-cert` mode now presents the default certificate exactly as a real FileMaker Server 22 does, read from a real server: an X.509 version 1 leaf with no extensions (serial 1, sha256WithRSA, 2048-bit), the real subject and issuer names, one certificate sent, TLS 1.2 only. The leaf is encoded in the mock itself, because not every OpenSSL build can make a version 1 certificate. A new end-to-end test connects by IP address through the extension's real code: refused in plain words, the trust dialog (identical to the one seen on a real server), trust by fingerprint, sign-in, and refusal of a different certificate.

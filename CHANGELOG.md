@@ -24,6 +24,30 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- None.
+
+### [FIX]
+
+- None.
+
+### [INTERNAL]
+
+- None.
+
+### [SECURITY]
+
+- None.
+
+## 1.6.0 - 2026-10-19
+
+Minor release: no data migration, and no command or setting was removed. User-facing notes: `extension/CHANGELOG.md`; upgrade notes: `extension/UPGRADE.md`.
+
+### [BREAKING]
+
+- None.
+
+### [FEATURE]
+
 - [FEATURE] Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing.
 - [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 

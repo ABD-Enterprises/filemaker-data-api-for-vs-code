@@ -2,6 +2,37 @@
 
 What to do, and what will look different, when you move from one version to the next. Each section lists only changes you can notice. For everything else, see the [Changelog](./CHANGELOG.md).
 
+## Upgrading from 1.5.0 to 1.6.0
+
+This is a minor release. Your profiles, saved queries, settings and stored data carry over unchanged, and no command or setting was removed or renamed. Nothing needs to be done for a normal install. These are the behavior changes you may notice.
+
+### 1. Fields look the same everywhere, and Layout Mode can tidy a layout
+
+The find form, Record Editor, Record Viewer and the generated web layout views now use the same field sizes, top labels and responsive spacing as Layout Mode. Your data and layouts are not changed, but these screens will look different from 1.5.0.
+
+Layout Mode adds standard field sizes and spacing, an action that arranges the selected objects into a standard form, an action that standardizes them, and starter templates (blank, form, two-column, first portal). Arranging and standardizing each undo in one step. Nothing is rearranged until you choose an action; field names and behavior bindings stay as they are.
+
+### 2. Trusting a certificate can need one VS Code setting
+
+If you trust a server's certificate by its fingerprint (for example FileMaker Server's default certificate), the extension checks that one certificate itself. VS Code's **http.proxySupport** setting at its default, `override`, replaces the extension's own connection for servers that are not on your computer, so the trust cannot take effect and the normal certificate check applies instead. Before this release that ended in a misleading "not trusted" message right after you trusted the certificate.
+
+- The trust dialog and the wizard now say this and name the setting, and the message after trusting offers to open it. Set **http.proxySupport** to `fallback`, or install a certificate from a public authority on the server and choose **Forget trusted certificate**.
+- A server whose certificate VS Code already trusts (for example one from Let's Encrypt) keeps working, with or without an old trusted certificate on the profile.
+- While the setting is `override`, a trusted certificate is not enforced: a different certificate that VS Code trusts would be accepted too.
+- Profiles that connect to the same computer (`localhost`) are not affected.
+
+### Smaller changes
+
+- A script, layout or container field named `.` or `..` is refused before anything is sent, also in proxy mode.
+- Copied TypeScript keeps a field named `__proto__`; copied proxy requests keep a trailing slash; copied API base paths stay as configured; curl output switches off bracket and brace expansion when needed.
+- Temporary context and export files start with owner-only permissions.
+- The Output panel and **Show Effective Settings** warn when `ai.hiddenFields` is a string instead of a list.
+- A profile changed in another VS Code window refreshes the connection status, the explorer and the AI tools within two seconds.
+
+### Rolling back
+
+Install the previous version from the Extensions view (**Install Specific Version...**) or from a [release](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/releases) (only tagged versions have one). Your data is not migrated, so nothing needs to be undone.
+
 ## Upgrading from 1.4.0 to 1.5.0
 
 This is a minor release. Your profiles, saved queries, settings and stored data carry over unchanged, and no command or setting was removed or renamed. Nothing needs to be done for a normal install. These are the behavior changes you may notice.
