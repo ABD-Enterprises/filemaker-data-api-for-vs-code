@@ -36,7 +36,7 @@ import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { assertUsableUrlName } from '../utils/urlSegment';
-import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
+import { environmentProxyFor, httpsTransportFor, noteRequestTimeout, pinBypassedByHost } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
@@ -1210,6 +1210,10 @@ export class FMClient {
     ]);
     if (failure.kind !== 'certificate' || !failure.networkCode || !untrusted.has(failure.networkCode)) {
       return failure;
+    }
+    const bypassed = pinBypassedByHost(profile);
+    if (bypassed) {
+      return bypassed;
     }
     const url = certificateTargetUrl(profile);
     // This look dials the server directly; behind a proxy it would only hang, so it is skipped there.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FIX] A trusted (pinned) certificate failed with a misleading "not trusted" error right after being trusted when VS Code's `http.proxySupport` setting is `"override"` (its default): VS Code's networking replaces the extension's connection, so the fingerprint check cannot run (it always failed closed, never open). A server whose certificate VS Code trusts anyway, such as one from a public authority, keeps working with or without a pin; when the connection fails as untrusted, the message now says why and names the fix: set `http.proxySupport` to `"fallback"`, or install a public certificate on the server and choose **Forget trusted certificate**. Found and verified in a real VS Code window.
 - [FIX] Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
 - [FIX] The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
 - [FIX] Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.
