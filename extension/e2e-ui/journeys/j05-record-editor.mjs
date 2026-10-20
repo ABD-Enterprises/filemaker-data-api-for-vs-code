@@ -52,6 +52,45 @@ export async function run(ctx) {
   );
   await s.step(
     J,
+    'compare Viewer and Editor field geometry',
+    'both single-line controls are 34 px, fields are 58 px, and row pitch is 74 px with Copy inside the Viewer box',
+    async () => {
+      const geometry = (row) => {
+        const control = row.querySelector('textarea');
+        const box = control.getBoundingClientRect();
+        const button = row.querySelector('button');
+        const copy = button?.getBoundingClientRect();
+        return {
+          field: row.getBoundingClientRect().height,
+          control: box.height,
+          pitch: row.getBoundingClientRect().height + parseFloat(getComputedStyle(row.parentElement).rowGap),
+          readonly: control.readOnly,
+          copyInside: !copy || (copy.top >= box.top && copy.bottom <= box.bottom && copy.left >= box.left && copy.right <= box.right)
+        };
+      };
+      const editor = await wv.locator('#fieldEditor tr:has(td:text-is("Name"))').evaluate(geometry);
+      await s.closeAllEditors();
+      await s.cmd('FileMaker: Open Record Viewer');
+      await answerPickers(s, ['Mock Quality', 'Products']);
+      if (await s.pickerOpen()) await s.inputBox(String(productId), { timeout: 10000 });
+      const viewer = await s.webview('#fieldDataContainer', { visible: false });
+      await viewer.locator('#recordIdInput').fill(String(productId));
+      await viewer.locator('#loadButton').click();
+      const row = viewer.locator('#fieldDataContainer tr:has(td:text-is("Name"))');
+      await row.locator('textarea').waitFor({ timeout: 20000 });
+      const viewed = await row.evaluate(geometry);
+      for (const [name, measured] of [['Editor', editor], ['Viewer', viewed]]) {
+        assert(Math.abs(measured.control - 34) < 1, `${name} control: ${JSON.stringify(measured)}`);
+        assert(Math.abs(measured.field - 58) < 1, `${name} field: ${JSON.stringify(measured)}`);
+        assert(Math.abs(measured.pitch - 74) < 1, `${name} pitch: ${JSON.stringify(measured)}`);
+      }
+      assert(Math.abs(viewed.field - editor.field) < 1 && viewed.readonly && viewed.copyInside, JSON.stringify({ editor, viewed }));
+      wv = await openEditor(s, productId);
+      return JSON.stringify({ editor, viewed });
+    }
+  );
+  await s.step(
+    J,
     'edit a field, Validate, Preview Update JSON',
     'preview shows only the changed field',
     async () => {

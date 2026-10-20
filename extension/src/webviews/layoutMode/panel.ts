@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { boundedDesignerFields } from '../../fmweb/fieldMetadata';
 
 import {
   migrateLayoutDefinition,
@@ -29,6 +30,7 @@ interface LayoutModeOpenOptions {
 
 type IncomingMessage =
   | { type: 'ready' }
+  | { type: 'loadTemplateMetadata'; payload: { layoutName: string } }
   | { type: 'saveLayout'; payload: { layout: LayoutDefinition; autosave?: boolean } }
   | {
       type: 'executeBehavior';
@@ -117,6 +119,12 @@ export class LayoutModePanel {
       case 'ready':
         await this.sendInitState();
         break;
+      case 'loadTemplateMetadata':
+        try {
+          const layouts = await this.fmWebProjectService.getDesignerLayouts([message.payload.layoutName]);
+          await this.panel.webview.postMessage({ type: 'templateMetadata', payload: layouts[0] });
+        } catch (error) { await this.postError(this.formatError(error)); }
+        break;
       case 'saveLayout':
         await this.handleSaveLayout(message.payload.layout, message.payload.autosave ?? false);
         break;
@@ -133,7 +141,9 @@ export class LayoutModePanel {
       const project = await this.fmWebProjectService.ensureProjectInitialized();
       const loaded = await this.fmWebProjectService.loadOrCreateLayout(this.pendingLayoutId);
       const metadataCache = await this.fmWebProjectService.loadMetadataCache();
-      const designerLayouts = await this.fmWebProjectService.getDesignerLayouts();
+      const templateLayoutNames = (metadataCache?.layoutMetadata ?? []).map((entry) => entry.layoutName);
+      const sourceName = loaded.layout.fmLayoutName ?? (loaded.source === 'created' ? templateLayoutNames[0] : undefined);
+      const designerLayouts = await this.fmWebProjectService.getDesignerLayouts(loaded.layout.fmLayoutName === undefined ? undefined : [loaded.layout.fmLayoutName]);
       const availableFields = await this.fmWebProjectService.getAvailableFields(loaded.layout.fmLayoutName);
 
       await this.panel.webview.postMessage({
@@ -143,8 +153,9 @@ export class LayoutModePanel {
           availableFields,
           availableFieldMetadata: loaded.layout.fmLayoutName
             ? designerLayouts.find((entry) => entry.layoutName === loaded.layout.fmLayoutName)?.fields ?? []
-            : designerLayouts.flatMap((entry) => entry.fields),
-          templateLayouts: loaded.source === 'created' ? designerLayouts : undefined,
+            : boundedDesignerFields(designerLayouts),
+          templateLayouts: loaded.source === 'created' ? designerLayouts.filter((entry) => entry.layoutName === sourceName) : undefined,
+          templateLayoutNames: loaded.source === 'created' ? templateLayoutNames : undefined,
           isNewLayout: loaded.source === 'created',
           scripts: metadataCache?.scripts ?? [],
           projectName: project.name
@@ -316,6 +327,12 @@ export class LayoutModePanel {
     const type = typeof message.type === 'string' ? message.type : undefined;
     if (!type) {
       return undefined;
+    }
+
+    if (type === 'loadTemplateMetadata') {
+      const payload = toRecord(message.payload);
+      const layoutName = payload && getStringField(payload, 'layoutName');
+      return layoutName ? { type, payload: { layoutName } } : undefined;
     }
 
     if (type === 'ready') {

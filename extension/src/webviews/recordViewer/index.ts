@@ -1,5 +1,7 @@
+import { designerLayoutMetadata } from '../../fmweb/fieldMetadata';
 import * as vscode from 'vscode';
 
+import { SettingsService } from '../../services/settingsService';
 import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
@@ -37,6 +39,7 @@ type IncomingMessage =
 export class RecordViewerPanel {
   private static currentPanel: RecordViewerPanel | undefined;
 
+  private recordLoadVersion = 0;
   private pendingDefaults: RecordViewerOpenOptions | undefined;
   private lastRecord: { profileId: string; layout: string; record: FileMakerRecord } | undefined;
 
@@ -174,14 +177,25 @@ export class RecordViewerPanel {
   }
 
   private async handleLoadRecord(payload: LoadRecordPayload): Promise<void> {
+    const loadVersion = ++this.recordLoadVersion;
     const profile = await this.profileStore.getProfile(payload.profileId);
+    if (loadVersion !== this.recordLoadVersion) return;
     if (!profile) {
       await this.postError('The selected profile no longer exists.');
       return;
     }
 
     try {
-      const record = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
+      const presentation = new SettingsService().isSchemaMetadataEnabled()
+        ? this.fmClient.getLayoutMetadata(profile, payload.layout, { recordHistory: false })
+          .then((metadata) => designerLayoutMetadata(payload.layout, metadata).fields)
+          .catch(() => []) // Presentation metadata must never prevent viewing a record.
+        : Promise.resolve([]);
+      const [record, presentationFields] = await Promise.all([
+        this.fmClient.getRecord(profile, payload.layout, payload.recordId),
+        presentation
+      ]);
+      if (loadVersion !== this.recordLoadVersion) return;
       this.lastRecord = {
         profileId: payload.profileId,
         layout: payload.layout,
@@ -190,10 +204,10 @@ export class RecordViewerPanel {
 
       await this.panel.webview.postMessage({
         type: 'recordLoaded',
-        payload: this.lastRecord
+        payload: { ...this.lastRecord, presentationFields }
       });
     } catch (error) {
-      await this.postError(this.formatError(error));
+      if (loadVersion === this.recordLoadVersion) await this.postError(this.formatError(error));
     }
   }
 
@@ -320,6 +334,13 @@ export class RecordViewerPanel {
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordViewer', 'ui', 'index.js')
     );
 
+    const standardsStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordViewer', 'ui', 'fieldStandards.css')
+    );
+    const standardsScriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordViewer', 'ui', 'fieldStandards.js')
+    );
+
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
@@ -333,6 +354,7 @@ export class RecordViewerPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Record Viewer</title>
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${standardsStyleUri}" />
 </head>
 <body>
   <div class="container">
@@ -371,6 +393,7 @@ export class RecordViewerPanel {
   </div>
 
   ${versionFooterHtml()}
+  <script nonce="${nonce}" src="${standardsScriptUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

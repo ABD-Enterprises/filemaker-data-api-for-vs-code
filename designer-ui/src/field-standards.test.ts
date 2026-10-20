@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FIELD_LAYOUT, standardFieldSize } from '@fmweb/shared';
+import { createStandardField } from './canvas-engine';
 
 describe('shared field presentation rules', () => {
   it('defines the single grid, spacing and label standard', () => {
@@ -21,4 +22,17 @@ describe('shared field presentation rules', () => {
       expect(standardFieldSize({ displayType, optionCount: NaN }).height).toBe(34);
     }
   });
+});
+
+// Real Data API display names and hostile/oversized option metadata.
+describe('Data API option sizing', () => {
+  it.each(['radioButtons', 'checkBox'])('sizes %s and caps option counts', (displayType) => {
+    expect(standardFieldSize({ displayType, optionCount: 4 }).height).toBe(96);
+    expect(standardFieldSize({ displayType, optionCount: 100000 }).height).toBe(1200);
+  });
+});
+
+it.each([['radioButtons', 'radio'], ['checkBox', 'checkbox'], ['popupMenu', 'dropdown'], ['dropdown', 'dropdown']] as const)('preserves Data API %s controls when creating fields', (displayType, expected) => {
+  expect(createStandardField({ name: ' Field ', displayType, optionCount: 4 }, 'id', { x: 0, y: 0 }, 0))
+    .toMatchObject({ fmFieldName: ' Field ', displayType: expected });
 });

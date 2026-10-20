@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { FIELD_LAYOUT } from './field-standards';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
 
@@ -26,6 +27,7 @@ export function LayoutContainer({
 }: LayoutRendererProps): React.JSX.Element {
   const viewport = mode === 'runtime' ? runtimeData?.viewport : undefined;
   const containerWidth = viewport ? Math.max(1, Math.round(viewport.width)) : layout.canvas.width;
+  const narrow = viewport !== undefined && viewport.width <= 640;
   const containerHeight = viewport ? Math.max(1, Math.round(viewport.height)) : layout.canvas.height;
 
   const renderedObjects = React.useMemo(
@@ -37,13 +39,27 @@ export function LayoutContainer({
     [layout, viewport]
   );
 
+  // Stack controls in the designer's visual order, while retaining paint order and decorative geometry.
+  let flowY = FIELD_LAYOUT.pageMargin;
+  const positions = new Map<string, LayoutObject>();
+  if (narrow) {
+    layout.objects.filter((object) => ['field', 'portal', 'button'].includes(object.type))
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .forEach((object) => {
+        positions.set(object.id, { ...object, x: FIELD_LAYOUT.pageMargin, y: flowY,
+          width: Math.min(object.width, Math.max(1, containerWidth - FIELD_LAYOUT.pageMargin * 2)) });
+        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.rowGap;
+      });
+  }
+  const visibleObjects = renderedObjects.map((object) => positions.get(object.id) ?? object);
+
   return (
     <div
       data-mode={mode}
       style={{
         position: 'relative',
         width: containerWidth,
-        height: containerHeight,
+        height: narrow ? Math.max(containerHeight, flowY + FIELD_LAYOUT.pageMargin) : containerHeight,
         backgroundColor: layout.styles.colors.surface,
         color: layout.styles.colors.text,
         fontFamily: layout.styles.typography.fontFamily,
@@ -53,7 +69,7 @@ export function LayoutContainer({
         boxShadow: '0 10px 25px rgba(18, 35, 56, 0.12)'
       }}
     >
-      {renderedObjects.map((object) => (
+      {visibleObjects.map((object) => (
         <LayoutObjectRenderer
           key={object.id}
           object={object}
@@ -158,9 +174,11 @@ function FieldControl(props: {
   const horizontalLabel = object.labelPosition === 'left' || object.labelPosition === 'right';
   const inputId = `field-input-${object.id}`;
   const inlineControlStyle: React.CSSProperties = {
-    flex: 1,
+    flex: horizontalLabel ? 1 : '0 0 auto',
     minWidth: 0,
-    minHeight: 26,
+    minHeight: object.height,
+    height: object.height,
+    flexShrink: horizontalLabel ? 1 : 0,
     display: 'flex',
     alignItems: 'center'
   };
@@ -169,6 +187,9 @@ function FieldControl(props: {
     <label
       htmlFor={object.displayType === 'radio' ? undefined : inputId}
       style={{
+        height: horizontalLabel ? undefined : FIELD_LAYOUT.labelSpace,
+        flexShrink: 0,
+        overflowWrap: 'anywhere',
         fontSize: 12,
         color: '#526980',
         fontWeight: 600,
@@ -199,12 +220,15 @@ function FieldControl(props: {
     <div
       style={{
         ...style,
+        height: object.height + (object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0),
         display: 'flex',
         flexDirection: horizontalLabel ? 'row' : 'column',
         justifyContent: horizontalLabel ? 'space-between' : undefined,
         alignItems: horizontalLabel ? 'center' : undefined,
-        gap: 6
+        gap: horizontalLabel ? 6 : 0
       }}
+      data-fm-width={object.width}
+      data-fm-height={object.height}
       data-fm-field-id={object.id}
       data-fm-field-control={object.displayType}
       data-fm-field-format={object.format}
@@ -236,7 +260,8 @@ function renderFieldDisplayControl(props: {
     border: '1px solid #90a3b8',
     borderRadius: 5,
     width: '100%',
-    minHeight: 26,
+    height: props.object.height,
+    minHeight: props.object.height,
     padding: '4px 8px',
     boxSizing: 'border-box',
     background: disabled ? '#f6fafc' : '#ffffff',

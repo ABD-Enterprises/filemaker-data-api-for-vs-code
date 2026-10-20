@@ -30,7 +30,7 @@ interface GeneratedLayoutSummary {
 const SAFE_ENV_VALUE = /^[A-Za-z0-9:/._~%+=@-]+$/;
 
 /** Bump together with the `fmweb-managed: runtime template vN` line in the managed files. */
-export const RUNTIME_TEMPLATE_VERSION = 2;
+export const RUNTIME_TEMPLATE_VERSION = 3;
 const MANAGED_MARKER = /^\/\/ fmweb-managed: runtime template v(\d+)/;
 
 /**
@@ -40,6 +40,7 @@ const MANAGED_MARKER = /^\/\/ fmweb-managed: runtime template v(\d+)/;
  * version marker, so an unmodified old copy can be recognised and refreshed safely.
  */
 const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
+  'app/layouts/[id]/page.tsx': ['0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266'],
   'lib/bridge-client.ts': ['5498ff7031a1e12b4c74b1d1a5d8c08f286754732f5c26006760f8ea95d58d1f'],
   'lib/runtime-data.ts': ['3e382ec9f700d98c480e30fa714f1fdb322a758b3d71b431ef07624c37b400aa'],
   'lib/runtime-behavior.ts': ['6d5794b937c78c15a1a2f97ab4fec42d88f9a6fb0d366c6d0625c80aad8cef95'],
@@ -58,10 +59,11 @@ const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
  * one; the runtime-template test fails until you do.
  */
 export const SHIPPED_MARKED_HASHES: Record<string, string[]> = {
-  'lib/bridge-client.ts': ['4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07'],
-  'lib/runtime-data.ts': ['17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b'],
-  'lib/runtime-behavior.ts': ['84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609'],
-  'app/layouts/[id]/runtime-layout-client.tsx': ['12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5']
+  'app/layouts/[id]/page.tsx': ['4a7882e3638ccadf65d48b1fa7a16a14b98df4009671453ea82f4ce18159e895'],
+  'lib/bridge-client.ts': ['e0253ec75ce1dd79cef212a05f12cc4db4570ffb5cc8f36fb3775f9ac72f323e', '4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07'],
+  'lib/runtime-data.ts': ['22cad0412d5a831000a671fc210edde6e7eb6285ea49356981b4e80d9ab0d729', '17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b'],
+  'lib/runtime-behavior.ts': ['8d74f0dc280c8a42e4e64e1b47a0df0d11f09beba8605808c5263a81a6f3b94d', '84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609'],
+  'app/layouts/[id]/runtime-layout-client.tsx': ['6becf8abb393e1e501f75390540b0fbefec17c9ca77803fc4f9352157a67249e', '12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5']
 };
 
 export function normalizedHash(content: Buffer): string {

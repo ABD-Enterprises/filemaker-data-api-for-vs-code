@@ -7,6 +7,8 @@ import { pathToFileURL } from 'url';
 import nock from 'nock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { standardFieldSize } from '@fmweb/shared/dist/field-standards';
+import { createBlankLayout } from '../../src/fmweb/layoutSchema';
 import { FmBridgeServer } from '../../src/services/fmBridgeServer';
 import {
   FmWebRuntimeGenerator,
@@ -45,6 +47,36 @@ describe('FM Web runtime template', () => {
     );
   }
 
+  it('generated web layouts retain standard geometry and ship the shared view presentation', async () => {
+    const layoutsDir = path.join(dir, 'layouts');
+    await mkdir(layoutsDir);
+    const layout = createBlankLayout(' Exact view ', ' Source ');
+    layout.objects = ['text', 'number', 'date', 'long text', 'container'].map((type, i) => ({
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, name: type, type: 'field',
+      fmFieldName: ` ${type} `, displayType: 'editBox', format: 'text', labelPosition: 'top', required: false,
+      ...standardFieldSize({ type }), x: 24, y: 24 + i * 220, zIndex: i,
+      anchors: { top: true, left: true, right: false, bottom: false }
+    }));
+    await writeFile(path.join(layoutsDir, 'view.layout.json'), JSON.stringify(layout));
+    const gen = new FmWebRuntimeGenerator({ extensionUri: { fsPath: extensionDir } } as never, {
+      isWorkspaceTrusted: () => true, ensureProjectInitialized: async () => undefined,
+      getGeneratedDirPath: () => path.join(dir, 'generated'), getLayoutsDirPath: () => layoutsDir
+    } as never, logger);
+    const generated = await gen.generateLayoutPage(layout.id);
+    const saved = JSON.parse(await readFile(generated.outputPath, 'utf8')) as typeof layout;
+    expect(saved.name).toBe(' Exact view ');
+    expect(saved.fmLayoutName).toBe(' Source ');
+    expect(saved.objects.map((object) => [object.width, object.height])).toEqual([[240, 34], [120, 34], [160, 34], [240, 96], [240, 160]]);
+    expect(saved.objects.map((object) => object.type === 'field' && object.labelPosition)).toEqual(Array(5).fill('top'));
+    await gen.generateRuntimeAppTemplate();
+    const page = await readFile(path.join(gen.getGeneratedRuntimeRoot(), 'app/layouts/[id]/page.tsx'), 'utf8');
+    expect(page).toContain('standardFieldsCss()');
+    expect(page).toContain('data-fm-field-layout="standard"');
+    const client = await readFile(path.join(gen.getGeneratedRuntimeRoot(), 'app/layouts/[id]/runtime-layout-client.tsx'), 'utf8');
+    expect(client).toContain('LayoutContainer');
+    expect(client).toContain('runtimeData={runtime.runtimeData}');
+  });
+
   const bridgeClientPath = () => path.join(dir, 'runtime-next', 'lib', 'bridge-client.ts');
 
   it('generates the managed files with the current template version marker', async () => {
@@ -75,6 +107,23 @@ describe('FM Web runtime template', () => {
     // The current copy is left as it is.
     const second = await generator().generateRuntimeAppTemplate();
     expect(second.updated).toEqual([]);
+  });
+
+  it('keeps the original page.tsx hash managed: refreshes old generated pages and preserves edits', async () => {
+    const legacy = await readFile(path.join(extensionDir, 'test/fixtures/legacy-runtime-page.tsx.txt'));
+    // Pin this historical file independently of the current template hash list.
+    expect(normalizedHash(legacy)).toBe('0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266');
+    const page = path.join(dir, 'runtime-next', 'app/layouts/[id]/page.tsx');
+    await mkdir(path.dirname(page), { recursive: true });
+    await writeFile(page, legacy);
+    const first = await generator().generateRuntimeAppTemplate();
+    expect(first.updated).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(await readFile(page, 'utf8')).toBe(await readFile(path.join(extensionDir, '../runtime-next/app/layouts/[id]/page.tsx'), 'utf8'));
+    const edited = Buffer.concat([legacy, Buffer.from('\n// my application change\n')]);
+    await writeFile(page, edited);
+    const second = await generator().generateRuntimeAppTemplate();
+    expect(second.needsManualUpdate).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(await readFile(page)).toEqual(edited);
   });
 
   it('does not overwrite a user-edited file that still carries an older marker: it is left alone and named', async () => {

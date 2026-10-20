@@ -23,6 +23,32 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('FMClient (unit)', () => {
+  it.each([false, true])('omits ancillary metadata history (failure=%s) while retaining record history, metrics and normal metadata history', async (failMetadata) => {
+    const axios = new FakeAxios();
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    const profile = createProfile();
+    await secrets.setSessionToken(profile.id, 'token');
+    const response = (data: unknown) => createAxiosResponse({ data: { response: data, messages: [{ code: '0', message: 'OK' }] } });
+    axios.request.mockResolvedValue(response({ fieldMetaData: [] }));
+    const history = { record: vi.fn(async () => undefined) };
+    const metrics = { record: vi.fn(async () => undefined) };
+    const client = new FMClient(secrets, logger, 15_000, axios as never, undefined, history, metrics);
+    if (failMetadata) axios.request.mockRejectedValueOnce(new Error('metadata failed'));
+    const lookup = client.getLayoutMetadata(profile, ' Exact layout ', { recordHistory: false });
+    if (failMetadata) await expect(lookup).rejects.toThrow('metadata failed');
+    else await lookup;
+    expect(history.record).not.toHaveBeenCalled();
+    expect(metrics.record).toHaveBeenCalledWith(expect.objectContaining({ operation: 'getLayoutMetadata', success: !failMetadata }));
+    axios.request.mockResolvedValueOnce(response({ data: [{ recordId: '1', fieldData: { Value: ' exact ' } }] }));
+    await client.getRecord(profile, ' Exact layout ', '1');
+    expect(history.record).toHaveBeenCalledTimes(1);
+    expect(history.record).toHaveBeenLastCalledWith(expect.objectContaining({ operation: 'getRecord', layout: ' Exact layout ' }));
+    await client.getLayoutMetadata(profile, ' Exact layout ');
+    expect(history.record).toHaveBeenCalledTimes(2);
+    expect(history.record).toHaveBeenLastCalledWith(expect.objectContaining({ operation: 'getLayoutMetadata' }));
+  });
+
   it('constructs authenticated request headers for Data API calls', async () => {
     const axios = new FakeAxios();
     const logger = {

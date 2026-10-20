@@ -48,11 +48,13 @@ type IncomingMessage =
         availableFields: string[];
         availableFieldMetadata?: StandardFieldMetadata[];
         isNewLayout?: boolean;
+        templateLayoutNames?: string[];
         templateLayouts?: Array<{ layoutName: string; fields: StandardFieldMetadata[]; portals: StandardPortalMetadata[] }>;
         scripts: string[];
         projectName: string;
       };
     }
+  | { type: 'templateMetadata'; payload?: { layoutName: string; fields: StandardFieldMetadata[]; portals: StandardPortalMetadata[] } }
   | { type: 'saveResult'; payload: { ok: boolean; message?: string } }
   | {
       type: 'behaviorResult';
@@ -67,6 +69,7 @@ type IncomingMessage =
 
 type OutgoingMessage =
   | { type: 'ready' }
+  | { type: 'loadTemplateMetadata'; payload: { layoutName: string } }
   | { type: 'saveLayout'; payload: { layout: LayoutDefinition; autosave: boolean } }
   | {
       type: 'executeBehavior';
@@ -119,7 +122,8 @@ interface LayoutCommand {
   apply: (layout: LayoutDefinition) => LayoutDefinition;
 }
 
-type LayoutExecutedCommand = ExecutedCommand<LayoutDefinition>;
+interface FieldPalette { fields: string[]; metadata: StandardFieldMetadata[]; source: string }
+type LayoutExecutedCommand = ExecutedCommand<LayoutDefinition> & { beforePalette?: FieldPalette; afterPalette?: FieldPalette };
 
 interface DragInteraction {
   kind: 'drag';
@@ -159,6 +163,7 @@ export function App(): React.JSX.Element {
   const [fieldMetadata, setFieldMetadata] = React.useState<StandardFieldMetadata[]>([]);
   const [formColumns, setFormColumns] = React.useState<1 | 2>(1);
   const [template, setTemplate] = React.useState<StarterTemplate>('blank');
+  const [templateLayoutNames, setTemplateLayoutNames] = React.useState<string[]>([]);
   const [templateSource, setTemplateSource] = React.useState('');
   const [templateLayouts, setTemplateLayouts] = React.useState<NonNullable<Extract<IncomingMessage, { type: 'init' }>['payload']['templateLayouts']>>([]);
   const [isNewLayout, setIsNewLayout] = React.useState(false);
@@ -241,33 +246,38 @@ export function App(): React.JSX.Element {
   );
 
   const executeLayoutCommand = React.useCallback(
-    (command: LayoutCommand): void => {
+    (command: LayoutCommand, palette?: FieldPalette): void => {
       const current = cloneLayout(layoutRef.current);
       const next = command.apply(cloneLayout(layoutRef.current));
       if (layoutsEqual(current, next)) {
         return;
       }
 
+      const previousSource = layoutRef.current.fmLayoutName ?? templateLayouts[0]?.layoutName ?? '';
       applyLayout(next);
       recordExecutedCommand({
         label: command.label,
         before: current,
-        after: next
+        after: next,
+        beforePalette: palette ? { fields, metadata: fieldMetadata, source: previousSource } : undefined,
+        afterPalette: palette
       });
+      if (palette) { setFields(palette.fields); setFieldMetadata(palette.metadata); setTemplateSource(palette.source); }
     },
-    [applyLayout, recordExecutedCommand]
+    [applyLayout, recordExecutedCommand, fields, fieldMetadata, templateLayouts]
   );
 
   const undo = React.useCallback(() => {
     setUndoStack((current) => {
       const popped = popHistoryEntry(current);
-      const entry = popped.entry;
+      const entry = popped.entry as LayoutExecutedCommand | undefined;
       if (!entry) {
         return current;
       }
 
       const restored = cloneLayout(entry.before);
       applyLayout(restored);
+      if (entry.beforePalette) { setFields(entry.beforePalette.fields); setFieldMetadata(entry.beforePalette.metadata); setTemplateSource(entry.beforePalette.source); }
       setRedoStack((redoCurrent) => pushHistoryEntry(redoCurrent, entry));
       log(`Undo: ${entry.label}`);
 
@@ -278,13 +288,14 @@ export function App(): React.JSX.Element {
   const redo = React.useCallback(() => {
     setRedoStack((current) => {
       const popped = popHistoryEntry(current);
-      const entry = popped.entry;
+      const entry = popped.entry as LayoutExecutedCommand | undefined;
       if (!entry) {
         return current;
       }
 
       const restored = cloneLayout(entry.after);
       applyLayout(restored);
+      if (entry.afterPalette) { setFields(entry.afterPalette.fields); setFieldMetadata(entry.afterPalette.metadata); setTemplateSource(entry.afterPalette.source); }
       setUndoStack((undoCurrent) => pushHistoryEntry(undoCurrent, entry));
       log(`Redo: ${entry.label}`);
 
@@ -1284,6 +1295,12 @@ export function App(): React.JSX.Element {
         return;
       }
 
+      if (message.type === 'templateMetadata') {
+        const source = message.payload;
+        if (source) setTemplateLayouts((current) => [...current.filter((entry) => entry.layoutName !== source.layoutName), source]);
+        return;
+      }
+
       if (message.type === 'init') {
         const initialLayout = message.payload.layout;
         layoutRef.current = initialLayout;
@@ -1292,6 +1309,7 @@ export function App(): React.JSX.Element {
         setFieldMetadata(message.payload.availableFieldMetadata ?? message.payload.availableFields.map((name) => ({ name })));
         setIsNewLayout(message.payload.isNewLayout ?? false);
         setTemplateLayouts(message.payload.templateLayouts ?? []);
+        setTemplateLayoutNames(message.payload.templateLayoutNames ?? message.payload.templateLayouts?.map((entry) => entry.layoutName) ?? []);
         setTemplateSource(message.payload.templateLayouts?.[0]?.layoutName ?? '');
         setScripts(message.payload.scripts);
         setProjectName(message.payload.projectName);
@@ -1461,19 +1479,20 @@ export function App(): React.JSX.Element {
                 <option value="blank">Blank</option><option value="form">Form</option>
                 <option value="twoColumn">Two-column form</option><option value="formPortal">Form + first portal</option>
               </select>
-              <select aria-label="Template FileMaker layout" value={templateSource} onChange={(event) => setTemplateSource(event.target.value)}>
-                {templateLayouts.map((entry) => <option key={entry.layoutName} value={entry.layoutName}>{entry.layoutName}</option>)}
+              <select aria-label="Template FileMaker layout" value={templateSource} onChange={(event) => {
+                const layoutName = event.target.value; setTemplateSource(layoutName);
+                if (!templateLayouts.some((entry) => entry.layoutName === layoutName)) vscode.postMessage({ type: 'loadTemplateMetadata', payload: { layoutName } });
+              }}>
+                {templateLayoutNames.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
-              <button type="button" disabled={template !== 'blank' && !templateLayouts.length} onClick={() => {
+              <button type="button" disabled={template !== 'blank' && !templateLayouts.some((entry) => entry.layoutName === templateSource)} onClick={() => {
                 const source = templateLayouts.find((entry) => entry.layoutName === templateSource);
                 if (template === 'blank' || !source) return;
                 const portal = source.portals[0];
                 const ids = Array.from({ length: source.fields.length + 1 + (portal?.fields.length ?? 0) }, () => createObjectId());
                 executeLayoutCommand({ label: 'Apply starter template', apply: (current) => createStarterTemplate(
                   { ...current, fmLayoutName: source.layoutName }, source.fields, template, ids, portal
-                ) });
-                setFields(source.fields.map((field) => field.name));
-                setFieldMetadata(source.fields);
+                ) }, { fields: source.fields.map((field) => field.name), metadata: source.fields, source: source.layoutName });
               }}>Apply starter template</button>
             </> : null}
             <select aria-label="Form columns" value={formColumns} onChange={(event) => setFormColumns(Number(event.target.value) as 1 | 2)}>
