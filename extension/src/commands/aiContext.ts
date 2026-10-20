@@ -3,7 +3,7 @@ import { join } from 'path';
 import * as vscode from 'vscode';
 
 import { HiddenFields } from '../ai/aiText';
-import { readAiSettings } from '../ai/aiSettings';
+import { readAiSettings, type HiddenFieldsProblemReporter } from '../ai/aiSettings';
 import {
   AI_CONTEXT_END_MARKER,
   AI_CONTEXT_MAX_LAYOUTS,
@@ -41,6 +41,7 @@ interface RegisterAiContextCommandsDeps {
   fmClient: FMClient;
   schemaService: SchemaService;
   logger: Logger;
+  reportHiddenFieldsProblem: HiddenFieldsProblemReporter;
   /** Overridable for tests. */
   now?: () => Date;
   isTracked?: (directory: string, absolutePath: string) => Promise<boolean>;
@@ -178,7 +179,7 @@ async function gatherSchema(
   let unavailable = 0;
   let hiddenOmitted = 0;
   // The same setting and the same name matching the AI tools use: a hidden field is not listed here either.
-  const hidden = new HiddenFields(readAiSettings(vscode.workspace.getConfiguration('filemaker')).hiddenFields);
+  const hidden = new HiddenFields(readAiSettings(vscode.workspace.getConfiguration('filemaker'), deps.reportHiddenFieldsProblem).hiddenFields);
 
   for (const layout of layouts) {
     if (token?.isCancellationRequested) {

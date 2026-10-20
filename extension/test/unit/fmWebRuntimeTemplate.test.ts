@@ -109,13 +109,17 @@ describe('FM Web runtime template', () => {
     expect(second.updated).toEqual([]);
   });
 
-  it('keeps the original page.tsx hash managed: refreshes old generated pages and preserves edits', async () => {
-    const legacy = await readFile(path.join(extensionDir, 'test/fixtures/legacy-runtime-page.tsx.txt'));
+  it.each([
+    ['legacy-runtime-page.tsx.txt', '0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266'],
+    ['v1.0.0-runtime-page.tsx.txt', '645ed91229d76841ea407279e6d0472f9d8af64dd3dcd4313c7aa566789ae814']
+  ])('refreshes shipped page %s but preserves edits and skips symlinks', async (fixture, hash) => {
+    const legacy = await readFile(path.join(extensionDir, 'test/fixtures', fixture));
     // Pin this historical file independently of the current template hash list.
-    expect(normalizedHash(legacy)).toBe('0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266');
+    expect(normalizedHash(legacy)).toBe(hash);
     const page = path.join(dir, 'runtime-next', 'app/layouts/[id]/page.tsx');
     await mkdir(path.dirname(page), { recursive: true });
-    await writeFile(page, legacy);
+    // Windows-generated copies must be recognised too.
+    await writeFile(page, legacy.toString('utf8').replace(/\n/g, '\r\n'));
     const first = await generator().generateRuntimeAppTemplate();
     expect(first.updated).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
     expect(await readFile(page, 'utf8')).toBe(await readFile(path.join(extensionDir, '../runtime-next/app/layouts/[id]/page.tsx'), 'utf8'));
@@ -124,6 +128,17 @@ describe('FM Web runtime template', () => {
     const second = await generator().generateRuntimeAppTemplate();
     expect(second.needsManualUpdate).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
     expect(await readFile(page)).toEqual(edited);
+
+    const outside = path.join(dir, 'original-page.tsx');
+    await writeFile(outside, legacy);
+    await rm(page);
+    await symlink(outside, page);
+    const third = await generator().generateRuntimeAppTemplate();
+    expect(third.updated).not.toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(third.skipped).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect(third.needsManualUpdate).toContain(path.join('app', 'layouts', '[id]', 'page.tsx'));
+    expect((await lstat(page)).isSymbolicLink()).toBe(true);
+    expect(await readFile(outside)).toEqual(legacy);
   });
 
   it('does not overwrite a user-edited file that still carries an older marker: it is left alone and named', async () => {
