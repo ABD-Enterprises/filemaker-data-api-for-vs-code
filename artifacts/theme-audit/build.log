@@ -1,0 +1,58 @@
+
+> fmweb-ide-monorepo@0.1.0 build
+> npm run build --workspaces --if-present
+
+
+> @fmweb/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @fmweb/designer-ui@0.1.0 build
+> esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --minify --define:process.env.NODE_ENV=\"production\"
+
+
+  dist/index.js   825.5kb
+  dist/index.css    8.0kb
+
+⚡ Done in 25ms
+
+> @fmweb/runtime-next@0.1.0 build
+> tsc -p tsconfig.json --noEmit
+
+
+> filemaker-data-api-tools@1.6.0 build
+> npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews
+
+
+> filemaker-data-api-tools@1.6.0 build:designer-ui
+> node ./scripts/build-designer-ui-if-available.mjs
+
+
+> @fmweb/designer-ui@0.1.0 build
+> esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --minify --define:process.env.NODE_ENV=\"production\"
+
+
+  dist/index.js   825.5kb
+  dist/index.css    8.0kb
+
+⚡ Done in 23ms
+
+> filemaker-data-api-tools@1.6.0 clean
+> rimraf dist
+
+
+> filemaker-data-api-tools@1.6.0 bundle:extension
+> node ./scripts/bundle.mjs extension
+
+
+> filemaker-data-api-tools@1.6.0 bundle:schema-diff-worker
+> node ./scripts/bundle.mjs worker
+
+
+> filemaker-data-api-tools@1.6.0 bundle:ai-mcp-shim
+> node ./scripts/bundle.mjs aiMcpShim
+
+
+> filemaker-data-api-tools@1.6.0 copy:webviews
+> node ./scripts/copy-webviews.mjs
+

@@ -1,0 +1,89 @@
+
+> fmweb-ide-monorepo@0.1.0 package:check
+> npm run package:check -w extension
+
+
+> filemaker-data-api-tools@1.6.0 package:check
+> npm run notices:check && npm run package:vsix
+
+
+> filemaker-data-api-tools@1.6.0 notices:check
+> node ./scripts/generate-third-party-notices.mjs --check
+
+[notices] THIRD_PARTY_NOTICES.txt is current (31 packages).
+
+> filemaker-data-api-tools@1.6.0 package:vsix
+> node ./scripts/package-vsix.mjs
+
+Executing prepublish script 'npm run vscode:prepublish'...
+
+> filemaker-data-api-tools@1.6.0 vscode:prepublish
+> npm run build
+
+
+> filemaker-data-api-tools@1.6.0 build
+> npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews
+
+
+> filemaker-data-api-tools@1.6.0 build:designer-ui
+> node ./scripts/build-designer-ui-if-available.mjs
+
+
+> @fmweb/designer-ui@0.1.0 build
+> esbuild src/main.tsx --bundle --platform=browser --format=iife --outfile=dist/index.js --minify --define:process.env.NODE_ENV=\"production\"
+
+
+  dist/index.js   825.5kb
+  dist/index.css    8.0kb
+
+⚡ Done in 23ms
+
+> filemaker-data-api-tools@1.6.0 clean
+> rimraf dist
+
+
+> filemaker-data-api-tools@1.6.0 bundle:extension
+> node ./scripts/bundle.mjs extension
+
+
+> filemaker-data-api-tools@1.6.0 bundle:schema-diff-worker
+> node ./scripts/bundle.mjs worker
+
+
+> filemaker-data-api-tools@1.6.0 bundle:ai-mcp-shim
+> node ./scripts/bundle.mjs aiMcpShim
+
+
+> filemaker-data-api-tools@1.6.0 copy:webviews
+> node ./scripts/copy-webviews.mjs
+
+ INFO  Files included in the VSIX:
+filemaker-data-api-tools-1.6.0.vsix
+├─ [Content_Types].xml 
+├─ extension.vsixmanifest 
+└─ extension/
+   ├─ LICENSE.txt [1.04 KB]
+   ├─ THIRD_PARTY_NOTICES.txt [40.5 KB]
+   ├─ UPGRADE.md [21.67 KB]
+   ├─ changelog.md [85.04 KB]
+   ├─ package.json [90.79 KB]
+   ├─ readme.md [20.63 KB]
+   ├─ dist/
+   │  ├─ aiMcpShim.js [6.59 KB]
+   │  ├─ extension.js [1.25 MB]
+   │  ├─ schemaDiffWorker.js [2.01 KB]
+   │  └─ webviews/ (22 files) [1.04 MB]
+   ├─ docs/
+   │  ├─ COMPATIBILITY.md [8.05 KB]
+   │  ├─ FM_WEB.md [5.89 KB]
+   │  ├─ USER_GUIDE.md [123.41 KB]
+   │  ├─ marketplace/ (10 files) [1.29 MB]
+   │  └─ walkthroughs/ (5 files) [6.51 KB]
+   ├─ examples/
+   │  └─ profile-template.json [0.23 KB]
+   └─ media/
+      └─ filemaker.svg [0.35 KB]
+
+=> Run vsce ls --tree to see all included files.
+
+ DONE  Packaged: /private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/filemaker-data-api-tools-1.6.0.vsix (53 files, 1.93 MB)

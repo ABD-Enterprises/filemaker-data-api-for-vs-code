@@ -2069,7 +2069,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "@types/node": "^26.6.5",
+    "@types/node": "^22.0.0",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.33.1",
@@ -2084,7 +2084,6 @@
     "playwright-core": "^1.64.1",
     "prettier": "^3.9.10",
     "rimraf": "^6.0.1",
-    "shx": "^0.4.0",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
     "typescript6": "npm:typescript@^6.0.3",

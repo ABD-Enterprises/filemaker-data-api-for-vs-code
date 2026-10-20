@@ -32,11 +32,11 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
-- None.
+- Add a support page with help channels and safe bug-report guidance, remove the unused `shx` development dependency (build and package scripts already use Node), and align workspace `@types/node` declarations with the supported Node 22 runtime.
 
 ### [SECURITY]
 
-- None.
+- Updated `follow-redirects` (inside `axios`) from 1.16.0 to 1.16.1 for two advisories about credential headers surviving a redirect; the extension refuses every redirect (`maxRedirects: 0`), so the fixed paths were not reachable, and the production audit is clean again.
 
 ## 1.6.0 - 2026-10-19
 

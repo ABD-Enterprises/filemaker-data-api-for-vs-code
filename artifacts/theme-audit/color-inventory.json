@@ -1,0 +1,74 @@
+[
+  {
+    "file": "designer-ui/src/styles.css",
+    "colorLiterals": 33,
+    "directPaperLiterals": 1,
+    "reason": "Canvas paper plus VS Code token fallbacks"
+  },
+  {
+    "file": "extension/src/webviews/connectionWizard/ui/styles.css",
+    "colorLiterals": 35,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/layoutMode/ui/index.css",
+    "colorLiterals": 3,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/queryBuilder/ui/styles.css",
+    "colorLiterals": 28,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/recordEditor/ui/styles.css",
+    "colorLiterals": 23,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/recordViewer/ui/styles.css",
+    "colorLiterals": 23,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/schemaDiff/ui/styles.css",
+    "colorLiterals": 22,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/scriptRunner/ui/styles.css",
+    "colorLiterals": 32,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/environmentCompare/index.ts",
+    "colorLiterals": 13,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/diagnostics/diagnosticsDashboard.ts",
+    "colorLiterals": 14,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/settings/effectiveSettings.ts",
+    "colorLiterals": 9,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  },
+  {
+    "file": "extension/src/webviews/common/panelRestore.ts",
+    "colorLiterals": 1,
+    "directPaperLiterals": 0,
+    "reason": "VS Code token fallbacks only"
+  }
+]

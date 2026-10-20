@@ -1,0 +1,59 @@
+[
+  {
+    "theme": "light",
+    "args": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--user-data-dir=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/chrome-light",
+      "--window-size=1440,1000",
+      "--virtual-time-budget=1000",
+      "--screenshot=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-light.png",
+      "file:///private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-light.html"
+    ],
+    "status": null,
+    "signal": "SIGABRT",
+    "screenshot": null
+  },
+  {
+    "theme": "dark",
+    "args": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--user-data-dir=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/chrome-dark",
+      "--window-size=1440,1000",
+      "--virtual-time-budget=1000",
+      "--screenshot=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-dark.png",
+      "file:///private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-dark.html"
+    ],
+    "status": null,
+    "signal": "SIGABRT",
+    "screenshot": null
+  },
+  {
+    "theme": "high-contrast",
+    "args": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--user-data-dir=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/chrome-high-contrast",
+      "--window-size=1440,1000",
+      "--virtual-time-budget=1000",
+      "--screenshot=/private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-high-contrast.png",
+      "file:///private/tmp/claude-501/-Users-deffenda-Code-filemaker-data-api-for-vs-code/2d54c747-2988-4932-a985-a202bab18034/scratchpad/theme/artifacts/theme-audit/designer-high-contrast.html"
+    ],
+    "status": null,
+    "signal": "SIGABRT",
+    "screenshot": null
+  }
+]
