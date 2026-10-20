@@ -13,11 +13,11 @@
 :root {
   --bg: var(--vscode-editor-background, #f8fafb);
   --panel: var(--vscode-textBlockQuote-background, #ffffff);
-  --border: var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea));
-  --accent: var(--vscode-focusBorder, #0ea5e9);
+  --border: var(--vscode-contrastBorder, var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea)));
+  --accent: var(--vscode-button-background, #007acc);
   --accent-hover: var(--vscode-button-hoverBackground, #0284c7);
   --text: var(--vscode-foreground, #1e293b);
-  --muted: var(--vscode-descriptionForeground, #64748b);
+  --muted: var(--vscode-foreground, #64748b);
   --error: var(--vscode-errorForeground, #ef4444);
   --success: var(--vscode-testing-iconPassed, #22c55e);
   --warning: var(--vscode-editorWarning-foreground, #d97706);
@@ -278,21 +278,21 @@ h1 {
 .status.error {
   display: block;
   background: var(--vscode-inputValidation-errorBackground, rgba(239, 68, 68, 0.1));
-  color: var(--vscode-inputValidation-errorForeground, var(--error));
+  color: var(--vscode-inputValidation-errorForeground, var(--text));
   border: 1px solid var(--vscode-inputValidation-errorBorder, var(--error));
 }
 
 .status.success {
   display: block;
   background: var(--vscode-inputValidation-infoBackground, rgba(34, 197, 94, 0.1));
-  color: var(--vscode-testing-iconPassed, var(--success));
+  color: var(--vscode-inputValidation-infoForeground, var(--text));
   border: 1px solid var(--vscode-testing-iconPassed, var(--success));
 }
 
 .status.warning {
   display: block;
   background: var(--vscode-inputValidation-warningBackground, rgba(217, 119, 6, 0.1));
-  color: var(--vscode-inputValidation-warningForeground, var(--warning));
+  color: var(--vscode-inputValidation-warningForeground, var(--text));
   border: 1px solid var(--vscode-inputValidation-warningBorder, var(--warning));
 }
 
@@ -333,18 +333,21 @@ h1 {
   border: 1px solid var(--vscode-input-border, transparent);
   vertical-align: middle;
 }
-.test-badge.untested { opacity: 0.7; }
+.test-badge.untested { color: var(--muted); }
 .test-badge.success {
-  background: var(--vscode-testing-iconPassed, #1f6f1f);
-  color: #ffffff;
+  background: var(--vscode-inputValidation-infoBackground, #d6ecf2);
+  color: var(--vscode-inputValidation-infoForeground, var(--text));
+  border-color: var(--vscode-inputValidation-infoBorder, var(--border));
 }
 .test-badge.failure {
-  background: var(--vscode-testing-iconFailed, #b22222);
-  color: #ffffff;
+  background: var(--vscode-inputValidation-errorBackground, #f2dede);
+  color: var(--vscode-inputValidation-errorForeground, var(--text));
+  border-color: var(--vscode-inputValidation-errorBorder, var(--border));
 }
 .test-badge.stale {
-  background: var(--vscode-editorWarning-foreground, #cc8400);
-  color: #1f1f1f;
+  background: var(--vscode-inputValidation-warningBackground, #fff4ce);
+  color: var(--vscode-inputValidation-warningForeground, var(--text));
+  border-color: var(--vscode-inputValidation-warningBorder, var(--border));
 }
 
 .test-progress {
@@ -393,7 +396,7 @@ h1 {
 }
 
 .warning-hint {
-  color: var(--vscode-editorWarning-foreground, #cca700);
+  color: var(--text);
 }
 
 .restricted-notice {
@@ -478,4 +481,30 @@ pre {
 button {
   max-width: 100%;
   white-space: normal;
+}
+
+/* Theme colors are paired; HC outlines do not change control geometry. */
+input, select, textarea {
+  background: var(--vscode-input-background, #ffffff);
+  color: var(--vscode-input-foreground, #333333);
+  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
+  accent-color: var(--vscode-focusBorder, #007acc);
+}
+button, summary {
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+button:hover, summary:hover {
+  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
+  outline-offset: 1px;
+}
+a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
+
+/* Native placeholder defaults are OS-dependent; keep hints readable. */
+input::placeholder, textarea::placeholder {
+  color: var(--vscode-input-foreground, #333333);
+  opacity: 1;
 }

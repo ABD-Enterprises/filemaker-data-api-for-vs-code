@@ -88,22 +88,25 @@ export class DiagnosticsDashboardPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>Diagnostics Dashboard</title>
   <style nonce="${nonce}">
-    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f6f8fb; color: #1f2937; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground, #333333); }
     .wrap { padding: 16px; display: grid; gap: 14px; min-width: 0; }
-    .card { background: #fff; border: 1px solid #d8e0eb; border-radius: 10px; padding: 12px; min-width: 0; }
+    .card { background: var(--vscode-editorWidget-background, #f3f3f3); border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 10px; padding: 12px; min-width: 0; }
     .table-scroll { overflow-x: auto; max-width: 100%; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; }
-    .stat { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
-    .label { color: #64748b; font-size: 12px; }
+    .stat { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 8px; padding: 8px; }
+    .label { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); font-size: 12px; }
     .value { font-weight: 700; font-size: 18px; margin-top: 4px; overflow-wrap: anywhere; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #e2e8f0; text-align: left; padding: 6px 8px; font-size: 12px; }
-    th { background: #f8fafc; }
+    th, td { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); text-align: left; padding: 6px 8px; font-size: 12px; }
+    th { background: var(--vscode-editor-background, #ffffff); }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-    button { border: none; border-radius: 6px; background: #0f766e; color: #fff; padding: 7px 10px; cursor: pointer; }
-    button:hover { background: #115e59; }
-    .muted { color: #64748b; }
-    .fm-version { color: #64748b; font-size: 11px; padding: 0 16px 12px; }
+    button { border: none; border-radius: 6px; background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); padding: 7px 10px; cursor: pointer; }
+    button:hover { background: var(--vscode-button-hoverBackground, #0062a3); }
+    .muted { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); }
+    .fm-version { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); font-size: 11px; padding: 0 16px 12px; }
+
+    button { outline: 1px solid var(--vscode-contrastBorder, transparent); }
+    button:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
   </style>
 </head>
 <body>

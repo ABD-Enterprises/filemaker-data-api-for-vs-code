@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FIX] Webviews and Layout Mode controls now follow light, dark and high-contrast editor themes, with readable fields, messages and schema differences.
+
 ## 1.6.0
 
 _Released 2026-10-19._

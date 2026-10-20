@@ -282,12 +282,13 @@ export function renderEffectiveSettingsHtml(
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
 <title>FileMaker Effective Settings</title>
 <style nonce="${nonce}">
-  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px 16px; }
+  body { font-family: var(--vscode-font-family); background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground); padding: 12px 16px; }
   table { border-collapse: collapse; width: 100%; table-layout: fixed; }
   th, td { border: 1px solid var(--vscode-panel-border, #8884); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
   code { white-space: pre-wrap; overflow-wrap: anywhere; }
-  .ignored { color: var(--vscode-editorWarning-foreground, #b58900); margin-bottom: 4px; }
-  button { margin: 2px 4px 2px 0; }
+  .ignored { color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)); background: var(--vscode-inputValidation-warningBackground, #fff4ce); margin-bottom: 4px; }
+  button { margin: 2px 4px 2px 0; background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); border-color: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); }
+  button:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
   .muted { color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
   @media (max-width: 640px) {
     table, thead, tbody, tr, td { display: block; width: 100%; }

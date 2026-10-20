@@ -3,14 +3,14 @@
   --bg: var(--vscode-editor-background, #f4f6f8);
   --panel: var(--vscode-sideBar-background, var(--vscode-editor-background, #ffffff));
   --text: var(--vscode-foreground, #1f2933);
-  --muted: var(--vscode-descriptionForeground, #5f6c7b);
+  --muted: var(--vscode-foreground, #5f6c7b);
   --accent: var(--vscode-button-background, #0f766e);
   --accent-text: var(--vscode-button-foreground, #ffffff);
   --accent-strong: var(--vscode-button-hoverBackground, #115e59);
-  --secondary: var(--vscode-button-secondaryBackground, #e5e7eb);
+  --secondary: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
   --secondary-text: var(--vscode-button-secondaryForeground, #1f2933);
-  --secondary-hover: var(--vscode-button-secondaryHoverBackground, #d1d5db);
-  --border: var(--vscode-panel-border, var(--vscode-widget-border, #d0d7de));
+  --secondary-hover: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground, var(--vscode-editor-background, #ffffff)));
+  --border: var(--vscode-contrastBorder, var(--vscode-panel-border, var(--vscode-widget-border, #d0d7de)));
   --input-bg: var(--vscode-input-background, #ffffff);
   --input-text: var(--vscode-input-foreground, #1f2933);
   --input-border: var(--vscode-input-border, var(--border));
@@ -255,8 +255,8 @@ details.menu > summary::after {
 
 .menu-items button:hover:not(:disabled),
 .menu-items button:focus-visible {
-  background: var(--vscode-menu-selectionBackground, var(--row-hover));
-  color: var(--vscode-menu-selectionForeground, inherit);
+  background: var(--vscode-menu-selectionBackground, var(--accent));
+  color: var(--vscode-menu-selectionForeground, var(--accent-text));
 }
 
 .menu-toggle {
@@ -471,7 +471,7 @@ td.actions-col {
 
 .raw {
   font-family: var(--mono);
-  background: var(--vscode-textCodeBlock-background, #0b1020);
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background, #ffffff));
   color: var(--text);
   padding: 12px;
   border-radius: 6px;
@@ -649,4 +649,30 @@ button {
 @media (max-width: 640px) {
   .criterion-row.fm-fields { align-items: flex-start; }
   .criterion-row.fm-fields > .fm-field { flex: none; }
+}
+
+/* Theme colors are paired; HC outlines do not change control geometry. */
+input, select, textarea {
+  background: var(--vscode-input-background, #ffffff);
+  color: var(--vscode-input-foreground, #333333);
+  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
+  accent-color: var(--vscode-focusBorder, #007acc);
+}
+button, summary {
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+button:hover, summary:hover {
+  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
+  outline-offset: 1px;
+}
+a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
+
+/* Native placeholder defaults are OS-dependent; keep hints readable. */
+input::placeholder, textarea::placeholder {
+  color: var(--vscode-input-foreground, #333333);
+  opacity: 1;
 }

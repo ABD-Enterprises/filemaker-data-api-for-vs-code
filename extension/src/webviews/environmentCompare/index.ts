@@ -59,18 +59,18 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>Environment Compare</title>
   <style nonce="${nonce}">
-    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f6f9fc; color: #1f2937; }
+    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground, #333333); }
     .wrap { padding: 16px; display: grid; gap: 14px; }
-    .card { background: #fff; border: 1px solid #dbe3ee; border-radius: 10px; padding: 12px; }
+    .card { background: var(--vscode-editorWidget-background, #f3f3f3); border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 10px; padding: 12px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #dbe3ee; text-align: left; padding: 6px 8px; font-size: 12px; }
-    th { background: #f1f5f9; }
+    th, td { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); text-align: left; padding: 6px 8px; font-size: 12px; }
+    th { background: var(--vscode-editor-background, #ffffff); }
     .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
-    .ok { background: #dcfce7; color: #14532d; }
-    .warn { background: #fef3c7; color: #7c2d12; }
-    .bad { background: #fee2e2; color: #7f1d1d; }
+    .ok { background: var(--vscode-inputValidation-infoBackground, #d6ecf2); color: var(--vscode-inputValidation-infoForeground, var(--vscode-foreground, #333333)); }
+    .warn { background: var(--vscode-inputValidation-warningBackground, #fff4ce); color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground, #333333)); }
+    .bad { background: var(--vscode-inputValidation-errorBackground, #f2dede); color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground, #333333)); }
     details { margin-bottom: 6px; }
-    .fm-version { color: #64748b; font-size: 11px; padding: 0 16px 12px; }
+    .fm-version { color: var(--vscode-descriptionForeground, #555555); font-size: 11px; padding: 0 16px 12px; }
     summary { cursor: pointer; font-weight: 600; }
   </style>
 </head>
