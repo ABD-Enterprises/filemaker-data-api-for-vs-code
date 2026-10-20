@@ -83,7 +83,7 @@ Checked 2026-10-19 (<https://cli.github.com/manual/gh_release_create>): without 
    ```bash
    bash tools/release-notes.sh v1.6.0 > artifacts/RELEASE_NOTES_v1.6.0.md
    wc -l < artifacts/RELEASE_NOTES_v1.6.0.md                                   # about 19 lines (more than 15, never 0)
-   grep -c 'Upgrading from 1.6.0 to 1.6.0' artifacts/RELEASE_NOTES_v1.6.0.md   # must print 1
+   grep -c 'Upgrading from 1.5.0 to 1.6.0' artifacts/RELEASE_NOTES_v1.6.0.md   # must print 1
    gh release create v1.6.0 \
      --repo SureForgeTech/filemaker-data-api-for-vs-code \
      --verify-tag \

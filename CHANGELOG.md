@@ -57,7 +57,7 @@ Minor release: no data migration, and no command or setting was removed. User-fa
 - Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
 - The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
 - Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.
-- New files written by Write AI Context and the FM Web generator are readable by you only; a replaced file keeps its permissions (without setuid, setgid or sticky bits).
+- New files written by Write AI Context and new FM Web runtime files are readable by you only; a file that is replaced keeps its permissions (without setuid, setgid or sticky bits).
 - Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. The Output panel and Show Effective Settings now warn when `ai.hiddenFields` is a string instead of a list; hiding is unchanged: the whole string still counts as one field name, even with commas.
 - Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
 - Layout Mode keeps standardized fields on canvas, arranges selections without covering other objects, sizes Data API option controls from value lists, restores template palettes on Undo, and loads template metadata on demand.

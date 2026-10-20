@@ -27,7 +27,7 @@ If you trust a server's certificate by its fingerprint (for example FileMaker Se
 
 - A script, layout or container field named `.` or `..` is refused before anything is sent, also in proxy mode.
 - Copied TypeScript keeps a field named `__proto__`; copied proxy requests keep a trailing slash; copied API base paths stay as configured; curl output switches off bracket and brace expansion when needed.
-- New files written by Write AI Context and the FM Web generator are readable by you only; a file that is replaced keeps its permissions.
+- New files written by Write AI Context and new FM Web runtime files are readable by you only; a file that is replaced keeps its permissions.
 - The Record Viewer also asks the server for the layout's field details at the same time as the record (when schema metadata is on); it is not added to the request history and a failure is ignored.
 - The Output panel and **Show Effective Settings** warn when `ai.hiddenFields` is a string instead of a list.
 - A profile changed in another VS Code window refreshes the connection status, the explorer and the AI tools within two seconds.

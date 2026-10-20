@@ -138,7 +138,7 @@ These changes came after 1.5.0 (details in the [upgrade notes](../UPGRADE.md)):
 - **Layout Mode standards.** Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step), and blank, form, two-column and first-portal starter templates for a new web layout. Fields are listed in FileMaker's field order.
 - **One look for fields.** The find form, Record Editor, Record Viewer and generated web layout views use the same field sizes, top labels and spacing as Layout Mode. Generated FM Web apps get their managed runtime files refreshed (template version 3) the next time you generate or preview; see [FM Web and Layout Mode](#fm-web-and-layout-mode) for what happens to a file you edited.
 - **Trusting a certificate and VS Code's network setting.** With VS Code's `http.proxySupport` at its default (`override`), a trust you give a certificate cannot take effect on a server that is not on this computer. The dialog, the wizard and the error say so and name the setting. See [Trust this certificate](#certificates).
-- **Smaller fixes:** script runs return only the script's answer, names `.` and `..` are refused, copy-as-code is more exact, profile changes in another window show up within two seconds, and new generated files are readable by you only.
+- **Smaller fixes:** script runs return only the script's answer, names `.` and `..` are refused, copy-as-code is more exact, profile changes in another window show up within two seconds, and new context and runtime files are readable by you only.
 
 ---
 
