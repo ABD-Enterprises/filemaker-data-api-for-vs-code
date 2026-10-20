@@ -6,7 +6,7 @@ import * as tls from 'tls';
 import shouldBypassProxy from 'axios/unsafe/helpers/shouldBypassProxy.js';
 
 import type { ConnectionProfile } from '../types/fm';
-import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE } from '../utils/networkErrors';
+import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE, isTrustableCertificateCode } from '../utils/networkErrors';
 import { FMClientError } from './errors';
 
 type TlsProfileOptions = Pick<
@@ -251,6 +251,98 @@ export class PinnedCertificateAgent extends Agent {
     });
     return socket;
   }
+}
+
+/**
+ * Whether the host replaces the agent this module builds with its own (VS Code's `http.proxySupport`
+ * setting on `"override"`, its default). Under it the pinned-certificate check never runs: verified
+ * in a real extension host, where a connection to the pinned server fails with
+ * `UNABLE_TO_VERIFY_LEAF_SIGNATURE` whatever was trusted, while `"fallback"` and `"off"` honour the
+ * agent (good pin connects, wrong pin is refused). The request still goes ahead (a server whose
+ * certificate the host trusts anyway, such as one from a public authority, works with or without a
+ * stale pin), but when it fails as untrusted the user sees `pinBypassedByHost`'s explanation instead
+ * of a "not trusted" error that appears right after they trusted the certificate. False until the
+ * extension injects the real setting, so plain Node (unit tests, tools) is unaffected.
+ */
+let agentIsReplacedByHost: () => boolean = () => false;
+let agentPolicyInstalled = false;
+
+export function setAgentReplacedPolicy(policy: () => boolean): void {
+  agentIsReplacedByHost = policy;
+  agentPolicyInstalled = true;
+}
+
+/** Installs the policy unless one was installed already (by the extension's start-up or by a test). */
+export function ensureAgentReplacedPolicy(policy: () => boolean): void {
+  if (!agentPolicyInstalled) {
+    setAgentReplacedPolicy(policy);
+  }
+}
+
+/**
+ * Whether VS Code replaces the agent that would check a pin for requests to `url`: its setting says so
+ * and the address is not loopback, where the host leaves the agent alone.
+ */
+export function hostReplacesAgentFor(url: string | undefined): boolean {
+  return agentIsReplacedByHost() && !isLoopbackUrl(url);
+}
+
+function isLoopbackUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '::1' || /^127(\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The explanation for a pinned profile whose request failed with a certificate problem the pin would
+ * have covered (not trusted, host name, validity dates) while the host replaces the agent that would
+ * have applied the pin. Undefined when it does not apply: no pin, the host honours the agent, or the
+ * failure is something else (no network, a revoked certificate, or the pin's own refusal, which means
+ * the agent did run). The result keeps the failure's status, request id, endpoint and details but not
+ * its network code, so no "Trust this certificate" button is offered for a decision that cannot take
+ * effect.
+ */
+export function pinBypassedByHost(
+  profile: Pick<ConnectionProfile, 'pinnedCertSha256'> & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
+  failure?: FMClientError
+): FMClientError | undefined {
+  // The host leaves the agent alone for loopback addresses (verified in a real host), so there the pin
+  // did run and its own refusals (including a not-yet-valid certificate) are the true answer.
+  if (
+    normalizeSha256(profile.pinnedCertSha256) === undefined ||
+    !hostReplacesAgentFor(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)
+  ) {
+    return undefined;
+  }
+  if (failure) {
+    const code = failure.networkCode;
+    if (
+      failure.kind !== 'certificate' ||
+      !isTrustableCertificateCode(code) ||
+      code === CERT_PIN_MISMATCH_CODE ||
+      code === CERT_PIN_EXPIRED_CODE
+    ) {
+      return undefined;
+    }
+  }
+  return new FMClientError(
+    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and the certificate you trusted for this connection could not be applied: VS Code's "http.proxySupport" setting is "override" (its default), which routes requests through VS Code's own networking and replaces the connection this extension uses to check a trusted (pinned) certificate. To fix it, set "http.proxySupport" to "fallback" in your VS Code settings (search Settings for "proxy support"), which lets the extension use its own connection when no proxy is configured, then test again. Or install a certificate from a public authority on the server and choose Forget trusted certificate. (A custom CA file does not help here, because a trusted certificate does not use the CA file.)`,
+    {
+      code: 'PIN_BYPASSED_BY_PROXY_SUPPORT',
+      kind: 'certificate',
+      isRetryable: false,
+      status: failure?.status,
+      details: failure?.details,
+      requestId: failure?.requestId,
+      endpoint: failure?.endpoint
+    }
+  );
 }
 
 /** Environment variable as `proxy-from-env` reads it: lower case first, then upper case. */

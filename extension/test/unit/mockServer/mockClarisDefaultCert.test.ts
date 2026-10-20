@@ -154,7 +154,7 @@ describe.skipIf(!hasOpenssl)(
       await c.deleteSession(pinned);
     });
 
-    it('refuses a different Claris default certificate than the one that was trusted, before anything is sent', async () => {
+    it('refuses a different Claris default certificate than the one that was trusted', async () => {
       const { raw } = await presented(mock.baseUrl);
       const trusted = new X509Certificate(raw).fingerprint256.replace(/:/g, '').toLowerCase();
       const error = await failure(async () =>

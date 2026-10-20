@@ -36,7 +36,7 @@ import { SessionTokenTracker } from './session/sessionTokenTracker';
 import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { assertUsableUrlName } from '../utils/urlSegment';
-import { environmentProxyFor, httpsTransportFor, noteRequestTimeout } from './tlsAgent';
+import { environmentProxyFor, httpsTransportFor, noteRequestTimeout, pinBypassedByHost } from './tlsAgent';
 import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
 
 interface LayoutCacheEntry {
@@ -1015,12 +1015,15 @@ export class FMClient {
         };
 
         const failure = (error: unknown, endpoint: string): FMClientError =>
-          toFMClientError(
-            normalizeError(error, {
-              fallbackMessage: 'Failed to run FileMaker script.',
-              requestId: trace.requestId,
-              endpoint
-            })
+          this.explainPinnedFailure(
+            profile,
+            toFMClientError(
+              normalizeError(error, {
+                fallbackMessage: 'Failed to run FileMaker script.',
+                requestId: trace.requestId,
+                endpoint
+              })
+            )
           );
 
         // A record in context cannot be given to the script endpoint.
@@ -1195,6 +1198,11 @@ export class FMClient {
     }
   }
 
+  /** A pinned profile's certificate failure, explained when the host replaced the agent that would have applied the pin. */
+  private explainPinnedFailure(profile: ConnectionProfile, failure: FMClientError): FMClientError {
+    return pinBypassedByHost(profile, failure) ?? failure;
+  }
+
   /**
    * When the certificate was refused because this computer does not trust its issuer, look at what
    * the server presents (one extra handshake, no request, at most 1.5 s, made directly and not through any proxy) and, if it is FileMaker Server's own
@@ -1208,6 +1216,10 @@ export class FMClient {
       'DEPTH_ZERO_SELF_SIGNED_CERT',
       'SELF_SIGNED_CERT_IN_CHAIN'
     ]);
+    const bypassed = pinBypassedByHost(profile, failure);
+    if (bypassed) {
+      return bypassed;
+    }
     if (failure.kind !== 'certificate' || !failure.networkCode || !untrusted.has(failure.networkCode)) {
       return failure;
     }
@@ -1537,12 +1549,15 @@ export class FMClient {
         return this.requestWithAuth(profile, request, false, trace);
       }
 
-      throw toFMClientError(
-        normalizeError(error, {
-          fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
-          requestId: trace?.requestId,
-          endpoint: redactString(`${request.method} ${request.path}`)
-        })
+      throw this.explainPinnedFailure(
+        profile,
+        toFMClientError(
+          normalizeError(error, {
+            fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
+            requestId: trace?.requestId,
+            endpoint: redactString(`${request.method} ${request.path}`)
+          })
+        )
       );
     }
   }
@@ -1613,12 +1628,15 @@ export class FMClient {
         return this.requestWithAuthRaw(profile, request, false, trace);
       }
 
-      throw toFMClientError(
-        normalizeError(error, {
-          fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
-          requestId: trace?.requestId,
-          endpoint: redactString(`${request.method} ${request.path}`)
-        })
+      throw this.explainPinnedFailure(
+        profile,
+        toFMClientError(
+          normalizeError(error, {
+            fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
+            requestId: trace?.requestId,
+            endpoint: redactString(`${request.method} ${request.path}`)
+          })
+        )
       );
     }
   }

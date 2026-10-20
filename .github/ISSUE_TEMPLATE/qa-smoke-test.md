@@ -34,7 +34,7 @@ assignees: []
 - [ ] **11** Schema snapshot and diff
 - [ ] **12** Disconnect, reconnect, session expiry
 - [ ] **13** Create Record
-- [ ] **14** Certificates (default certificate trust dialog, decline, changed and expired certificate, CA file, forget, proxy case)
+- [ ] **14** Certificates (set VS Code's `http.proxySupport` to `fallback` first; default certificate trust dialog, decline, changed and expired certificate, CA file, forget, proxy case)
 - [ ] **15** MCP server start, stop and config
 
 ## Further checks

@@ -18,7 +18,7 @@ import { extractScriptNames } from '../utils/scriptParser';
 import { getFileMakerErrorInfo } from '../utils/fileMakerCodes';
 import { normalizeError } from '../utils/normalizeError';
 import { redactValue } from '../utils/redact';
-import { httpsTransportFor } from './tlsAgent';
+import { httpsTransportFor, pinBypassedByHost } from './tlsAgent';
 
 /**
  * What a proxy answers. On failure (`ok: false`, with HTTP status 200 or an error status) the proxy
@@ -355,7 +355,7 @@ export class ProxyClient {
         throw proxyFailure(body, (error as { response?: { status?: number } }).response?.status);
       }
 
-      throw this.normalizeProxyError(error);
+      throw this.normalizeProxyError(error, profile);
     }
   }
 
@@ -367,7 +367,7 @@ export class ProxyClient {
     return 'ok' in value || 'data' in value || 'error' in value;
   }
 
-  private normalizeProxyError(error: unknown): FMClientError {
+  private normalizeProxyError(error: unknown, profile: ConnectionProfile): FMClientError {
     const normalized = normalizeError(error, {
       fallbackMessage: 'Proxy request failed.'
     });
@@ -379,7 +379,8 @@ export class ProxyClient {
       details: redactValue(normalized.details)
     });
 
-    return toFMClientError(normalized);
+    const failure = toFMClientError(normalized);
+    return pinBypassedByHost(profile, failure) ?? failure;
   }
 }
 

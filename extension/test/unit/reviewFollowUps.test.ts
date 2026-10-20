@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import { certificateTargetUrl, inspectServerCertificate } from '../../src/services/certificateInspect';
 import { describeCertificate, quoteCertificateText, reviewAndTrustCertificate } from '../../src/services/certificateTrust';
+import { setAgentReplacedPolicy } from '../../src/services/tlsAgent';
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { parseDataApiEnvelope } from '../../src/services/responseGuard';
@@ -70,6 +71,9 @@ describe('trust offers', () => {
   });
 
   it('says in the dialog that the review dials directly when a proxy is configured', async () => {
+    // This test is about the HTTPS_PROXY note; with VS Code's own setting at its default the dialog also names
+    // http.proxySupport, so the setting is taken out of the picture here.
+    setAgentReplacedPolicy(() => false);
     const saved = process.env.HTTPS_PROXY;
     try {
       const details: string[] = [];
