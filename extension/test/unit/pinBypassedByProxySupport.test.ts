@@ -3,69 +3,69 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
+import { ProxyClient } from '../../src/services/proxyClient';
 import { SecretStore } from '../../src/services/secretStore';
-import {
-  httpsTransportFor,
-  pinBypassedByHost,
-  setAgentReplacedPolicy
-} from '../../src/services/tlsAgent';
+import { pinBypassedByHost, setAgentReplacedPolicy } from '../../src/services/tlsAgent';
+import type { ConnectionProfile } from '../../src/types/fm';
 import { InMemorySecretStorage } from './mocks';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const PIN = 'a'.repeat(64);
+const OK = {
+  response: { productInfo: { name: 'Stub Engine' }, token: 'stub-token' },
+  messages: [{ code: '0', message: 'OK' }]
+};
 
-/** What Node reports when the host's own checks reject a server certificate the pin was meant to cover. */
-function untrusted(code = 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'): Error {
-  return Object.assign(new Error('unable to verify the first certificate'), {
-    code,
-    isAxiosError: true
-  });
+/** What Node reports for a certificate failure; `isAxiosError` is how real request failures arrive. */
+function certificateFailure(code: string): Error {
+  return Object.assign(new Error('certificate problem'), { code, isAxiosError: true });
 }
 
-function clientFailingWith(error: Error): FMClient {
-  const reject = vi.fn().mockRejectedValue(error);
-  const http = {
-    request: reject,
-    post: reject,
-    get: reject,
-    delete: reject
-  } as unknown as AxiosInstance;
+const profile = (extra: Partial<ConnectionProfile> = {}): ConnectionProfile => ({
+  id: 'p1',
+  name: 'T',
+  authMode: 'direct',
+  serverUrl: 'https://fms.example.test',
+  database: 'Sales',
+  username: 'u',
+  ...extra
+});
+
+/** An HTTP client whose answer is chosen per request; the sign-in always succeeds unless `signIn` says otherwise. */
+function httpWith(handler: (url: string) => unknown): AxiosInstance {
+  const request = vi.fn(async (config: { url?: string }) => {
+    const out = handler(String(config.url));
+    if (out instanceof Error) throw out;
+    return { status: 200, headers: {}, data: out };
+  });
+  return { request } as unknown as AxiosInstance;
+}
+
+async function client(http: AxiosInstance): Promise<FMClient> {
   const secrets = new SecretStore(new InMemorySecretStorage() as never);
-  void secrets.setPassword('p1', 'the-password');
+  await secrets.setPassword('p1', 'the-password');
   return new FMClient(secrets, logger, 3000, http);
 }
 
-async function signIn(client: FMClient, extra: Record<string, unknown>): Promise<FMClientError> {
+async function failure(run: () => Promise<unknown>): Promise<FMClientError> {
   try {
-    await client.createSession({
-      id: 'p1',
-      name: 'T',
-      authMode: 'direct',
-      serverUrl: 'https://fms.example.test',
-      database: 'Sales',
-      username: 'u',
-      ...extra
-    });
+    await run();
   } catch (caught) {
     return caught as FMClientError;
   }
-  throw new Error('expected the sign-in to fail');
+  throw new Error('expected a failure');
 }
 
 describe('a pinned certificate when the host replaces the agent (http.proxySupport "override")', () => {
   afterEach(() => setAgentReplacedPolicy(() => false));
 
-  it('does not stop the request: a server the host trusts anyway works with a stale pin', () => {
+  it('does not stop the request: a server the host trusts anyway works with a stale pin', async () => {
     setAgentReplacedPolicy(() => true);
-    expect(() =>
-      httpsTransportFor(
-        { pinnedCertSha256: PIN },
-        'https://example.test/fmi/data/vLatest/productInfo'
-      )
-    ).not.toThrow();
+    const c = await client(httpWith(() => OK));
+    expect((await c.getProductInfo(profile({ pinnedCertSha256: PIN }))).name).toBe('Stub Engine');
   });
 
-  it('explains itself, with both fixes, when the profile is pinned and the host is replacing the agent', () => {
+  it('explains itself, with both fixes, and is quiet without a pin or when the host honours the agent', () => {
     setAgentReplacedPolicy(() => true);
     const error = pinBypassedByHost({ pinnedCertSha256: PIN });
     expect(error?.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
@@ -74,10 +74,6 @@ describe('a pinned certificate when the host replaces the agent (http.proxySuppo
     expect(error?.message).toMatch(/"fallback"/);
     expect(error?.message).toMatch(/Forget trusted certificate/);
     expect(error?.message).toMatch(/does not help here/);
-  });
-
-  it('has nothing to say without a pin, or when the host honours the agent ("fallback", "off", plain Node)', () => {
-    setAgentReplacedPolicy(() => true);
     expect(pinBypassedByHost({})).toBeUndefined();
     expect(pinBypassedByHost({ pinnedCertSha256: 'not-a-fingerprint' })).toBeUndefined();
     setAgentReplacedPolicy(() => false);
@@ -85,39 +81,99 @@ describe('a pinned certificate when the host replaces the agent (http.proxySuppo
   });
 });
 
-describe('the explanation through FMClient', () => {
+describe('which failures are explained', () => {
   afterEach(() => setAgentReplacedPolicy(() => false));
 
+  // Everything a pin would have covered: not trusted, wrong host name, outside its dates.
   it.each([
     'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
     'DEPTH_ZERO_SELF_SIGNED_CERT',
-    'SELF_SIGNED_CERT_IN_CHAIN'
-  ])('replaces the misleading "not trusted" error (%s) of a pinned profile', async (code) => {
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+    'CERT_HAS_EXPIRED',
+    'CERT_NOT_YET_VALID'
+  ])('replaces the generic error for %s on a pinned profile', async (code) => {
     setAgentReplacedPolicy(() => true);
-    const error = await signIn(clientFailingWith(untrusted(code)), { pinnedCertSha256: PIN });
+    const c = await client(httpWith(() => certificateFailure(code)));
+    const error = await failure(() => c.createSession(profile({ pinnedCertSha256: PIN })));
     expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    // No network code, so no "Trust this certificate" button is offered for a decision that cannot take effect.
+    expect(error.networkCode).toBeUndefined();
   });
 
-  it("leaves an unpinned profile's certificate error alone", async () => {
+  it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'CERT_REVOKED'])(
+    'leaves %s alone',
+    async (code) => {
+      setAgentReplacedPolicy(() => true);
+      const c = await client(httpWith(() => certificateFailure(code)));
+      const error = await failure(() => c.createSession(profile({ pinnedCertSha256: PIN })));
+      expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    }
+  );
+
+  it("leaves the pin's own refusal alone (it means the agent did run)", async () => {
     setAgentReplacedPolicy(() => true);
-    const error = await signIn(clientFailingWith(untrusted()), {});
+    const c = await client(httpWith(() => certificateFailure('FM_CERT_PIN_MISMATCH')));
+    const error = await failure(() => c.createSession(profile({ pinnedCertSha256: PIN })));
     expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
   });
 
-  it('leaves the error alone when the host honours the agent (the pin itself decided)', async () => {
-    setAgentReplacedPolicy(() => false);
-    const error = await signIn(clientFailingWith(untrusted()), { pinnedCertSha256: PIN });
-    expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
-  });
-
-  it('does not touch a failure that is not about an untrusted certificate', async () => {
+  it("leaves an unpinned profile's error alone, and so when the host honours the agent", async () => {
     setAgentReplacedPolicy(() => true);
-    const error = await signIn(
-      clientFailingWith(
-        Object.assign(new Error('refused'), { code: 'ECONNREFUSED', isAxiosError: true })
-      ),
-      { pinnedCertSha256: PIN }
+    const unpinned = await client(
+      httpWith(() => certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE'))
     );
-    expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    expect((await failure(() => unpinned.createSession(profile()))).code).not.toBe(
+      'PIN_BYPASSED_BY_PROXY_SUPPORT'
+    );
+    setAgentReplacedPolicy(() => false);
+    const honoured = await client(
+      httpWith(() => certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE'))
+    );
+    expect(
+      (await failure(() => honoured.createSession(profile({ pinnedCertSha256: PIN })))).code
+    ).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+  });
+});
+
+describe('every route that can meet the failure explains it', () => {
+  afterEach(() => setAgentReplacedPolicy(() => false));
+  const pinned = profile({ pinnedCertSha256: PIN });
+
+  it('server-level requests (product info before sign-in)', async () => {
+    setAgentReplacedPolicy(() => true);
+    const c = await client(httpWith(() => certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')));
+    expect((await failure(() => c.getProductInfo(pinned))).code).toBe(
+      'PIN_BYPASSED_BY_PROXY_SUPPORT'
+    );
+  });
+
+  it('signed-in requests, where the failure comes after a session already exists', async () => {
+    setAgentReplacedPolicy(() => true);
+    const c = await client(
+      httpWith((url) => (url.endsWith('/sessions') ? OK : certificateFailure('CERT_HAS_EXPIRED')))
+    );
+    const error = await failure(() => c.listLayouts(pinned));
+    expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    expect(error.endpoint).toBeTruthy(); // the request's own details are kept for the history and the report
+  });
+
+  it('proxy connections, which can be pinned too', async () => {
+    setAgentReplacedPolicy(() => true);
+    const post = vi.fn().mockRejectedValue(certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE'));
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    await secrets.setProxyApiKey('p1', 'key');
+    const proxy = new ProxyClient(secrets, logger, 3000, { post } as unknown as AxiosInstance);
+    const error = await failure(() =>
+      proxy.createSession(
+        profile({
+          authMode: 'proxy',
+          proxyEndpoint: 'https://proxy.example.test/api',
+          pinnedCertSha256: PIN
+        })
+      )
+    );
+    expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
   });
 });

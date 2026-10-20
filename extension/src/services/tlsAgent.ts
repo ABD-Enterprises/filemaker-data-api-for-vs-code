@@ -6,7 +6,7 @@ import * as tls from 'tls';
 import shouldBypassProxy from 'axios/unsafe/helpers/shouldBypassProxy.js';
 
 import type { ConnectionProfile } from '../types/fm';
-import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE } from '../utils/networkErrors';
+import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE, isTrustableCertificateCode } from '../utils/networkErrors';
 import { FMClientError } from './errors';
 
 type TlsProfileOptions = Pick<
@@ -271,17 +271,43 @@ export function setAgentReplacedPolicy(policy: () => boolean): void {
 }
 
 /**
- * The explanation for a pinned profile whose request failed as untrusted while the host replaces
- * the agent that would have applied the pin; undefined when it does not apply (no pin, or the host
- * honours the agent).
+ * The explanation for a pinned profile whose request failed with a certificate problem the pin would
+ * have covered (not trusted, host name, validity dates) while the host replaces the agent that would
+ * have applied the pin. Undefined when it does not apply: no pin, the host honours the agent, or the
+ * failure is something else (no network, a revoked certificate, or the pin's own refusal, which means
+ * the agent did run). The result keeps the failure's status, request id, endpoint and details but not
+ * its network code, so no "Trust this certificate" button is offered for a decision that cannot take
+ * effect.
  */
-export function pinBypassedByHost(profile: Pick<ConnectionProfile, 'pinnedCertSha256'>): FMClientError | undefined {
+export function pinBypassedByHost(
+  profile: Pick<ConnectionProfile, 'pinnedCertSha256'>,
+  failure?: FMClientError
+): FMClientError | undefined {
   if (normalizeSha256(profile.pinnedCertSha256) === undefined || !agentIsReplacedByHost()) {
     return undefined;
   }
+  if (failure) {
+    const code = failure.networkCode;
+    if (
+      failure.kind !== 'certificate' ||
+      !isTrustableCertificateCode(code) ||
+      code === CERT_PIN_MISMATCH_CODE ||
+      code === CERT_PIN_EXPIRED_CODE
+    ) {
+      return undefined;
+    }
+  }
   return new FMClientError(
     'This server\'s certificate is not trusted by VS Code, and the certificate you trusted for this connection could not be applied: VS Code\'s "http.proxySupport" setting is "override" (its default), which routes requests through VS Code\'s own networking and replaces the connection this extension uses to check a trusted (pinned) certificate. To fix it, set "http.proxySupport" to "fallback" in your VS Code settings (search Settings for "proxy support"), then test again: "fallback" keeps VS Code\'s proxy handling for everything that does not bring its own connection. Or install a certificate from a public authority on the server and choose Forget trusted certificate. (A custom CA file does not help here, because a trusted certificate does not use the CA file.)',
-    { code: 'PIN_BYPASSED_BY_PROXY_SUPPORT', kind: 'certificate', isRetryable: false }
+    {
+      code: 'PIN_BYPASSED_BY_PROXY_SUPPORT',
+      kind: 'certificate',
+      isRetryable: false,
+      status: failure?.status,
+      details: failure?.details,
+      requestId: failure?.requestId,
+      endpoint: failure?.endpoint
+    }
   );
 }
 
