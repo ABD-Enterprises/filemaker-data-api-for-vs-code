@@ -2,13 +2,13 @@
   --bg: var(--vscode-editor-background, #f8fafc);
   --panel: var(--vscode-editorWidget-background, #f3f3f3);
   --text: var(--vscode-editor-foreground, #111827);
-  --muted: var(--vscode-foreground, #5b6472);
+  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
   --border: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc));
   --accent: var(--vscode-button-background, #1f6feb);
   --accent-text: var(--vscode-button-foreground, #ffffff);
-  --added: var(--vscode-diffEditor-insertedTextBorder, var(--vscode-gitDecoration-addedResourceForeground, #137333));
+  --added: var(--vscode-diffEditor-insertedTextBorder, var(--vscode-gitDecoration-addedResourceForeground, var(--vscode-foreground, #137333)));
   --added-bg: var(--vscode-diffEditor-insertedTextBackground, var(--vscode-editor-background, #e6f4ea));
-  --removed: var(--vscode-diffEditor-removedTextBorder, var(--vscode-gitDecoration-deletedResourceForeground, #b3261e));
+  --removed: var(--vscode-diffEditor-removedTextBorder, var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-foreground, #b3261e)));
   --removed-bg: var(--vscode-diffEditor-removedTextBackground, var(--vscode-editor-background, #fce8e6));
   --changed: var(--vscode-inputValidation-warningBorder, #9a6700);
   --changed-bg: var(--vscode-inputValidation-warningBackground, #fff4ce);
@@ -180,18 +180,21 @@ button.active,
 .field-cell.added,
 .tree-leaf.added {
   border-color: var(--added);
+  border-style: solid;
   background: var(--added-bg);
 }
 
 .field-cell.removed,
 .tree-leaf.removed {
   border-color: var(--removed);
+  border-style: dashed;
   background: var(--removed-bg);
 }
 
 .field-cell.changed,
 .tree-leaf.changed {
   border-color: var(--changed);
+  border-style: dotted;
   background: var(--changed-bg);
 }
 
@@ -321,7 +324,7 @@ button.active,
 .fm-version {
   margin: 12px 16px;
   font-size: 11px;
-  color: var(--vscode-descriptionForeground, #5f6c7b);
+  color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
 }
 
 /* Diff tint may sit over the editor widget. Use editor text for readable metadata
@@ -352,8 +355,8 @@ button:focus-visible, summary:focus-visible, a:focus-visible {
 }
 a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
 
-/* Native placeholder defaults are OS-dependent; keep hints readable. */
+/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
 input::placeholder, textarea::placeholder {
-  color: var(--vscode-input-foreground, #333333);
+  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
   opacity: 1;
 }

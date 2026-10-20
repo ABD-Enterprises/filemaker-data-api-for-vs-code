@@ -18,6 +18,6 @@ body,
   right: 8px;
   bottom: 4px;
   font-size: 11px;
-  color: var(--vscode-descriptionForeground, #555555);
+  color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
   pointer-events: none;
 }

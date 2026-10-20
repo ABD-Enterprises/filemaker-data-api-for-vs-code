@@ -66,11 +66,11 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
     th, td { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); text-align: left; padding: 6px 8px; font-size: 12px; }
     th { background: var(--vscode-editor-background, #ffffff); }
     .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
-    .ok { background: var(--vscode-inputValidation-infoBackground, #d6ecf2); color: var(--vscode-inputValidation-infoForeground, var(--vscode-foreground, #333333)); }
+    .ok { background: color-mix(in srgb, var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-foreground, #333333)))) 12%, var(--vscode-editor-background, #ffffff)); color: var(--vscode-foreground, #333333); }
     .warn { background: var(--vscode-inputValidation-warningBackground, #fff4ce); color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground, #333333)); }
     .bad { background: var(--vscode-inputValidation-errorBackground, #f2dede); color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground, #333333)); }
     details { margin-bottom: 6px; }
-    .fm-version { color: var(--vscode-descriptionForeground, #555555); font-size: 11px; padding: 0 16px 12px; }
+    .fm-version { color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333)); font-size: 11px; padding: 0 16px 12px; }
     summary { cursor: pointer; font-weight: 600; }
   </style>
 </head>

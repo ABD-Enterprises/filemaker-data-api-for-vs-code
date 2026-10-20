@@ -289,7 +289,7 @@ export function renderEffectiveSettingsHtml(
   .ignored { color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)); background: var(--vscode-inputValidation-warningBackground, #fff4ce); margin-bottom: 4px; }
   button { margin: 2px 4px 2px 0; background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); border-color: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); }
   button:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
-  .muted { color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
+  .muted { color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333)); margin-bottom: 4px; }
   @media (max-width: 640px) {
     table, thead, tbody, tr, td { display: block; width: 100%; }
     thead { display: none; }

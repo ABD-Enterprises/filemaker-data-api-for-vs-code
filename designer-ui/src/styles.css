@@ -492,10 +492,10 @@ button:disabled {
   pointer-events: none;
 }
 
-/* Paper belongs to the page being designed; only the surrounding chrome is themed.
-   Keep its grid above the authored page, whose surface otherwise covers it. */
+/* Paper belongs to the page being designed; only the surrounding chrome is themed. */
 .design-surface { background-color: #ffffff; }
-.interaction-layer { background-image: inherit; background-size: inherit; }
+/* Paint the grid on the authored surface, behind its field/object children. */
+.design-surface > [data-mode="designer"] { background-image: inherit; background-size: inherit; }
 :root { --border: var(--line); }
 .inspector-field input, .action-row select {
   color: var(--vscode-input-foreground, #333333);
@@ -521,8 +521,8 @@ button:focus-visible, summary:focus-visible, a:focus-visible {
 }
 a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
 
-/* Native placeholder defaults are OS-dependent; keep hints readable. */
+/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
 input::placeholder, textarea::placeholder {
-  color: var(--vscode-input-foreground, #333333);
+  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
   opacity: 1;
 }
