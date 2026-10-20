@@ -173,7 +173,7 @@ describe('offline theme audit regression guards', () => {
 
   it.each(audit.themes)('%s keeps success/OK green and readable, catching a blue mutation', (theme) => {
     const tokens = audit.tokensFor(theme);
-    const environment = auditedStyles.find(({ file }) => file.endsWith('/environmentCompare/index.ts'))!.css;
+    const environment = auditedStyles.find(({ file }) => file.replace(/\\/g, '/').endsWith('/environmentCompare/index.ts'))!.css;
     for (const [css, body] of [[stylesheet('connectionWizard'), successFixture], [environment, '<section class="card"><span class="ok">OK</span></section>']]) {
       expect(audit.presentationFailures(css!, body!, tokens)).toEqual([]);
       expect(audit.measure(css!, body!, tokens).every((pair) => pair.ratio >= 4.5)).toBe(true);
