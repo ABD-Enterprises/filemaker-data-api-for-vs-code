@@ -1,6 +1,6 @@
 # FileMaker Data API Tools: User Guide
 
-This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.5, including what changed since 1.4 (listed under [New in 1.5](#new-in-15)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
+This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.6, including what changed since 1.5 (listed under [New in 1.6](#new-in-16)) and since 1.4 ([New in 1.5](#new-in-15)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
 
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
@@ -130,6 +130,17 @@ Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 - A batch update carries on past records your account cannot change and stops only when the account cannot do updates at all.
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
 - A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
+
+### New in 1.6
+
+These changes came after 1.5.0 (details in the [upgrade notes](../UPGRADE.md)):
+
+- **Layout Mode standards.** Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step), and blank, form, two-column and first-portal starter templates for a new web layout. Fields are listed in FileMaker's field order.
+- **One look for fields.** The find form, Record Editor, Record Viewer and generated web layout views use the same field sizes, top labels and spacing as Layout Mode. Generated FM Web apps get their managed runtime files refreshed (template version 3) the next time you generate or preview; see [FM Web and Layout Mode](#fm-web-and-layout-mode) for what happens to a file you edited.
+- **Trusting a certificate and VS Code's network setting.** With VS Code's `http.proxySupport` at its default (`override`), a trust you give a certificate cannot take effect on a server that is not on this computer. The dialog, the wizard and the error say so and name the setting. See [Trust this certificate](#certificates).
+- **Smaller fixes:** script runs return only the script's answer, names `.` and `..` are refused, copy-as-code is more exact, profile changes in another window show up within two seconds, and new generated files are readable by you only.
+
+---
 
 ### New in 1.5
 

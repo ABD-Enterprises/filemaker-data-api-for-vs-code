@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 1.6.0
 
 _Released 2026-10-19._
@@ -11,18 +13,16 @@ In short:
 - **New:** Layout Mode has standard field sizes and spacing, arranging and standardizing a layout (each undone in one step), and starter templates. The find form, Record Editor, Record Viewer and generated web layout views now show fields the same way.
 - **Fixed:** a certificate you trusted could still fail with a misleading "not trusted" error under VS Code's default network setting; the message now says why and names the setting to change. Script runs return only the script's answer, copy-as-code is more exact, and profile changes made in another VS Code window show up within two seconds.
 
-
-- [FIX] A trusted (pinned) certificate failed with a misleading "not trusted" error right after being trusted when VS Code's `http.proxySupport` setting is `"override"` (its default): VS Code's networking replaces the extension's own connection, so the fingerprint check cannot run and VS Code's normal certificate check applies instead. A server whose certificate VS Code trusts anyway, such as one from a public authority, keeps working with or without a pin. Note that under `"override"` the pin is not enforced as a restriction: a different certificate that VS Code trusts would be accepted too. When the connection fails with a certificate problem the pin would have covered (not trusted, wrong host name, outside its dates), on any kind of request including proxy connections, the message now says why and names the fix: set `http.proxySupport` to `"fallback"` (which enforces the pin), or install a public certificate on the server and choose **Forget trusted certificate**. The `"on"` value was not tested. Found and verified in a real VS Code window.
-- [INTERNAL] The mock server's `claris-default-cert` mode now presents the default certificate exactly as a real FileMaker Server 22 does, read from a real server: an X.509 version 1 leaf with no extensions (serial 1, sha256WithRSA, 2048-bit), the real subject and issuer names, one certificate sent, TLS 1.2 only. The leaf is encoded in the mock itself, because not every OpenSSL build can make a version 1 certificate. A new end-to-end test connects by IP address through the extension's real code: refused in plain words, the trust dialog (identical to the one seen on a real server), trust by fingerprint, sign-in, and refusal of a different certificate.
-- [FIX] Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
-- [FIX] The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
-- [FIX] Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.
-- [FIX] Temporary context and runtime export files start with owner-only permissions. Replaced files keep ordinary permissions without copying setuid, setgid or sticky bits.
+- [FEATURE] Layout Mode adds standard field sizes and spacing, arranging the selection into a standard form and standardizing it (each with one Undo step), and blank, form, two-column and first-portal starter templates (offered for a new, empty web layout). Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
+- [FEATURE] Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing. The next time you generate or preview an FM Web app, its managed runtime files are refreshed to template version 3; a managed file you edited is left alone and named in a warning.
+- [FIX] A certificate you trusted (pinned) could still fail with a misleading "not trusted" error when VS Code's `http.proxySupport` setting is `override` (its default): VS Code then replaces the extension's own connection, so the extension cannot check the certificate you trusted and VS Code's normal check applies instead. A server whose certificate VS Code trusts anyway (for example from Let's Encrypt) keeps working. Under `override` the trust is not enforced: a different certificate that VS Code trusts would be accepted too. The message now says why, for every kind of request and for proxy connections, and names the fix: set `http.proxySupport` to `fallback`, or install a public certificate on the server and choose **Forget trusted certificate**. The trust dialog, the wizard and the message after trusting say the same. The `on` value was not tested.
+- [FIX] Script runs return only the script's answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before a request is sent, also in proxy mode.
+- [FIX] Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl switches off bracket and brace expansion when needed.
+- [FIX] New files written by Write AI Context and the FM Web generator are readable by you only; a file that is replaced keeps its permissions (without setuid, setgid or sticky bits).
 - [FIX] Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. The Output panel and Show Effective Settings now warn when `ai.hiddenFields` is a string instead of a list; hiding is unchanged: the whole string still counts as one field name, even with commas.
-- [FIX] Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
-- [INTERNAL] The MCP connection-capacity test waits for the expected counts on slow runners. Added tests for pending connection limits and handshake expiry, and corrected Vitest's nested dependency in the lockfile.
-- [FEATURE] Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing.
-- [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
+- [FIX] Profile changes made in another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
+- [FIX] Layout Mode lists fields in FileMaker's field order, not alphabetically. The Record Viewer also asks the server for the layout's field details at the same time as the record (it is not added to the request history, and a failure is ignored).
+- [INTERNAL] The test mock of FileMaker Server's default certificate now matches a real server exactly, with an end-to-end test of the trust flow. Connection-limit tests no longer depend on timing.
 
 ## 1.5.0
 

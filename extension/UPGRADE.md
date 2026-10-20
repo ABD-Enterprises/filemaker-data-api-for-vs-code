@@ -10,7 +10,9 @@ This is a minor release. Your profiles, saved queries, settings and stored data 
 
 The find form, Record Editor, Record Viewer and the generated web layout views now use the same field sizes, top labels and responsive spacing as Layout Mode. Your data and layouts are not changed, but these screens will look different from 1.5.0.
 
-Layout Mode adds standard field sizes and spacing, an action that arranges the selected objects into a standard form, an action that standardizes them, and starter templates (blank, form, two-column, first portal). Arranging and standardizing each undo in one step. Nothing is rearranged until you choose an action; field names and behavior bindings stay as they are.
+Layout Mode adds standard field sizes and spacing, an action that arranges the selected objects into a standard form, an action that standardizes them, and starter templates (blank, form, two-column, first portal; the templates are offered for a new, empty web layout). Arranging and standardizing each undo in one step. Nothing is rearranged until you choose an action; field names and behavior bindings stay as they are. Layout Mode now lists fields in FileMaker's field order instead of alphabetically.
+
+**Apps you generated before:** the next time you run **Generate FM Web Next.js App** or **Start FM Web Preview Server**, the extension refreshes the managed runtime files in an app you generated earlier (template version 2 becomes 3: `page.tsx`, `bridge-client.ts`, `runtime-data.ts`, `runtime-behavior.ts` and `runtime-layout-client.tsx`). A managed file you edited is not overwritten: a warning names it, and you delete that file and run the command again to get a fresh copy; until then the preview cannot reach the bridge.
 
 ### 2. Trusting a certificate can need one VS Code setting
 
@@ -25,7 +27,8 @@ If you trust a server's certificate by its fingerprint (for example FileMaker Se
 
 - A script, layout or container field named `.` or `..` is refused before anything is sent, also in proxy mode.
 - Copied TypeScript keeps a field named `__proto__`; copied proxy requests keep a trailing slash; copied API base paths stay as configured; curl output switches off bracket and brace expansion when needed.
-- Temporary context and export files start with owner-only permissions.
+- New files written by Write AI Context and the FM Web generator are readable by you only; a file that is replaced keeps its permissions.
+- The Record Viewer also asks the server for the layout's field details at the same time as the record (when schema metadata is on); it is not added to the request history and a failure is ignored.
 - The Output panel and **Show Effective Settings** warn when `ai.hiddenFields` is a string instead of a list.
 - A profile changed in another VS Code window refreshes the connection status, the explorer and the AI tools within two seconds.
 
