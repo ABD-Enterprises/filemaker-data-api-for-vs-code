@@ -270,6 +270,18 @@ export function setAgentReplacedPolicy(policy: () => boolean): void {
   agentIsReplacedByHost = policy;
 }
 
+function isLoopbackUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '::1' || /^127(\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The explanation for a pinned profile whose request failed with a certificate problem the pin would
  * have covered (not trusted, host name, validity dates) while the host replaces the agent that would
@@ -280,10 +292,15 @@ export function setAgentReplacedPolicy(policy: () => boolean): void {
  * effect.
  */
 export function pinBypassedByHost(
-  profile: Pick<ConnectionProfile, 'pinnedCertSha256'>,
+  profile: Pick<ConnectionProfile, 'pinnedCertSha256'> & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
   failure?: FMClientError
 ): FMClientError | undefined {
   if (normalizeSha256(profile.pinnedCertSha256) === undefined || !agentIsReplacedByHost()) {
+    return undefined;
+  }
+  // The host leaves the agent alone for loopback addresses (verified in a real host), so there the pin
+  // did run and its own refusals (including a not-yet-valid certificate) are the true answer.
+  if (isLoopbackUrl(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)) {
     return undefined;
   }
   if (failure) {
@@ -298,7 +315,7 @@ export function pinBypassedByHost(
     }
   }
   return new FMClientError(
-    'This server\'s certificate is not trusted by VS Code, and the certificate you trusted for this connection could not be applied: VS Code\'s "http.proxySupport" setting is "override" (its default), which routes requests through VS Code\'s own networking and replaces the connection this extension uses to check a trusted (pinned) certificate. To fix it, set "http.proxySupport" to "fallback" in your VS Code settings (search Settings for "proxy support"), then test again: "fallback" keeps VS Code\'s proxy handling for everything that does not bring its own connection. Or install a certificate from a public authority on the server and choose Forget trusted certificate. (A custom CA file does not help here, because a trusted certificate does not use the CA file.)',
+    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and the certificate you trusted for this connection could not be applied: VS Code's "http.proxySupport" setting is "override" (its default), which routes requests through VS Code's own networking and replaces the connection this extension uses to check a trusted (pinned) certificate. To fix it, set "http.proxySupport" to "fallback" in your VS Code settings (search Settings for "proxy support"), which lets the extension use its own connection when no proxy is configured, then test again. Or install a certificate from a public authority on the server and choose Forget trusted certificate. (A custom CA file does not help here, because a trusted certificate does not use the CA file.)`,
     {
       code: 'PIN_BYPASSED_BY_PROXY_SUPPORT',
       kind: 'certificate',

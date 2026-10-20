@@ -177,3 +177,82 @@ describe('every route that can meet the failure explains it', () => {
     expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
   });
 });
+
+describe('routes and hosts that need their own check', () => {
+  afterEach(() => setAgentReplacedPolicy(() => false));
+
+  it('script runs', async () => {
+    setAgentReplacedPolicy(() => true);
+    const c = await client(
+      httpWith((url) =>
+        url.endsWith('/sessions') ? OK : certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')
+      )
+    );
+    const error = await failure(() =>
+      c.runScript(profile({ pinnedCertSha256: PIN }), { layout: 'L', scriptName: 'S' } as never)
+    );
+    expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+  });
+
+  it.each([
+    'https://localhost:4443',
+    'https://127.0.0.1:4443',
+    'https://[::1]:4443',
+    'https://dev.localhost'
+  ])(
+    'leaves a loopback address alone (%s): the host does not replace the agent there, so the pin did run',
+    async (serverUrl) => {
+      setAgentReplacedPolicy(() => true);
+      // The pin's own "not yet valid" refusal shares its code with the TLS one and must not be mislabelled.
+      const c = await client(httpWith(() => certificateFailure('CERT_NOT_YET_VALID')));
+      const error = await failure(() =>
+        c.createSession(profile({ serverUrl, pinnedCertSha256: PIN }))
+      );
+      expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    }
+  );
+
+  it('still explains a LAN address, which the host does replace', async () => {
+    setAgentReplacedPolicy(() => true);
+    const c = await client(httpWith(() => certificateFailure('CERT_NOT_YET_VALID')));
+    const error = await failure(() =>
+      c.createSession(profile({ serverUrl: 'https://192.168.1.50:443', pinnedCertSha256: PIN }))
+    );
+    expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    expect(error.message).toMatch(/CERT_NOT_YET_VALID/); // the specific cause is kept in the text
+  });
+
+  it('judges a proxy profile by its proxy address', async () => {
+    setAgentReplacedPolicy(() => true);
+    expect(
+      pinBypassedByHost({
+        pinnedCertSha256: PIN,
+        authMode: 'proxy',
+        serverUrl: 'https://fms.example.test',
+        proxyEndpoint: 'https://localhost:9000/api'
+      })
+    ).toBeUndefined();
+    expect(
+      pinBypassedByHost({
+        pinnedCertSha256: PIN,
+        authMode: 'proxy',
+        serverUrl: 'https://localhost',
+        proxyEndpoint: 'https://proxy.example.test/api'
+      })
+    ).toBeDefined();
+  });
+
+  it('an unpinned proxy profile is left alone', async () => {
+    setAgentReplacedPolicy(() => true);
+    const post = vi.fn().mockRejectedValue(certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE'));
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    await secrets.setProxyApiKey('p1', 'key');
+    const proxy = new ProxyClient(secrets, logger, 3000, { post } as unknown as AxiosInstance);
+    const error = await failure(() =>
+      proxy.createSession(
+        profile({ authMode: 'proxy', proxyEndpoint: 'https://proxy.example.test/api' })
+      )
+    );
+    expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+  });
+});

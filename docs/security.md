@@ -47,7 +47,9 @@ instead trust one specific certificate by its SHA-256 fingerprint
 ("pinning"): the connection then accepts exactly that certificate (host name
 and issuer checks are skipped for it only), refuses it when it has expired
 unless the user accepted that, and fails hard with a re-trust prompt when
-the server presents a different one. For a verified or pinned profile nothing
+the server presents a different one. This depends on VS Code letting the extension make its own
+connection: with `http.proxySupport` set to `override` (VS Code's default) the pin is not enforced and
+VS Code's normal check applies instead (see the User Guide, Certificates). For a verified or pinned profile nothing
 is sent to the server before its certificate is checked; a profile that still
 has the older allow-self-signed setting skips every check. A pinned connection is never made through an
 HTTP proxy (the request is refused before anything is sent when an

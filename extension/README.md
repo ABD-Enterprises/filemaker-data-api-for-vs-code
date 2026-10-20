@@ -14,7 +14,7 @@ Work with a FileMaker database from VS Code: connect to a server, inspect layout
 - **Track schema**: capture snapshots, diff them, compare environments, and generate TypeScript types, a typed client and editor snippets.
 - **Batch**: export to JSONL or CSV, or update many records from a CSV or JSON file, with a dry run first.
 - **Control**: workspace trust (Restricted Mode keeps editing, scripts and batch jobs off), an enterprise mode with roles, an offline metadata mode, and confirmation before risky actions.
-- **Trust a private server on purpose**: for FileMaker Server's default certificate or a company certificate, review the certificate in the connection wizard and trust exactly that one by its fingerprint. A different certificate later is refused.
+- **Trust a private server on purpose**: for FileMaker Server's default certificate or a company certificate, review the certificate in the connection wizard and trust exactly that one by its fingerprint. A different certificate later is refused, unless VS Code's `http.proxySupport` setting is `override` (its default); see the User Guide's Certificates section.
 - **AI, off by default**: give AI coding tools your real layout names, let an agent in VS Code or an MCP client (Claude Code, Cursor) read records and, with your approval, change one record at a time, or ask `@filemaker` in the Chat view (read only).
 - **Windows, Linux and macOS**: build, lint, type check and the unit tests run on Windows and Linux in CI.
 
@@ -139,7 +139,7 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 - Passwords, API keys and session tokens live in VS Code SecretStorage (your OS keychain), not in settings or logs.
 - Logs, history and error details hide authorization headers, tokens and passwords.
 - Editing, creating and deleting records, uploading, the Script Runner, batch jobs, writing generated files and plugins need a trusted workspace. Virtual workspaces (such as github.dev) are not supported. A repository can make the extension's policy stricter but never looser.
-- The server certificate is checked. To use FileMaker Server's default certificate or a private authority's, the wizard shows the certificate and you trust that one certificate by its SHA-256 fingerprint (never from a workspace file); a different certificate later is refused. A pin is trust on first use: it detects a change, it does not prove who you reached the first time.
+- The server certificate is checked. To use FileMaker Server's default certificate or a private authority's, the wizard shows the certificate and you trust that one certificate by its SHA-256 fingerprint (never from a workspace file); a different certificate later is refused (unless VS Code's `http.proxySupport` setting is `override` (its default), which replaces the extension's own connection; see the User Guide). A pin is trust on first use: it detects a change, it does not prove who you reached the first time.
 - In Restricted Mode (an untrusted folder) you can browse, read metadata and run finds. The connection wizard says so and offers **Manage Workspace Trust**.
 - The extension collects no telemetry. It talks only to your FileMaker server or your proxy.
 

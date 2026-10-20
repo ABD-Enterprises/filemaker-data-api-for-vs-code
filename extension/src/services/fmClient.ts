@@ -1198,16 +1198,16 @@ export class FMClient {
     }
   }
 
-  /**
-   * When the certificate was refused because this computer does not trust its issuer, look at what
-   * the server presents (one extra handshake, no request, at most 1.5 s, made directly and not through any proxy) and, if it is FileMaker Server's own
-   * default certificate, say so in the message. Best effort: any problem returns the error as it was.
-   */
   /** A pinned profile's certificate failure, explained when the host replaced the agent that would have applied the pin. */
   private explainPinnedFailure(profile: ConnectionProfile, failure: FMClientError): FMClientError {
     return pinBypassedByHost(profile, failure) ?? failure;
   }
 
+  /**
+   * When the certificate was refused because this computer does not trust its issuer, look at what
+   * the server presents (one extra handshake, no request, at most 1.5 s, made directly and not through any proxy) and, if it is FileMaker Server's own
+   * default certificate, say so in the message. Best effort: any problem returns the error as it was.
+   */
   private async refineCertificateError(profile: ConnectionProfile, failure: FMClientError): Promise<FMClientError> {
     const untrusted = new Set([
       'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
