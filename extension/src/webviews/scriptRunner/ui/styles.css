@@ -1,12 +1,12 @@
 :root {
-  --bg: #f8fafc;
-  --panel: #ffffff;
-  --text: #1f2937;
-  --muted: #5b6472;
-  --accent: #0f766e;
-  --accent-strong: #115e59;
-  --border: #d0d7de;
-  --error: #b42318;
+  --bg: var(--vscode-editor-background, #ffffff);
+  --panel: var(--vscode-editorWidget-background, #f3f3f3);
+  --text: var(--vscode-foreground, #333333);
+  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
+  --accent: var(--vscode-button-background, #007acc);
+  --accent-strong: var(--vscode-button-hoverBackground, #0062a3);
+  --border: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc));
+  --error: var(--vscode-errorForeground, #a1260d);
 }
 
 * {
@@ -17,7 +17,7 @@ body {
   margin: 0;
   font-family: 'Avenir Next', 'Segoe UI', sans-serif;
   font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
-  background: linear-gradient(140deg, #d2f2eb 0%, var(--bg) 38%);
+  background: var(--bg);
   color: var(--text);
 }
 
@@ -96,7 +96,7 @@ textarea {
   margin: 10px 0;
   padding: 14px;
   border-radius: 8px;
-  background: #f8fbfb;
+  background: var(--vscode-editorWidget-background, #f3f3f3);
 }
 
 .builder-panel h2 {
@@ -117,7 +117,7 @@ textarea {
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--vscode-editor-background, #ffffff);
 }
 
 .builder-field {
@@ -146,8 +146,8 @@ textarea {
   border-radius: 8px;
   padding: 10px;
   overflow: auto;
-  background: #0b1020;
-  color: #d6deeb;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background, #ffffff));
+  color: var(--vscode-editor-foreground, #333333);
 }
 
 .actions {
@@ -160,7 +160,7 @@ button {
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--vscode-button-foreground, #ffffff);
   font-weight: 600;
   padding: 8px 12px;
   cursor: pointer;
@@ -171,12 +171,13 @@ button:hover {
 }
 
 button.secondary {
-  background: #e5e7eb;
-  color: var(--text);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
+  color: var(--vscode-button-secondaryForeground, #333333);
 }
 
 button.secondary:hover {
-  background: #d1d5db;
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground, var(--vscode-editor-background, #ffffff)));
+  color: var(--vscode-button-secondaryForeground, #333333);
 }
 
 button:disabled {
@@ -249,8 +250,8 @@ button:disabled {
 }
 
 .raw {
-  background: #0b1020;
-  color: #d6deeb;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background, #ffffff));
+  color: var(--vscode-editor-foreground, #333333);
   border-radius: 8px;
   padding: 10px;
   max-height: 320px;
@@ -275,7 +276,7 @@ button:disabled {
 .fm-version {
   margin: 12px 16px;
   font-size: 11px;
-  color: var(--vscode-descriptionForeground, #5f6c7b);
+  color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
 }
 
 /* The "Copy request" dropdown, built on <details> */
@@ -291,8 +292,8 @@ details.menu > summary {
   padding: 8px 12px;
   cursor: pointer;
   font-weight: 600;
-  background: #e5e7eb;
-  color: var(--text);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
+  color: var(--vscode-button-secondaryForeground, #333333);
 }
 
 details.menu > summary::-webkit-details-marker {
@@ -317,7 +318,7 @@ details.menu > summary::after {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px var(--vscode-widget-shadow, color-mix(in srgb, var(--vscode-foreground, #333333) 20%, transparent));
 }
 
 .menu-items button {
@@ -331,8 +332,8 @@ details.menu > summary::after {
 
 .menu-items button:hover:not(:disabled),
 .menu-items button:focus-visible {
-  background: #e5e7eb;
-  color: var(--text);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
+  color: var(--vscode-button-secondaryForeground, #333333);
 }
 
 /* A closed menu has no boxes at all (nothing to overflow or cover), and on a narrow panel an open one
@@ -404,4 +405,30 @@ pre {
 button {
   max-width: 100%;
   white-space: normal;
+}
+
+/* Theme colors are paired; HC outlines do not change control geometry. */
+input, select, textarea {
+  background: var(--vscode-input-background, #ffffff);
+  color: var(--vscode-input-foreground, #333333);
+  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
+  accent-color: var(--vscode-focusBorder, #007acc);
+}
+button, summary {
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+button:hover, summary:hover {
+  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
+  outline-offset: 1px;
+}
+a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
+
+/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
+input::placeholder, textarea::placeholder {
+  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
+  opacity: 1;
 }
