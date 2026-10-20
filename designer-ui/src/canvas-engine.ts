@@ -446,20 +446,24 @@ export function standardizeFields(
   fields: StandardFieldMetadata[],
   ids?: string[]
 ): LayoutDefinition {
-  return {
-    ...layout,
-    objects: layout.objects.map((object) => {
-      if (object.type !== 'field' || (ids && !ids.includes(object.id))) return object;
-      const metadata = fields.find((field) => field.name === object.fmFieldName);
-      return {
-        ...object,
-        ...standardFieldSize({ ...metadata, displayType: object.displayType === 'editBox' ? metadata?.displayType : object.displayType }),
-        x: Math.max(0, snapToGrid(object.x, FIELD_LAYOUT.grid)),
-        y: Math.max(0, snapToGrid(object.y, FIELD_LAYOUT.grid)),
-        labelPosition: FIELD_LAYOUT.labelPosition
-      };
-    })
-  };
+  const objects = layout.objects.map((object) => {
+    if (object.type !== 'field' || (ids && !ids.includes(object.id))) return object;
+    const metadata = fields.find((field) => field.name === object.fmFieldName);
+    const size = standardFieldSize({ ...metadata, displayType: object.displayType === 'editBox' ? metadata?.displayType : object.displayType });
+    // Move left/up before growing; reserve the top label as Arrange does.
+    const maxX = Math.max(0, Math.floor((layout.canvas.width - size.width) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid);
+    const maxY = Math.max(0, Math.floor((layout.canvas.height - size.height - FIELD_LAYOUT.labelSpace) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid);
+    return { ...object, ...size,
+      x: clamp(snapToGrid(object.x, FIELD_LAYOUT.grid), 0, maxX),
+      y: clamp(snapToGrid(object.y, FIELD_LAYOUT.grid), 0, maxY),
+      labelPosition: FIELD_LAYOUT.labelPosition
+    };
+  });
+  const changed = objects.filter((object, index) => object !== layout.objects[index]);
+  return { ...layout, objects, canvas: { ...layout.canvas,
+    width: Math.max(layout.canvas.width, ...changed.map((object) => object.x + object.width)),
+    height: Math.max(layout.canvas.height, ...changed.map((object) => object.y + object.height + FIELD_LAYOUT.labelSpace))
+  } };
 }
 
 /** Column-major order: the first half runs down the left, the rest down the right. */
@@ -479,25 +483,46 @@ export function arrangeStandardForm(
   const columnWidth = Math.max(FIELD_LAYOUT.textWidth, ...arranged.map((object) => object.width));
   const actualColumns = columns === 2 && layout.canvas.width >= FIELD_LAYOUT.pageMargin * 2 + columnWidth * 2 + FIELD_LAYOUT.columnGap ? 2 : 1;
   const split = Math.ceil(arranged.length / actualColumns);
-  const bottom = [FIELD_LAYOUT.pageMargin, FIELD_LAYOUT.pageMargin];
+  const selected = layout.objects.filter((object) => included(object) && (object.type === 'field' || object.type === 'portal'));
+  const originX = ids ? Math.max(0, snapToGrid(Math.min(...selected.map((object) => object.x)), FIELD_LAYOUT.grid)) : FIELD_LAYOUT.pageMargin;
+  const originY = ids ? Math.max(0, snapToGrid(Math.min(...selected.map((object) => object.y)), FIELD_LAYOUT.grid)) : FIELD_LAYOUT.pageMargin;
+  const bottom = [originY, originY];
   const positions = new Map<string, Partial<LayoutObject>>();
   arranged.forEach((object, index) => {
     const column = index < split ? 0 : 1;
-    positions.set(object.id, { x: FIELD_LAYOUT.pageMargin + column * (columnWidth + FIELD_LAYOUT.columnGap), y: bottom[column] });
+    positions.set(object.id, { x: originX + column * (columnWidth + FIELD_LAYOUT.columnGap), y: bottom[column] });
     // Reserve room for the top label and round upwards, so the 34 px controls cannot overlap.
     bottom[column] += Math.ceil((object.height + FIELD_LAYOUT.labelSpace + FIELD_LAYOUT.rowGap) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
   });
   let portalY = Math.max(...bottom);
-  const fullWidth = Math.max(columnWidth, layout.canvas.width - FIELD_LAYOUT.pageMargin * 2);
+  const fullWidth = Math.max(columnWidth, layout.canvas.width - originX - FIELD_LAYOUT.pageMargin);
   next.objects.filter((object) => object.type === 'portal' && included(object)).forEach((object) => {
-    positions.set(object.id, { x: FIELD_LAYOUT.pageMargin, y: portalY, width: fullWidth });
+    positions.set(object.id, { x: originX, y: portalY, width: fullWidth });
     portalY += Math.ceil((object.height + FIELD_LAYOUT.rowGap) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
   });
+  // Shift the whole selected block, including labels, below conflicts; unrelated objects stay put.
+  if (ids) {
+    const obstacles = next.objects.filter((object) => !included(object));
+    let shift = 0;
+    for (;;) {
+      const conflicts = obstacles.filter((obstacle) => [...positions].some(([id, position]) => {
+        const object = next.objects.find((item) => item.id === id)!;
+        return rectanglesIntersect({ ...object, ...position, y: position.y! + shift,
+          height: object.height + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) },
+          { ...obstacle, height: obstacle.height + (obstacle.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) });
+      }));
+      if (!conflicts.length) break;
+      shift = Math.ceil((Math.max(...conflicts.map((object) => object.y + object.height
+        + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0))) + FIELD_LAYOUT.rowGap - originY) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
+    }
+    for (const position of positions.values()) position.y! += shift;
+    portalY += shift;
+  }
   return {
     ...next,
     canvas: {
       ...next.canvas,
-      width: Math.max(next.canvas.width, FIELD_LAYOUT.pageMargin * 2 + columnWidth),
+      width: Math.max(next.canvas.width, originX + columnWidth * actualColumns + (actualColumns - 1) * FIELD_LAYOUT.columnGap + FIELD_LAYOUT.pageMargin),
       height: Math.max(next.canvas.height, portalY + FIELD_LAYOUT.pageMargin)
     },
     objects: next.objects.map((object) => positions.has(object.id) ? { ...object, ...positions.get(object.id) } as LayoutObject : object)
@@ -521,8 +546,8 @@ export function createStandardField(
     ...standardFieldSize(metadata), zIndex,
     anchors: { top: true, right: false, bottom: false, left: true },
     displayType: ['checkbox', 'checkboxset'].includes(display) ? 'checkbox'
-      : ['radio', 'radiobuttongroup'].includes(display) ? 'radio'
-      : display === 'dropdown' ? 'dropdown' : 'editBox',
+      : ['radio', 'radiobuttongroup', 'radiobuttons'].includes(display) ? 'radio'
+      : ['dropdown', 'popupmenu'].includes(display) ? 'dropdown' : 'editBox',
     format: metadata.type?.toLowerCase() === 'number' ? 'number' : metadata.type?.toLowerCase() === 'date' ? 'date' : 'text',
     labelPosition: FIELD_LAYOUT.labelPosition, required: false
   };

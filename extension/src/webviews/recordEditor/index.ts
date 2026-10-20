@@ -1,3 +1,4 @@
+import { designerLayoutMetadata } from '../../fmweb/fieldMetadata';
 import * as vscode from 'vscode';
 
 import { isRecordModifiedConflict } from '../../services/errors';
@@ -279,6 +280,7 @@ export class RecordEditorPanel {
           layout: payload.layout,
           record,
           fields: schema.fields,
+          presentationFields: designerLayoutMetadata(payload.layout, schema.metadata ?? { fields: schema.fields }).fields,
           metadataSupported: schema.supported
         }
       });
@@ -485,6 +487,7 @@ export class RecordEditorPanel {
         payload: {
           profileId: payload.profileId,
           layout: payload.layout,
+          presentationFields: designerLayoutMetadata(payload.layout, schema.metadata ?? { fields: schema.fields }).fields,
           fields: schema.fields.map((field) => ({ name: field.name, type: field.type, result: field.result })),
           metadataSupported: schema.supported,
           message: schema.message
@@ -633,6 +636,13 @@ export class RecordEditorPanel {
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui', 'index.js')
     );
 
+    const standardsStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui', 'fieldStandards.css')
+    );
+    const standardsScriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'recordEditor', 'ui', 'fieldStandards.js')
+    );
+
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
       nonce
@@ -646,6 +656,7 @@ export class RecordEditorPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Record Editor</title>
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${standardsStyleUri}" />
 </head>
 <body>
   <div class="container">
@@ -697,6 +708,7 @@ export class RecordEditorPanel {
   </div>
 
   ${versionFooterHtml()}
+  <script nonce="${nonce}" src="${standardsScriptUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

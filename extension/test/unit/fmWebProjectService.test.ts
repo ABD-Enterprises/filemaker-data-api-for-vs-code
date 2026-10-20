@@ -113,6 +113,8 @@ describe('FmWebProjectService', () => {
       { layoutName: 'Old', fields: [{ name: ' Old field ' }], portals: [] },
       { layoutName: 'Outside', fields: [{ name: 'Keep' }], portals: [] }
     ]);
+    expect(await service.getDesignerLayouts(['Old'])).toEqual([{ layoutName: 'Old', fields: [{ name: ' Old field ' }], portals: [] }]);
+    expect(await service.getDesignerLayouts([])).toEqual([]);
     if (process.platform !== 'win32') {
       const outside = path.join(WORKSPACE_ROOT, 'outside.json');
       await writeFile(outside, JSON.stringify({ metadata: { fields: [{ name: 'Do not read' }] } }));

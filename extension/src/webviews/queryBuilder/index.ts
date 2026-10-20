@@ -1,3 +1,4 @@
+import { designerLayoutMetadata } from '../../fmweb/fieldMetadata';
 import * as vscode from 'vscode';
 
 import { FMClientError } from '../../services/errors';
@@ -341,7 +342,7 @@ export class QueryBuilderPanel {
       const fieldNames = extractLayoutFieldNames(metadata);
       await this.panel.webview.postMessage({
         type: 'fieldNamesLoaded',
-        payload: { profileId, layout, fieldNames }
+        payload: { profileId, layout, fieldNames, fieldMetadata: designerLayoutMetadata(layout, metadata).fields }
       });
     } catch (error) {
       this.logger.warn('Failed to load field names for query builder.', { profileId, layout, error });
@@ -849,6 +850,8 @@ export class QueryBuilderPanel {
       webview.asWebviewUri(
         vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'queryBuilder', 'ui', file)
       );
+    const standardsStyleUri = uiUri('fieldStandards.css');
+    const standardsScriptUri = uiUri('fieldStandards.js');
     const styleUri = uiUri('styles.css');
     const findFormUri = uiUri('findForm.js');
     const cellTextUri = uiUri('cellText.js');
@@ -867,6 +870,7 @@ export class QueryBuilderPanel {
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Query Builder</title>
   <link rel="stylesheet" href="${styleUri}" />
+  <link rel="stylesheet" href="${standardsStyleUri}" />
 </head>
 <body>
   <div class="container">
@@ -991,6 +995,7 @@ export class QueryBuilderPanel {
   ${versionFooterHtml()}
   <script nonce="${nonce}" src="${findFormUri}"></script>
   <script nonce="${nonce}" src="${cellTextUri}"></script>
+  <script nonce="${nonce}" src="${standardsScriptUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

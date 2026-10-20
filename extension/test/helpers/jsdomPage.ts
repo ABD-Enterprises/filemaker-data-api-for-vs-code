@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
 import path from 'path';
+import { buildSync } from 'esbuild';
 
 /** A real DOM (jsdom, installed by the designer-ui workspace) for running a webview page script in unit tests. */
 export interface DomElement {
@@ -45,6 +46,10 @@ export function loadPage(html: string, uiSource: string, url = 'https://panel.in
     getState: () => undefined,
     setState: () => undefined
   });
+  if (html.includes('fieldStandards.js')) {
+    window.eval(buildSync({ entryPoints: [path.resolve(__dirname, '../../../shared/src/field-standards.ts')],
+      bundle: true, platform: 'browser', format: 'iife', globalName: 'FieldStandards', write: false }).outputFiles[0]!.text + '\nwindow.FieldStandards = FieldStandards;');
+  }
   window.eval(uiSource);
   window.document.dispatchEvent(new window.Event('DOMContentLoaded'));
   const send = (data: unknown) => window.dispatchEvent(new window.MessageEvent('message', { data }));

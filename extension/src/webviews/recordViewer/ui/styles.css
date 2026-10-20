@@ -59,7 +59,8 @@ label {
 }
 
 select,
-input {
+input,
+textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
@@ -336,4 +337,27 @@ pre {
 button {
   max-width: 100%;
   white-space: normal;
+}
+
+/* Match the Editor control; reserve space for Copy inside the same value box. */
+.fm-field-table > tbody > tr > td.fm-field-control.viewer-value {
+  position: relative;
+  padding: 0;
+  overflow: visible;
+  white-space: normal;
+}
+
+.viewer-value > textarea {
+  resize: none;
+  padding-right: 58px;
+  overflow: auto;
+}
+
+.viewer-value > .field-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 18px;
 }

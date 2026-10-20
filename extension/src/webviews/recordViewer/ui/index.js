@@ -18,6 +18,7 @@ const fieldDataContainer = document.getElementById('fieldDataContainer');
 const relatedDataContainer = document.getElementById('relatedDataContainer');
 const rawJson = document.getElementById('rawJson');
 const fieldCellRefs = new Map();
+let presentationFields = [];
 const portalSectionRefs = new Map();
 const recordViewerPanel = fieldDataContainer.closest('.panel');
 const recordViewerHeading = recordViewerPanel ? recordViewerPanel.querySelector('h2') : null;
@@ -279,6 +280,7 @@ function renderRecord(payload) {
   const fieldData = record.fieldData && typeof record.fieldData === 'object' ? record.fieldData : {};
   const relatedData = record.portalData && typeof record.portalData === 'object' ? record.portalData : {};
 
+  presentationFields = payload.presentationFields || [];
   renderFieldData(fieldData);
   renderPortalData(relatedData);
 
@@ -343,8 +345,10 @@ function buildFieldTable(fieldData, fieldKeys) {
   wrapper.className = 'table-scroll-wrapper';
 
   const table = document.createElement('table');
+  if (typeof FieldStandards !== 'undefined') table.className = 'fm-field-table';
 
   const thead = document.createElement('thead');
+  thead.className = 'visually-hidden';
   const headRow = document.createElement('tr');
 
   const fieldHeader = document.createElement('th');
@@ -363,28 +367,52 @@ function buildFieldTable(fieldData, fieldKeys) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  if (typeof FieldStandards !== 'undefined') tbody.className = 'fm-fields';
 
   for (const field of fieldKeys) {
     const row = document.createElement('tr');
+    if (typeof FieldStandards !== 'undefined') {
+      row.className = 'fm-field';
+      FieldStandards.applyStandardField(row, fieldPresentation(field, fieldData[field]));
+    }
 
     const fieldCell = document.createElement('td');
+    if (typeof FieldStandards !== 'undefined') fieldCell.className = 'fm-field-label';
+    fieldCell.id = `viewer-field-label-${fieldCellRefs.size}`;
     fieldCell.textContent = field;
     row.appendChild(fieldCell);
 
     const valueCell = document.createElement('td');
-    valueCell.textContent = toText(fieldData[field]);
-    fieldCellRefs.set(field, valueCell);
+    const standard = typeof FieldStandards !== 'undefined';
+    valueCell.className = standard ? 'fm-field-control viewer-value' : '';
+    const valueControl = document.createElement(standard ? 'textarea' : 'span');
+    if (standard) {
+      valueControl.className = 'fm-field-control';
+      valueControl.setAttribute('readonly', '');
+      valueControl.setAttribute('aria-label', field);
+      valueControl.setAttribute('aria-labelledby', fieldCell.id);
+      valueControl.value = toText(fieldData[field]);
+    } else {
+      valueControl.textContent = toText(fieldData[field]);
+    }
+    valueCell.appendChild(valueControl);
+    fieldCellRefs.set(field, valueControl);
     row.appendChild(valueCell);
 
     const copyCell = document.createElement('td');
     const copyButton = document.createElement('button');
     copyButton.textContent = 'Copy';
     copyButton.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(valueCell.textContent || '');
+      await navigator.clipboard.writeText(toText(state.lastRecord.record.fieldData[field]));
       setStatus(`Copied ${field}.`);
     });
-    copyCell.appendChild(copyButton);
-    row.appendChild(copyCell);
+    if (standard) {
+      copyButton.className = 'field-copy';
+      valueCell.appendChild(copyButton);
+    } else {
+      copyCell.appendChild(copyButton);
+      row.appendChild(copyCell);
+    }
 
     tbody.appendChild(row);
   }
@@ -394,12 +422,21 @@ function buildFieldTable(fieldData, fieldKeys) {
   fieldDataContainer.replaceChildren(wrapper);
 }
 
+function fieldPresentation(name, value) {
+  const metadata = presentationFields.find((entry) => entry.name === name) || {};
+  const text = toText(value);
+  return { ...metadata, multiline: metadata.multiline || /[\r\n]/.test(text) || text.length > 100 };
+}
+
 function updateFieldCells(fieldData, fieldKeys) {
   fieldKeys.forEach((fieldKey) => {
-    const cell = fieldCellRefs.get(fieldKey);
+    const control = fieldCellRefs.get(fieldKey);
     const nextValue = toText(fieldData[fieldKey]);
-    if (cell && cell.textContent !== nextValue) {
-      cell.textContent = nextValue;
+    if (control && typeof FieldStandards !== 'undefined') {
+      FieldStandards.applyStandardField(control.closest('tr'), fieldPresentation(fieldKey, fieldData[fieldKey]));
+      control.value = nextValue;
+    } else if (control) {
+      control.textContent = nextValue;
     }
   });
 }

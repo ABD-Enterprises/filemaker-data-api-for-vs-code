@@ -299,9 +299,9 @@ export class FmWebProjectService {
     return [...fields].sort((a, b) => a.localeCompare(b));
   }
 
-  public async getDesignerLayouts(): Promise<DesignerLayoutMetadata[]> {
+  public async getDesignerLayouts(layoutNames?: string[]): Promise<DesignerLayoutMetadata[]> {
     const cache = await this.loadMetadataCache();
-    return Promise.all((cache?.layoutMetadata ?? []).map(async (entry) => {
+    return Promise.all((cache?.layoutMetadata ?? []).filter((entry) => !layoutNames || layoutNames.includes(entry.layoutName)).map(async (entry) => {
       // The index is a workspace file. A metadata filename must stay inside its directory.
       const fileName = path.basename(entry.metadataFile);
       let stored: { metadata?: Record<string, unknown> } | undefined;

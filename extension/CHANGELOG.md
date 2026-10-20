@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FEATURE] Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing.
 - [FEATURE] Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
 
 ## 1.5.0
