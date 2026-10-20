@@ -50,7 +50,6 @@ export class ScriptRunnerPanel {
   private static currentPanel: ScriptRunnerPanel | undefined;
 
   private pendingDefaults: ScriptRunnerOpenOptions | undefined;
-  private lastResult: unknown;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -226,7 +225,6 @@ export class ScriptRunnerPanel {
       const result = await this.fmClient.runScript(profile, request);
 
       const payloadForPage = { profileId: payload.profileId, request, result };
-      this.lastResult = payloadForPage;
 
       // A script that ran but reported a non-zero error (for example 3, "command is unavailable") is not a
       // success: the Data API answers 200 with `scriptError` in the response, so the page needs it spelled out.

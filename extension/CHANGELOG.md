@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Remove unused snippet and helper code, keep documented utilities and command handlers, and check for unused locals and parameters during typecheck.
 - [SECURITY] Updated `follow-redirects` (a library inside `axios`) from 1.16.0 to 1.16.1, which fixes two advisories about credential headers surviving a redirect. The extension already refuses every redirect (`maxRedirects` is 0 in every request), so the fixed paths were not reachable here; the update keeps the production audit clean.
 - [INTERNAL] Add a support page with help channels and safe bug-report guidance. Remove the unused `shx` development dependency; build and package scripts already use Node. Align workspace `@types/node` declarations with the supported Node 22 runtime.
 

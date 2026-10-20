@@ -32,6 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Remove unused snippet and helper code, keep documented utilities and command handlers, and check for unused locals and parameters during typecheck.
 - Add a support page with help channels and safe bug-report guidance, remove the unused `shx` development dependency (build and package scripts already use Node), and align workspace `@types/node` declarations with the supported Node 22 runtime.
 
 ### [SECURITY]
