@@ -32,8 +32,8 @@ describe.skipIf(!hasOpenssl)(
       other = await startMockProcess({ TLS: 'claris-default-cert' }); // a second server with its own, different certificate
     });
     afterAll(async () => {
-      await mock.stop();
-      await other.stop();
+      // Either may be missing if start-up failed; stopping one must not skip the other or the nock reset.
+      await Promise.allSettled([mock?.stop(), other?.stop()]);
       nock.activate();
       nock.disableNetConnect();
     });
