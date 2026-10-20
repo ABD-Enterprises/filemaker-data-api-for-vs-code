@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
+import { reviewAndTrustCertificate } from '../../src/services/certificateTrust';
 import { ProxyClient } from '../../src/services/proxyClient';
 import { SecretStore } from '../../src/services/secretStore';
 import { pinBypassedByHost, setAgentReplacedPolicy } from '../../src/services/tlsAgent';
@@ -254,5 +255,72 @@ describe('routes and hosts that need their own check', () => {
       )
     );
     expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+  });
+});
+
+describe('the metadata route', () => {
+  afterEach(() => setAgentReplacedPolicy(() => false));
+
+  it('explains the failure for layout metadata, which uses the raw signed-in route', async () => {
+    setAgentReplacedPolicy(() => true);
+    const c = await client(
+      httpWith((url) =>
+        url.endsWith('/sessions') ? OK : certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')
+      )
+    );
+    const error = await failure(() =>
+      c.getLayoutMetadata(profile({ pinnedCertSha256: PIN }), 'Sales')
+    );
+    expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+  });
+});
+
+describe('the trust dialog tells the truth about what trusting will do', () => {
+  afterEach(() => setAgentReplacedPolicy(() => false));
+  const info = {
+    host: 'fms.example.test',
+    port: '443',
+    subject: 'CN=x',
+    issuer: 'CN=y',
+    altNames: [],
+    validFrom: 'a',
+    validTo: 'b',
+    sha256: 'b'.repeat(64),
+    expired: false,
+    notYetValid: false,
+    selfSigned: true
+  };
+  async function detailFor(serverUrl: string): Promise<string> {
+    let detail = '';
+    await reviewAndTrustCertificate(
+      { name: 'T', authMode: 'direct', serverUrl },
+      {},
+      {
+        inspect: async () => ({ ...info }),
+        confirm: async (_message, text) => {
+          detail = text;
+          return undefined;
+        }
+      }
+    );
+    return detail;
+  }
+
+  it('promises enforcement only where it can be enforced', async () => {
+    setAgentReplacedPolicy(() => false);
+    expect(await detailFor('https://fms.example.test')).toMatch(/warn you if it ever changes/);
+  });
+
+  it('says the trust cannot take effect while VS Code replaces the connection, and names the setting', async () => {
+    setAgentReplacedPolicy(() => true);
+    const text = await detailFor('https://fms.example.test');
+    expect(text).toMatch(/http\.proxySupport/);
+    expect(text).toMatch(/"fallback"/);
+    expect(text).not.toMatch(/warn you if it ever changes/);
+  });
+
+  it('keeps the promise for a loopback address, where the host leaves the connection alone', async () => {
+    setAgentReplacedPolicy(() => true);
+    expect(await detailFor('https://localhost:8443')).toMatch(/warn you if it ever changes/);
   });
 });

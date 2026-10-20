@@ -270,6 +270,14 @@ export function setAgentReplacedPolicy(policy: () => boolean): void {
   agentIsReplacedByHost = policy;
 }
 
+/**
+ * Whether VS Code replaces the agent that would check a pin for requests to `url`: its setting says so
+ * and the address is not loopback, where the host leaves the agent alone.
+ */
+export function hostReplacesAgentFor(url: string | undefined): boolean {
+  return agentIsReplacedByHost() && !isLoopbackUrl(url);
+}
+
 function isLoopbackUrl(url: string | undefined): boolean {
   if (!url) {
     return false;
@@ -295,12 +303,12 @@ export function pinBypassedByHost(
   profile: Pick<ConnectionProfile, 'pinnedCertSha256'> & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
   failure?: FMClientError
 ): FMClientError | undefined {
-  if (normalizeSha256(profile.pinnedCertSha256) === undefined || !agentIsReplacedByHost()) {
-    return undefined;
-  }
   // The host leaves the agent alone for loopback addresses (verified in a real host), so there the pin
   // did run and its own refusals (including a not-yet-valid certificate) are the true answer.
-  if (isLoopbackUrl(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)) {
+  if (
+    normalizeSha256(profile.pinnedCertSha256) === undefined ||
+    !hostReplacesAgentFor(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)
+  ) {
     return undefined;
   }
   if (failure) {

@@ -238,7 +238,7 @@ model or on the user. See also the [AI section of DATA_HANDLING.md](./DATA_HANDL
   the extension host's memory. This is outside the OS-level threat
   model; rely on the OS / EDR.
 - **A compromised proxy host**. See "Proxy mode" above.
-- **A man-in-the-middle at the moment a certificate is first trusted**, or a leaked private key of a trusted certificate. A pin detects a later change only. Profiles that still use the older allow-self-signed setting have no certificate checks at all.
+- **A man-in-the-middle at the moment a certificate is first trusted**, or a leaked private key of a trusted certificate. A pin detects a later change only, and only while VS Code lets the extension make its own connection (not with `http.proxySupport` on `override`, its default). Profiles that still use the older allow-self-signed setting have no certificate checks at all.
 - **FileMaker server-side ACLs**. The extension talks the Data API
   and inherits whatever rights the authenticated user has on the
   server. Server admins remain the authority on what data is

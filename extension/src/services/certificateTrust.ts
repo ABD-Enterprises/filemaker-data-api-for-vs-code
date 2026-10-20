@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import type { ConnectionProfile } from '../types/fm';
 import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
 import { certificateTargetUrl, formatFingerprint, inspectServerCertificate, type ServerCertificateInfo } from './certificateInspect';
-import { environmentProxyFor, normalizeSha256 } from './tlsAgent';
+import { environmentProxyFor, hostReplacesAgentFor, normalizeSha256 } from './tlsAgent';
 
 export { certificateTargetUrl, inspectServerCertificate, type ServerCertificateInfo };
 
@@ -105,7 +105,10 @@ export async function reviewAndTrustCertificate(
     changed ? `\nPreviously trusted: ${formatFingerprint(previous)}` : undefined,
     '',
     PROXY_NOTE(url).trim() || undefined,
-    'Only continue if you recognise this fingerprint (ask your FileMaker administrator, or compare it with the one in the Admin Console). The extension will then accept exactly this certificate for this connection, and warn you if it ever changes.'
+    'Only continue if you recognise this fingerprint (ask your FileMaker administrator, or compare it with the one in the Admin Console). ' +
+      (hostReplacesAgentFor(url)
+        ? 'Note: VS Code\'s "http.proxySupport" setting is "override" (its default), which replaces the extension\'s own connection. Until you set it to "fallback", this trust cannot take effect (VS Code\'s normal certificate check applies instead) and the extension cannot warn you if the certificate changes.'
+        : 'The extension will then accept exactly this certificate for this connection, and warn you if it ever changes.')
   ].filter((line): line is string => line !== undefined);
 
   const expiredNote = info.expired || info.notYetValid;
