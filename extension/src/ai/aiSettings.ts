@@ -44,11 +44,11 @@ function isStringListMap(value: unknown): value is Record<string, string[]> {
 /**
  * Called when `filemaker.ai.hiddenFields` holds something that is not a list of text names:
  * `entries-ignored` (a list with non-text entries; the text names still hide) or
- * `value-ignored` (not a list, including a bare string).
+ * `string-as-name` (a bare string still hides one exact name) or `value-ignored` (other values).
  */
 export type HiddenFieldsProblemReporter = (problem: {
   scope: string;
-  kind: 'entries-ignored' | 'value-ignored';
+  kind: 'entries-ignored' | 'string-as-name' | 'value-ignored';
   count: number;
 }) => void;
 
@@ -101,7 +101,13 @@ function readHiddenFields(configuration: Configuration, report?: HiddenFieldsPro
     if (value === undefined || value === null) {
       continue;
     }
-    // Keep valid names in mixed lists, but do not reinterpret a string as a list or one name.
+    // A bare string remains one exact name, even when it contains commas.
+    if (isString(value)) {
+      names.add(value);
+      report?.({ scope, kind: 'string-as-name', count: 1 });
+      continue;
+    }
+    // Keep valid names in mixed lists.
     if (!Array.isArray(value)) {
       report?.({ scope, kind: 'value-ignored', count: 1 });
       continue;

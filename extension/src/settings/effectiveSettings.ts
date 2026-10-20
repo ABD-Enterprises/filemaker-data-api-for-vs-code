@@ -220,7 +220,9 @@ export async function collectExplanations(deps: Dependencies): Promise<Collected
   readAiSettings(config, ({ scope, kind, count }) => {
     const problem = kind === 'value-ignored'
       ? 'the value is not a list and was ignored; use an array of exact field names, for example ["SSN", "Password"]'
-      : `${count} non-text entries were ignored; valid names in the array still hide`;
+      : kind === 'string-as-name'
+        ? 'the value is a string, so it still hides one exact field name (commas are not separators); use an array of exact field names, for example ["SSN", "Password"]'
+        : `${count} non-text entries were ignored; valid names in the array still hide`;
     notes.push(`filemaker.ai.hiddenFields (${scope}): ${problem}.`);
   });
   if (!trusted) {

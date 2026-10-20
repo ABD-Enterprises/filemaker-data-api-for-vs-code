@@ -115,7 +115,7 @@ function titleFor(operation: SnippetOperation, redactor: Redactor): string {
 function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation, redactor: Redactor): RequestSpec {
   const host = cleanServerAddress(profile.serverUrl, 'server address');
   const version = (profile.apiVersionPath ?? 'vLatest').replace(/^\/+|\/+$/g, '');
-  const base = `${normalizePath(profile.apiBasePath ?? '/fmi/data').split('/').map(encodeComponent).join('/')}/${version}/databases/${encodeComponent(redactor.text(profile.database))}`;
+  const base = `${normalizePath(profile.apiBasePath ?? '/fmi/data')}/${version}/databases/${encodeComponent(redactor.text(profile.database))}`;
   const title = titleFor(operation, redactor);
   const notes: string[] = [];
   const layoutPath = (layout: string): string => `${base}/layouts/${encodeComponent(redactor.text(segment(layout, 'Layout', 'layout')))}`;

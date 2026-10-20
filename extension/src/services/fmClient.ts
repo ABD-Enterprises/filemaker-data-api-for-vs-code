@@ -957,6 +957,8 @@ export class FMClient {
         endpoint: `GET /layouts/${request.layout}/script/${request.scriptName}`
       },
       async (trace) => {
+        assertUsableUrlName(request.scriptName, 'script');
+        assertUsableUrlName(request.layout, 'layout');
         if (isProxyProfile(profile)) {
           return this.proxyClient.runScript(profile, request, control?.signal);
         }
@@ -971,8 +973,6 @@ export class FMClient {
         if (!layout.trim()) {
           throw new FMClientError('Layout is required to run script.');
         }
-        assertUsableUrlName(scriptName, 'script');
-        assertUsableUrlName(layout, 'layout');
 
         const scriptParam = request.scriptParam !== undefined && request.scriptParam.length > 0 ? request.scriptParam : undefined;
         const ifTooLong = (path: string, query: Record<string, string>): boolean =>

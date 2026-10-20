@@ -4,11 +4,11 @@ import * as vscode from 'vscode';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
 import { generateSnippet } from '../../src/snippets';
-import type { SnippetOperation } from '../../src/snippets/model';
+import type { ConnectionProfile } from '../../src/types/fm';
 import { ScriptRunnerPanel } from '../../src/webviews/scriptRunner';
 import { makeHarness } from './ai/harness';
 import { createAxiosResponse, InMemoryMemento, InMemorySecretStorage } from './mocks';
-import { cleanupScratch, runScriptSnippet, transpile } from './snippets/checks';
+import { cleanupScratch, parseHttpFile, parsePostman, runCurl, runScriptSnippet, transpile, wireFromCurl } from './snippets/checks';
 import { directProfile, proxyProfile } from './snippets/fixtures';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -65,24 +65,26 @@ describe('release hardening', () => {
     expect(JSON.stringify(posted)).toContain('  exact answer  ');
   });
 
-  const operations: Record<string, (fm: FMClient, name: string) => Promise<unknown>> = {
-    get: (fm, name) => fm.getRecord(directProfile, name, '1'),
-    find: (fm, name) => fm.findRecords(directProfile, name, { query: [{}] }),
-    metadata: (fm, name) => fm.getLayoutMetadata(directProfile, name),
-    edit: (fm, name) => fm.editRecord(directProfile, name, '1', { Name: 'A' }),
-    create: (fm, name) => fm.createRecord(directProfile, name, { Name: 'A' }),
-    delete: (fm, name) => fm.deleteRecord(directProfile, name, '1'),
-    'container layout': (fm, name) => fm.uploadContainer(directProfile, name, '1', 'Photo', { fileName: 'x', content: Buffer.from('x') }),
-    'container field': (fm, name) => fm.uploadContainer(directProfile, 'L', '1', name, { fileName: 'x', content: Buffer.from('x') }),
-    'script layout': (fm, name) => fm.runScript(directProfile, { layout: name, scriptName: 'S' }),
-    script: (fm, name) => fm.runScript(directProfile, { layout: 'L', scriptName: name })
+  const operations: Record<string, (fm: FMClient, name: string, profile: ConnectionProfile) => Promise<unknown>> = {
+    get: (fm, name, profile) => fm.getRecord(profile, name, '1'),
+    find: (fm, name, profile) => fm.findRecords(profile, name, { query: [{}] }),
+    metadata: (fm, name, profile) => fm.getLayoutMetadata(profile, name),
+    edit: (fm, name, profile) => fm.editRecord(profile, name, '1', { Name: 'A' }),
+    create: (fm, name, profile) => fm.createRecord(profile, name, { Name: 'A' }),
+    delete: (fm, name, profile) => fm.deleteRecord(profile, name, '1'),
+    'container layout': (fm, name, profile) => fm.uploadContainer(profile, name, '1', 'Photo', { fileName: 'x', content: Buffer.from('x') }),
+    'container field': (fm, name, profile) => fm.uploadContainer(profile, 'L', '1', name, { fileName: 'x', content: Buffer.from('x') }),
+    'script layout': (fm, name, profile) => fm.runScript(profile, { layout: name, scriptName: 'S' }),
+    script: (fm, name, profile) => fm.runScript(profile, { layout: 'L', scriptName: name })
   };
   for (const [operation, invoke] of Object.entries(operations)) {
-    it.each(['.', '..'])(`${operation}: refuses %s with no request, including login`, async (name) => {
-      const { fm, request } = client();
-      await expect(invoke(fm, name)).rejects.toMatchObject({ code: 'NAME_NOT_USABLE_IN_URL', kind: 'validation', isRetryable: false });
-      expect(request).not.toHaveBeenCalled();
-    });
+    for (const profile of [directProfile, proxyProfile]) {
+      it.each(['.', '..'])(`${profile.authMode} ${operation}: refuses %s with no request, including login`, async (name) => {
+        const { fm, request } = client();
+        await expect(invoke(fm, name, profile)).rejects.toMatchObject({ code: 'NAME_NOT_USABLE_IN_URL', kind: 'validation', isRetryable: false });
+        expect(request).not.toHaveBeenCalled();
+      });
+    }
   }
 
   it.each([' .', '.. ', 'a..b', '...', ' Layout/ü '])('keeps usable names exactly: %s', async (layout) => {
@@ -108,13 +110,33 @@ describe('release hardening', () => {
     }
   });
 
-  it('copy encodes every apiBasePath segment so curl cannot glob brackets or braces', () => {
-    const profile = { ...directProfile, apiBasePath: '/prefix[x]/{data}/' };
-    const op: SnippetOperation = { kind: 'listLayouts' };
-    for (const format of ['curl', 'fetch', 'typescript', 'http', 'postman'] as const) {
-      const text = generateSnippet(profile, op, format);
-      expect(text).toContain('/prefix%5Bx%5D/%7Bdata%7D/vLatest/databases/');
-      expect(text).not.toContain('/prefix[x]/{data}/');
-    }
+  it.each(['/fmi/my%20path', '/prefix[x]/{data}/'])('copy keeps the configured API base path %s identical to the client', async (apiBasePath) => {
+    const profile = { ...directProfile, apiBasePath };
+    const { fm, request, secretStore } = client();
+    await secretStore.setSessionToken(profile.id, 'tok');
+    await fm.listLayouts(profile);
+    const url = `${profile.serverUrl}${apiBasePath.replace(/\/$/, '')}/vLatest/databases/Sales%20DB/layouts`;
+    expect(request.mock.calls[0]?.[0].url).toBe(url);
+    const copy = (format: 'curl' | 'fetch' | 'typescript' | 'http' | 'postman') => generateSnippet(profile, { kind: 'listLayouts' }, format);
+    const wires = [
+      wireFromCurl(runCurl(copy('curl')).args),
+      (await runScriptSnippet(copy('fetch'))).wire,
+      (await runScriptSnippet(transpile(copy('typescript')))).wire,
+      parseHttpFile(copy('http')).wire,
+      parsePostman(copy('postman')).wire
+    ];
+    for (const wire of wires) expect(wire.url).toBe(url);
   });
+
+  it.each(['/prefix[x]/', '/{data}/', "/fmi/it's$(echo unsafe)[x]/{data}"])(
+    'curl receives one unchanged URL with globbing disabled for %s', (apiBasePath) => {
+      const text = generateSnippet({ ...directProfile, apiBasePath }, { kind: 'listLayouts' }, 'curl');
+      const { args, stderr } = runCurl(text);
+      const url = `${directProfile.serverUrl}${apiBasePath.replace(/\/$/, '')}/vLatest/databases/Sales%20DB/layouts`;
+      expect(stderr).toBe('');
+      expect(args).toContain('--globoff');
+      expect(args.filter((arg) => arg.startsWith('https://'))).toEqual([url]);
+      expect(wireFromCurl(args).url).toBe(url);
+    }
+  );
 });

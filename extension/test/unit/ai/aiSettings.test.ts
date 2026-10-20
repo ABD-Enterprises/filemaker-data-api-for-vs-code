@@ -116,7 +116,7 @@ describe('readAiSettings', () => {
     expect(problems).toEqual([{ scope: 'globalValue', kind: 'entries-ignored', count: 3 }]);
   });
 
-  it('hiddenFields: a bare string is invalid and ignored, while array names stay exact', () => {
+  it('hiddenFields: a bare string still hides one exact name and warns, while array names stay exact', () => {
     const problems: unknown[] = [];
     const settings = readAiSettings(
       configuration({
@@ -124,9 +124,9 @@ describe('readAiSettings', () => {
       }),
       (problem) => problems.push(problem)
     );
-    expect(settings.hiddenFields.sort()).toEqual([' SSN ', 'Password']);
+    expect(settings.hiddenFields.sort()).toEqual([' SSN ', 'Password', 'SSN, Password']);
     expect(problems).toEqual([
-      { scope: 'globalValue', kind: 'value-ignored', count: 1 },
+      { scope: 'globalValue', kind: 'string-as-name', count: 1 },
       { scope: 'workspaceValue', kind: 'value-ignored', count: 1 }
     ]);
   });
