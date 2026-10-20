@@ -1,6 +1,0 @@
-{
-  "file": "designer-ui/src/styles.css",
-  "mutation": "color: #123456",
-  "exit": 1,
-  "guardDetectedMutation": true
-}

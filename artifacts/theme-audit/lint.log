@@ -1,8 +1,0 @@
-
-> fmweb-ide-monorepo@0.1.0 lint
-> npm run lint --workspaces --if-present
-
-
-> filemaker-data-api-tools@1.6.0 lint
-> eslint "src/**/*.ts" "test/**/*.ts" "test/mock-server/**/*.mjs" "e2e-ui/**/*.mjs" --max-warnings=0
-
