@@ -10,7 +10,7 @@ it('keeps the release instructions intact and the Layout Mode feature under Feat
     root.split('\n## 1.6.0 - ')[1]?.split('### [FEATURE]')[1]?.split('### [FIX]')[0]
   ).toContain('- Layout Mode adds standard field sizes');
   const extension = readFileSync(resolve(__dirname, '../../CHANGELOG.md'), 'utf8');
-  // A fresh, empty Unreleased section sits above the release so the next change has a place to go.
-  expect(extension).toMatch(/^# Changelog\n\n## Unreleased\n\n## 1\.6\.0\n/);
+  // Unreleased stays above the latest release and may contain entries for the next one.
+  expect(extension).toMatch(/^# Changelog\n\n## Unreleased\n[\s\S]*?\n## 1\.6\.0\n/);
   expect(extension.split('\n## 1.6.0\n')[1]?.split('\n## ')[0]).toContain('Layout Mode');
 });
