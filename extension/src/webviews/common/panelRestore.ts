@@ -35,7 +35,7 @@ export function renderReopenPage(title: string, reopenWith: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';" />
 <title>${escapeHtml(title)}</title>
 <style nonce="${nonce}">
-  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 24px; line-height: 1.5; }
+  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background, #ffffff); padding: 24px; line-height: 1.5; }
   code { font-family: var(--vscode-editor-font-family); }
 </style></head>
 <body>

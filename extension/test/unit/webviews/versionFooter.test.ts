@@ -133,13 +133,13 @@ describe('packaged stylesheets carry the footer rule', () => {
     expect(css).toContain('.fm-version');
     const rule = /\.fm-version\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     const declarations = Object.fromEntries(rule.split(';').filter(Boolean).map((part) => part.split(/:(.*)/s).slice(0, 2).map((text) => text.trim())));
-    // Pinned to a corner, over the content, never in the way of a click, and muted but readable.
+    // Pinned to a corner, over the content, never in the way of a click, at full text contrast.
     expect(declarations['position']).toBe('fixed');
     expect(declarations['right']).toBe('8px');
     expect(declarations['bottom']).toBe('4px');
     expect(declarations['font-size']).toBe('11px');
     expect(declarations['color']).toBe('var(--ink)');
-    expect(declarations['opacity']).toMatch(/^0?\.7$/);
+    expect(declarations['opacity']).toBeUndefined();
     expect(declarations['pointer-events']).toBe('none');
   });
 

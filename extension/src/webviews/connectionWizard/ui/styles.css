@@ -1,10 +1,9 @@
 /*
  * Map the wizard's local design tokens onto VS Code's theme tokens. This is
  * what makes the wizard track the user's editor theme — light, dark, high
- * contrast, custom — instead of imposing our own palette. The fallbacks (the
- * second argument inside each var()) match the previous hardcoded values so
- * the form still renders if VS Code somehow doesn't inject these tokens
- * (snapshot tests, screenshot rendering outside the webview, etc.).
+ * contrast, custom — instead of imposing our own palette. Optional colors fall
+ * back to defined theme tokens before standalone neutral values so missing
+ * registrations cannot put light panels behind high contrast light text.
  *
  * The @media (prefers-color-scheme) override is gone on purpose: VS Code's
  * tokens already adapt to the user's chosen theme, so a parallel rule would
@@ -12,14 +11,14 @@
  */
 :root {
   --bg: var(--vscode-editor-background, #f8fafb);
-  --panel: var(--vscode-textBlockQuote-background, #ffffff);
-  --border: var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea));
-  --accent: var(--vscode-focusBorder, #0ea5e9);
+  --panel: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
+  --border: var(--vscode-contrastBorder, var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea)));
+  --accent: var(--vscode-button-background, #007acc);
   --accent-hover: var(--vscode-button-hoverBackground, #0284c7);
   --text: var(--vscode-foreground, #1e293b);
-  --muted: var(--vscode-descriptionForeground, #64748b);
+  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
   --error: var(--vscode-errorForeground, #ef4444);
-  --success: var(--vscode-testing-iconPassed, #22c55e);
+  --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-foreground, #333333))));
   --warning: var(--vscode-editorWarning-foreground, #d97706);
 }
 
@@ -203,7 +202,7 @@ h1 {
 
 .mode-toggle button.active {
   border-color: var(--vscode-focusBorder, var(--accent));
-  background: var(--vscode-list-activeSelectionBackground, rgba(14, 165, 233, 0.08));
+  background: var(--vscode-list-activeSelectionBackground, var(--vscode-editor-background, #ffffff));
   color: var(--vscode-list-activeSelectionForeground, var(--text));
 }
 
@@ -278,21 +277,21 @@ h1 {
 .status.error {
   display: block;
   background: var(--vscode-inputValidation-errorBackground, rgba(239, 68, 68, 0.1));
-  color: var(--vscode-inputValidation-errorForeground, var(--error));
+  color: var(--vscode-inputValidation-errorForeground, var(--text));
   border: 1px solid var(--vscode-inputValidation-errorBorder, var(--error));
 }
 
 .status.success {
   display: block;
-  background: var(--vscode-inputValidation-infoBackground, rgba(34, 197, 94, 0.1));
-  color: var(--vscode-testing-iconPassed, var(--success));
-  border: 1px solid var(--vscode-testing-iconPassed, var(--success));
+  background: color-mix(in srgb, var(--success) 12%, var(--vscode-editor-background, #ffffff));
+  color: var(--text);
+  border: 1px solid var(--success);
 }
 
 .status.warning {
   display: block;
   background: var(--vscode-inputValidation-warningBackground, rgba(217, 119, 6, 0.1));
-  color: var(--vscode-inputValidation-warningForeground, var(--warning));
+  color: var(--vscode-inputValidation-warningForeground, var(--text));
   border: 1px solid var(--vscode-inputValidation-warningBorder, var(--warning));
 }
 
@@ -333,18 +332,21 @@ h1 {
   border: 1px solid var(--vscode-input-border, transparent);
   vertical-align: middle;
 }
-.test-badge.untested { opacity: 0.7; }
+.test-badge.untested { color: var(--muted); }
 .test-badge.success {
-  background: var(--vscode-testing-iconPassed, #1f6f1f);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--success) 12%, var(--vscode-editor-background, #ffffff));
+  color: var(--text);
+  border-color: var(--success);
 }
 .test-badge.failure {
-  background: var(--vscode-testing-iconFailed, #b22222);
-  color: #ffffff;
+  background: var(--vscode-inputValidation-errorBackground, #f2dede);
+  color: var(--vscode-inputValidation-errorForeground, var(--text));
+  border-color: var(--vscode-inputValidation-errorBorder, var(--border));
 }
 .test-badge.stale {
-  background: var(--vscode-editorWarning-foreground, #cc8400);
-  color: #1f1f1f;
+  background: var(--vscode-inputValidation-warningBackground, #fff4ce);
+  color: var(--vscode-inputValidation-warningForeground, var(--text));
+  border-color: var(--vscode-inputValidation-warningBorder, var(--border));
 }
 
 .test-progress {
@@ -393,7 +395,7 @@ h1 {
 }
 
 .warning-hint {
-  color: var(--vscode-editorWarning-foreground, #cca700);
+  color: var(--text);
 }
 
 .restricted-notice {
@@ -428,7 +430,7 @@ h1 {
 .fm-version {
   margin: 12px 16px;
   font-size: 11px;
-  color: var(--vscode-descriptionForeground, #5f6c7b);
+  color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
 }
 
 /* Narrow editors (a split editor, a narrow window, high zoom): nothing is wider than the panel.
@@ -478,4 +480,30 @@ pre {
 button {
   max-width: 100%;
   white-space: normal;
+}
+
+/* Theme colors are paired; HC outlines do not change control geometry. */
+input, select, textarea {
+  background: var(--vscode-input-background, #ffffff);
+  color: var(--vscode-input-foreground, #333333);
+  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
+  accent-color: var(--vscode-focusBorder, #007acc);
+}
+button, summary {
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+button:hover, summary:hover {
+  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
+  outline-offset: 1px;
+}
+a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
+
+/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
+input::placeholder, textarea::placeholder {
+  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
+  opacity: 1;
 }
