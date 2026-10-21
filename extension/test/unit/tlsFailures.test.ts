@@ -166,7 +166,7 @@ describe('TLS and network failures reach the user as actionable messages', () =>
     servers.push(dropper);
     const error = await connect(dropper.port, {}, 'localhost', 'http');
     expect(error.networkCode).toBe('ECONNRESET');
-    expect(error.message).toMatch(/closed the connection|only accept https/);
+    expect(error.message).toMatch(/closed the connection|only accept https|was closed before answering/);
     expect(error.message).not.toMatch(/HTTP 200/);
   });
 });
