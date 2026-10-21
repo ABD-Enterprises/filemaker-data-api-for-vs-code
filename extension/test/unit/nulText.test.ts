@@ -10,4 +10,11 @@ describe('NUL text protection', () => {
     expect(containsNulText({ name: { nested: 'a\0b' } })).toBe(true);
     expect(containsNulText([false, null, 0, '', 'A\u200bB\ufeffC'])).toBe(false);
   });
+  it('removes every NUL in strings, repeating values and nested values without changing the input', () => {
+    const fields = { Name: 'A\0B\0C', Repeats: ['A\0B\0C', '\0\0'], Nested: { text: 'A\0B\0C' } };
+    expect(nulTextFields(fields)).toEqual(['Name', 'Repeats', 'Nested']);
+    expect(removeNulText(fields)).toEqual({ Name: 'ABC', Repeats: ['ABC', ''], Nested: { text: 'ABC' } });
+    expect(fields.Nested.text).toBe('A\0B\0C');
+    expect(fields.Repeats).toEqual(['A\0B\0C', '\0\0']);
+  });
 });

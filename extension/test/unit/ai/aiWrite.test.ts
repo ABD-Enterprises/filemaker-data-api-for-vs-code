@@ -18,11 +18,11 @@ const ready = (): Harness => {
 const edit = (h: Harness, fields: Record<string, string>, extra: Record<string, unknown> = {}) =>
   h.service.invoke('fm_edit_record', { layout: 'Contacts', recordId: '1', fields, ...extra }) as Promise<Record<string, any>>;
 
-it.each(['fm_edit_record', 'fm_create_record'])('%s refuses NUL with a data loss explanation before approval', async (tool) => {
+it.each(['fm_edit_record', 'fm_create_record'].flatMap((tool) => ['A\0B', 'A\0B\0C'].map((value) => ({ tool, value }))))('$tool refuses NUL with a data loss explanation before approval: $value', async ({ tool, value }) => {
   const h = ready();
-  const error = await failure(h.service.invoke(tool, { layout: 'Contacts', ...(tool === 'fm_edit_record' ? { recordId: '1' } : {}), fields: { Name: 'A\0B' } }));
+  const error = await failure(h.service.invoke(tool, { layout: 'Contacts', ...(tool === 'fm_edit_record' ? { recordId: '1' } : {}), fields: { Name: value } }));
   expect(error).toContain('Name');
-  expect(error).toContain('FileMaker keeps only the text before this character and drops the rest.');
+  expect(error).toContain('On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.');
   expect(h.confirms).toHaveLength(0);
   expect(h.client.editRecord).not.toHaveBeenCalled();
   expect(h.client.createRecord).not.toHaveBeenCalled();

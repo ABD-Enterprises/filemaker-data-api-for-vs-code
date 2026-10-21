@@ -26,6 +26,7 @@ import type { Logger } from './logger';
 import type { SecretStore } from './secretStore';
 import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
+import { assertNoNulText } from '../utils/nulText';
 import { normalizeError } from '../utils/normalizeError';
 import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 import { isCredentialRejection } from '../utils/fileMakerCodes';
@@ -662,6 +663,7 @@ export class FMClient {
       },
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
+        assertNoNulText(fieldDataPartial);
         if (isProxyProfile(profile)) {
           return this.proxyClient.editRecord(
             profile,
@@ -726,6 +728,7 @@ export class FMClient {
       },
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
+        assertNoNulText(fieldData);
         if (isProxyProfile(profile)) {
           return this.proxyClient.createRecord(profile, layout, fieldData, control?.signal);
         }

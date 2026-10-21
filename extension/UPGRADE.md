@@ -4,7 +4,7 @@ What to do, and what will look different, when you move from one version to the 
 
 ## Unreleased
 
-The Record Editor now warns before saving or creating text with a NUL character (U+0000). FileMaker keeps only the text before this character and drops the rest. Choose **Remove the character and continue** to keep the text on both sides, or **Cancel**. Batch update/import refuses the whole affected row and reports why; AI writes refuse the value too. Other characters are left alone.
+The Record Editor now warns before saving or creating text with a NUL character (U+0000). On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest. Choose **Remove the character and continue** to keep the text on both sides, or **Cancel**. Batch update/import refuses the whole affected row and reports why; AI writes refuse the value too. Other characters are left alone.
 
 Layouts listing a field twice now generate types that compile. The editor shows one value with a note, while Layout Inspector keeps both occurrences.
 

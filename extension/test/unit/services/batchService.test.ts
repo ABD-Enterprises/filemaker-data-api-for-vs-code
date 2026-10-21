@@ -51,27 +51,27 @@ function createFmClient(overrides: Partial<FMClient> = {}): FMClient {
   return stub as FMClient;
 }
 
-it('flags NUL rows in a batch dry run without writing', async () => {
+it.each(['a\0b', 'A\0B\0C'])('flags NUL rows in a batch dry run without writing: %s', async (value) => {
   const editRecord = vi.fn();
   const service = new BatchService(createFmClient({ editRecord } as never));
-  const result = await service.batchUpdate(profile(), 'Contacts', [{ recordId: '1', fieldData: { Name: 'a\0b' } }], { dryRun: true });
+  const result = await service.batchUpdate(profile(), 'Contacts', [{ recordId: '1', fieldData: { Name: value } }], { dryRun: true });
   expect(result).toMatchObject({ attempted: 0, failureCount: 1, failures: [{ recordId: '1', reason: expect.stringContaining('NUL') }] });
   expect(editRecord).not.toHaveBeenCalled();
 });
 
-it.each(['csv', 'json'] as const)('refuses a whole NUL %s import row without retry and continues with other rows', async (format) => {
+it.each(['csv', 'json'].flatMap((format) => ['A\0B', 'A\0B\0C'].map((value) => ({ format, value }))))('refuses a whole NUL $format import row without retry and continues with other rows: $value', async ({ format, value }) => {
   const editRecord = vi.fn().mockResolvedValue({});
   const service = new BatchService(createFmClient({ editRecord } as never));
   const entries = [
-    { recordId: 'bad', fieldData: { ' Name ': 'A\0B', Other: 'unchanged' } },
+    { recordId: 'bad', fieldData: { ' Name ': value, Other: 'unchanged' } },
     { recordId: 'good', fieldData: { ' Name ': 'A\u200bB\ufeffC' } }
   ];
-  const source = format === 'json' ? JSON.stringify(entries) : 'recordId, Name ,Other\nbad,A\0B,unchanged\ngood,A\u200bB\ufeffC,';
-  const result = await service.batchUpdate(profile(), 'Contacts', parseBatchUpdateInput(source, format), { dryRun: false });
+  const source = format === 'json' ? JSON.stringify(entries) : `recordId, Name ,Other\nbad,${value},unchanged\ngood,A\u200bB\ufeffC,`;
+  const result = await service.batchUpdate(profile(), 'Contacts', parseBatchUpdateInput(source, format as 'csv' | 'json'), { dryRun: false });
   expect(editRecord).toHaveBeenCalledTimes(1);
   expect(editRecord).toHaveBeenCalledWith(expect.anything(), 'Contacts', 'good', { ' Name ': 'A\u200bB\ufeffC' });
   expect(result).toMatchObject({ successCount: 1, failureCount: 1, failures: [{ recordId: 'bad', reason: expect.stringContaining(' Name ') }] });
-  expect(result.failures[0]?.reason).toContain('FileMaker keeps only the text before this character and drops the rest.');
+  expect(result.failures[0]?.reason).toContain('On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.');
 });
 
 describe('BatchService.batchExportFind', () => {

@@ -347,15 +347,22 @@ export class RecordEditorPanel {
       return;
     }
 
-    const preview = this.recordEditService.previewPatch(payload.originalFieldData, payload.draftFieldData);
-    if (preview.changedFields.length === 0) {
+    const initialPreview = this.recordEditService.previewPatch(payload.originalFieldData, payload.draftFieldData);
+    if (initialPreview.changedFields.length === 0) {
       await this.postError('No field changes detected.');
       return;
     }
 
-    const safePatch = await this.confirmNulText(preview.patch);
+    const safePatch = await this.confirmNulText(initialPreview.patch);
     if (!safePatch) return;
     const draftFieldData = { ...payload.draftFieldData, ...safePatch };
+
+    const preview = this.recordEditService.previewPatch(payload.originalFieldData, draftFieldData);
+    if (preview.changedFields.length === 0) {
+      void vscode.window.showInformationMessage('After removing the NUL characters, the values match the original record. Nothing needs to be saved.');
+      await this.panel.webview.postMessage({ type: 'saveCancelled' });
+      return;
+    }
 
     const confirmation = await vscode.window.showWarningMessage(
       `Save ${preview.changedFields.length} field changes to record ${payload.recordId}? (${preview.changedFields.join(', ')})\nRollback guidance: export the current record before save, then reapply previous values if needed.`,
@@ -583,8 +590,11 @@ export class RecordEditorPanel {
   private async confirmNulText(fields: Record<string, unknown>): Promise<Record<string, unknown> | undefined> {
     const names = nulTextFields(fields);
     if (names.length === 0) return fields;
+    const cleaned = removeNulText(fields) as Record<string, unknown>;
+    const emptied = names.filter((name) => cleaned[name] === '');
+    const emptyWarning = emptied.length ? ` Removing the character will leave these fields empty: ${emptied.join(', ')}. They will be sent as empty values if you continue.` : '';
     const choice = await vscode.window.showWarningMessage(
-      `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING}`,
+      `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING}${emptyWarning}`,
       { modal: true },
       'Remove the character and continue',
       'Cancel'
@@ -593,7 +603,7 @@ export class RecordEditorPanel {
       await this.panel.webview.postMessage({ type: 'saveCancelled' });
       return undefined;
     }
-    return removeNulText(fields) as Record<string, unknown>;
+    return cleaned;
   }
 
   private async exportCurrentRecord(): Promise<void> {

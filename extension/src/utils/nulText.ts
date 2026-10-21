@@ -1,5 +1,7 @@
-/** Real FileMaker Server writes accept NUL but silently discard the following text. */
-export const NUL_TEXT_WARNING = 'FileMaker keeps only the text before this character and drops the rest.';
+import { FMClientError } from '../services/errors';
+
+/** Observed on the FileMaker server we tested; refuse NUL to prevent possible data loss. */
+export const NUL_TEXT_WARNING = 'On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.';
 
 export function containsNulText(value: unknown): boolean {
   if (typeof value === 'string') return value.includes('\0');
@@ -25,4 +27,10 @@ export function removeNulText(value: unknown): unknown {
 export function nulTextError(fields: Record<string, unknown>): string | undefined {
   const names = nulTextFields(fields);
   return names.length ? `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING} Nothing in this row was written. Remove the character from the source and try again.` : undefined;
+}
+
+/** Refuse unsafe writes for callers that cannot ask the user to remove NUL. */
+export function assertNoNulText(fields: Record<string, unknown>): void {
+  const reason = nulTextError(fields);
+  if (reason) throw new FMClientError(reason, { status: 400 });
 }

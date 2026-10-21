@@ -22,6 +22,35 @@ const logger = {
 };
 
 describe('FmBridgeServer', () => {
+  it.each(['/editRecord', '/createRecord'].flatMap((route) =>
+    ['A\0B', 'A\0B\0C', ['safe', 'A\0B\0C'], { nested: 'A\0B\0C' }].map((value) => ({ route, value }))
+  ))('refuses NUL on $route before calling FileMaker: $value', async ({ route, value }) => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const response = await invokeBridgeRequest(server, `/fm${route}`, {
+      payload: { layout: 'Contacts', recordId: '1', fieldData: { ' Name ': value, Other: 'safe' } }
+    });
+    expect(response.status).toBe(400);
+    expect(response.json).toEqual({ error: 'NUL character (U+0000) in field(s):  Name . On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest. Nothing in this row was written. Remove the character from the source and try again.' });
+    expect(client.editRecord).not.toHaveBeenCalled();
+    expect(client.createRecord).not.toHaveBeenCalled();
+  });
+
+  it.each(['/editRecord', '/createRecord'])('passes safe field text through $route unchanged', async (route) => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const fields = { ' Name ': 'A\u200bB\ufeffC' };
+    const response = await invokeBridgeRequest(server, `/fm${route}`, {
+      payload: { layout: 'Contacts', recordId: '1', fieldData: fields }
+    });
+    expect(response.status).toBe(200);
+    if (route === '/editRecord') {
+      expect(client.editRecord).toHaveBeenCalledWith(profile, 'Contacts', '1', fields, expect.anything());
+    } else {
+      expect(client.createRecord).toHaveBeenCalledWith(profile, 'Contacts', fields, expect.anything());
+    }
+  });
+
   it('handles runScript requests through FMClient', async () => {
     const server = new FmBridgeServer(
       createProfileStoreStub(),

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 
+import { assertNoNulText } from '../utils/nulText';
 import type { FindRecordsRequest } from '../types/fm';
 import type { FMClient } from './fmClient';
 import { FMClientError } from './errors';
@@ -279,6 +280,7 @@ export class FmBridgeServer {
         const layout = requireString(payload.layout, 'layout');
         const recordId = requireString(payload.recordId, 'recordId');
         const fieldData = asObject(payload.fieldData, 'fieldData');
+        assertNoNulText(fieldData);
         const result = await this.fmClient.editRecord(profile, layout, recordId, fieldData, {
           signal: controller.signal
         });
@@ -288,6 +290,7 @@ export class FmBridgeServer {
       if (route === '/createRecord') {
         const layout = requireString(payload.layout, 'layout');
         const fieldData = asObject(payload.fieldData ?? {}, 'fieldData');
+        assertNoNulText(fieldData);
         const result = await this.fmClient.createRecord(profile, layout, fieldData, {
           signal: controller.signal
         });
