@@ -50,7 +50,13 @@ describe('the real VS Code patch, without sockets', () => {
     expect(proxySupportReplacesAgent()).toBe(true);
     setAgentReplacedPolicy(proxySupportReplacesAgent);
     const failure = new FMClientError('untrusted', { kind: 'certificate', networkCode: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' });
-    expect(pinBypassedByHost({ ...profile, serverUrl: url }, failure)?.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+    expect(pinBypassedByHost({ ...profile, serverUrl: url }, failure)).toBeUndefined();
+    vi.stubEnv('HTTPS_PROXY', 'http://proxy.example.test:3128');
+    try {
+      expect(pinBypassedByHost({ allowSelfSigned: true, serverUrl: url }, failure)).toMatchObject({ code: 'PIN_BYPASSED_BY_PROXY_SUPPORT', networkCode: failure.networkCode });
+    } finally {
+      vi.unstubAllEnvs();
+    }
     expect(pinBypassedByHost({ ...profile, serverUrl: url })).toBeUndefined();
   });
 
@@ -66,8 +72,13 @@ describe('the real VS Code patch, without sockets', () => {
     req.destroy();
   });
 
-  it.each(['override', 'fallback'] as const)('%s refuses a VS Code http.proxy route before any socket opens', async (mode) => {
-    restore = installVscodeProxyPatch(mode, { proxy: 'http://proxy.example.test:3128' });
+  it.each([
+    ['override', 'http://proxy.example.test:3128'],
+    ['fallback', 'http://proxy.example.test:3128'],
+    ['override', 'https://proxy.example.test:443'],
+    ['fallback', 'https://proxy.example.test:443']
+  ] as const)('%s refuses a VS Code http.proxy %s route before any socket opens', async (mode, proxy) => {
+    restore = installVscodeProxyPatch(mode, { proxy });
     const dial = vi.spyOn(https.Agent.prototype, 'createConnection').mockImplementation(() => { throw new Error('must not dial'); });
     const config = httpsTransportFor(profile, url);
     const request = axios.post(url, { password: 'never-sent' }, { ...config, maxRedirects: 0, timeout: 500 });

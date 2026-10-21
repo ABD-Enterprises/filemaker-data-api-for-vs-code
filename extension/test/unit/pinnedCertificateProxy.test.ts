@@ -2,6 +2,9 @@ import { createServer as createHttpServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import net from 'net';
 import type { Duplex } from 'stream';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 import axios from 'axios';
 import nock from 'nock';
@@ -10,10 +13,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
-import { createHttpsAgentForProfile, normalizeSha256 } from '../../src/services/tlsAgent';
+import { createHttpsAgentForProfile, hostNetworkingPatched, normalizeSha256, setAgentReplacedPolicy } from '../../src/services/tlsAgent';
+import { isTrustableCertificateCode } from '../../src/utils/networkErrors';
 import type { ConnectionProfile } from '../../src/types/fm';
 import { startTlsServer, type TestTlsServer } from '../helpers/tlsServer';
 import { DAY, makeCertificate, newKeyPair } from '../helpers/x509';
+import { installVscodeProxyPatch } from '../helpers/vscodeProxyPatch';
 import { InMemorySecretStorage } from './mocks';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
@@ -22,13 +27,13 @@ const now = Date.now();
 const caKey = newKeyPair();
 const ca = makeCertificate({ subjectCn: 'Proxy Test CA', notBefore: new Date(now - DAY), notAfter: new Date(now + 30 * DAY), subjectKey: caKey, isCa: true });
 
-function leaf(options: { signedByCa?: boolean } = {}) {
+function leaf(options: { signedByCa?: boolean; host?: string } = {}) {
   const key = newKeyPair();
   return {
     key,
     cert: makeCertificate({
-      subjectCn: 'localhost',
-      altNames: ['localhost'],
+      subjectCn: options.host ?? 'localhost',
+      altNames: [options.host ?? 'localhost'],
       notBefore: new Date(now - DAY),
       notAfter: new Date(now + 30 * DAY),
       subjectKey: key,
@@ -40,6 +45,8 @@ function leaf(options: { signedByCa?: boolean } = {}) {
 describe('certificate checks when an HTTP proxy is configured', () => {
   const servers: Array<{ close(): Promise<void> }> = [];
   const saved: Record<string, string | undefined> = {};
+  const dirs: string[] = [];
+  let restorePatch: (() => void) | undefined;
   let connects: string[];
 
   beforeAll(() => nock.restore());
@@ -49,17 +56,21 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   });
   beforeEach(async () => {
     connects = [];
-    for (const name of ['HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'no_proxy']) {
+    for (const name of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']) {
       saved[name] = process.env[name];
       delete process.env[name];
     }
   });
   afterEach(async () => {
+    restorePatch?.();
+    restorePatch = undefined;
+    setAgentReplacedPolicy(() => false);
     for (const [name, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
     }
     await Promise.all(servers.splice(0).map((server) => server.close()));
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
   /** A CONNECT proxy that tunnels everything to `target`, whatever host was asked for. */
@@ -80,7 +91,7 @@ describe('certificate checks when an HTTP proxy is configured', () => {
       upstream.on('error', () => socket.destroy());
       socket.on('error', () => upstream.destroy());
     });
-    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => { proxy.once('error', reject); proxy.listen(0, '127.0.0.1', resolve); });
     servers.push({
       close: () => {
         open.forEach((socket) => socket.destroy());
@@ -99,6 +110,14 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   function useProxy(url: string): void {
     process.env.HTTPS_PROXY = url;
     process.env.https_proxy = url;
+  }
+
+  async function caFile(pem: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'proxy-ca-'));
+    dirs.push(dir);
+    const file = join(dir, 'ca.pem');
+    await writeFile(file, pem);
+    return file;
   }
 
   async function login(server: TestTlsServer, extra: Partial<ConnectionProfile>, host = 'localhost'): Promise<string | FMClientError> {
@@ -166,6 +185,42 @@ describe('certificate checks when an HTTP proxy is configured', () => {
   });
 
   describe('the other certificate settings keep their meaning through a proxy', () => {
+    it.each(['environment', 'http.proxy', 'PAC'] as const)('CA-only profiles retain the %s proxy route (CONNECT is observed)', async (route) => {
+      const host = 'ca-profile.example.test'; // non-loopback: exercise the patch's agent replacement
+      const server = await origin(leaf({ signedByCa: true, host }));
+      const proxy = await startProxy(server.port);
+      if (route === 'environment') useProxy(proxy);
+      if (route !== 'environment') {
+        restorePatch = installVscodeProxyPatch('override', route === 'http.proxy' ? { proxy } : {
+          resolveProxy: async () => `PROXY ${new URL(proxy).host}`
+        });
+      }
+      setAgentReplacedPolicy(hostNetworkingPatched);
+
+      expect(await login(server, { caBundlePath: await caFile(ca.pem) }, host)).toBe('test-token');
+      expect(connects).toContain(`${host}:${server.port}`);
+      expect(server.requests).toHaveLength(1);
+    });
+
+    it.each(['override', 'fallback', 'on', 'off'] as const)('%s: a wrong CA file keeps the untrusted message, network code and trust action', async (mode) => {
+      const host = 'ca-profile.example.test';
+      const server = await origin(leaf({ signedByCa: true, host }));
+      const proxy = await startProxy(server.port);
+      useProxy(proxy);
+      restorePatch = installVscodeProxyPatch(mode, { proxy });
+      setAgentReplacedPolicy(hostNetworkingPatched);
+      const wrongCa = makeCertificate({ subjectCn: 'Unrelated CA', subjectKey: newKeyPair(), isCa: true, notBefore: new Date(now - DAY), notAfter: new Date(now + 30 * DAY) });
+
+      const error = await login(server, { caBundlePath: await caFile(wrongCa.pem) }, host) as FMClientError;
+      expect(error.code).not.toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
+      expect(error.networkCode).toBe('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
+      expect(isTrustableCertificateCode(error.networkCode)).toBe(true);
+      expect(error.message).toMatch(/not trusted.*missing intermediate/s);
+      expect(error.message).not.toMatch(/could not be applied|http\.proxySupport|fallback/);
+      expect(connects).toContain(`${host}:${server.port}`);
+      expect(server.requests).toHaveLength(0);
+    });
+
     it('without any trust setting, a certificate that is not trusted is still refused', async () => {
       const server = await origin(leaf());
       useProxy(await startProxy(server.port));

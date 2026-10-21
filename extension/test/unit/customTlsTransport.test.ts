@@ -1,7 +1,7 @@
 import http from 'http';
 import https from 'https';
 import nock from 'nock';
-import { mkdtemp, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -32,14 +32,22 @@ describe('custom TLS uses ClientRequest instead of the replaceable request funct
     expect(patched).not.toHaveBeenCalled();
   });
 
-  it('uses the same transport for a custom CA file', async () => {
+  it('keeps CA-only profiles on the plain axios/agent path, but a pin takes priority over a CA file', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'transport-ca-'));
     const file = join(dir, 'ca.pem');
-    await writeFile(file, makeCertificate({ subjectCn: 'CA', notBefore: new Date(Date.now() - DAY), notAfter: new Date(Date.now() + DAY), subjectKey: newKeyPair() }).pem);
-    expect((await httpsTransportFor({ caBundlePath: file }, 'https://fm.example.test')).transport).toBeDefined();
+    try {
+      await writeFile(file, makeCertificate({ subjectCn: 'CA', notBefore: new Date(Date.now() - DAY), notAfter: new Date(Date.now() + DAY), subjectKey: newKeyPair() }).pem);
+      const config = httpsTransportFor({ caBundlePath: file }, 'https://fm.example.test');
+      expect(config).not.toHaveProperty('transport');
+      expect(config).not.toHaveProperty('proxy');
+      expect(config.httpsAgent.options.ca).toContain(await readFile(file, 'utf8'));
+      expect(httpsTransportFor({ caBundlePath: file, pinnedCertSha256: 'a'.repeat(64) }, 'https://fm.example.test')).toMatchObject({ proxy: false, transport: expect.any(Object) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  it('preserves axios proxy agents for CA/legacy profiles, but always enforces the pin agent', () => {
+  it('preserves the supplied legacy agent, but always enforces the pin agent', () => {
     nock.restore();
     for (const profile of [{ allowSelfSigned: true }, { pinnedCertSha256: 'a'.repeat(64) }]) {
       const config = httpsTransportFor(profile, 'https://fm.example.test');

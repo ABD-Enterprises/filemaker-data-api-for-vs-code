@@ -290,16 +290,18 @@ function isLoopbackUrl(url: string | undefined): boolean {
   }
 }
 
-/** A fallback only for an actual untrusted failure on custom TLS while the host patch is active. */
+/** A fallback for an untrusted pin/legacy request left on axios's environment-proxy route. */
 export function pinBypassedByHost(
   profile: TlsProfileOptions & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
   failure?: FMClientError
 ): FMClientError | undefined {
+  const url = profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl;
   // Only localhost and 127.0.0.1 retain the supplied agent in the host request patch.
   if (
-    !hasCustomTls(profile) ||
+    !needsCustomTlsTransport(profile) ||
+    !url || !/^https:/i.test(url) || !environmentProxyFor(url) ||
     !failure ||
-    !hostReplacesAgentFor(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)
+    !hostReplacesAgentFor(url)
   ) {
     return undefined;
   }
@@ -316,9 +318,10 @@ export function pinBypassedByHost(
     }
   }
   return new FMClientError(
-    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and this connection's certificate settings could not be applied. The extension normally checks trusted certificates and custom CA files without changing VS Code settings. VS Code's networking patch is active; if it interferes with this connection, try setting "http.proxySupport" to "fallback" in VS Code settings (search for "proxy support"), then test again. This is a fallback for that failure. Or install a certificate from a public authority on the server and choose Forget trusted certificate. For a pinned connection a custom CA file does not help here, because a trusted certificate does not use the CA file.`,
+    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and this connection's certificate settings could not be applied on the environment-proxy route. VS Code's networking patch is active; try setting "http.proxySupport" to "fallback" in VS Code settings (search for "proxy support"), then test again. Or install a certificate from a public authority on the server and choose Forget trusted certificate. For a pinned connection a custom CA file does not help here, because a trusted certificate does not use the CA file.`,
     {
       code: 'PIN_BYPASSED_BY_PROXY_SUPPORT',
+      networkCode: failure.networkCode,
       kind: 'certificate',
       isRetryable: false,
       status: failure?.status,
@@ -409,9 +412,9 @@ export function hostNetworkingPatched(): boolean {
     http.ClientRequest !== (originalHttp?.ClientRequest ?? initialClientRequest);
 }
 
-function hasCustomTls(profile: TlsProfileOptions): boolean {
+function needsCustomTlsTransport(profile: TlsProfileOptions): boolean {
   return normalizeSha256(profile.pinnedCertSha256) !== undefined ||
-    Boolean(profile.caBundlePath?.trim()) || profile.allowSelfSigned === true;
+    profile.allowSelfSigned === true;
 }
 
 function pinThroughProxy(): FMClientError {
@@ -482,13 +485,13 @@ interface HttpsTransport {
   transport?: { request(options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest };
 }
 
-/** Preserve the profile agent under VS Code's request patch; axios still owns all HTTP handling. */
+/** Preserve pin/legacy agents under VS Code's request patch; CA-only profiles keep axios's proxy route. */
 export function httpsTransportFor(profile: TlsProfileOptions, url: string): HttpsTransport {
   const httpsAgent = createHttpsAgentForProfile(profile);
-  if (!/^https:/i.test(url) || !hasCustomTls(profile)) return { httpsAgent };
+  if (!/^https:/i.test(url) || !needsCustomTlsTransport(profile)) return { httpsAgent };
   const pinned = normalizeSha256(profile.pinnedCertSha256) !== undefined;
   if (pinned && environmentProxyFor(url)) throw pinThroughProxy();
-  // A CA-file or legacy self-signed profile behind an environment proxy keeps axios's own CONNECT
+  // A legacy self-signed profile behind an environment proxy keeps axios's own CONNECT
   // tunnel (and its https-proxy-agent), which a hand-built ClientRequest cannot drive: the proxy route
   // is unchanged from before, and VS Code's networking owns it.
   if (!pinned && environmentProxyFor(url)) return { httpsAgent };
@@ -497,8 +500,7 @@ export function httpsTransportFor(profile: TlsProfileOptions, url: string): Http
     ...(pinned ? { proxy: false as const } : {}),
     transport: {
       request: (options, callback) => {
-        // Axios may have built a CONNECT agent for an environment proxy. Keep it for CA/legacy
-        // profiles; pinned requests have proxy:false and must always use the pin agent itself.
+        // Pinned requests have proxy:false and must always use the pin agent itself.
         let pendingRoute = false;
         let agent = pinned ? httpsAgent : (options.agent ?? httpsAgent);
         if (pinned && (https as PatchedHttps).__vscodeOriginal && hostNetworkingPatched()) {
