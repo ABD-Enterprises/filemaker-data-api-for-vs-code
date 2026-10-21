@@ -23,6 +23,27 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('FMClient (unit)', () => {
+  it.each((['direct', 'proxy'] as const).flatMap((authMode) =>
+    (['editRecord', 'createRecord'] as const).flatMap((operation) =>
+      ['A\0B', 'A\0B\0C', ['A\0B\0C'], { nested: 'A\0B\0C' }].map((value) => ({ authMode, operation, value }))
+    )
+  ))('refuses NUL before any $authMode $operation request: $value', async ({ authMode, operation, value }) => {
+    const axios = new FakeAxios();
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    const proxy = { editRecord: vi.fn(), createRecord: vi.fn() };
+    const client = new FMClient(secrets, logger, 15_000, axios as never, proxy as never);
+    const profile = { ...createProfile(), authMode };
+    const fields = { Name: value };
+    const pending = operation === 'editRecord'
+      ? client.editRecord(profile, 'Contacts', '1', fields)
+      : client.createRecord(profile, 'Contacts', fields);
+    await expect(pending).rejects.toMatchObject({ status: 400, isRetryable: false, message: expect.stringContaining('NUL character (U+0000) in field(s): Name.') });
+    expect(axios.request).not.toHaveBeenCalled();
+    expect(proxy.editRecord).not.toHaveBeenCalled();
+    expect(proxy.createRecord).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])('omits ancillary metadata history (failure=%s) while retaining record history, metrics and normal metadata history', async (failMetadata) => {
     const axios = new FakeAxios();
     const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };

@@ -79,7 +79,7 @@ async function clientRequest(operation: SnippetOperation): Promise<{ url: string
 
 describe('a copied request is the request FMClient sends', () => {
   const strings = hostileStrings('/tmp/unused');
-  const names = [...Object.values(strings), 'Plain Layout', 'a/b', '100%', 'Ünïcode ✓'];
+  const names = [...Object.values(strings), 'A\0B\0C', 'Plain Layout', 'a/b', '100%', 'Ünïcode ✓'];
 
   for (const name of names) {
     it(`address, method and body for ${JSON.stringify(name).slice(0, 40)}`, async () => {
@@ -95,6 +95,16 @@ describe('a copied request is the request FMClient sends', () => {
       for (const operation of operations) {
         // The client trims names before an upload; the copied request sends what it was given.
         if (operation.kind === 'uploadContainer' && name !== name.trim()) {
+          continue;
+        }
+        // Writes containing NUL are refused by the shared client; read requests still
+        // exercise URL encoding for these names below.
+        if ((operation.kind === 'editRecord' || operation.kind === 'createRecord') && name.includes('\0')) {
+          await expect(clientRequest(operation)).rejects.toMatchObject({
+            status: 400,
+            isRetryable: false,
+            message: expect.stringContaining(`NUL character (U+0000) in field(s): ${name}.`)
+          });
           continue;
         }
         const sent = await clientRequest(operation);

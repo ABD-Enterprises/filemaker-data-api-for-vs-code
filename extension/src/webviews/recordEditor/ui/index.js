@@ -286,6 +286,7 @@ function applyLayoutFields(payload) {
     return;
   }
 
+  showDuplicateFieldNote(payload.fields);
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = {};
   state.draftFieldData = {};
@@ -302,6 +303,19 @@ function applyLayoutFields(payload) {
       : (payload.message || 'Field list is unavailable for this layout.'),
     !payload.metadataSupported
   );
+}
+
+function showDuplicateFieldNote(fields) {
+  const note = document.getElementById('duplicateFieldNote');
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const field of Array.isArray(fields) ? fields : []) {
+    if (!field || typeof field.name !== 'string') continue;
+    if (seen.has(field.name)) duplicates.add(field.name);
+    seen.add(field.name);
+  }
+  note.textContent = duplicates.size ? `Repeated fields are shown once: ${Array.from(duplicates).join(', ')}. Each name has one value in a record.` : '';
+  note.classList.toggle('hidden', duplicates.size === 0);
 }
 
 function applyCreated(payload) {
@@ -348,6 +362,7 @@ function applyRecord(payload) {
   debouncedMarkDirtyState.cancel();
   hideConflict();
   state.loaded = payload;
+  showDuplicateFieldNote(payload.fields);
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);

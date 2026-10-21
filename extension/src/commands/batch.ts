@@ -7,6 +7,7 @@ import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import type { SettingsService } from '../services/settingsService';
+import { nulTextFields } from '../utils/nulText';
 import { parseFindJson, parseSortJson } from '../utils/jsonValidate';
 import {
   openJsonDocument,
@@ -241,7 +242,12 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
               dryRun: true,
               totalEntries: entries.length,
               layout,
-              sample: entries.slice(0, 5)
+              sample: entries.slice(0, 5),
+              // Rows are numbered from 1 in the parsed data, excluding a CSV header.
+              flaggedRows: entries.flatMap((entry, index) => {
+                const fields = nulTextFields(entry.fieldData);
+                return fields.length ? [{ row: index + 1, recordId: entry.recordId, fields }] : [];
+              })
             };
             await openJsonDocument(preview);
           }
