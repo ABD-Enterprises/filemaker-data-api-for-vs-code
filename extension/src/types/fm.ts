@@ -46,15 +46,26 @@ export interface FileMakerLayoutInfo {
   name: string;
 }
 
+export interface PortalDataInfo {
+  portalObjectName?: string;
+  table?: string;
+  foundCount: number;
+  returnedCount: number;
+}
+
+export type PortalPaging = Record<string, { limit: number; offset?: number }>;
+
 export interface FileMakerRecord {
   recordId: string;
   modId?: string;
   fieldData: Record<string, unknown>;
+  portalDataInfo?: PortalDataInfo[];
   portalData?: Record<string, Array<Record<string, unknown>>>;
   [key: string]: unknown;
 }
 
 export interface FindRecordsRequest {
+  portal?: PortalPaging;
   query: Array<Record<string, unknown>>;
   sort?: Array<Record<string, unknown>>;
   limit?: number;
@@ -330,6 +341,7 @@ export interface BatchExportOptions {
   maxRecords: number;
   outputPath: string;
   pageSize?: number;
+  excelCompatible?: boolean;
 }
 
 export interface BatchExportResult {
@@ -340,6 +352,9 @@ export interface BatchExportResult {
 }
 
 export interface BatchUpdateEntry {
+  /** CSV values are converted using layout result types at job start. */
+  sourceFormat?: 'csv';
+  csvRecordColumn?: string;
   recordId: string;
   fieldData: Record<string, unknown>;
 }

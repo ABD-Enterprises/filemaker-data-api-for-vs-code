@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCsvStreamWriter } from '../../../src/utils/csvStreamWriter';
 
@@ -17,7 +17,7 @@ describe('createCsvStreamWriter', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('discovers columns from the first row and writes header + data', async () => {
+  it('discovers columns from initial rows and writes header + data', async () => {
     const file = join(dir, 'out.csv');
     const writer = await createCsvStreamWriter(file);
     await writer.append({ recordId: '1', name: 'Alice', age: 30 });
@@ -36,14 +36,14 @@ describe('createCsvStreamWriter', () => {
     expect(text).toBe('a,b\n1,2\n');
   });
 
-  it('drops fields not present in the discovered column set on later rows', async () => {
+  it('includes fields absent from the first row within the sample', async () => {
     const file = join(dir, 'out.csv');
     const writer = await createCsvStreamWriter(file);
     await writer.append({ a: 1, b: 2 });
     await writer.append({ a: 10, b: 20, c: 'extra' }); // c is dropped
     await writer.close();
     const text = await readFile(file, 'utf8');
-    expect(text).toBe('a,b\n1,2\n10,20\n');
+    expect(text).toBe('a,b,c\n1,2,\n10,20,extra\n');
   });
 
   it('escapes commas, quotes, and newlines inside cells', async () => {
@@ -106,4 +106,28 @@ describe('createCsvStreamWriter', () => {
     expect(lines[1]).toBe('0,row-0');
     expect(lines[5000]).toBe('4999,row-4999');
   });
+  it('warns when a field appears after the bounded discovery sample', async () => {
+    const file = join(dir, 'out.csv');
+    const onUnknownField = vi.fn();
+    const writer = await createCsvStreamWriter(file, { sampleSize: 2, onUnknownField });
+    await writer.append({ a: 1 });
+    await writer.append({ b: 2 });
+    await writer.append({ c: 3 });
+    await writer.close();
+    expect(await readFile(file, 'utf8')).toBe('a,b\n1,\n,2\n,\n');
+    expect(onUnknownField).toHaveBeenCalledWith('c');
+  });
+
+  it('captures each appended value even when the caller reuses a row during sampling', async () => {
+    const file = join(dir, 'out.csv');
+    const writer = await createCsvStreamWriter(file);
+    const row = { a: 1, nested: [1] };
+    await writer.append(row);
+    row.a = 2;
+    row.nested[0] = 2;
+    await writer.append(row);
+    await writer.close();
+    expect(await readFile(file, 'utf8')).toBe('a,nested\n1,[1]\n2,[2]\n');
+  });
+
 });

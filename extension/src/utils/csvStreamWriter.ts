@@ -1,112 +1,66 @@
-import { createWriteStream, type WriteStream } from 'fs';
-import { mkdir } from 'fs/promises';
-import { dirname } from 'path';
-
+import { atomicExport } from './atomicExport';
 import { escapeCsvValue } from './exportCsv';
 
+export type CsvRow = Record<string, unknown> | Map<string, unknown>;
 export interface CsvStreamWriterOptions {
   lineEnding?: '\n' | '\r\n';
-  /**
-   * Explicit column order. When provided, the header is written immediately and
-   * subsequent rows are projected onto these columns (extra fields ignored).
-   * When omitted, the column set is discovered from the first appended row,
-   * then locked. Fields that appear only in later rows are silently dropped.
-   *
-   * FileMaker layouts have a fixed schema so discovery-from-first-row matches
-   * the natural shape of the data.
-   */
   columns?: string[];
-  /** Defuse text that a spreadsheet would run as a formula. On unless set to false. */
   neutralizeFormulas?: boolean;
+  excelCompatible?: boolean;
+  /** Without metadata, discover the union of at most this many initial rows. */
+  sampleSize?: number;
+  onUnknownField?: (field: string) => void;
 }
-
 export interface CsvStreamWriter {
-  /** Append one record. The first call locks the column order if not preset. */
-  append(record: Record<string, unknown>): Promise<void>;
-  /** Flush and close. Safe to call multiple times. */
+  append(record: CsvRow): Promise<void>;
   close(): Promise<void>;
-  /** Visible for tests / diagnostics. */
+  abort(): Promise<void>;
   getColumns(): string[];
 }
 
-/**
- * Streams CSV rows to disk so memory does not scale with the export size.
- *
- * Behavior:
- * - Writes the header on the first append() (or eagerly if columns provided).
- * - Locks the column set after the first row so column order is stable across
- *   the file. Fields appearing only in later rows are dropped (with a single
- *   diagnostic log via the optional onUnknownField callback).
- * - On close(), flushes pending writes and closes the underlying stream.
- */
-export async function createCsvStreamWriter(
-  path: string,
-  options: CsvStreamWriterOptions = {}
-): Promise<CsvStreamWriter> {
-  await mkdir(dirname(path), { recursive: true });
-
+/** Bounded sampling when no schema is available; explicit columns preserve metadata order. */
+export async function createCsvStreamWriter(path: string, options: CsvStreamWriterOptions = {}): Promise<CsvStreamWriter> {
+  const file = await atomicExport(path);
   const lineEnding = options.lineEnding ?? '\n';
-  const stream = createWriteStream(path, { encoding: 'utf8', flags: 'w' });
-
-  let columns: string[] | undefined = options.columns ? [...options.columns] : undefined;
+  let columns = options.columns ? [...options.columns] : undefined;
+  const pending: Map<string, string>[] = [];
+  const warned = new Set<string>();
   let headerWritten = false;
-  let closePromise: Promise<void> | undefined;
-
-  const writeLine = (line: string): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      stream.write(line + lineEnding, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-  const writeHeader = async (): Promise<void> => {
-    if (headerWritten || !columns) return;
-    await writeLine(columns.map((column) => escapeCsvValue(column, { neutralizeFormulas: options.neutralizeFormulas })).join(','));
-    headerWritten = true;
+  let closed = false;
+  const keys = (row: CsvRow) => row instanceof Map ? [...row.keys()] : Object.keys(row);
+  const writeRow = async (row: Map<string, string>) => {
+    for (const key of keys(row)) if (!columns!.includes(key) && !warned.has(key)) {
+      warned.add(key);
+      options.onUnknownField?.(key);
+    }
+    await file.write(columns!.map((key) => row.get(key) ?? '').join(',') + lineEnding);
   };
-
-  if (columns) {
-    await writeHeader();
-  }
-
+  const flush = async () => {
+    if (!columns) columns = [...new Set(pending.flatMap(keys))];
+    if (!headerWritten) {
+      await file.write((options.excelCompatible ? '\uFEFF' : '') + (columns.length ? columns.map((key) => escapeCsvValue(key, options)).join(',') + lineEnding : ''));
+      headerWritten = true;
+    }
+    for (const row of pending) await writeRow(row);
+    pending.length = 0;
+  };
   return {
-    async append(record: Record<string, unknown>): Promise<void> {
+    async append(record) {
+      const row = new Map(keys(record).map((key) => [key, escapeCsvValue(record instanceof Map ? record.get(key) : record[key], options)]));
       if (!columns) {
-        columns = Object.keys(record);
-        await writeHeader();
+        pending.push(row);
+        if (pending.length >= (options.sampleSize ?? 100)) await flush();
+      } else {
+        await flush();
+        await writeRow(row);
       }
-      const cells = columns.map((col) => escapeCsvValue(record[col], { neutralizeFormulas: options.neutralizeFormulas }));
-      await writeLine(cells.join(','));
     },
-    async close(): Promise<void> {
-      // Memoize the close so repeated calls return the same settled promise
-      // instead of trying to call stream.end() twice (which throws).
-      if (!closePromise) {
-        closePromise = closeStream(stream);
-      }
-      await closePromise;
+    async close() {
+      if (closed) return;
+      try { await flush(); await file.close(); closed = true; }
+      catch (error) { await file.abort(); closed = true; throw error; }
     },
-    getColumns(): string[] {
-      return columns ? [...columns] : [];
-    }
+    async abort() { closed = true; await file.abort(); },
+    getColumns() { return columns ? [...columns] : [...new Set(pending.flatMap(keys))]; }
   };
-}
-
-function closeStream(stream: WriteStream): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    if (stream.writableEnded || stream.closed) {
-      stream.once('close', () => resolve());
-      stream.once('error', reject);
-      // If already closed (event fired before we attached), resolve immediately.
-      if (stream.closed) {
-        resolve();
-      }
-      return;
-    }
-    stream.end((err?: Error | null) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
 }

@@ -24,6 +24,8 @@ interface RecordViewerOpenOptions {
 }
 
 interface LoadRecordPayload {
+  portal?: string;
+  portalLimit?: number;
   profileId: string;
   layout: string;
   recordId: string;
@@ -192,7 +194,9 @@ export class RecordViewerPanel {
           .catch(() => []) // Presentation metadata must never prevent viewing a record.
         : Promise.resolve([]);
       const [record, presentationFields] = await Promise.all([
-        this.fmClient.getRecord(profile, payload.layout, payload.recordId),
+        payload.portal && payload.portalLimit
+          ? this.fmClient.getRecord(profile, payload.layout, payload.recordId, { portal: { [payload.portal]: { limit: payload.portalLimit, offset: 1 } } })
+          : this.fmClient.getRecord(profile, payload.layout, payload.recordId),
         presentation
       ]);
       if (loadVersion !== this.recordLoadVersion) return;
@@ -318,11 +322,10 @@ export class RecordViewerPanel {
       return undefined;
     }
 
-    return {
-      profileId,
-      layout,
-      recordId
-    };
+    const portal = typeof payload.portal === 'string' && payload.portal.length > 0 ? payload.portal : undefined;
+    const portalLimit = typeof payload.portalLimit === 'number' && Number.isInteger(payload.portalLimit) && payload.portalLimit > 0 && payload.portalLimit <= 250_000 ? payload.portalLimit : undefined;
+    if (portal && !portalLimit) return undefined;
+    return { profileId, layout, recordId, ...(portal ? { portal, portalLimit } : {}) };
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {

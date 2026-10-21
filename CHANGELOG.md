@@ -28,6 +28,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Preserve text and record IDs when moving data through CSV and the Record Editor; show incomplete portal rows with Load more, keep existing exports safe on failure or cancellation, and offer CSV for Excel.
+
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 
 - Webviews and Layout Mode controls now follow light, dark and high-contrast editor themes, with readable fields, messages and schema differences.

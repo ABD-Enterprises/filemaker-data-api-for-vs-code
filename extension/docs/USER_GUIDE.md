@@ -55,7 +55,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | List Layouts | Opens a JSON list of the profile's layouts. | Shown with a profile. |
 | Run Find (JSON) | Prompts for find, sort and paging options and opens the result as JSON. | Shown with a profile; choose a layout. |
 | Get Record by ID | Reads one record and opens it as JSON. | Shown with a profile; choose a layout and record ID. |
-| Open Record Viewer | Opens a record or browses records in a layout. | Shown with a profile; choose a layout. |
+| Open Record Viewer | Opens a record and shows related row counts, with Load more on direct connections. | Shown with a profile; choose a layout. |
 | Open Query Builder | Opens the visual find form and results table. | Shown with a profile. |
 | Open Layout Metadata | Opens layout metadata, field count and cache status as JSON. | Shown with a profile; needs metadata support for the chosen layout. |
 | Select Layout for Inspector | Selects a layout and focuses the Layout Inspector. | Shown with a profile. |
@@ -82,13 +82,13 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Generate Snippets for Layout | Writes and opens editor snippets for a layout. | Shown with a profile; needs workspace trust and a layout. |
 | Generate TypeScript Client | Generates a typed client for selected layouts in a chosen folder. | Shown with a profile; needs workspace trust. |
 | Open Generated Types Folder | Creates the configured types folder if needed and reveals it in the file manager. | Always shown; needs a trusted workspace folder. |
-| Open Record Editor | Opens the editor for an existing record. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
+| Open Record Editor | Opens an existing record for editing, keeping number-looking text as text. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
 | Edit Record by ID | Prompts for a record ID and opens the record editor. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Create Record | Opens the editor in create mode. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
-| Batch Export (Find) | Exports matching records to CSV or JSONL as a background job. | Shown with a profile; needs batch operations enabled and workspace trust. |
-| Batch Update from CSV/JSON | Previews or applies record updates from a chosen CSV or JSON file. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
+| Batch Export (Find) | Saves matching records to CSV or JSONL safely, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
+| Batch Update from CSV/JSON | Previews or applies updates, using field types for CSV and leaving empty CSV cells unchanged. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
 | Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
 | Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
@@ -504,9 +504,19 @@ Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in 
 
 Large results are fetched page by page. The export stops at `filemaker.batch.maxRecords` records (default 10,000; the hard limit is 250,000). With `filemaker.performance.mode` set to `high-scale`, exports are always written as JSONL.
 
+**Safe export files.** The extension writes a temporary file in the same folder and replaces your chosen file only when the export finishes successfully. A failed or cancelled export leaves the existing file untouched and removes the temporary file; no partial file is kept. A successful CSV export with no matches still has its column headings. Export files are readable and writable only by your account. When field information is unavailable, CSV uses the columns found in the first 100 records; fields appearing later are omitted with a warning in the job log.
+
+**CSV for Excel.** Choose **Standard CSV** for the usual UTF-8 file, or **Excel-compatible CSV (UTF-8 BOM)** so Excel on Windows recognizes accents. Standard CSV is the default. This choice is available for batch CSV exports and Query Builder's **Save results as CSV…**.
+
+**Related rows in exports.** FileMaker often returns only the first 50 rows of each portal. CSV has a note column and JSONL has an `exportNote` when rows are missing, for example `Orders: showing 50 of 170`. These exports do not fetch the missing related rows. In the Record Viewer, each portal shows how many rows were returned out of the total. Choose **Load more** to request another 50, until all rows are shown. Portal names keep their spaces exactly. Loading more is available on direct connections; a proxy connection shows a message explaining this limit.
+
 **Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** and **Copy results as table** in the Query Builder.
 
-**Editing and re-importing a CSV export.** A CSV export has `recordId` and `modId` columns followed by every field the layout returns. Batch update skips the `recordId` and `modId` columns as fields (using `recordId` to find each record), so a layout with plain fields can be edited and imported back. But the export also writes related (`Table::Field`), calculation, summary and container columns, and import sends every column back as a field. Before importing, delete the columns for related, calculation, summary and container fields and keep only the fields you want to change. Empty cells are skipped. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true`, `null` or a number) is sent as JSON, not as text. A JSONL export cannot be imported: batch update accepts `.csv` and `.json` only.
+**Editing and re-importing a CSV export.** The first two CSV columns identify the record: `recordId` and `modId`. If a layout has a field with either name (including different capitals), the record columns use `__recordId` and `__modId` instead. Extra underscores are used if those names are also fields. Keep these two columns together at the start of the file. The layout fields follow, including fields missing from the first record. Duplicate column names are refused because the record or field to change would be unclear. An older CSV using plain record columns on a layout with clashing field names is also refused when the field list can be read; export it again to get the reserved columns. The last column, `__portalNote (export information)`, is a note about missing related rows, not a field; import skips it. Keep that note last or remove it before importing.
+
+Text fields keep exactly what you typed, including `10.50`, `null`, `true`, brackets and spaces. Number fields receive numbers only for valid decimal numbers within the safe range (up to 9,007,199,254,740,991 in either direction). Other number entries are kept as text, with a warning for each affected row in the job log, so large numbers are not rounded. Dates and times stay as written. Field types are checked once when the update job starts; if they cannot be read, values stay as text and the job log warns you. Empty CSV cells are still skipped: they leave the field unchanged, so a CSV cannot clear a field. A space in a text cell is kept as a space. The Record Editor also uses the field's type, keeping number-looking text as text.
+
+Before importing, remove columns for related (`Table::Field`), calculation, summary and container fields, keeping only fields you want to change. JSONL files cannot be imported; batch update accepts comma-separated CSV or a JSON array of updates. A semicolon-separated file or JSONL file gets a message asking for comma-separated CSV instead.
 
 **Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 

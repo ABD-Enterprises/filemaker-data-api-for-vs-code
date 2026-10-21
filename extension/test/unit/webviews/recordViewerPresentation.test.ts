@@ -20,7 +20,7 @@ function viewer(client: object, getProfile = async () => profile) {
     onDidDispose: vi.fn(), reveal: vi.fn()
   } as never);
   const panels = RecordViewerPanel as unknown as { currentPanel: {
-    handleLoadRecord: (input: ReturnType<typeof payload>) => Promise<void>;
+    handleLoadRecord: (input: ReturnType<typeof payload> & { portal?: string; portalLimit?: number }) => Promise<void>;
     exportRecord: () => Promise<void>;
   } | undefined };
   panels.currentPanel = undefined;
@@ -96,4 +96,11 @@ it('ignores a stale record error and a profile lookup that completes after a new
   await slowLoad;
   expect(second.postMessage).toHaveBeenCalledTimes(1);
   expect(client.getRecord).not.toHaveBeenCalledWith(profile, 'Slow', '1');
+});
+
+it('passes exact portal names and the cumulative limit to getRecord', async () => {
+  const getRecord = vi.fn(async () => record());
+  const { panel } = viewer({ getRecord, getLayoutMetadata: vi.fn(async () => metadata) });
+  await panel.handleLoadRecord({ ...payload(), portal: ' Orders ', portalLimit: 100 });
+  expect(getRecord).toHaveBeenCalledWith(profile, ' Layout ', '1', { portal: { ' Orders ': { limit: 100, offset: 1 } } });
 });

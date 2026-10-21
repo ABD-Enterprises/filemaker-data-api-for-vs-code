@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FIX] Keep number-looking text and spaces unchanged when importing CSV or editing records. Keep record IDs separate from fields with the same names, include fields missing from the first row, show when portal rows are incomplete and let the Record Viewer load more. Failed or cancelled exports leave your existing file untouched. CSV can be saved for Excel, and unsupported import files get clear messages.
+
 - [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 
 - [INTERNAL] Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.

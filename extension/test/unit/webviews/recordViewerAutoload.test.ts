@@ -74,4 +74,22 @@ describe.skipIf(!JSDOM)('Record Viewer opened for a record', () => {
     expect(isSkeletonShown(document as never)).toBe(false);
     expect(document.getElementById('status')?.textContent).toBe('Record is missing.');
   });
+  it('shows 50 of 170 Orders and loads through all rows using the exact portal name', () => {
+    const { document, send, posted } = loadPage(pageHtml(), uiSource);
+    const payload = (count: number) => ({ profileId: 'p1', layout: ' Layout ', record: {
+      recordId: '42', fieldData: {},
+      portalData: { ' Orders ': Array.from({ length: count }, (_, i) => ({ recordId: String(i + 1) })) },
+      portalDataInfo: [{ portalObjectName: ' Orders ', foundCount: 170, returnedCount: count }]
+    } });
+    send({ type: 'recordLoaded', payload: payload(50) });
+    expect(document.getElementById('relatedDataContainer')?.textContent).toContain(' Orders : showing 50 of 170');
+    const more = document.getElementById('relatedDataContainer')?.querySelector('button');
+    expect(more?.textContent).toBe('Load more');
+    more!.click();
+    expect(posted.at(-1)).toEqual({ type: 'loadRecord', payload: { profileId: 'p1', layout: ' Layout ', recordId: '42', portal: ' Orders ', portalLimit: 100 } });
+    send({ type: 'recordLoaded', payload: payload(170) });
+    expect(document.getElementById('relatedDataContainer')?.textContent).toContain('showing 170 of 170');
+    expect(document.getElementById('relatedDataContainer')?.querySelector('button')).toBeNull();
+  });
+
 });

@@ -4,6 +4,7 @@ import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } f
 
 import type {
   ConnectionProfile,
+  PortalPaging,
   ContainerUploadFile,
   EditRecordResult,
   FileMakerRecord,
@@ -73,6 +74,7 @@ interface RequestTrace {
 }
 
 interface ClientRequestControl {
+  portal?: PortalPaging;
   signal?: AbortSignal;
   /**
    * The user asked for this sign-in (Connect, Test Connection). It goes ahead even when automatic
@@ -473,6 +475,7 @@ export class FMClient {
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
         if (isProxyProfile(profile)) {
+          if (control?.portal) throw new FMClientError('Loading more portal rows is unavailable through this proxy. Use a direct connection.');
           return this.proxyClient.getRecord(profile, layout, recordId, control?.signal);
         }
 
@@ -481,6 +484,7 @@ export class FMClient {
           {
             method: 'GET',
             path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
+            ...(control?.portal ? { params: portalPagingParams(control.portal, '_'), strictQuery: true } : {}),
             signal: control?.signal,
             maxResponseBytes: control?.maxResponseBytes
           },
@@ -503,7 +507,7 @@ export class FMClient {
           });
         }
 
-        return record;
+        return withPortalInfo(record, envelope.response.dataInfo);
       }
     );
   }
@@ -536,7 +540,8 @@ export class FMClient {
         }
 
         const payload: Record<string, unknown> = {
-          query: body.query
+          query: body.query,
+          ...portalPagingParams(body.portal, '')
         };
 
         if (body.sort && body.sort.length > 0) {
@@ -575,7 +580,7 @@ export class FMClient {
         }
 
         return {
-          data: envelope.response.data ?? [],
+          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, envelope.response.dataInfo)),
           dataInfo: envelope.response.dataInfo,
           ...scriptErrorsOf(envelope.response)
         };
@@ -1980,4 +1985,18 @@ function normalizeHeaders(headers: Record<string, unknown>): Record<string, stri
   }
 
   return normalized;
+}
+
+function portalPagingParams(portals: PortalPaging | undefined, prefix: string): Record<string, number> {
+  const params: Record<string, number> = {};
+  for (const [name, page] of Object.entries(portals ?? {})) {
+    params[`${prefix}limit.${name}`] = page.limit;
+    if (page.offset !== undefined) params[`${prefix}offset.${name}`] = page.offset;
+  }
+  return params;
+}
+
+function withPortalInfo(record: FileMakerRecord, dataInfo?: Record<string, unknown>): FileMakerRecord {
+  const info = record.portalDataInfo ?? dataInfo?.portalDataInfo;
+  return Array.isArray(info) ? { ...record, portalDataInfo: info } : record;
 }

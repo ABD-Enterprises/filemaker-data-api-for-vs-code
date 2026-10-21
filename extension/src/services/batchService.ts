@@ -14,6 +14,7 @@ import type {
   BatchUpdateResult,
   ConnectionProfile,
   FindRecordsRequest,
+  FileMakerRecord,
   JobContext,
   PerformanceMode
 } from '../types/fm';
@@ -21,6 +22,9 @@ import { isCredentialRejection } from '../utils/fileMakerCodes';
 import { createCsvStreamWriter } from '../utils/csvStreamWriter';
 import { restoreFormulaText } from '../utils/exportCsv';
 import { createJsonlWriter } from '../utils/jsonlWriter';
+import { extractFieldsFromMetadata } from './schemaService';
+import { exportColumns, exportRow, portalNotes } from '../utils/exportRecords';
+import { numericText } from '../utils/numericText';
 
 interface BatchServiceOptions {
   getMaxRecords?: () => number;
@@ -72,7 +76,31 @@ export class BatchService {
     let offset = typeof request.offset === 'number' ? request.offset : 1;
     let truncated = false;
     const jsonlWriter = format === 'jsonl' ? await createJsonlWriter(options.outputPath) : undefined;
-    const csvWriter = format === 'csv' ? await createCsvStreamWriter(options.outputPath, { neutralizeFormulas: this.getNeutralizeFormulas() }) : undefined;
+    let fields: ReturnType<typeof extractFieldsFromMetadata> | undefined;
+    if (format === 'csv') {
+      try {
+        const metadataFields = extractFieldsFromMetadata(await this.fmClient.getLayoutMetadata(profile, layout));
+        if (metadataFields.length) fields = metadataFields;
+      } catch { /* Use a bounded sample when metadata cannot be read. */ }
+      if (!fields) job?.log('warn', 'Layout metadata unavailable. CSV columns use the first 100 records; later unknown fields will be reported.');
+    }
+    let csvWriter: Awaited<ReturnType<typeof createCsvStreamWriter>> | undefined;
+    let meta: [string, string] = exportColumns(fields?.map((field) => field.name) ?? []);
+    let noteColumn: string | undefined;
+    const pendingCsv: FileMakerRecord[] = [];
+    const startCsv = async (records: FileMakerRecord[]) => {
+      const names = fields?.map((field) => field.name) ?? [...new Set(records.slice(0, 100).flatMap((record) => Object.keys(record.fieldData)))];
+      meta = exportColumns(names);
+      // Reserve a note column even if only a later page has truncated portals.
+      noteColumn = '__portalNote (export information)';
+      while (names.includes(noteColumn)) noteColumn = '_' + noteColumn;
+      csvWriter = await createCsvStreamWriter(options.outputPath, {
+        columns: [...meta, ...names, noteColumn],
+        excelCompatible: options.excelCompatible,
+        neutralizeFormulas: this.getNeutralizeFormulas(),
+        onUnknownField: (field) => job?.log('warn', `CSV field "${field}" appeared after the column sample and was omitted.`)
+      });
+    };
 
     try {
       while (exported < maxRecords) {
@@ -89,19 +117,24 @@ export class BatchService {
           offset
         });
 
+        if (format === 'csv' && fields && !csvWriter) await startCsv([]);
         if (!page.data || page.data.length === 0) {
           break;
         }
 
         for (const record of page.data) {
           if (format === 'jsonl') {
-            await jsonlWriter?.append(record);
+            const note = portalNotes(record);
+            await jsonlWriter?.append(note ? { ...record, exportNote: note } : record);
+          } else if (csvWriter) {
+            await csvWriter.append(exportRow(record, meta, noteColumn));
           } else {
-            await csvWriter?.append({
-              recordId: record.recordId,
-              modId: record.modId,
-              ...record.fieldData
-            });
+            pendingCsv.push(record);
+            if (pendingCsv.length >= 100) {
+              await startCsv(pendingCsv);
+              for (const pending of pendingCsv) await csvWriter!.append(exportRow(pending, meta, noteColumn));
+              pendingCsv.length = 0;
+            }
           }
         }
 
@@ -128,15 +161,27 @@ export class BatchService {
         }
       }
 
+      if (job?.isCancellationRequested()) {
+        await jsonlWriter?.abort();
+        await csvWriter?.abort();
+      } else {
+        if (format === 'csv' && !csvWriter) {
+          await startCsv(pendingCsv);
+          for (const pending of pendingCsv) await csvWriter!.append(exportRow(pending, meta, noteColumn));
+        }
+        await jsonlWriter?.close();
+        await csvWriter?.close();
+      }
       return {
         outputPath: options.outputPath,
         format,
         exportedRecords: exported,
         truncated
       };
-    } finally {
-      await jsonlWriter?.close();
-      await csvWriter?.close();
+    } catch (error) {
+      await jsonlWriter?.abort();
+      await csvWriter?.abort();
+      throw error;
     }
   }
 
@@ -164,7 +209,25 @@ export class BatchService {
       };
     }
 
-    const queue = [...entries];
+    let csvFields: ReturnType<typeof extractFieldsFromMetadata> = [];
+    if (entries.some((entry) => entry.sourceFormat === 'csv')) {
+      try { csvFields = extractFieldsFromMetadata(await this.fmClient.getLayoutMetadata(profile, layout)); }
+      catch { job?.log('warn', 'Layout metadata unavailable. CSV values will be sent as strings.'); }
+      if (!csvFields.length) job?.log('warn', 'No field types available. CSV values will be sent as strings.');
+    }
+    if (csvFields.some((field) => /^(recordId|modId)$/i.test(field.name)) && entries.some((entry) => entry.sourceFormat === 'csv' && (entry.csvRecordColumn ?? 'recordId') === 'recordId')) {
+      throw new Error('Ambiguous CSV: this layout has a recordId or modId field. Export again and keep the reserved __recordId and __modId columns.');
+    }
+    const queue = entries.map((entry) => {
+      if (entry.sourceFormat !== 'csv') return entry;
+      return { ...entry, fieldData: Object.fromEntries(Object.entries(entry.fieldData).map(([name, value]) => {
+        if (csvFields.find((field) => field.name === name)?.result !== 'number' || typeof value !== 'string') return [name, value];
+        const numeric = numericText(value);
+        if (typeof numeric === 'number') return [name, numeric];
+        job?.log('warn', `Row ${entry.recordId}, field "${name}": number kept as text to avoid changing its value.`);
+        return [name, value];
+      })) };
+    });
     // Set when the account itself cannot do this (no privilege, rejected credentials): every other
     // record would fail the same way, so the job stops with one clear reason.
     let stoppedReason: string | undefined;
@@ -360,6 +423,7 @@ export function inferExportFormat(outputPath: string): BatchExportFormat {
 }
 
 export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): BatchUpdateEntry[] {
+  if (looksLikeJsonl(content)) throw new Error('This looks like a JSONL file; export as comma-separated CSV.');
   if (format === 'json') {
     const parsed = JSON.parse(content) as unknown;
 
@@ -373,29 +437,12 @@ export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): 
   return parseCsvBatchUpdates(content);
 }
 
-/**
- * Columns the export writes before the fields: exactly `recordId` and `modId`. They are record
- * metadata, not fields: `recordId` names the record to edit, and `modId` is ignored on import
- * because the update path sends no modification-id guard (FileMaker would reject it as an
- * unknown field). Only surrounding whitespace and a byte-order mark are ignored. The match is
- * case-sensitive on purpose: a layout field called `RecordID` or `ModId` is a field, and must
- * never be mistaken for FileMaker's internal record id.
- */
-function metaColumn(header: string): 'recordId' | 'modId' | undefined {
-  const normalized = header.replace(/^\uFEFF/, '').trim();
-  return normalized === 'recordId' || normalized === 'modId' ? normalized : undefined;
-}
-
-/**
- * Reads a CSV written by the batch export (or any file with a `recordId` column) into
- * updates. Every other column is a field name. Empty cells are skipped (they cannot be
- * told apart from "leave unchanged"), and a cell that looks like JSON (an object, array,
- * `true`, `false`, `null` or a plain number) is parsed as that JSON value, so a text field
- * holding `12` is sent as the number 12. Text that merely starts like a formula was given a
- * leading apostrophe by the export; it is taken off again here.
- */
 function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
-  const rows = parseCsv(content);
+  const firstLine = content.replace(/^\uFEFF/, '').split(/\r?\n/)[0] ?? '';
+  if (!parseCsv(firstLine)[0]?.some((header) => /^(?:_{2,})?recordId$/.test(header)) && firstLine.includes(';') && parseCsv(firstLine, ';')[0]?.some((header) => /^(?:_{2,})?recordId$/.test(header))) {
+    throw new Error('This looks like a semicolon-delimited file; export as comma-separated CSV.');
+  }
+  const rows = parseCsv(content.replace(/^\uFEFF/, ''));
   if (rows.length === 0) {
     return [];
   }
@@ -404,10 +451,16 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   if (!headers) {
     return [];
   }
-  const recordIdIndex = headers.findIndex((header) => metaColumn(header) === 'recordId');
-  if (recordIdIndex < 0) {
-    throw new Error('CSV must include a "recordId" column.');
-  }
+  if (new Set(headers).size !== headers.length) throw new Error('Ambiguous CSV: duplicate column names. Export again with unique metadata columns.');
+  const reserved = /^(_{2,})recordId$/.exec(headers[0] ?? '');
+  const recordColumn = reserved && headers[1] === `${reserved[1]}modId` ? headers[0]! : 'recordId';
+  const modColumn = recordColumn === 'recordId' ? 'modId' : `${reserved![1]}modId`;
+  if (recordColumn === 'recordId' && !(headers[0] === 'recordId' && headers[1] === 'modId') && headers.some((header) => {
+    const match = /^(_{2,})recordId$/.exec(header);
+    return match && headers.includes(`${match[1]}modId`);
+  })) throw new Error('Ambiguous CSV: keep the two reserved record columns together at the start of the file.');
+  const recordIdIndex = headers.indexOf(recordColumn);
+  if (recordIdIndex < 0) throw new Error('CSV must include a "recordId" column (or reserved __recordId and __modId columns).');
 
   const entries: BatchUpdateEntry[] = [];
 
@@ -417,9 +470,9 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
       continue;
     }
 
-    const fieldData: Record<string, unknown> = {};
+    const fieldData: Record<string, unknown> = Object.create(null);
     headers.forEach((header, index) => {
-      if (metaColumn(header)) {
+      if (header === recordColumn || header === modColumn || (index === headers.length - 1 && /^_+portalNote \(export information\)$/.test(header))) {
         return;
       }
 
@@ -428,19 +481,27 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
         return;
       }
 
-      fieldData[header] = parsePossibleJsonValue(restoreFormulaText(value));
+      fieldData[header] = restoreFormulaText(value);
     });
 
-    entries.push({
-      recordId,
-      fieldData
-    });
+    const entry: BatchUpdateEntry = { recordId, fieldData };
+    Object.defineProperties(entry, { sourceFormat: { value: 'csv' }, csvRecordColumn: { value: recordColumn } });
+    entries.push(entry);
   }
 
   return entries;
 }
 
-function parseCsv(content: string): string[][] {
+function looksLikeJsonl(content: string): boolean {
+  const firstLine = content.replace(/^\uFEFF/, '').split(/\r?\n/).find((line) => line.length > 0);
+  if (!firstLine) return false;
+  try {
+    const value = JSON.parse(firstLine) as unknown;
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  } catch { return false; }
+}
+
+function parseCsv(content: string, delimiter = ','): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentValue = '';
@@ -460,7 +521,7 @@ function parseCsv(content: string): string[][] {
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       currentRow.push(currentValue);
       currentValue = '';
       continue;
@@ -487,30 +548,6 @@ function parseCsv(content: string): string[][] {
   }
 
   return rows.filter((row) => row.some((cell) => cell.trim().length > 0));
-}
-
-function parsePossibleJsonValue(raw: string): unknown {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return '';
-  }
-
-  if (
-    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-    (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-    trimmed === 'true' ||
-    trimmed === 'false' ||
-    trimmed === 'null' ||
-    /^-?\d+(\.\d+)?$/.test(trimmed)
-  ) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return raw;
-    }
-  }
-
-  return raw;
 }
 
 function normalizeBatchUpdateEntry(input: unknown): BatchUpdateEntry {
