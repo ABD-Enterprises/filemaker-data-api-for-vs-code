@@ -67,6 +67,7 @@ interface HistoryContext {
 }
 
 interface RequestTrace {
+  operation: string;
   requestId: string;
   reauthCount: number;
   cacheHit: boolean;
@@ -154,6 +155,13 @@ function credentialStamp(profile: ConnectionProfile, username: string, password:
  */
 function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
+}
+
+/** Preserve the match count when an offset is beyond the last record. */
+function emptyFindResult(error: unknown): FindRecordsResult {
+  const details = error instanceof FMClientError ? error.details as { response?: { dataInfo?: FindRecordsResult['dataInfo'] }; dataInfo?: FindRecordsResult['dataInfo'] } | undefined : undefined;
+  const dataInfo = details?.response?.dataInfo ?? details?.dataInfo;
+  return { data: [], dataInfo: { ...dataInfo, foundCount: dataInfo?.foundCount ?? 0, returnedCount: 0 } };
 }
 
 const CERTIFICATE_LOOK_TTL_MS = 60_000;
@@ -318,6 +326,7 @@ export class FMClient {
           const failure = toFMClientError(
             normalizeError(error, {
               fallbackMessage: 'Failed to create FileMaker session.',
+              operation: trace.operation,
               requestId: trace.requestId,
               endpoint: 'POST /sessions'
             })
@@ -530,7 +539,7 @@ export class FMClient {
           } catch (error) {
             // The proxy passes FileMaker's code on, so "no records match" is an empty result here too.
             if (isNoRecordsFound(error)) {
-              return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+              return emptyFindResult(error);
             }
             throw error;
           }
@@ -552,6 +561,10 @@ export class FMClient {
           payload.offset = body.offset;
         }
 
+        for (const key of ['script', 'script.param', 'script.prerequest', 'script.prerequest.param', 'script.presort', 'script.presort.param'] as const) {
+          if (body[key] !== undefined) payload[key] = body[key];
+        }
+
         let envelope: DataApiEnvelope<DataApiListRecordsResponse>;
         try {
           envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
@@ -567,10 +580,11 @@ export class FMClient {
             trace
           );
         } catch (error) {
-          // Real-server no-match finds return HTTP 200, code 401 and empty data.
-          // Older/other servers may use another status; match the FileMaker code alone.
+          // FileMaker answers a find with no matches (or an offset past the last match) with code 401.
+          // A real server returns HTTP 200 with empty data; older/other versions may use another status:
+          // match the code alone. That is a result, not a failure.
           if (isNoRecordsFound(error)) {
-            return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+            return emptyFindResult(error);
           }
           throw error;
         }
@@ -1023,6 +1037,7 @@ export class FMClient {
             toFMClientError(
               normalizeError(error, {
                 fallbackMessage: 'Failed to run FileMaker script.',
+                operation: trace.operation,
                 requestId: trace.requestId,
                 endpoint
               })
@@ -1556,6 +1571,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1635,6 +1653,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1699,6 +1720,7 @@ export class FMClient {
     execute: (trace: RequestTrace) => Promise<T>
   ): Promise<T> {
     const trace: RequestTrace = {
+      operation: context.operation,
       requestId: randomUUID(),
       reauthCount: 0,
       cacheHit: false,

@@ -1,10 +1,12 @@
 import type { FileMakerFieldMetadata, SchemaMetadataResult, ValueList } from '../types/fm';
+import { fieldsForGeneration } from './generatedFields';
 import { extractPortalMetadata } from './portalUtils';
 import { extractValueLists } from './valueListParser';
 
 export interface LayoutInspectorField {
   name: string;
   type?: string;
+  kind?: string;
   repetitions?: number;
   isGlobal: boolean;
   validation?: Record<string, unknown>;
@@ -16,6 +18,7 @@ export interface LayoutInspectorPortal {
   fields: Array<{
     name: string;
     type?: string;
+    kind?: string;
   }>;
 }
 
@@ -34,7 +37,7 @@ export interface LayoutInspectorModel {
 
 export function buildLayoutInspectorModel(schema: SchemaMetadataResult): LayoutInspectorModel {
   const metadata = schema.metadata ?? {};
-  const fields = schema.fields.map(toInspectorField);
+  const fields = fieldsForGeneration(schema.fields).map(toInspectorField);
   const portals = extractInspectorPortals(metadata);
   const valueLists = extractValueLists(metadata);
   const validations = fields
@@ -57,7 +60,8 @@ function toInspectorField(field: FileMakerFieldMetadata): LayoutInspectorField {
   return {
     name: field.name,
     type: field.result ?? field.type,
-    repetitions: field.repetitions,
+    ...(field.type ? { kind: field.type } : {}),
+    repetitions: typeof field.maxRepeat === 'number' ? field.maxRepeat : field.repetitions,
     isGlobal: isGlobalField(field),
     validation: field.validation
   };
@@ -87,9 +91,10 @@ function extractInspectorPortals(metadata: Record<string, unknown>): LayoutInspe
         key,
         fields.map((field) => field.name)
       ),
-      fields: fields.map((field) => ({
+      fields: fieldsForGeneration(fields).map((field) => ({
         name: field.name,
-        type: field.result ?? field.type
+        type: field.result ?? field.type,
+        ...(field.type ? { kind: field.type } : {})
       }))
     }))
     .sort((a, b) => a.key.localeCompare(b.key));

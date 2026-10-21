@@ -201,3 +201,9 @@ describe('Query Builder find form', () => {
     expect(FindForm.findDuplicateField(model)).toBeUndefined();
   });
 });
+
+it('preserves prototype-like field names when building find JSON', () => {
+  const names = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+  const query = FindForm.modelToFindQuery({ requests: [{ omit: false, criteria: names.map((field) => ({ field, operator: 'match', value: 'value', value2: '' })) }], sort: [] });
+  expect(JSON.parse(JSON.stringify(query))).toEqual([Object.fromEntries(names.map((name) => [name, 'value']))]);
+});

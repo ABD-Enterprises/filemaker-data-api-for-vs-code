@@ -650,6 +650,10 @@ With `filemaker.schema.diagnostics.enabled`, changes found by **Diff Against Lat
 
 ---
 
+Limit (records per page) and offset (starting record) must each be a whole number of at least 1. Zero is refused before sending a request.
+
+If a create, edit, delete or script times out, **the change may have been applied**. Check the record before trying again; a script may still be running. The timeout shows tenths of a second (for example, 1.5 s), and these uncertain changes are not marked for automatic retry. HTTP 413 means to send a smaller file or fewer records. For HTTP 429, wait for the time shown in `Retry-After` before trying again. HTTP 500, 502 or 504 without a FileMaker code means server or proxy trouble: try later or ask the administrator to check the Admin Console. A FileMaker code in brackets has its own meaning: 500 is a date validation problem, 502 is a number validation problem, and 504 needs a unique value.
+
 ## Generate types, a client and snippets
 
 Generation writes files into your workspace, so it needs a **trusted workspace**.
@@ -659,9 +663,13 @@ Generation writes files into your workspace, so it needs a **trusted workspace**
 | **FileMaker: Generate Types for Layout** | `<output folder>/layouts/<layout file name>.ts`, a TypeScript interface for one layout |
 | **FileMaker: Generate Types for All Layouts** | the same, for every layout. A layout whose metadata cannot be read is skipped (the reason goes to the Output channel) and the rest are still generated. |
 | **FileMaker: Generate TypeScript Client** | first asks you to tick the layouts to include (a multi-select list), then for a folder, then writes `types.ts`, `client.ts` and `README.md` there |
-| **FileMaker: Generate Snippets for Layout** | adds two editor snippets to `snippets/filemaker-data-api.code-snippets` in the workspace root. They call this extension's commands (`filemakerDataApiTools.runFindJson` and `filemakerDataApiTools.getRecordById`) from VS Code extension code; they are not Data API client snippets. |
+| **FileMaker: Generate Snippets for Layout** | adds two editor snippets to `snippets/filemaker-data-api.code-snippets` in the workspace root. Their descriptions show field result types and kinds when metadata is available. They call this extension's commands (`filemakerDataApiTools.runFindJson` and `filemakerDataApiTools.getRecordById`) from VS Code extension code; they are not Data API client snippets. |
 
 The output folder is `filemaker.typegen.outputDir` (default `filemaker-types`, inside the workspace). **FileMaker: Open Generated Types Folder** opens it.
+
+**Field types.** Generated files use the field's result type. Numbers become TypeScript `number`. JavaScript can lose precision for whole numbers beyond 2^53 - 1 (9,007,199,254,740,991) and for long decimals; a note in the generated file warns about this. If an identifier or amount must stay exact, ask your FileMaker administrator about storing it as text. Dates, times and timestamps stay as strings in the format used by the FileMaker file's locale, so do not assume they are ISO dates. Container values are URL strings. A repeating field uses optional keys such as `Name(1)`, `Name(2)` and so on, through its maximum repetition. The Layout Inspector and schema comparison show the result type separately from the field kind (normal, calculation, summary or global).
+
+**Empty finds and errors.** A generated client's find returns an empty list for FileMaker code 401, including when the server reports HTTP 200, 404 or 500. This also happens if the starting record is past the last match. In the Query Builder the total match count stays visible when FileMaker supplies it, even on an empty page; choose an earlier starting record to see the matches. Other generated-client failures include the FileMaker `code`, HTTP `status` and full `messages` list on the error. A web page instead of a Data API reply gives a message to check the server address and proxy. Regenerate older clients to get these fixes. Names such as `__proto__`, `constructor`, `toString` and `hasOwnProperty` are kept exactly, just like other layout and field names. For request fields with these names, follow the generated README example, which starts with `Object.create(null)` so JavaScript does not confuse them with its built-in object properties.
 
 **File names.** A layout name made only of letters, digits, `_`, `.` and `-` is used as it is (`Contacts.ts`). If the name has any other character (a space, `/`, `:`, accents), the unusable characters become `_` and a short hash of the original name is added, for example `My_Layout-1a2b3c4d.ts`. Two layouts whose names differ only in punctuation therefore get separate files. Reserved Windows names such as `CON` get a safe name. Names that differ only in letter case can still collide on a case-insensitive file system. If you generated files with an older version, delete the old files for layouts whose names have spaces or punctuation.
 

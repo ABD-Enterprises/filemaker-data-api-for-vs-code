@@ -76,7 +76,7 @@ export async function createCsvStreamWriter(
         columns = Object.keys(record);
         await writeHeader();
       }
-      const cells = columns.map((col) => escapeCsvValue(record[col], { neutralizeFormulas: options.neutralizeFormulas }));
+      const cells = columns.map((col) => escapeCsvValue(Object.hasOwn(record, col) ? record[col] : undefined, { neutralizeFormulas: options.neutralizeFormulas }));
       await writeLine(cells.join(','));
     },
     async close(): Promise<void> {
