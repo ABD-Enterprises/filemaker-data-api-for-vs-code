@@ -36,6 +36,7 @@ PR title prefix matches the highest-tier label added:
 
 - Refresh non-certificate failure-mode documentation against current code, check its file references, and clarify the upgrade guide’s AI switch behavior. Keep webview asset tests out of the build folder, and test Record Viewer failures, stale loads and its older fallback layout.
 - Make command-context tests wait for completion, test process lookups without repeatedly starting PowerShell, and keep one real-process check with a longer timeout. Remove unused designer test tooling, align the zod version range, explain the TypeScript test alias, and add a complete command reference with a coverage check.
+- Remove unused snippet and helper code, keep documented utilities and command handlers, and check for unused locals and parameters during typecheck.
 - Add a support page with help channels and safe bug-report guidance, remove the unused `shx` development dependency (build and package scripts already use Node), and align workspace `@types/node` declarations with the supported Node 22 runtime.
 
 ### [SECURITY]

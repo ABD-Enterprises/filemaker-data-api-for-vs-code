@@ -117,11 +117,6 @@ export function formatActivationLine(inputs: AboutInputs): string {
   );
 }
 
-/** Tooltip suffix for the status bar item and similar short labels. */
-export function versionLabel(version: string | undefined): string {
-  return `v${token(version)}`;
-}
-
 /**
  * A GitHub new-issue URL for the bug-report form. A form template prefills by field id (a
  * free-form `body` is ignored), so the facts go into `extension-version`, `vscode-version`,

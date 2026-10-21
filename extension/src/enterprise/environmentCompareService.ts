@@ -7,7 +7,7 @@ import type {
 } from '../types/fm';
 import { diffSchemaFields } from '../services/schemaDiff';
 import type { FMClient } from '../services/fmClient';
-import { extractFieldsFromMetadata, type SchemaService } from '../services/schemaService';
+import type { SchemaService } from '../services/schemaService';
 import { hashObjectWithAlgorithm, stableStringify } from '../utils/hash';
 
 interface CompareOptions {
@@ -425,16 +425,4 @@ function normalizeHashAlgorithm(value: string | undefined): string {
   }
 
   return value.trim();
-}
-
-export function diffFieldsFromMetadata(
-  beforeMetadata: Record<string, unknown>,
-  afterMetadata: Record<string, unknown>
-): ReturnType<typeof diffSchemaFields> {
-  return diffSchemaFields({
-    profileId: 'compare',
-    layout: 'layout',
-    beforeFields: extractFieldsFromMetadata(beforeMetadata),
-    afterFields: extractFieldsFromMetadata(afterMetadata)
-  });
 }
