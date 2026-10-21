@@ -34,6 +34,7 @@ const ADMIN_PRIVILEGE =
   'Your account cannot do this. Ask your FileMaker administrator to change the privilege set for your account; editing this connection will not help.';
 
 const KNOWN: Record<number, FileMakerErrorInfo> = {
+  [-1]: { meaning: 'Unknown error.', category: 'request', advice: 'Check the request and ask your FileMaker administrator to review the server logs if it keeps failing.' },
   0: { meaning: 'No error.', category: 'request' },
   1: { meaning: 'User canceled the action.', category: 'request' },
   3: {
@@ -58,10 +59,10 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
   102: { meaning: 'Field is missing.', category: 'notFound', advice: 'The field name is not on this layout. The layout may have changed; refresh and try again.' },
   103: { meaning: 'Relationship is missing.', category: 'notFound' },
   104: { meaning: 'Script is missing.', category: 'notFound', advice: 'Check the script name, and that your account may run scripts.' },
-  105: { meaning: 'Layout is missing.', category: 'notFound', advice: 'The layout may have been renamed or hidden from your account.' },
+  105: { meaning: 'Layout is missing.', category: 'notFound', advice: 'Refresh the layout list and check the exact name; ask your administrator if it is hidden from your account.' },
   106: { meaning: 'Table is missing.', category: 'notFound' },
   200: { meaning: 'Record access is denied.', category: 'privilege', advice: ADMIN_PRIVILEGE },
-  201: { meaning: 'Field cannot be modified.', category: 'request', advice: 'The field is a calculation, summary or otherwise protected field, or your account may only view it.' },
+  201: { meaning: 'Field cannot be modified.', category: 'request', advice: 'Check whether the field is a calculation or summary that cannot be edited, or ask your administrator for edit access.' },
   202: { meaning: 'Field access is denied.', category: 'privilege', advice: ADMIN_PRIVILEGE },
   203: {
     meaning: 'No records in file to print, or the password does not allow print access.',
@@ -127,20 +128,21 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
   304: { meaning: 'The layout is in use by another user.', category: 'conflict', retryable: true },
   306: {
     meaning: 'The record modification ID does not match: the record was changed by someone else since it was read.',
-    category: 'conflict'
+    category: 'conflict',
+    advice: 'Reload the record, review the other changes, then re-apply your changes.'
   },
   400: { meaning: 'Find criteria are empty.', category: 'request', advice: 'Enter at least one find criterion.' },
-  401: { meaning: 'No records match the request.', category: 'notFound' },
-  500: { meaning: 'The date value does not meet the validation entry options.', category: 'request' },
+  401: { meaning: 'No records match the request.', category: 'notFound', advice: 'This is an empty find result. Check the find criteria and record access, or choose an earlier page.' },
+  500: { meaning: 'The date value does not meet the validation entry options.', category: 'request', advice: 'Enter a valid date in the format used by this FileMaker file; ask your administrator about its date validation.' },
   501: { meaning: 'The time value does not meet the validation entry options.', category: 'request' },
-  502: { meaning: 'The number value does not meet the validation entry options.', category: 'request' },
+  502: { meaning: 'The number value does not meet the validation entry options.', category: 'request', advice: 'Enter a valid number and check the field’s number validation with your administrator.' },
   503: { meaning: 'The value is not within the range specified in the validation entry options.', category: 'request' },
-  504: { meaning: 'The value is not unique as required in the validation entry options.', category: 'request' },
+  504: { meaning: 'The value is not unique as required in the validation entry options.', category: 'request', advice: 'Use a different, unique value; check whether another record already uses it.' },
   505: { meaning: 'The value is not an existing value in the database file as required in the validation entry options.', category: 'request' },
-  506: { meaning: 'The value is not listed on the value list specified in the validation entry options.', category: 'request' },
+  506: { meaning: 'The value is not listed on the value list specified in the validation entry options.', category: 'request', advice: 'Choose a value from the field’s value list; ask your administrator which values are allowed.' },
   507: { meaning: 'The value failed the calculation test of the validation entry options.', category: 'request' },
   508: { meaning: 'Invalid value entered in Find mode.', category: 'request' },
-  509: { meaning: 'The field requires a valid value.', category: 'request' },
+  509: { meaning: 'The field requires a valid value.', category: 'request', advice: 'Enter a value in the required field and check its validation rules with your administrator.' },
   510: { meaning: 'The related value is empty or unavailable.', category: 'request' },
   511: { meaning: 'The value exceeds the maximum number of allowed characters.', category: 'request' },
   802: {
@@ -149,7 +151,7 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
     advice:
       'The database may be closed or not hosted, or your account\'s privilege set may lack the "Access via FileMaker Data API" (fmrest) extended privilege. Ask your FileMaker administrator to check both.'
   },
-  952: { meaning: 'Invalid Data API token (the session expired or was closed).', category: 'credentials' },
+  952: { meaning: 'Invalid Data API token (the session expired or was closed).', category: 'credentials', advice: 'Sign in again with FileMaker: Connect; the session token is no longer valid.' },
   953: { meaning: 'The request exceeded the limit on data the FileMaker Data API can transmit.', category: 'request', advice: 'Ask for fewer records or fields at a time.' },
   954: { meaning: 'Unsupported XML grammar.', category: 'config' },
   955: { meaning: 'No database name.', category: 'config', advice: 'Enter the database name in the connection.' },
@@ -167,8 +169,9 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
     category: 'config',
     advice: 'Ask your FileMaker administrator to enable the Data API (Admin Console > Connectors > FileMaker Data API).'
   },
-  960: { meaning: 'A parameter is invalid.', category: 'request' },
+  960: { meaning: 'A parameter is invalid.', category: 'request', advice: 'Check the request parameters. Limit and offset must be integers of at least 1.' },
   1630: { meaning: 'The server rejected the request (error 1630).', category: 'request', advice: 'Look up this code in the FileMaker Server error reference, or ask your administrator.' },
+  1633: { meaning: 'The server rejected another connection (error 1633).', category: 'transient', advice: 'Wait and try again later. Ask your administrator to check the Admin Console and the FileMaker error code reference for error 1633.' },
   1700: { meaning: 'The server could not process the request (error 1700).', category: 'transient' },
   1701: {
     meaning: 'The host is currently unable to receive requests.',

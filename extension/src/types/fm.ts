@@ -66,6 +66,12 @@ export interface FileMakerRecord {
 
 export interface FindRecordsRequest {
   portal?: PortalPaging;
+  script?: string;
+  'script.param'?: string;
+  'script.prerequest'?: string;
+  'script.prerequest.param'?: string;
+  'script.presort'?: string;
+  'script.presort.param'?: string;
   query: Array<Record<string, unknown>>;
   sort?: Array<Record<string, unknown>>;
   limit?: number;
@@ -349,6 +355,9 @@ export interface BatchExportResult {
   format: BatchExportFormat;
   exportedRecords: number;
   truncated: boolean;
+  cancelled?: boolean;
+  unknownColumnValues?: number;
+  warnings?: string[];
 }
 
 export interface BatchUpdateEntry {

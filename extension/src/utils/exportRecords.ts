@@ -18,7 +18,7 @@ export function portalNotes(record: FileMakerRecord): string {
 export function exportRow(record: FileMakerRecord, meta: [string, string], noteColumn?: string): Map<string, unknown> {
   const row = new Map<string, unknown>([[meta[0], record.recordId], [meta[1], record.modId]]);
   for (const [name, value] of Object.entries(record.fieldData)) {
-    if (meta.some((key) => key.toLowerCase() === name.toLowerCase())) {
+    if (name === noteColumn || meta.some((key) => key.toLowerCase() === name.toLowerCase())) {
       throw new Error(`Export column collision for field "${name}". Export again with layout metadata available.`);
     }
     row.set(name, value);

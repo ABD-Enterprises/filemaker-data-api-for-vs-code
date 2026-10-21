@@ -109,6 +109,27 @@ describe('batch commands', () => {
     expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, expect.anything(), expect.objectContaining({ excelCompatible: true }), expect.anything());
   });
 
+  it('shows the omitted value count when the export finishes', async () => {
+    const { tasks, batchService } = setup();
+    batchService.batchExportFind.mockResolvedValue({ exportedRecords: 3, truncated: false, unknownColumnValues: 3 } as never);
+    exportInputs();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue('Standard CSV' as never);
+    await command('batchExportFind')(arg);
+    await tasks[0]!({ log: vi.fn() } as never);
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('3 values were not exported because their columns were unknown. See the export job for column names.');
+  });
+
+  it('does not log a finished export after cancellation', async () => {
+    const { tasks, batchService } = setup();
+    batchService.batchExportFind.mockResolvedValue({ exportedRecords: 0, truncated: false, cancelled: true } as never);
+    exportInputs();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue('Standard CSV' as never);
+    await command('batchExportFind')(arg);
+    const log = vi.fn();
+    await expect(tasks[0]!({ log } as never)).resolves.toMatchObject({ cancelled: true, exportedRecords: 0 });
+    expect(log).not.toHaveBeenCalledWith('info', expect.stringContaining('Finished export'));
+  });
+
   it.each([join('/tmp', 'results.csv'), join('/tmp', 'results.jsonl')])('forces streaming JSONL in high-scale mode (%s)', async (path) => {
     const { roleGuard, tasks, batchService } = setup();
     roleGuard.resolvePerformanceMode.mockReturnValue('high-scale');
@@ -151,8 +172,25 @@ describe('batch commands', () => {
     expect(batchService.batchUpdate).toHaveBeenCalledWith(profile, layout, entries, { dryRun: true, concurrency: 3 }, context);
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
     const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
-    expect(JSON.parse(doc.content)).toEqual({ dryRun: true, totalEntries: 1, layout, sample: entries });
+    expect(JSON.parse(doc.content)).toEqual({ dryRun: true, totalEntries: 1, layout, sample: entries, flaggedRows: [] });
     expect(context.log).toHaveBeenCalledWith('info', 'Batch update completed. Attempted=1, success=1, failures=0');
+  });
+
+  it.each(['json', 'csv'])('lists all flagged data rows and exact field names in the %s dry-run document', async (format) => {
+    setup();
+    updateInputs(true, join('/tmp', `input.${format}`));
+    // Include repeated record ids and a flagged row beyond the five-row sample.
+    const rows = Array.from({ length: 7 }, (_, index) => ({
+      recordId: '42', fieldData: { ' Name ': index === 1 || index === 6 ? 'A\0B\0C' : 'safe', Other: index === 6 ? '\0\0' : 'safe' }
+    }));
+    const source = format === 'json' ? JSON.stringify(rows) : 'recordId, Name ,Other\n' + rows.map((row) => `42,${row.fieldData[' Name ']},${row.fieldData.Other}`).join('\n');
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(source));
+    await command('batchUpdateFromFile')(arg);
+    const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
+    expect(JSON.parse(doc.content)).toEqual({
+      dryRun: true, totalEntries: 7, layout, sample: rows.slice(0, 5),
+      flaggedRows: [{ row: 2, recordId: '42', fields: [' Name '] }, { row: 7, recordId: '42', fields: [' Name ', 'Other'] }]
+    });
   });
 
   it.each([undefined, 'Cancel', 'Execute'])('requires a destructive modal before executing updates (%s)', async (choice) => {

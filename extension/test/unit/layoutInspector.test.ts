@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
 import { buildLayoutInspectorModel } from '../../src/utils/layoutInspector';
 import type { SchemaMetadataResult } from '../../src/types/fm';
 
 describe('buildLayoutInspectorModel', () => {
+  it('keeps unique Photo keys and all portal names', () => {
+    const model = buildLayoutInspectorModel({ supported: true, fromCache: false, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata });
+    expect(model.fields.map((field) => field.name)).toEqual(['Photo']);
+    expect(model.portals.map((portal) => portal.key)).toEqual(['Addresses', 'Email Addresses', 'Phone Numbers']);
+  });
+
   it('extracts fields, portals, value lists, globals, and validation rules', () => {
     const schema: SchemaMetadataResult = {
       supported: true,

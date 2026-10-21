@@ -17,6 +17,19 @@ describe('createCsvStreamWriter', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it('leaves missing prototype-like fields blank in later rows', async () => {
+    const columns = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+    const file = join(dir, 'names.csv');
+    const writer = await createCsvStreamWriter(file);
+    try {
+      await writer.append(Object.fromEntries(columns.map((name) => [name, 'value'])));
+      await writer.append({});
+    } finally {
+      await writer.close();
+    }
+    expect(await readFile(file, 'utf8')).toBe(columns.join(',') + '\nvalue,value,value,value\n,,,\n');
+  });
+
   it('discovers columns from initial rows and writes header + data', async () => {
     const file = join(dir, 'out.csv');
     const writer = await createCsvStreamWriter(file);

@@ -89,6 +89,49 @@ describe('Record Editor save conflicts', () => {
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Save' as never);
   });
 
+  it.each(['A\0B\u200bC\ufeffD', 'A\0B\0C\u200bD\ufeffE'].flatMap((value) =>
+    [undefined, 'Cancel', 'Remove the character and continue'].map((choice) => ({ value, choice }))
+  ))('handles NUL before saving: $value / $choice', async ({ value, choice }) => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
+    const editor = openEditor(editRecord);
+    await editor.send({ type: 'loadRecord', payload: target });
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Save' as never);
+    await editor.send({ type: 'saveRecord', payload: { ...draft, draftFieldData: { ...draft.draftFieldData, Status: value } } });
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Status'), { modal: true }, 'Remove the character and continue', 'Cancel'
+    );
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.');
+    if (choice === 'Remove the character and continue') {
+      expect(editRecord).toHaveBeenCalledWith(profile, 'Contacts', '7', { Status: value === 'A\0B\u200bC\ufeffD' ? 'AB\u200bC\ufeffD' : 'ABC\u200bD\ufeffE' }, undefined, { modId: '3' });
+    } else {
+      expect(editRecord).not.toHaveBeenCalled();
+      expect(editor.posted.map((message) => message.type)).toContain('saveCancelled');
+    }
+  });
+
+  it('skips the save modal and explains when NUL removal restores the original values', async () => {
+    const editRecord = vi.fn();
+    const editor = openEditor(editRecord);
+    await editor.send({ type: 'loadRecord', payload: target });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Remove the character and continue' as never);
+    await editor.send({ type: 'saveRecord', payload: { ...draft, draftFieldData: { ...loadedRecord.fieldData, Status: 'O\0p\0en' } } });
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledTimes(1);
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('After removing the NUL characters, the values match the original record. Nothing needs to be saved.');
+    expect(editRecord).not.toHaveBeenCalled();
+    expect(editor.posted.map((message) => message.type)).toContain('saveCancelled');
+    expect(editor.posted.map((message) => message.type)).not.toContain('error');
+  });
+
+  it('confirms and saves only the fields still changed after NUL removal', async () => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
+    const editor = openEditor(editRecord);
+    await editor.send({ type: 'loadRecord', payload: target });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Remove the character and continue' as never);
+    await editor.send({ type: 'saveRecord', payload: { ...draft, draftFieldData: { ...loadedRecord.fieldData, Status: 'O\0p\0en', Region: 'East' } } });
+    expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith(expect.stringContaining('Save 1 field changes to record 7? (Region)'), { modal: true }, 'Save');
+    expect(editRecord).toHaveBeenCalledWith(profile, 'Contacts', '7', { Region: 'East' }, undefined, { modId: '3' });
+  });
+
   it('sends the modId the record was loaded with', async () => {
     const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
     const editor = openEditor(editRecord);

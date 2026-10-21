@@ -80,7 +80,7 @@ export function recordsToCsv(
   }
 
   for (const row of rows) {
-    lines.push(columns.map((column) => escapeCsvValue(row instanceof Map ? row.get(column) : row[column], options)).join(','));
+    lines.push(columns.map((column) => escapeCsvValue(row instanceof Map ? row.get(column) : (Object.hasOwn(row, column) ? row[column] : undefined), options)).join(','));
   }
 
   return (options?.excelCompatible ? '\uFEFF' : '') + lines.join(lineEnding);

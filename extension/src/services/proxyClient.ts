@@ -355,7 +355,7 @@ export class ProxyClient {
         throw proxyFailure(body, (error as { response?: { status?: number } }).response?.status);
       }
 
-      throw this.normalizeProxyError(error, profile);
+      throw this.normalizeProxyError(error, profile, action, payload);
     }
   }
 
@@ -367,9 +367,11 @@ export class ProxyClient {
     return 'ok' in value || 'data' in value || 'error' in value;
   }
 
-  private normalizeProxyError(error: unknown, profile: ConnectionProfile): FMClientError {
+  private normalizeProxyError(error: unknown, profile: ConnectionProfile, operation: string, payload: Record<string, unknown>): FMClientError {
     const normalized = normalizeError(error, {
-      fallbackMessage: 'Proxy request failed.'
+      fallbackMessage: 'Proxy request failed.',
+      operation,
+      requestData: payload.body ?? payload
     });
 
     this.logger.error('Proxy request error', {

@@ -4,6 +4,7 @@ import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
+import { duplicatePhotoMetadata } from '../../fixtures/duplicatePhoto';
 import { RecordEditorPanel } from '../../../src/webviews/recordEditor';
 import { JSDOM, loadPage } from '../../helpers/jsdomPage';
 import { InMemoryMemento } from '../mocks';
@@ -39,6 +40,26 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     send({ type: 'recordLoaded', payload: { profileId: 'p', layout: 'Contacts', record: { recordId: '1', modId: '1', fieldData }, fields, metadataSupported: true } });
     return document.getElementById('hiddenNote');
   };
+
+  it('shows one Photo control with a note when the metadata lists it twice', () => {
+    const { document, send } = loadPage(pageHtml(), uiSource);
+    send({ type: 'recordLoaded', payload: { record: { recordId: '1', fieldData: { Photo: 'https://example.test/photo' } }, fields: duplicatePhotoMetadata.fieldMetaData } });
+    expect(document.querySelectorAll('#fieldEditor tbody tr')).toHaveLength(1);
+    expect(document.getElementById('duplicateFieldNote')?.textContent).toContain('Photo');
+    expect(document.getElementById('duplicateFieldNote')?.textContent).toContain('shown once');
+    send({ type: 'recordLoaded', payload: { record: { recordId: '2', fieldData: { Photo: '' } }, fields: [{ name: 'Photo' }] } });
+    expect(document.getElementById('duplicateFieldNote')?.textContent).toBe('');
+  });
+
+  it('shows the duplicate field note in create mode too', () => {
+    const { document, send } = loadPage(pageHtml(), uiSource);
+    send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'P' }], activeProfileId: 'p', defaults: { mode: 'create', profileId: 'p', layout: 'Contact Details' } } });
+    send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['Contact Details'] } });
+    send({ type: 'layoutFields', payload: { profileId: 'p', layout: 'Contact Details', fields: duplicatePhotoMetadata.fieldMetaData, metadataSupported: true } });
+    expect(document.querySelectorAll('#fieldEditor tbody tr')).toHaveLength(1);
+    expect(document.getElementById('duplicateFieldNote')?.textContent).toContain('Photo');
+    expect(document.getElementById('duplicateFieldNote')?.textContent).toContain('shown once');
+  });
 
   it('says nothing when nothing is missing (the note is hidden and empty)', () => {
     const note = load({ Name: 'A' }, [{ name: 'Name' }]);
@@ -92,4 +113,20 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     expect(posted.at(-1)).toMatchObject({ type: 'previewPatch', payload: { layout: ' Layout ', draftFieldData: { ' Text ': '10.50', Number: 10.5, Date: '10.50' } } });
   });
 
+});
+
+it.skipIf(!JSDOM)('keeps prototype-like fields in new-record forms and create payloads', () => {
+  const { document, window, posted, send } = loadPage(pageHtml(), uiSource);
+  send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'Profile' }], activeProfileId: 'p', defaults: { mode: 'create', profileId: 'p', layout: '__proto__' } } });
+  send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['__proto__'] } });
+  const names = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+  send({ type: 'layoutFields', payload: { profileId: 'p', layout: '__proto__', fields: names.map((name) => ({ name })), metadataSupported: true } });
+  const inputs = document.querySelectorAll('textarea[aria-label]');
+  expect(Array.from(inputs).map((input) => input.getAttribute('aria-label'))).toEqual(names.slice().sort());
+  for (const input of inputs) {
+    input.value = 'value';
+    (input as unknown as { dispatchEvent(event: unknown): void }).dispatchEvent(new window.Event('input'));
+  }
+  document.getElementById('createButton')!.click();
+  expect(JSON.parse(JSON.stringify(posted.at(-1)))).toMatchObject({ type: 'createRecord', payload: { fieldData: Object.fromEntries(names.map((name) => [name, 'value'])) } });
 });

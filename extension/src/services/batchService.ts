@@ -19,12 +19,14 @@ import type {
   PerformanceMode
 } from '../types/fm';
 import { isCredentialRejection } from '../utils/fileMakerCodes';
+import { nulTextError } from '../utils/nulText';
 import { createCsvStreamWriter } from '../utils/csvStreamWriter';
 import { restoreFormulaText } from '../utils/exportCsv';
 import { createJsonlWriter } from '../utils/jsonlWriter';
 import { extractFieldsFromMetadata } from './schemaService';
 import { exportColumns, exportRow, portalNotes } from '../utils/exportRecords';
 import { numericText } from '../utils/numericText';
+import { fieldsForGeneration } from '../utils/generatedFields';
 
 interface BatchServiceOptions {
   getMaxRecords?: () => number;
@@ -80,7 +82,7 @@ export class BatchService {
     if (format === 'csv') {
       try {
         const metadataFields = extractFieldsFromMetadata(await this.fmClient.getLayoutMetadata(profile, layout));
-        if (metadataFields.length) fields = metadataFields;
+        if (metadataFields.length) fields = fieldsForGeneration(metadataFields);
       } catch { /* Use a bounded sample when metadata cannot be read. */ }
       if (!fields) job?.log('warn', 'Layout metadata unavailable. CSV columns use the first 100 records; later unknown fields will be reported.');
     }
@@ -88,8 +90,13 @@ export class BatchService {
     let meta: [string, string] = exportColumns(fields?.map((field) => field.name) ?? []);
     let noteColumn: string | undefined;
     const pendingCsv: FileMakerRecord[] = [];
+    let unknownColumnValues = 0;
+    const unknownColumns = new Set<string>();
     const startCsv = async (records: FileMakerRecord[]) => {
-      const names = fields?.map((field) => field.name) ?? [...new Set(records.slice(0, 100).flatMap((record) => Object.keys(record.fieldData)))];
+      const names = [...new Set([
+        ...(fields?.map((field) => field.name) ?? []),
+        ...(fields ? records : records.slice(0, 100)).flatMap((record) => Object.keys(record.fieldData))
+      ])];
       meta = exportColumns(names);
       // Reserve a note column even if only a later page has truncated portals.
       noteColumn = '__portalNote (export information)';
@@ -98,7 +105,10 @@ export class BatchService {
         columns: [...meta, ...names, noteColumn],
         excelCompatible: options.excelCompatible,
         neutralizeFormulas: this.getNeutralizeFormulas(),
-        onUnknownField: (field) => job?.log('warn', `CSV field "${field}" appeared after the column sample and was omitted.`)
+        onUnknownField: (field) => {
+          unknownColumnValues += 1;
+          unknownColumns.add(field);
+        }
       });
     };
 
@@ -117,7 +127,7 @@ export class BatchService {
           offset
         });
 
-        if (format === 'csv' && fields && !csvWriter) await startCsv([]);
+        if (format === 'csv' && fields && !csvWriter) await startCsv(page.data ?? []);
         if (!page.data || page.data.length === 0) {
           break;
         }
@@ -161,7 +171,10 @@ export class BatchService {
         }
       }
 
-      if (job?.isCancellationRequested()) {
+      const cancelled = job?.isCancellationRequested() ?? false;
+      if (cancelled) {
+        exported = 0;
+        truncated = false;
         await jsonlWriter?.abort();
         await csvWriter?.abort();
       } else {
@@ -172,7 +185,13 @@ export class BatchService {
         await jsonlWriter?.close();
         await csvWriter?.close();
       }
+      const warnings = !cancelled && unknownColumnValues > 0
+        ? [`${unknownColumnValues} values were not exported because their columns were unknown: ${[...unknownColumns].map((name) => JSON.stringify(name)).join(', ')}.`]
+        : [];
+      for (const warning of warnings) job?.log('warn', warning);
       return {
+        ...(cancelled ? { cancelled: true } : {}),
+        ...(warnings.length ? { warnings, unknownColumnValues } : {}),
         outputPath: options.outputPath,
         format,
         exportedRecords: exported,
@@ -199,13 +218,17 @@ export class BatchService {
     const total = entries.length;
 
     if (dryRun) {
+      const failures = entries.flatMap((entry) => {
+        const reason = nulTextError(entry.fieldData);
+        return reason ? [{ recordId: entry.recordId, reason }] : [];
+      });
       return {
         dryRun: true,
         total,
         attempted: 0,
         successCount: 0,
-        failureCount: 0,
-        failures: []
+        failureCount: failures.length,
+        failures
       };
     }
 
@@ -336,6 +359,8 @@ export class BatchService {
     adaptive: AdaptiveConcurrency,
     breaker: CircuitBreaker
   ): Promise<void> {
+    const nulError = nulTextError(entry.fieldData);
+    if (nulError) throw new Error(nulError);
     let attempt = 0;
 
     while (attempt < 3) {
@@ -423,7 +448,7 @@ export function inferExportFormat(outputPath: string): BatchExportFormat {
 }
 
 export function parseBatchUpdateInput(content: string, format: 'json' | 'csv'): BatchUpdateEntry[] {
-  if (looksLikeJsonl(content)) throw new Error('This looks like a JSONL file; export as comma-separated CSV.');
+  if (looksLikeJsonl(content, format === 'json')) throw new Error('This looks like a JSONL file; export as comma-separated CSV.');
   if (format === 'json') {
     const parsed = JSON.parse(content) as unknown;
 
@@ -470,7 +495,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
       continue;
     }
 
-    const fieldData: Record<string, unknown> = Object.create(null);
+    const fieldData: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     headers.forEach((header, index) => {
       if (header === recordColumn || header === modColumn || (index === headers.length - 1 && /^_+portalNote \(export information\)$/.test(header))) {
         return;
@@ -492,13 +517,15 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   return entries;
 }
 
-function looksLikeJsonl(content: string): boolean {
-  const firstLine = content.replace(/^\uFEFF/, '').split(/\r?\n/).find((line) => line.length > 0);
-  if (!firstLine) return false;
-  try {
-    const value = JSON.parse(firstLine) as unknown;
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-  } catch { return false; }
+function looksLikeJsonl(content: string, requireMultipleLines: boolean): boolean {
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length || (requireMultipleLines && lines.length < 2)) return false;
+  return lines.every((line) => {
+    try {
+      const value = JSON.parse(line) as unknown;
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    } catch { return false; }
+  });
 }
 
 function parseCsv(content: string, delimiter = ','): string[][] {

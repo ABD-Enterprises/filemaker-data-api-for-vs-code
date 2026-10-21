@@ -490,8 +490,8 @@ export class QueryBuilderPanel {
       return undefined;
     }
 
-    if (!Number.isInteger(value) || value < 0) {
-      throw new FMClientError(`${label} must be a non-negative integer.`);
+    if (!Number.isInteger(value) || value < 1) {
+      throw new FMClientError(`${label} must be an integer and must be at least 1.`);
     }
 
     return value;

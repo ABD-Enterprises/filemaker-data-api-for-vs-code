@@ -17,7 +17,7 @@ export interface GlobalFieldEntry {
 export function buildGlobalFieldsPayload(
   entries: GlobalFieldEntry[]
 ): Record<string, string> {
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null) as Record<string, string>;
 
   for (const entry of entries) {
     // Exactly as given: a leading or trailing space can be part of a field name. Only a blank name is skipped.

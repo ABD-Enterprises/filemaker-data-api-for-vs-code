@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../../fixtures/duplicatePhoto';
 import { LayoutInspectorProvider } from '../../../src/views/layoutInspector';
 import type { ConnectionProfile } from '../../../src/types/fm';
 
@@ -20,7 +21,7 @@ function createProvider() {
       supported: true,
       fromCache: false,
       fields: [
-        { name: 'Name', result: 'text' },
+        { name: 'Name', type: 'normal', result: 'number', maxRepeat: 2 },
         { name: 'GlobalStatus', result: 'text', isGlobal: true, validation: { notEmpty: true } }
       ],
       metadata: {
@@ -41,6 +42,16 @@ function createProvider() {
 }
 
 describe('LayoutInspectorProvider', () => {
+  it('renders one key for duplicate Photo containers', async () => {
+    const { provider, schemaService } = createProvider();
+    schemaService.getLayoutSchema.mockResolvedValueOnce({ supported: true, fromCache: false, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata } as never);
+    provider.selectLayout('p1', 'Contact Details');
+    const categories = await provider.getChildren();
+    const fields = await provider.getChildren(categories[0]);
+    expect(fields.map((field) => field.label)).toEqual(['Photo']);
+    expect(fields.map((field) => field.description)).toEqual(['container']);
+  });
+
   it('renders the four layout inspector categories for the selected layout', async () => {
     const { provider } = createProvider();
     provider.selectLayout('p1', 'Contacts');
@@ -53,7 +64,7 @@ describe('LayoutInspectorProvider', () => {
       'Value Lists',
       'Field Validation'
     ]);
-    expect(children.map((item) => item.description)).toEqual(['2', '1', '1', '1']);
+    expect(children.map((item) => item.description)).toEqual(['3', '1', '1', '1']);
   });
 
   it('uses its session cache until refresh is requested', async () => {
@@ -71,4 +82,14 @@ describe('LayoutInspectorProvider', () => {
     expect(schemaService.invalidateLayout).toHaveBeenCalledWith(profile, 'Contacts');
     expect(schemaService.getLayoutSchema).toHaveBeenCalledTimes(2);
   });
+});
+
+it('shows result type, kind and repetitions in the Fields tree', async () => {
+  const { provider } = createProvider();
+  provider.selectLayout('p1', 'Contacts');
+  const categories = await provider.getChildren();
+  const fields = await provider.getChildren(categories[0]);
+  expect(fields[0]?.description).toContain('number');
+  expect(fields[0]?.tooltip).toContain('Kind: normal');
+  expect(fields[0]?.tooltip).toContain('Repetitions: 2');
 });

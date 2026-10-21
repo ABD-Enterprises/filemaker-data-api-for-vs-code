@@ -112,15 +112,17 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
 
   const timeoutLike = error.code === 'ECONNABORTED' || /timeout/i.test(error.message);
   if (timeoutLike) {
-    const seconds = error.config?.timeout ? Math.round(error.config.timeout / 1000) : undefined;
+    const seconds = error.config?.timeout ? (error.config.timeout / 1000).toFixed(1) : undefined;
+    const uncertainChange = isUncertainChange(error, options);
+    const warning = uncertainChange ? ' The change may have been applied. Check the record before trying again.' : '';
     return {
       kind: 'timeout',
       message: options?.fallbackMessage
-        ? `${options.fallbackMessage} (request timed out${seconds ? ` after ${seconds} s` : ''}${status ? `, HTTP ${status}` : ''}). If the server is slow, raise the setting filemaker.requestTimeoutMs.`
-        : `Request timed out${seconds ? ` after ${seconds} s` : ''}${status ? ` (HTTP ${status})` : ''}. If the server is slow, raise the setting filemaker.requestTimeoutMs.`,
+        ? `${options.fallbackMessage} (request timed out${seconds ? ` after ${seconds} s` : ''}${status ? `, HTTP ${status}` : ''}). If the server is slow, raise the setting filemaker.requestTimeoutMs.${warning}`
+        : `Request timed out${seconds ? ` after ${seconds} s` : ''}${status ? ` (HTTP ${status})` : ''}. If the server is slow, raise the setting filemaker.requestTimeoutMs.${warning}`,
       status,
       safeHeaders,
-      isRetryable: true,
+      isRetryable: !uncertainChange,
       details
     };
   }
@@ -145,7 +147,7 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
   const rejectedLogin = info?.category === 'credentials' || status === 401;
   const resolvedMessage =
     (fmMessage
-      ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}${info?.advice ? ` ${info.advice}` : ''}`
+      ? `FileMaker API error${status ? ` (HTTP ${status})` : ''} [${fmMessage.code}]: ${fmMessage.message}${info?.advice ? ` ${info.advice}` : ''}${status === 413 || status === 429 ? ` ${statusHint(status, error.response?.headers)}` : ''}`
       : buildFallbackAxiosMessage(error, options, status)) +
     (rejectedLogin ? cloudSignInNote(error.config?.url) : '');
 
@@ -170,6 +172,43 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
   };
 }
 
+/** Classify the logical request before falling back to a direct Data API endpoint. */
+function isUncertainChange(error: AxiosError, options?: NormalizeErrorOptions): boolean {
+  const scriptKeys = ['script', 'script.prerequest', 'script.presort'];
+  const hasScript = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      try { value = JSON.parse(value); } catch { return false; }
+    }
+    const record = toUnknownRecord(value);
+    return scriptKeys.some((key) => Object.prototype.hasOwnProperty.call(record ?? {}, key));
+  };
+  if ([options?.requestParams, options?.requestData, error.config?.params, error.config?.data].some(hasScript)) {
+    return true;
+  }
+
+  const endpoint = options?.endpoint?.match(/^(GET|POST|PATCH|DELETE) (.+)$/i);
+  const method = (error.config?.method ?? endpoint?.[1] ?? '').toUpperCase();
+  let url: URL;
+  try {
+    url = new URL(error.config?.url ?? endpoint?.[2] ?? '', 'https://filemaker.invalid');
+  } catch {
+    url = new URL('https://filemaker.invalid');
+  }
+  if (scriptKeys.some((key) => url.searchParams.has(key))) return true;
+
+  // Operation names also cover proxy requests, where every transport call is a POST.
+  if (options?.operation) {
+    return ['createRecord', 'editRecord', 'deleteRecord', 'uploadContainer', 'runScript', 'setGlobalFields'].includes(options.operation);
+  }
+
+  const path = url.pathname;
+  if (/\/layouts\/[^/]+\/script\/[^/]+$/.test(path)) return true;
+  if (method === 'GET') return false;
+  return (['POST', 'PATCH', 'DELETE'].includes(method) && /\/layouts\/[^/]+\/records(?:\/[^/]+)?$/.test(path)) ||
+    (method === 'POST' && /\/layouts\/[^/]+\/records\/[^/]+\/containers\/[^/]+\/\d+$/.test(path)) ||
+    (method === 'PATCH' && /\/globals$/.test(path));
+}
+
 function isDroppedMidResponse(error: AxiosError): boolean {
   const status = error.response?.status;
   if (status === undefined || status < 200 || status >= 300) {
@@ -188,7 +227,7 @@ function buildFallbackAxiosMessage(
   options: NormalizeErrorOptions | undefined,
   status: number | undefined
 ): string {
-  const hint = status ? (redirectHint(error, status) ?? statusHint(status)) : undefined;
+  const hint = status ? (redirectHint(error, status) ?? statusHint(status, error.response?.headers)) : undefined;
   if (options?.fallbackMessage) {
     if (!status && error.message && isTlsCertificateMessage(error.message)) {
       return `${options.fallbackMessage} (${error.message})`;
@@ -236,7 +275,7 @@ function redirectHint(error: AxiosError, status: number): string | undefined {
 }
 
 /** What a status without a FileMaker error body most likely means. */
-function statusHint(status: number): string | undefined {
+function statusHint(status: number, headers?: unknown): string | undefined {
   switch (status) {
     case 301:
     case 302:
@@ -249,13 +288,21 @@ function statusHint(status: number): string | undefined {
     case 404:
       return 'Nothing answered at that address. Check the Server URL, the API base path and version, the database name, and that the FileMaker Data API is enabled (Admin Console > Connectors).';
     case 413:
-      return 'The request was too large for the server or a gateway in front of it.';
-    case 429:
-      return 'The server (or a gateway) is receiving too many requests and asked for a pause.';
+      return 'The request was too large for the server or a gateway in front of it. Send a smaller file or fewer records at a time, or ask your administrator to check the request size limit.';
+    case 429: {
+      const record = toUnknownRecord(headers) ?? {};
+      const raw = record['retry-after'] ?? record['Retry-After'];
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      const wait = typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+      return 'The server (or a gateway) is receiving too many requests. ' +
+        (wait ? `Wait before trying again: Retry-After is ${wait}${/^\d+(?:\.\d+)?$/.test(wait) ? ' seconds' : ''}.` : 'Wait and try again later; ask your administrator if this keeps happening.');
+    }
+    case 500:
+      return 'FileMaker Server could not process the request. Try again later, or ask your administrator to check the Admin Console.';
     case 502:
     case 503:
     case 504:
-      return 'A gateway or proxy could not reach FileMaker Server, or it did not answer in time. The server may be restarting or overloaded; try again shortly.';
+      return 'A gateway or proxy could not reach FileMaker Server, or it did not answer in time. The server may be restarting or overloaded; try again shortly, or ask your administrator to check the Admin Console.';
     default:
       return undefined;
   }

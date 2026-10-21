@@ -24,13 +24,11 @@ export async function createCsvStreamWriter(path: string, options: CsvStreamWrit
   const lineEnding = options.lineEnding ?? '\n';
   let columns = options.columns ? [...options.columns] : undefined;
   const pending: Map<string, string>[] = [];
-  const warned = new Set<string>();
   let headerWritten = false;
   let closed = false;
   const keys = (row: CsvRow) => row instanceof Map ? [...row.keys()] : Object.keys(row);
   const writeRow = async (row: Map<string, string>) => {
-    for (const key of keys(row)) if (!columns!.includes(key) && !warned.has(key)) {
-      warned.add(key);
+    for (const key of keys(row)) if (!columns!.includes(key)) {
       options.onUnknownField?.(key);
     }
     await file.write(columns!.map((key) => row.get(key) ?? '').join(',') + lineEnding);
@@ -46,7 +44,7 @@ export async function createCsvStreamWriter(path: string, options: CsvStreamWrit
   };
   return {
     async append(record) {
-      const row = new Map(keys(record).map((key) => [key, escapeCsvValue(record instanceof Map ? record.get(key) : record[key], options)]));
+      const row = new Map(keys(record).map((key) => [key, escapeCsvValue(record instanceof Map ? record.get(key) : (Object.hasOwn(record, key) ? record[key] : undefined), options)]));
       if (!columns) {
         pending.push(row);
         if (pending.length >= (options.sampleSize ?? 100)) await flush();

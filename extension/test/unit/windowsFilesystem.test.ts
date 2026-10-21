@@ -11,6 +11,7 @@ import { installShim } from '../../src/ai/mcp/mcpConfig';
 import { newToken } from '../../src/ai/mcp/auth';
 import { FmWebRuntimeGenerator, writeManagedFile } from '../../src/services/fmWebRuntimeGenerator';
 import { resolveConfinedFile } from '../../src/utils/pathConfinement';
+import { atomicExport } from '../../src/utils/atomicExport';
 
 const windows = process.platform === 'win32';
 const extensionDir = path.resolve(__dirname, '../..');
@@ -140,7 +141,12 @@ describe.skipIf(!windows)('links and access rights on Windows', () => {
     // updatable, and must stay read-only afterwards.
     it.each([
       ['writeManagedFile', (target: string) => writeManagedFile(target, 'new content')],
-      ['writeFileAtomic', (target: string) => writeFileAtomic(target, 'new content')]
+      ['writeFileAtomic', (target: string) => writeFileAtomic(target, 'new content')],
+      ['atomicExport', async (target: string) => {
+        const file = await atomicExport(target);
+        await file.write('new content');
+        await file.close();
+      }]
     ])('%s replaces a read-only file and keeps it read-only', async (_name, write) => {
       const target = path.join(dir, 'locked.txt');
       await writeFile(target, 'old content');

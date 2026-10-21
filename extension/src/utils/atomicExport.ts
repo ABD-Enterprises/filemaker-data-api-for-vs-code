@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
-import { mkdir, open, rename, rm } from 'fs/promises';
+import { mkdir, open, rm, stat } from 'fs/promises';
 import { dirname, join, basename } from 'path';
+import { renameReplacing } from './renameReplacing';
 
-/** Publish only a complete export. Temporary and published files are owner-only. */
+/** Publish only a complete export, preserving existing modes and replacing links without following them. */
 export async function atomicExport(path: string) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
@@ -13,8 +14,15 @@ export async function atomicExport(path: string) {
     async close(): Promise<void> {
       if (finished) return;
       try {
+        try {
+          const existing = await stat(path);
+          await file.chmod(existing.mode & 0o777);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          // New file: keep the owner-only default mode.
+        }
         await file.close();
-        await rename(temporary, path);
+        await renameReplacing(temporary, path);
         finished = true;
       } catch (error) {
         await file.close().catch(() => undefined);

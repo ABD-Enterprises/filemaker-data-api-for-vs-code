@@ -88,6 +88,35 @@ describe('Record Editor create mode (stubbed services)', () => {
 
   const create = { type: 'createRecord', payload: { profileId: 'p1', layout: 'People', fieldData: { Name: 'Ada', Age: 36, Blank: '' } } };
 
+  it.each(['A\0B\u200bC\ufeffD', 'A\0B\0C\u200bD\ufeffE'].flatMap((value) =>
+    [undefined, 'Cancel', 'Remove the character and continue'].map((choice) => ({ value, choice }))
+  ))('handles NUL before creating: $value / $choice', async ({ value, choice }) => {
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Create' as never);
+    await panel.send({ ...create, payload: { ...create.payload, fieldData: { Name: value } } });
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Name'), { modal: true }, 'Remove the character and continue', 'Cancel'
+    );
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.');
+    if (choice === 'Remove the character and continue') {
+      expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: value === 'A\0B\u200bC\ufeffD' ? 'AB\u200bC\ufeffD' : 'ABC\u200bD\ufeffE' });
+    } else {
+      expect(createRecord).not.toHaveBeenCalled();
+      expect(panel.last('saveCancelled')).toBeDefined();
+    }
+  });
+
+  it.each([undefined, 'Cancel', 'Remove the character and continue'])('warns that an all-NUL create value will be sent empty: %s', async (choice) => {
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Create' as never);
+    await panel.send({ ...create, payload: { ...create.payload, fieldData: { Name: '\0\0' } } });
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('Removing the character will leave these fields empty: Name. They will be sent as empty values if you continue.');
+    if (choice === 'Remove the character and continue') {
+      expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: '' });
+    } else {
+      expect(createRecord).not.toHaveBeenCalled();
+      expect(panel.last('saveCancelled')).toBeDefined();
+    }
+  });
+
   it('lists the layout fields without any record id', async () => {
     await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } });
     expect(panel.last('layoutFields')?.payload).toMatchObject({ metadataSupported: true, fields: [{ name: 'Name' }, { name: 'Age' }] });
