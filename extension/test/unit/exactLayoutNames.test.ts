@@ -201,7 +201,7 @@ describe('layout (and script and field) names are used exactly, ` Sales` is not 
       const { service } = await make();
       await service.generateSnippetsForLayout(profile, 'Sales');
       const second = await service.generateSnippetsForLayout(profile, ' Sales');
-      const keys = Object.keys(JSON.parse(second.content) as Record<string, unknown>);
+      const keys = Object.keys(JSON.parse(second.content.replace(/^\/\/[^\n]*\n/, '')) as Record<string, unknown>);
       expect(keys).toHaveLength(4);
       expect(keys).toContain('Sales Find Records');
       expect(keys.filter((key) => /^Sales-[0-9a-f]{8} /.test(key))).toHaveLength(2);

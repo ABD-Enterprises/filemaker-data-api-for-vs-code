@@ -17,6 +17,7 @@ function debounce(fn, ms) {
 
 const state = {
   // 'edit' loads and saves one record; 'create' lists a layout's fields and creates a new record.
+  busy: false,
   mode: 'edit',
   profiles: [],
   activeProfileId: undefined,
@@ -73,6 +74,7 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (['recordLoaded', 'recordSaved', 'recordCreated', 'saveCancelled', 'saveConflict', 'error'].includes(message.type)) setBusy(false);
   switch (message.type) {
     case 'init':
       applyInit(message.payload);
@@ -124,11 +126,13 @@ profileSelect.addEventListener('change', () => {
 });
 
 loadButton.addEventListener('click', () => {
+  if (state.busy) return;
   const payload = collectBasePayload();
   if (!payload) {
     return;
   }
 
+  setBusy(true);
   vscode.postMessage({ type: 'loadRecord', payload });
   setStatus('Loading record...');
 });
@@ -152,12 +156,14 @@ previewButton.addEventListener('click', () => {
 });
 
 saveButton.addEventListener('click', () => {
+  if (state.busy) return;
   const payload = collectDraftPayload();
   if (!payload) {
     return;
   }
 
   debouncedMarkDirtyState.cancel();
+  setBusy(true);
   vscode.postMessage({ type: 'saveRecord', payload });
   setStatus('Saving...');
 });
@@ -178,6 +184,7 @@ exportButton.addEventListener('click', () => {
 });
 
 createButton.addEventListener('click', () => {
+  if (state.busy) return;
   const profileId = profileSelect.value;
   const layout = layoutSelect.value;
   if (!profileId || !layout) {
@@ -197,6 +204,7 @@ createButton.addEventListener('click', () => {
   }
 
   debouncedMarkDirtyState.cancel();
+  setBusy(true);
   vscode.postMessage({ type: 'createRecord', payload: { profileId, layout, fieldData } });
   setStatus('Creating record...');
 });
@@ -349,8 +357,11 @@ function applyLayouts(payload) {
 
   state.layoutsByProfile.set(payload.profileId, payload.layouts);
   if (profileSelect.value === payload.profileId) {
-    renderLayouts(payload.layouts, state.defaults && state.defaults.layout);
+    const wanted = state.defaults && state.defaults.layout;
+    const autoLoad = state.mode === 'edit' && state.defaults && state.defaults.recordId;
+    renderLayouts(payload.layouts, wanted);
     state.defaults = undefined;
+    if (autoLoad && wanted && layoutSelect.value === wanted) loadButton.click();
   }
 }
 
@@ -516,11 +527,10 @@ function renderProfiles() {
   const selected =
     (state.defaults && state.defaults.profileId) || state.activeProfileId || state.profiles[0].id;
   profileSelect.value = selected;
-  loadLayouts(selected, state.defaults && state.defaults.layout);
-
   if (state.defaults && state.defaults.recordId) {
     recordIdInput.value = state.defaults.recordId;
   }
+  loadLayouts(selected);
 }
 
 function renderLayouts(layouts, preferredLayout) {
@@ -550,10 +560,10 @@ function renderLayouts(layouts, preferredLayout) {
   requestCreateFields();
 }
 
-function loadLayouts(profileId, preferredLayout) {
+function loadLayouts(profileId) {
   const cached = state.layoutsByProfile.get(profileId);
   if (cached) {
-    renderLayouts(cached, preferredLayout);
+    applyLayouts({ profileId, layouts: cached });
     return;
   }
 
@@ -740,3 +750,8 @@ function setStatus(message, isError = false) {
 }
 
 vscode.postMessage({ type: 'ready' });
+
+function setBusy(busy) {
+  state.busy = busy;
+  for (const button of [loadButton, saveButton, createButton, discardButton, profileSelect, layoutSelect]) button.disabled = busy;
+}

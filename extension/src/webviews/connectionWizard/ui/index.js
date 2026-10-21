@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /** @type {{state:'untested'|'success'|'failure'|'stale', message?:string, hash?:string}} */
   let testState = { state: 'untested' };
   let pendingConfirmedSave = false;
+  let populatingForm = false;
 
   // Mode toggle
   directBtn.addEventListener('click', () => {
@@ -195,6 +196,9 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       }
 
+      case 'certificateNotice':
+        showStatus('warning', message.message);
+        break;
       case 'certificateState':
         renderCertificateState(message.payload);
         break;
@@ -202,6 +206,8 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'loadProfile':
         clearTemplateState();
         populateForm(message.payload);
+        document.getElementById('password').value = '';
+        document.getElementById('password').placeholder = message.hasPassword ? '••••••• (saved)' : '';
         break;
 
       case 'loadTemplate':
@@ -306,6 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function populateForm(profile) {
     if (!profile) return;
+    populatingForm = true;
     setFieldValue('profileName', profile.name || '');
     setFieldValue('serverUrl', profile.serverUrl || '');
     setFieldValue('database', profile.database || '');
@@ -340,12 +347,13 @@ document.addEventListener('DOMContentLoaded', () => {
       directBtn.click();
       setFieldValue('username', profile.username || '');
     }
+    populatingForm = false;
     onFormChanged();
   }
 
   function getValue(id) {
     const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
-    return el ? el.value.trim() : '';
+    return el ? (id === 'password' || id === 'proxyApiKey' ? el.value : el.value.trim()) : '';
   }
 
   function setFieldValue(id, value) {
@@ -443,6 +451,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onFormChanged() {
+    if (populatingForm) return;
+    vscode.postMessage({ type: 'addressChanged', payload: { authMode, serverUrl: getValue('serverUrl'), proxyEndpoint: getValue('proxyEndpoint') } });
     pendingConfirmedSave = false;
     if (testState.state === 'success' || testState.state === 'failure') {
       const data = collectFormData();
@@ -550,13 +560,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function showConfirmation() {
-    const confirmed = window.confirm(
-      'You have not run a successful Test Connection on the current values. Save anyway?'
-    );
-    if (confirmed) {
+    showStatus('warning', 'Test the connection first, or choose Save anyway.');
+    const button = document.createElement('button');
+    button.id = 'saveAnywayBtn';
+    button.type = 'button';
+    button.textContent = 'Save anyway';
+    button.addEventListener('click', () => {
       pendingConfirmedSave = true;
       saveBtn.click();
-    }
+    });
+    statusEl.appendChild(button);
   }
 
   /**
@@ -564,9 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * @returns {string}
    */
   function hashForm(data) {
-    // Stable, order-independent hash. Excludes secrets so the form is considered
-    // "tested" even after the user re-enters a password (tests didn't change auth values
-    // unless the auth fields themselves changed).
+    // This comparison stays in page memory. Changing credentials also invalidates a test.
     const subset = {
       name: data.name,
       authMode: data.authMode,
@@ -575,6 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
       apiBasePath: data.apiBasePath,
       apiVersionPath: data.apiVersionPath,
       username: data.username,
+      password: data.password,
+      proxyApiKey: data.proxyApiKey,
       proxyEndpoint: data.proxyEndpoint,
       caBundlePath: data.caBundlePath,
       // Trusting a different certificate means the earlier test no longer proves the connection.

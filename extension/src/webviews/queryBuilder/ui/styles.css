@@ -116,6 +116,10 @@ summary:focus-visible {
   outline-offset: 1px;
 }
 
+.grid > div {
+  min-inline-size: 0;
+}
+
 .grid {
   display: grid;
   gap: 10px;
@@ -314,6 +318,7 @@ details.menu > summary::after {
 
 .request-card,
 .sort-editor {
+  min-inline-size: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px 10px;
@@ -395,6 +400,7 @@ details.menu > summary::after {
 
 .pager {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

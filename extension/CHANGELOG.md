@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- [FEATURE] Add Cancel Job in the Command Palette, running job menu and jobs status menu, with Copy failures in job details.
+- [FIX] Ask before replacing unrelated generated files, start the client chooser in a generated folder, and protect AI context and FM Web page output.
+- [FIX] Show successful and failed batch rows separately, retain failure codes and partial results, and list each job once.
+- [FIX] Clear trusted certificates when the wizard address changes, offer a visible Save anyway choice, and show when a saved password can be kept.
+- [FIX] Clear old query and script results after failures and prevent repeated clicks from starting duplicate requests or dialogs.
+- [FIX] Keep narrow Query Builder controls inside the panel, remove repeated server facts and AI field names, and report missing portal rows honestly.
+- [FIX] Place added Layout Mode fields below existing objects and load the record automatically when Edit Record by ID supplies an ID. Correct the guide to say container URLs are shown as text.
+
 - [FIX] Generated types now use the real field type and repeating field names. Generated clients handle empty finds and explain server errors. Special names stay intact; timeouts, paging and error messages give clearer next steps.
 
 - [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.

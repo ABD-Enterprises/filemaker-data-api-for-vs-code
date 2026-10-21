@@ -2,7 +2,7 @@ export type AuthMode = 'direct' | 'proxy';
 export type SavedQueryScope = 'workspace' | 'global';
 export type SchemaSnapshotStorage = 'workspaceState' | 'workspaceFiles';
 export type SchemaSnapshotSource = 'manual' | 'auto';
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | `completed with ${number} failed row${'' | 's'}`;
 export type BatchExportFormat = 'jsonl' | 'csv';
 export type EnterpriseRole = 'viewer' | 'developer' | 'admin';
 export type PerformanceMode = 'standard' | 'high-scale';
@@ -46,7 +46,15 @@ export interface FileMakerLayoutInfo {
   name: string;
 }
 
+export interface PortalDataInfo {
+  portalObjectName?: string;
+  table?: string;
+  foundCount?: number;
+  returnedCount?: number;
+}
+
 export interface FileMakerRecord {
+  portalDataInfo?: PortalDataInfo[];
   recordId: string;
   modId?: string;
   fieldData: Record<string, unknown>;
@@ -211,6 +219,7 @@ export interface GeneratedSnippetsArtifacts {
 }
 
 export interface GeneratedTypeScriptClientArtifacts {
+  skippedPaths?: string[];
   directory: string;
   typesPath: string;
   clientPath: string;
@@ -311,6 +320,7 @@ export interface JobLogEntry {
 }
 
 export interface JobSummary {
+  result?: unknown;
   id: string;
   name: string;
   startedAt: string;
@@ -356,6 +366,7 @@ export interface BatchUpdateOptions {
 }
 
 export interface BatchUpdateFailure {
+  code?: string;
   recordId: string;
   reason: string;
 }

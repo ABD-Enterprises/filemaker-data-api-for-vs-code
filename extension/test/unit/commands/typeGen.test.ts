@@ -82,6 +82,15 @@ describe('type generation commands', () => {
     expect(service.generateTypesForLayout).toHaveBeenCalledWith(profile, layout);
   });
 
+  it('starts the client folder chooser in a dedicated generated folder that exists', async () => {
+    setup();
+    (vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: vscode.Uri.file('/tmp/project') }];
+    vi.mocked(vscode.Uri.joinPath).mockImplementationOnce((base, ...segments) => vscode.Uri.file(join(base.fsPath, ...segments)));
+    await command('generateTypeScriptClient')(arg);
+    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp/project', '.filemaker', 'generated', 'client') }));
+    expect(vscode.window.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({ defaultUri: expect.objectContaining({ fsPath: join('/tmp/project', '.filemaker', 'generated', 'client') }) }));
+  });
+
   it('generates all layouts for the selected profile and reports the count', async () => {
     const { service } = setup();
     await command('generateTypesForAllLayouts')(arg);

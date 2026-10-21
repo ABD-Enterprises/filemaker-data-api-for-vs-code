@@ -94,6 +94,7 @@ async function setup(editing?: Record<string, unknown>, client: Record<string, u
   const fire = async (message: unknown) => {
     const before = posted.length;
     await handler?.(message);
+    await new Promise((resolve) => setImmediate(resolve));
     for (let i = 0; i < 100 && !posted.slice(before).some((m) => /^(save|test)(Success|Error)$|^certificateState$/.test(m.type ?? '')); i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }

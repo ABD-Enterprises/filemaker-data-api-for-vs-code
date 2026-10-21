@@ -215,7 +215,8 @@ export class BatchService {
           .catch((error) => {
             failures.push({
               recordId: next.recordId,
-              reason: error instanceof Error ? error.message : 'Unknown update failure'
+              ...(error instanceof FMClientError && error.code ? { code: error.code } : {}),
+              reason: error instanceof FMClientError && error.code ? `FileMaker ${error.code}: ${error.message}` : error instanceof Error ? error.message : 'Unknown update failure'
             });
             if (stoppedReason === undefined && stopsTheJob(error)) {
               stoppedReason = error instanceof Error ? error.message : 'The account cannot make this change.';
@@ -225,7 +226,7 @@ export class BatchService {
           .finally(() => {
             completed += 1;
             if (job) {
-              job.reportProgress(Math.round((completed / total) * 100), `Updated ${completed}/${total}`);
+              job.reportProgress(Math.round((completed / total) * 100), `Processed ${completed}/${total}: ${successCount} succeeded, ${failures.length} failed`);
             }
           });
 
@@ -253,6 +254,9 @@ export class BatchService {
 
       await Promise.race(inFlight);
     }
+
+    // Cancellation stops scheduling; requests already sent still contribute their results.
+    await Promise.all(inFlight);
 
     if (registry) {
       registry.unregister(breakerName);

@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import * as vscode from 'vscode';
 
@@ -234,6 +234,9 @@ async function resolveTarget(
 
   try {
     if (configured !== undefined) {
+      if (/^(readme|changelog|license)(\.[^/]*)?$/i.test(basename(configured))) {
+        throw new PathConfinementError('Choose a dedicated AI context file, such as .filemaker/ai-context.md, rather than README.md or another project document.');
+      }
       return await resolveConfinedFile(configured, workspaceRoots[0] ?? globalStorage, roots);
     }
     // Capped so a long profile name cannot make an over-long file name; names that differ
@@ -288,11 +291,11 @@ async function deliver(
       throw error;
     }
     const choice = await vscode.window.showWarningMessage(
-      `${target.relativePath} already exists and has no FileMaker AI context section. Add one at the end? The rest of the file is not changed.`,
+      `${target.relativePath} already exists and has no FileMaker AI context section. Choose Overwrite to keep the current text and add the generated section at the end, Skip existing to leave the file alone, or Cancel to stop.`,
       { modal: true },
-      'Add Section'
+      'Overwrite', 'Skip existing', 'Cancel'
     );
-    if (choice !== 'Add Section') {
+    if (choice !== 'Overwrite') {
       return undefined;
     }
     applied = applyMarkerSection(existing, wrapped, true);

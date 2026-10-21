@@ -66,6 +66,7 @@ type IncomingMessage =
   | { type: 'copyRecordRequest'; payload: RecordRequestPayload };
 
 export class RecordEditorPanel {
+  private readonly requestsInFlight = new Set<string>();
   private static currentPanel: RecordEditorPanel | undefined;
 
   private pendingDefaults: RecordEditorOpenOptions | undefined;
@@ -169,39 +170,47 @@ export class RecordEditorPanel {
       return;
     }
 
-    switch (incoming.type) {
-      case 'ready':
-        await this.sendInit();
-        break;
-      case 'loadLayouts':
-        await this.loadLayouts(incoming.profileId);
-        break;
-      case 'loadRecord':
-        await this.loadRecord(incoming.payload);
-        break;
-      case 'validateDraft':
-        await this.validateDraft(incoming.payload);
-        break;
-      case 'previewPatch':
-        await this.previewPatch(incoming.payload);
-        break;
-      case 'saveRecord':
-        await this.saveRecord(incoming.payload);
-        break;
-      case 'createRecord':
-        await this.handleCreateRecord(incoming.payload);
-        break;
-      case 'exportRecord':
-        await this.exportCurrentRecord();
-        break;
-      case 'copyRecordRequest':
-        await this.copyRecordRequest(incoming.payload);
-        break;
-      case 'loadLayoutFields':
-        await this.loadLayoutFields(incoming.payload);
-        break;
-      default:
-        break;
+    const guarded = ['loadRecord', 'saveRecord', 'createRecord'].includes(incoming.type);
+    const requestKey = guarded && 'payload' in incoming ? incoming.type === 'loadRecord' ? `load:${JSON.stringify(incoming.payload)}` : 'write' : undefined;
+    if (requestKey && this.requestsInFlight.has(requestKey)) return;
+    if (requestKey) this.requestsInFlight.add(requestKey);
+    try {
+      switch (incoming.type) {
+        case 'ready':
+          await this.sendInit();
+          break;
+        case 'loadLayouts':
+          await this.loadLayouts(incoming.profileId);
+          break;
+        case 'loadRecord':
+          await this.loadRecord(incoming.payload);
+          break;
+        case 'validateDraft':
+          await this.validateDraft(incoming.payload);
+          break;
+        case 'previewPatch':
+          await this.previewPatch(incoming.payload);
+          break;
+        case 'saveRecord':
+          await this.saveRecord(incoming.payload);
+          break;
+        case 'createRecord':
+          await this.handleCreateRecord(incoming.payload);
+          break;
+        case 'exportRecord':
+          await this.exportCurrentRecord();
+          break;
+        case 'copyRecordRequest':
+          await this.copyRecordRequest(incoming.payload);
+          break;
+        case 'loadLayoutFields':
+          await this.loadLayoutFields(incoming.payload);
+          break;
+        default:
+          break;
+      }
+    } finally {
+      if (requestKey) this.requestsInFlight.delete(requestKey);
     }
   }
 

@@ -58,6 +58,7 @@ function setupPanel(editingProfile?: Record<string, unknown>): CapturedPanel {
     upsertProfile: vi.fn(async () => undefined)
   };
   const secretStore = {
+    getPassword: vi.fn(async () => undefined),
     setPassword: vi.fn(async () => undefined),
     deleteProxyApiKey: vi.fn(async () => undefined),
     deletePassword: vi.fn(async () => undefined),

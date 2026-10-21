@@ -321,13 +321,14 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
       kind: 'job',
       label: job.name,
       jobId: job.id,
-      description: `${job.status} • ${job.progress}%`,
+      description: `${job.status} • ${job.progress}%${job.details ? ` • ${job.details}` : ''}`,
       tooltip: `${job.startedAt}${job.details ? `\n${job.details}` : ''}`,
-      contextValue: 'fmJob',
+      contextValue: ['queued', 'running'].includes(job.status) ? 'fmJobRunning' : 'fmJob',
       iconPath: new vscode.ThemeIcon(job.status === 'failed' ? 'error' : 'history'),
       command: {
         command: 'filemakerDataApiTools.showJobs',
-        title: 'Show Jobs'
+        title: 'Show Jobs',
+        arguments: [{ jobId: job.id }]
       }
     });
   }

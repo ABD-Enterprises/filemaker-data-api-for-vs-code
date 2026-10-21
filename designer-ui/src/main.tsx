@@ -16,6 +16,7 @@ import {
   arrangeStandardForm,
   standardizeFields,
   createStandardField,
+  nextStandardFieldPosition,
   createStarterTemplate,
   type StarterTemplate,
   type StandardPortalMetadata,
@@ -455,8 +456,10 @@ export function App(): React.JSX.Element {
           const object = createObjectFromTool(
             payload,
             {
-              x: payload.type === 'field' ? point?.x ?? FIELD_LAYOUT.pageMargin : point ? snapToGrid(point.x, current.canvas.gridSize) : 40,
-              y: payload.type === 'field' ? point?.y ?? FIELD_LAYOUT.pageMargin : point ? snapToGrid(point.y, current.canvas.gridSize) : 40
+              ...(payload.type === 'field' ? nextStandardFieldPosition(current, fieldMetadata.find((field) => field.name === (payload.fieldName ?? fields[0])) ?? { name: payload.fieldName ?? fields[0] ?? 'Field' }, point) : {
+                x: point ? snapToGrid(point.x, current.canvas.gridSize) : 40,
+                y: point ? snapToGrid(point.y, current.canvas.gridSize) : 40
+              })
             },
             current,
             fields,
@@ -467,7 +470,8 @@ export function App(): React.JSX.Element {
 
           return {
             ...current,
-            objects: [...current.objects, object]
+            objects: [...current.objects, object],
+            canvas: { ...current.canvas, height: Math.max(current.canvas.height, object.y + object.height + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.pageMargin) }
           };
         }
       });

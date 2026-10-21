@@ -52,16 +52,20 @@ export class JobRunner {
 
     return {
       id,
-      cancel: () => {
-        controller.cancelled = true;
-        if (state.status === 'running' || state.status === 'queued') {
-          state.status = 'cancelled';
-          state.finishedAt = new Date().toISOString();
-          this.emit(state);
-        }
-      },
+      cancel: () => { this.cancelJob(id); },
       getState: () => ({ ...state, logs: [...state.logs] })
     };
+  }
+
+  public cancelJob(id: string): boolean {
+    const controller = this.jobControllers.get(id);
+    const state = this.activeJobs.get(id);
+    if (!controller || !state || !['queued', 'running'].includes(state.status)) return false;
+    controller.cancelled = true;
+    state.status = 'cancelled';
+    state.details = 'Cancelling; waiting for requests already sent to finish.';
+    this.emit(state);
+    return true;
   }
 
   public listJobs(): JobRuntimeState[] {
@@ -112,12 +116,17 @@ export class JobRunner {
     try {
       const result = await task(context);
 
+      state.result = result;
       if (controller.cancelled) {
         state.status = 'cancelled';
       } else {
         state.status = 'completed';
         state.progress = 100;
-        state.result = result;
+        const counts = batchCounts(result);
+        if (counts) {
+          state.details = `${counts.successCount} succeeded, ${counts.failureCount} failed`;
+          if (counts.failureCount > 0) state.status = `completed with ${counts.failureCount} failed row${counts.failureCount === 1 ? '' : 's'}`;
+        }
       }
     } catch (error) {
       if (controller.cancelled) {
@@ -130,6 +139,7 @@ export class JobRunner {
       state.finishedAt = new Date().toISOString();
       this.emit(state);
       await this.persistSummary(state);
+      this.jobControllers.delete(state.id);
     }
   }
 
@@ -143,7 +153,8 @@ export class JobRunner {
         finishedAt: state.finishedAt,
         status: state.status,
         progress: state.progress,
-        details: state.details
+        details: state.details,
+        ...(batchCounts(state.result) ? { result: sanitizeBatchResult(state.result) } : {})
       },
       ...current.filter((item) => item.id !== state.id)
     ].slice(0, normalizeRecentLimit(this.getRecentLimit()));
@@ -177,4 +188,15 @@ function normalizeRecentLimit(value: number): number {
 
 function sanitizeLogMessage(input: string): string {
   return redactString(input);
+}
+
+function batchCounts(result: unknown): { successCount: number; failureCount: number } | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const counts = result as { successCount?: unknown; failureCount?: unknown };
+  return typeof counts.successCount === 'number' && typeof counts.failureCount === 'number'
+    ? counts as { successCount: number; failureCount: number } : undefined;
+}
+
+function sanitizeBatchResult(result: unknown): unknown {
+  return JSON.parse(redactString(JSON.stringify(result))) as unknown;
 }

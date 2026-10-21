@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { singleFlight } from '../utils/singleFlight';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
 import type { FMClient } from '../services/fmClient';
@@ -136,7 +137,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
       });
     }),
 
-    vscode.commands.registerCommand('filemakerDataApiTools.deleteRecord', async (arg: unknown) => {
+    vscode.commands.registerCommand('filemakerDataApiTools.deleteRecord', singleFlight(async (arg: unknown) => {
       // Deleting is a record edit as much as saving is: it needs the same switch and policy.
       if (!settingsService.isRecordEditEnabled()) {
         vscode.window.showInformationMessage('Record editing is disabled by settings.');
@@ -197,7 +198,7 @@ export function registerRecordEditCommands(deps: RegisterRecordEditCommandsDeps)
           logMessage: 'Delete record command failed.'
         });
       }
-    }),
+    })),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.uploadContainer',

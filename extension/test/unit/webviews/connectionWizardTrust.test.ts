@@ -409,3 +409,34 @@ describe('Connection wizard credential safety', () => {
     });
   });
 });
+
+describe('wizard certificate address binding', () => {
+  beforeEach(() => vi.clearAllMocks());
+  it.each(['https://other.example.com', 'https://fm.example.com:8443'])('clears a saved pin on address change to %s and does not restore it on return', async (serverUrl) => {
+    const h = await setup({ editing: { ...saved, pinnedCertSha256: 'a'.repeat(64) } as typeof saved });
+    await h.fire({ type: 'ready' });
+    await h.fire({ type: 'addressChanged', payload: { ...form, serverUrl } });
+    const states = h.posted.filter((m) => m.type === 'certificateState') as Array<{ payload: { pin?: unknown } }>;
+    expect(states.at(-1)?.payload.pin).toBeUndefined();
+    expect(lastMessage(h, 'certificateNotice')).toMatch(/trusted certificate was cleared/);
+    await h.fire({ type: 'addressChanged', payload: form });
+    await h.fire({ type: 'save', payload: { ...form, password: 'typed' } });
+    expect(h.upsertProfile).toHaveBeenCalledWith(expect.not.objectContaining({ pinnedCertSha256: expect.anything() }));
+  });
+  it('clears the pin even if a changed address arrives only with Save', async () => {
+    const h = await setup({ editing: { ...saved, pinnedCertSha256: 'a'.repeat(64) } as typeof saved });
+    await h.fire({ type: 'ready' });
+    await h.fire({ type: 'save', payload: { ...form, serverUrl: 'https://other.example.com', password: 'typed' } });
+    expect(h.upsertProfile).toHaveBeenCalledWith(expect.not.objectContaining({ pinnedCertSha256: expect.anything() }));
+  });
+  it('also clears a proxy profile pin when its backend server address changes', async () => {
+    const proxy = { ...saved, authMode: 'proxy', proxyEndpoint: 'https://proxy.example.com/api', pinnedCertSha256: 'a'.repeat(64) };
+    const h = await setup({ editing: proxy as typeof saved });
+    await h.fire({ type: 'ready' });
+    await h.fire({ type: 'addressChanged', payload: { ...form, authMode: 'proxy', proxyEndpoint: proxy.proxyEndpoint, serverUrl: 'https://other.example.com' } });
+    expect(lastMessage(h, 'certificateNotice')).toMatch(/trusted certificate was cleared/);
+    const state = h.posted.filter((m) => m.type === 'certificateState').at(-1) as { payload: { pin?: unknown } };
+    expect(state.payload.pin).toBeUndefined();
+  });
+
+});

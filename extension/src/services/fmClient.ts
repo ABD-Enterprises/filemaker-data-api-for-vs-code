@@ -513,7 +513,10 @@ export class FMClient {
           });
         }
 
-        return record;
+        const portalInfo = envelope.response.dataInfo?.portalDataInfo ?? envelope.response.portalDataInfo;
+        return !record.portalDataInfo && Array.isArray(portalInfo)
+          ? { ...record, portalDataInfo: portalInfo }
+          : record;
       }
     );
   }

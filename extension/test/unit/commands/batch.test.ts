@@ -43,6 +43,18 @@ function updateInputs(dryRun = true, path = join('/tmp', 'input.json')) {
 describe('batch commands', () => {
   beforeEach(resetCommandMocks);
 
+  it.each(['batchExportFind', 'batchUpdateFromFile'])('%s opens only one set of dialogs during rapid repeated commands', async (name) => {
+    setup();
+    let finish!: (value: undefined) => void;
+    vi.mocked(vscode.window.showInputBox).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(vscode.window.showOpenDialog).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const run = command(name);
+    const pending = Array.from({ length: 15 }, () => run(arg));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(vi.mocked(name === 'batchExportFind' ? vscode.window.showInputBox : vscode.window.showOpenDialog)).toHaveBeenCalledTimes(1);
+    finish(undefined); await Promise.all(pending);
+  });
+
   it.each(['batchExportFind', 'batchUpdateFromFile'])('%s refuses an untrusted workspace before touching services', async (name) => {
     const { jobRunner, profiles, roleGuard } = setup();
     (vscode.workspace as unknown as { isTrusted: boolean }).isTrusted = false;

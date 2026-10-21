@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { singleFlight } from '../utils/singleFlight';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
 import type { BatchService } from '../services/batchService';
@@ -31,7 +32,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
   const { profileStore, fmClient, batchService, jobRunner, roleGuard, settingsService, logger } = deps;
 
   return [
-    vscode.commands.registerCommand('filemakerDataApiTools.batchExportFind', async (arg: unknown) => {
+    vscode.commands.registerCommand('filemakerDataApiTools.batchExportFind', singleFlight(async (arg: unknown) => {
       if (!(await ensureBatchEnabled(settingsService))) {
         return;
       }
@@ -130,11 +131,11 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
       });
 
       vscode.window.showInformationMessage(`Started job ${job.id.slice(0, 8)} for batch export.`);
-    }),
+    })),
 
     vscode.commands.registerCommand(
       'filemakerDataApiTools.batchUpdateFromFile',
-      async (arg: unknown) => {
+      singleFlight(async (arg: unknown) => {
         if (!(await ensureBatchEnabled(settingsService))) {
           return;
         }
@@ -258,7 +259,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
             logMessage: 'Batch update failed to start.'
           });
         }
-      }
+      })
     )
   ];
 }

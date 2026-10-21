@@ -262,3 +262,12 @@ describe('Test My Server', () => {
     expect(renderSelfTestReport(report, true)).not.toContain('private.example');
   });
 });
+
+it('lists each observed fact once even when more than one check observes it', async () => {
+  const h = harness();
+  const report = (await h.run())!;
+  expect(report.facts.filter((fact) => fact.startsWith('No records:'))).toHaveLength(1);
+  const repeated = { ...report, facts: ['No records: HTTP 500, FileMaker 401.', 'No records: HTTP 500, FileMaker 401.'] };
+  const markdown = renderSelfTestReport(repeated);
+  expect(markdown.split('- No records: HTTP 500, FileMaker 401.')).toHaveLength(2);
+});

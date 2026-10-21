@@ -357,3 +357,17 @@ it.each([200, 404, 500])('preserves foundCount for an empty page with FileMaker 
   const result = await client.findRecords(profile, 'Contacts', { query: [{}], offset: 158 });
   expect(result).toEqual({ data: [], dataInfo: { foundCount: 157, returnedCount: 0, totalRecordCount: 200 } });
 });
+
+describe('getRecord portal totals', () => {
+  it.each(['record', 'dataInfo'] as const)('preserves portalDataInfo supplied on %s', async (where) => {
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    const profile = createProfile();
+    await secrets.setSessionToken(profile.id, 'token');
+    const info = [{ portalObjectName: ' Lines ', foundCount: 60, returnedCount: 20 }];
+    const record = { recordId: '1', fieldData: {}, portalData: { ' Lines ': [] }, ...(where === 'record' ? { portalDataInfo: info } : {}) };
+    const axios = new FakeAxios();
+    axios.request.mockResolvedValue(createAxiosResponse({ data: { response: { data: [record], ...(where === 'dataInfo' ? { dataInfo: { portalDataInfo: info } } : {}) }, messages: [{ code: '0', message: 'OK' }] } }));
+    const client = new FMClient(secrets, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, 1500, axios as never);
+    expect(await client.getRecord(profile, ' Contacts ', '1')).toMatchObject({ portalDataInfo: info });
+  });
+});

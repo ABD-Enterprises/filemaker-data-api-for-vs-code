@@ -111,6 +111,16 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
   });
 
+  it('does not export an earlier result after a failed run', async () => {
+    const payload = { profileId: 'p1', layout: 'Contacts', findJson: '[{}]' };
+    await panel.send({ type: 'runQuery', payload });
+    panel.fmClient.findRecords.mockRejectedValueOnce(new Error('New run failed'));
+    await panel.send({ type: 'runQuery', payload });
+    await panel.send({ type: 'exportResultsToEditor' });
+    expect(vscode.workspace.openTextDocument).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', message: expect.stringMatching(/Run a query|No query result/i) }));
+  });
+
   it('tags a failed run with its run id', async () => {
     panel.close();
     panel = openPanel({ findRecords: vi.fn(async () => Promise.reject(new Error('Field is missing'))) });

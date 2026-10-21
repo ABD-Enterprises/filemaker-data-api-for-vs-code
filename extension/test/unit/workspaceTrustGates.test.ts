@@ -240,6 +240,22 @@ describe('Delete Record policy', () => {
     expect(fmClient.deleteRecord).not.toHaveBeenCalled();
   });
 
+  it('opens only one Delete dialog during rapid repeated commands and allows retry after cancellation', async () => {
+    const guard = guardWith({}); await guard.refresh();
+    const { deps } = recordDeps(true); deps.roleGuard = guard;
+    registerRecordEditCommands(deps);
+    let finish!: (value: undefined) => void;
+    vi.mocked(vscode.window.showInputBox).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const run = commandHandler('filemakerDataApiTools.deleteRecord');
+    const pending = Array.from({ length: 15 }, () => run({ profileId: 'p1', layout: 'L' }));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(vscode.window.showInputBox).toHaveBeenCalledTimes(1);
+    finish(undefined); await Promise.all(pending);
+    vi.mocked(vscode.window.showInputBox).mockResolvedValue(undefined);
+    await run({ profileId: 'p1', layout: 'L' });
+    expect(vscode.window.showInputBox).toHaveBeenCalledTimes(2);
+  });
+
   it('still works for a developer with record editing on', async () => {
     const fmClient = await runDelete(guardWith({}), true);
     expect(fmClient.deleteRecord).toHaveBeenCalledWith(expect.anything(), 'L', '5');

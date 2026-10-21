@@ -103,7 +103,11 @@ window.addEventListener('message', (event) => {
       state.savedQueries = Array.isArray(message.payload) ? message.payload : [];
       renderSavedQueries();
       break;
+    case 'querySaveFinished':
+      setQuerySaving(false);
+      break;
     case 'querySaved':
+      setQuerySaving(false);
       if (message.payload && typeof message.payload.id === 'string') {
         state.currentQueryId = message.payload.id;
         state.currentQueryName = String(message.payload.name || '');
@@ -132,6 +136,10 @@ window.addEventListener('message', (event) => {
         }
         setRunning(false);
       }
+      setRunning(false);
+      setQuerySaving(false);
+      state.lastResult = undefined;
+      renderResultView();
       setStatus(message.message || 'Unknown error.', true);
       break;
     default:
@@ -530,7 +538,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 function runQuery() {
-  if (state.running) {
+  if (state.running || state.savingQuery) {
     return;
   }
   const payload = collectPayload();
@@ -550,11 +558,13 @@ function runQuery() {
 }
 
 saveButton.addEventListener('click', () => {
+  if (state.running || state.savingQuery) return;
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
+  setQuerySaving(true);
   vscode.postMessage({
     type: 'saveQuery',
     payload: {
@@ -1495,13 +1505,24 @@ function isCurrentRun(payload) {
 
 function setRunning(isRunning) {
   state.running = isRunning;
-  runButton.disabled = isRunning;
+  runButton.disabled = isRunning || state.savingQuery;
+  saveButton.disabled = isRunning || state.savingQuery;
   runButton.textContent = isRunning ? 'Running…' : 'Run';
 }
 
 function setStatus(message, isError = false) {
+  if (isError) {
+    state.lastResult = undefined;
+    renderResultView();
+  }
   status.textContent = message;
   status.classList.toggle('error', isError);
 }
 
 vscode.postMessage({ type: 'ready' });
+
+function setQuerySaving(saving) {
+  state.savingQuery = saving;
+  runButton.disabled = saving || state.running;
+  saveButton.disabled = saving || state.running;
+}

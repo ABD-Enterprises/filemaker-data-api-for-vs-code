@@ -54,11 +54,13 @@ window.addEventListener('message', (event) => {
       break;
     }
     case 'recordLoaded': {
+      loadButton.disabled = false;
       renderRecord(message.payload);
       revealRecordViewer();
       break;
     }
     case 'error': {
+      loadButton.disabled = false;
       // Show the form with the error rather than leaving the loading skeleton up.
       revealRecordViewer();
       setStatus(message.message || 'Unknown error.', true);
@@ -79,6 +81,7 @@ loadButton.addEventListener('click', () => {
     return;
   }
 
+  loadButton.disabled = true;
   setStatus('Loading record...');
   vscode.postMessage({
     type: 'loadRecord',

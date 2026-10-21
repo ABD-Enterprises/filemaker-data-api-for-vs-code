@@ -47,6 +47,7 @@ type IncomingMessage =
   | { type: 'copyRequest'; payload: CopySnippetPayload };
 
 export class ScriptRunnerPanel {
+  private requestInFlight = false;
   private static currentPanel: ScriptRunnerPanel | undefined;
 
   private pendingDefaults: ScriptRunnerOpenOptions | undefined;
@@ -125,23 +126,30 @@ export class ScriptRunnerPanel {
       return;
     }
 
-    switch (message.type) {
-      case 'ready':
-        await this.sendInit();
-        break;
-      case 'loadLayouts':
-        await this.loadLayouts(message.profileId);
-        break;
-      case 'runScript':
-        await this.runScript(message.payload);
-        break;
-      case 'copyCurl':
-      case 'copyFetch':
-      case 'copyRequest':
-        await this.copyRequest(message.payload);
-        break;
-      default:
-        break;
+    const guarded = ['runScript'].includes(message.type);
+    if (guarded && this.requestInFlight) return;
+    if (guarded) this.requestInFlight = true;
+    try {
+      switch (message.type) {
+        case 'ready':
+          await this.sendInit();
+          break;
+        case 'loadLayouts':
+          await this.loadLayouts(message.profileId);
+          break;
+        case 'runScript':
+          await this.runScript(message.payload);
+          break;
+        case 'copyCurl':
+        case 'copyFetch':
+        case 'copyRequest':
+          await this.copyRequest(message.payload);
+          break;
+        default:
+          break;
+      }
+    } finally {
+      if (guarded) this.requestInFlight = false;
     }
   }
 

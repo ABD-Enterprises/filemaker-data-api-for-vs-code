@@ -205,3 +205,38 @@ describe('standard form toolbar', () => {
     expect(screen.queryByLabelText('Starter template')).toBeNull();
   });
 });
+
+it('adds picker and toolbox fields below all existing objects without overlap, grows the canvas, and undoes each addition', () => {
+  const { container } = render(<App />);
+  const layout = createBlankLayout('New'); layout.canvas.height = 100;
+  layout.objects = [{ ...createStandardField({ name: 'Container', type: 'container' }, ids[0], { x: 24, y: 24 }, 0) }];
+  init(layout);
+  const chip = Array.from(container.querySelectorAll('.field-chip')).find((element) => element.textContent === ' Z')!;
+  fireEvent.click(chip); fireEvent.click(chip);
+  fireEvent.click(screen.getByRole('button', { name: 'field' }));
+  const boxes = Array.from(container.querySelectorAll<HTMLElement>('.object-hitbox'));
+  expect(boxes).toHaveLength(4);
+  expect(boxes.map((box) => Number.parseInt(box.style.top))).toEqual([24, 224, 304, 384]);
+  expect(boxes.every((box) => box.style.left === '24px')).toBe(true);
+  expect(Number.parseInt(container.querySelector<HTMLElement>('.design-surface')!.style.height)).toBeGreaterThanOrEqual(442);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(container.querySelectorAll('.object-hitbox')).toHaveLength(3);
+});
+
+it('adds picker fields below objects in another column and moves overlapping field drops to a free slot', () => {
+  const { container } = render(<App />);
+  const layout = createBlankLayout('Columns');
+  layout.objects = [createStandardField({ name: 'Existing' }, ids[0], { x: 800, y: 400 }, 0)];
+  init(layout);
+  const chip = Array.from(container.querySelectorAll('.field-chip')).find((element) => element.textContent === ' Z')!;
+  fireEvent.click(chip);
+  let boxes = container.querySelectorAll<HTMLElement>('.object-hitbox');
+  expect(boxes[1].style.top).toBe('480px');
+  expect(boxes[1].style.left).toBe('24px');
+  const drop = new MouseEvent('drop', { bubbles: true, clientX: 800, clientY: 400 });
+  Object.defineProperty(drop, 'dataTransfer', { value: { getData: () => JSON.stringify({ type: 'field', fieldName: ' Z' }) } });
+  fireEvent(container.querySelector('.canvas-scroll')!, drop);
+  boxes = container.querySelectorAll<HTMLElement>('.object-hitbox');
+  expect(boxes[2].style.top).toBe('480px');
+  expect(boxes[2].style.left).toBe('800px');
+});

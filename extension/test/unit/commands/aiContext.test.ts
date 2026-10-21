@@ -216,8 +216,9 @@ describe('FileMaker: Write AI Context', () => {
     warningChoices = [undefined];
     await run();
     expect(await readFile(join(workspace, 'AGENTS.md'), 'utf8')).toBe('# Mine\n');
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('AGENTS.md'), { modal: true }, 'Overwrite', 'Skip existing', 'Cancel');
 
-    warningChoices = ['Add Section'];
+    warningChoices = ['Overwrite'];
     await run();
     const text = await readFile(join(workspace, 'AGENTS.md'), 'utf8');
     expect(text.startsWith('# Mine\n\n')).toBe(true);
@@ -236,7 +237,7 @@ describe('FileMaker: Write AI Context', () => {
     expect(await readdir(workspace)).toEqual([]);
   });
 
-  it.each(['../escape.md', '/etc/fm-ai.md', 'D:docs\\ai.md', '.git/hooks/pre-commit', 'a:b.md'])(
+  it.each(['../escape.md', '/etc/fm-ai.md', 'D:docs\\ai.md', '.git/hooks/pre-commit', 'a:b.md', 'README.md', 'docs/CHANGELOG.md'])(
     'refuses the user-setting path %s and writes nothing',
     async (configured) => {
       inspected = { globalValue: configured };
@@ -358,7 +359,7 @@ describe('FileMaker: Write AI Context', () => {
     await writeFile(target, '# Mine\n');
     vi.mocked(vscode.window.showWarningMessage).mockImplementation((async () => {
       await writeFile(target, '# Mine\nedited meanwhile\n');
-      return 'Add Section';
+      return 'Overwrite';
     }) as never);
     await run();
 

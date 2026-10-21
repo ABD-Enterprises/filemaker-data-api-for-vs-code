@@ -689,7 +689,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const jobsStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
   jobsStatusBar.command = 'filemakerDataApiTools.showJobs';
   jobsStatusBar.text = '$(history) FM Jobs: idle';
-  jobsStatusBar.tooltip = 'FileMaker Data API jobs';
+  jobsStatusBar.tooltip = 'Show jobs, cancel a running job, or copy failed rows.';
   jobsStatusBar.show();
 
   const jobsSubscription = jobRunner.onDidChange(() => {
