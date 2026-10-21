@@ -31,6 +31,14 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Allow generated files in a workspace opened through a symbolic link, refuse linked output folders before creating files, and show generation refusals clearly.
+- Let requests continue as soon as a renewed session is ready, while closing the previous session in the background.
+- Use stored text fields for long script parameters and distinguish empty text from an empty layout, with clearer messages when a script did not run.
+- Keep all batch counts in recent jobs while limiting each saved record list to 1,000 entries; full lists remain available during the session. Cancelled exports say no file was written.
+- Keep portal counts with the correct record and allow retrying Load more after an error.
+- Give certificate date advice that matches the failure and put Data API failures before advice about older certificate settings.
+- Name repeating fields that become empty after removing NUL characters.
+
 - Ask before replacing unrelated generated files, start the client chooser in a generated folder, and protect AI context and FM Web page output.
 - Show successful and failed batch rows separately, retain failure codes and partial results, and list each job once.
 - Clear trusted certificates when the wizard address changes, offer a visible Save anyway choice, and show when a saved password can be kept.
@@ -69,6 +77,8 @@ PR title prefix matches the highest-tier label added:
 - Add a support page with help channels and safe bug-report guidance, remove the unused `shx` development dependency (build and package scripts already use Node), and align workspace `@types/node` declarations with the supported Node 22 runtime.
 
 ### [SECURITY]
+
+- Hide plain-text API keys and FileMaker access-token headers in error messages.
 
 - Harden error messages by masking credentials and tokens before they reach notifications or other normalized-message displays; normal FileMaker messages stay unchanged. No known exploit.
 

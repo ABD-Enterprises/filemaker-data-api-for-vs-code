@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- [FIX] Allow generated files in a workspace opened through a symbolic link, refuse linked output folders before creating files, and show generation refusals clearly.
+- [FIX] Let requests continue as soon as a renewed session is ready, while closing the previous session in the background.
+- [FIX] Use stored text fields for long script parameters and distinguish empty text from an empty layout, with clearer messages when a script did not run.
+- [FIX] Keep all batch counts in recent jobs while limiting each saved record list to 1,000 entries; full lists remain available during the session. Cancelled exports say no file was written.
+- [FIX] Keep portal counts with the correct record and allow retrying Load more after an error.
+- [FIX] Give certificate date advice that matches the failure and put Data API failures before advice about older certificate settings.
+- [FIX] Name repeating fields that become empty after removing NUL characters.
+- [SECURITY] Hide plain-text API keys and FileMaker access-token headers in error messages.
+
 - [FEATURE] Add Cancel Job in the Command Palette, running job menu and jobs status menu, with Copy failures in job details.
 - [FIX] Ask before replacing unrelated generated files, start the client chooser in a generated folder, and protect AI context and FM Web page output.
 - [FIX] Show successful and failed batch rows separately, retain failure codes and partial results, and list each job once.

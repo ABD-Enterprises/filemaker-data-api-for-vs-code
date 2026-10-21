@@ -69,7 +69,7 @@ it('copies failures and opens partial results from persisted history after cance
 
 it.each([
   [{ cancelled: true, total: 5, attempted: 2 }, 'Cancelled after 2 of 5'],
-  [{ cancelled: true, exportedRecords: 7 }, 'Cancelled after exporting 7 records'],
+  [{ cancelled: true, exportedRecords: 7 }, 'Cancelled; no file was written'],
   [undefined, 'Cancelled'],
   ['throw', 'Cancelled']
 ])('finalizes cancellation text across tree, quick pick and saved history (%j)', async (result, expected) => {

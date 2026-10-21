@@ -156,7 +156,7 @@ export class JobRunner {
         status: state.status,
         progress: state.progress,
         details: state.details,
-        result: redactValue(state.result)
+        result: persistedResult(state.result)
       },
       ...current.filter((item) => item.id !== state.id)
     ].slice(0, normalizeRecentLimit(this.getRecentLimit()));
@@ -170,6 +170,20 @@ export class JobRunner {
       listener(cloned);
     }
   }
+}
+
+/** Keep full lists in the session, but bound the copy saved across restarts. */
+function persistedResult(result: unknown): unknown {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return redactValue(result);
+  const saved = { ...result } as Record<string, unknown>;
+  for (const key of ['updatedIds', 'notAttemptedIds', 'failures']) {
+    const list = saved[key];
+    if (Array.isArray(list) && list.length > 1000) {
+      saved[key] = list.slice(0, 1000);
+      saved[`${key}Truncated`] = true;
+    }
+  }
+  return redactValue(saved);
 }
 
 function clampProgress(value: number): number {
@@ -202,7 +216,7 @@ function batchCounts(result: unknown): { successCount: number; failureCount: num
 function cancelledDetails(result: unknown): string {
   if (result && typeof result === 'object') {
     if ('attempted' in result && 'total' in result) return `Cancelled after ${result.attempted} of ${result.total}`;
-    if ('exportedRecords' in result) return `Cancelled after exporting ${result.exportedRecords} records`;
+    if ('exportedRecords' in result) return 'Cancelled; no file was written';
   }
   return 'Cancelled';
 }

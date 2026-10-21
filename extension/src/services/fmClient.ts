@@ -625,7 +625,8 @@ export class FMClient {
         }
 
         return {
-          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, envelope.response.dataInfo, envelope.response.portalDataInfo)),
+          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, (envelope.response.data?.length === 1) ? envelope.response.dataInfo : undefined,
+            (envelope.response.data?.length === 1) ? envelope.response.portalDataInfo : undefined)),
           dataInfo: envelope.response.dataInfo,
           ...scriptErrorsOf(envelope.response)
         };
@@ -992,7 +993,7 @@ export class FMClient {
    *
    * When a record is needed, or the script endpoint is unsupported, attach the script to a GET
    * of the selected record or a GET records limited to one. Without a record ID, long parameters
-   * use a wildcard find on the first text field, limited to one record. An empty find is invalid,
+   * use a wildcard find on a normal stored text field, limited to one record. An empty find is invalid,
    * and a find with no matches does not run the attached script (verified 2026-10-21).
    */
   public async runScript(
@@ -1051,9 +1052,14 @@ export class FMClient {
           if (ifTooLong(path, Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(value)])))) {
             throw tooLongScriptParameter();
           }
-          const envelope = await this.requestWithAuth<Record<string, unknown>>(profile,
-            { method: 'GET', path, params, strictQuery: true, signal: control?.signal }, true, trace);
-          return { response: scriptResponse(envelope.response), messages: envelope.messages };
+          try {
+            const envelope = await this.requestWithAuth<Record<string, unknown>>(profile,
+              { method: 'GET', path, params, strictQuery: true, signal: control?.signal }, true, trace);
+            return { response: scriptResponse(envelope.response), messages: envelope.messages };
+          } catch (error) {
+            if (isNoRecordsFound(error)) throw scriptLayoutEmpty();
+            throw error;
+          }
         };
 
         const failure = (error: unknown, endpoint: string): FMClientError =>
@@ -1093,10 +1099,13 @@ export class FMClient {
           const fields = Array.isArray(metadata.fieldMetaData) ? metadata.fieldMetaData : [];
           const textField = fields.find((field): field is { name: string; result: string } =>
             field !== null && typeof field === 'object' && typeof field.name === 'string'
-            && typeof field.result === 'string' && field.result.toLowerCase() === 'text');
+            && typeof field.result === 'string' && field.result.toLowerCase() === 'text'
+            && typeof field.type === 'string' && field.type.toLowerCase() === 'normal'
+            && field.global !== true && String(field.global).toLowerCase() !== 'true');
           if (!textField) {
-            // With no text criterion, only the bounded GET records form is available.
-            // attach() enforces the same 2000-character encoded URL limit.
+            // Establish whether the layout is empty even when the parameter cannot fit a GET.
+            const records = await this.listRecords(profile, layout, { limit: 1 }, control);
+            if (!records.data.length) throw scriptLayoutEmpty();
             return attach();
           }
           try {
@@ -1113,10 +1122,11 @@ export class FMClient {
             return { response: scriptResponse(envelope.response), messages: envelope.messages };
           } catch (error) {
             if (isNoRecordsFound(error)) {
-              throw new FMClientError(
-                'The script did not run because this layout has no records. Add a record or use a layout that has records.',
-                { code: '401', kind: 'validation', isRetryable: false }
-              );
+              // '*' matches non-empty text, not every record. A read without a script distinguishes
+              // an empty layout from one whose chosen field is empty in every visible record.
+              const records = await this.listRecords(profile, layout, { limit: 1 }, control);
+              if (!records.data.length) throw scriptLayoutEmpty();
+              return attach();
             }
             throw failure(error, `POST /layouts/${request.layout}/_find`);
           }
@@ -1141,6 +1151,7 @@ export class FMClient {
         try {
           return await attach();
         } catch (error) {
+          if (isNoRecordsFound(error)) throw scriptLayoutEmpty();
           if (isLikelyScriptUnsupportedError(error)) {
             throw scriptUnsupported(error);
           }
@@ -1530,8 +1541,8 @@ export class FMClient {
     // not stop work that the current token can still do: keep using it, and pause nothing. If the
     // token has really expired, the 401 on the next request starts a real renewal, which can pause.
     const refreshPromise = this.createSession(profile, { proactive: Boolean(existing), userInitiated: control?.userInitiated })
-      .then(async (token) => {
-        if (existing && existing !== token) await this.retireSession(profile, existing);
+      .then((token) => {
+        if (existing && existing !== token) void this.retireSession(profile, existing);
         return token;
       })
       .catch((error) => {
@@ -1558,8 +1569,8 @@ export class FMClient {
     // Proxy sessions are managed by the proxy; its logout would delete the replacement session.
     if (isProxyProfile(profile)) return;
     const timeout = Math.min(this.timeoutMs, 3000);
-    const url = this.buildEndpoint(profile, `/sessions/${encodeURIComponent(token)}`);
     try {
+      const url = this.buildEndpoint(profile, `/sessions/${encodeURIComponent(token)}`);
       await this.httpClient.request({ method: 'DELETE', url,
         headers: { Authorization: `Bearer ${token}` }, timeout, signal: AbortSignal.timeout(timeout),
         maxRedirects: 0, ...httpsTransportFor(profile, url) });
@@ -1599,7 +1610,7 @@ export class FMClient {
       await this.secretStore.deleteSessionToken(profile.id);
       this.sessionTracker.clear(profile.id);
       const token = await this.createSession(profile);
-      if (presumedLive && token !== rejectedToken) await this.retireSession(profile, rejectedToken);
+      if (presumedLive && token !== rejectedToken) void this.retireSession(profile, rejectedToken);
       return token;
     })().finally(() => {
       this.inFlightRefresh.delete(profile.id);
@@ -2135,6 +2146,11 @@ function portalPagingParams(portals: PortalPaging | undefined, prefix: string): 
     if (page.offset !== undefined) params[`${prefix}offset.${name}`] = page.offset;
   }
   return params;
+}
+
+function scriptLayoutEmpty(): FMClientError {
+  return new FMClientError('The script did not run because this layout has no records. Add a record or use a layout that has records.',
+    { code: '401', kind: 'validation', isRetryable: false });
 }
 
 function withPortalInfo(record: FileMakerRecord, dataInfo?: Record<string, unknown>, responsePortalInfo?: unknown): FileMakerRecord {

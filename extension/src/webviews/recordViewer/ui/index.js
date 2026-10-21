@@ -61,6 +61,9 @@ window.addEventListener('message', (event) => {
     }
     case 'error': {
       loadButton.disabled = false;
+      for (const section of portalSectionRefs.values()) {
+        for (const button of section.summary.querySelectorAll('button')) button.disabled = false;
+      }
       // Show the form with the error rather than leaving the loading skeleton up.
       revealRecordViewer();
       setStatus(message.message || 'Unknown error.', true);

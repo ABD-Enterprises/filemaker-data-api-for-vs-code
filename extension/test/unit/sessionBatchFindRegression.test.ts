@@ -72,6 +72,46 @@ describe('session cancellation and retirement regressions', () => {
     expect(h.http.request.mock.calls.filter(([config]) => config.method === 'POST')).toHaveLength(mode === 'proactive' ? 2 : 1);
   });
 
+  it.each(['proactive', 'rejected'] as const)('returns the new token while %s retirement is still pending, including a late old-token rejection', async (mode) => {
+    let now = 0;
+    const h = await setup({ now: () => now });
+    const deletion = deferred<ReturnType<typeof ok>>();
+    const late = deferred<ReturnType<typeof ok>>();
+    h.http.request.mockResolvedValueOnce(ok({ token: 'old' }));
+    await h.client.createSession(profile);
+    let oldRequests = 0;
+    h.http.request.mockImplementation(async (config) => {
+      if (config.method === 'POST') return ok({ token: 'new' });
+      if (config.method === 'DELETE') return deletion.promise;
+      if (config.headers.Authorization === 'Bearer old') {
+        oldRequests += 1;
+        if (oldRequests === 1) return late.promise;
+        throw { isAxiosError: true, response: { status: 401 } };
+      }
+      return ok({ data: [{ recordId: '1', fieldData: {} }] });
+    });
+    vi.spyOn(h.client, 'shouldRefreshSession').mockReturnValue(false);
+    const old = h.client.getRecord(profile, 'Contacts', '1');
+    await vi.waitFor(() => expect(oldRequests).toBe(1));
+    if (mode === 'proactive') vi.mocked(h.client.shouldRefreshSession).mockReturnValue(true);
+    now = 1000;
+    let finished = false;
+    const fresh = h.client.getRecord(profile, 'Contacts', '2').finally(() => { finished = true; });
+    try {
+      await vi.waitFor(() => expect(finished).toBe(true), { timeout: 300 });
+      await fresh;
+      vi.mocked(h.client.shouldRefreshSession).mockReturnValue(false);
+      late.reject({ isAxiosError: true, response: { status: 401 } });
+      expect(await old).toMatchObject({ recordId: '1' });
+      expect(h.http.request.mock.calls.filter(([config]) => config.method === 'POST')).toHaveLength(2);
+      expect(await h.secrets.getSessionToken(profile.id)).toBe('new');
+    } finally {
+      deletion.resolve(ok({}));
+      late.reject({ isAxiosError: true, response: { status: 401 } });
+      await Promise.allSettled([old, fresh]);
+    }
+  });
+
   it.each([false, true])('retires the old token after renewal even if cleanup fails=%s', async (fails) => {
     let now = 0;
     const h = await setup({ now: () => now });
@@ -220,11 +260,11 @@ describe('read and script GET carriers', () => {
 
   it('refuses long script parameters without a text field, also in copied requests', async () => {
     const h = await setup();
-    h.http.request.mockResolvedValue(ok({ token: 'unused', scriptError: '0' }));
+    h.http.request.mockResolvedValue(ok({ token: 'unused', scriptError: '0', data: [{ recordId: '1', fieldData: {} }] }));
     const request = { layout: 'Contacts', scriptName: 'Echo', scriptParam: 'x'.repeat(4000) };
     await expect(h.client.runScript(profile, request)).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-    expect(h.http.request.mock.calls.map(([config]) => config.method)).toEqual(['POST', 'GET']);
-    expect(h.http.request.mock.calls.at(-1)?.[0].url).toContain('/layouts/Contacts');
+    expect(h.http.request.mock.calls.map(([config]) => config.method)).toEqual(['POST', 'GET', 'GET']);
+    expect(h.http.request.mock.calls.at(-1)?.[0]).toMatchObject({ url: expect.stringContaining('/layouts/Contacts/records'), params: { _limit: 1 } });
     expect(() => buildRequestSpec(profile, { kind: 'runScript', ...request })).toThrow(/too long/);
   });
 });

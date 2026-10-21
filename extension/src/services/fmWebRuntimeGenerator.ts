@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'crypto';
-import { access, chmod, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'fs/promises';
+import { access, chmod, lstat, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises';
 import path from 'path';
 
 import type * as vscode from 'vscode';
 
-import { GENERATED_MARKER, GenerationSkippedError, writeGeneratedFiles } from './generatedFileWriter';
+import { assertSafeOutputFolder, GENERATED_MARKER, GenerationSkippedError, writeGeneratedFiles } from './generatedFileWriter';
 import { migrateLayoutDefinition } from '../fmweb/layoutSchema';
 import { renameReplacing } from '../utils/renameReplacing';
 import type { Logger } from './logger';
@@ -168,6 +168,7 @@ export class FmWebRuntimeGenerator {
     await this.fmWebProjectService.ensureProjectInitialized();
 
     const outputRoot = this.getGeneratedRuntimeRoot();
+    await this.assertSafeFolder(outputRoot);
     await mkdir(outputRoot, { recursive: true });
 
     const templateFiles = await collectFiles(templateRoot, templateRoot);
@@ -185,6 +186,7 @@ export class FmWebRuntimeGenerator {
       // lstat, not access: a link (even a dangling one) is something the user or the repository put
       // there, and a write would follow it to wherever it points. Leave it alone; for a managed
       // file say so, because the preview may then run with a stale or foreign copy.
+      await this.assertSafeFolder(path.dirname(outputPath));
       const present = await lstat(outputPath).catch(() => undefined);
       if (present) {
         const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey];
@@ -203,7 +205,7 @@ export class FmWebRuntimeGenerator {
           ? decideManagedRefresh(await readFile(outputPath), legacyHashes, SHIPPED_MARKED_HASHES[managedKey] ?? [])
           : 'skip';
         if (decision === 'refresh') {
-          await assertInsideRoot(outputRoot, path.dirname(outputPath));
+          await this.assertSafeFolder(path.dirname(outputPath));
           await writeManagedFile(outputPath, content);
           updated.push(relativePath);
         } else {
@@ -216,8 +218,9 @@ export class FmWebRuntimeGenerator {
         continue;
       }
 
+      await this.assertSafeFolder(path.dirname(outputPath));
       await mkdir(path.dirname(outputPath), { recursive: true });
-      await assertInsideRoot(outputRoot, path.dirname(outputPath));
+      await this.assertSafeFolder(path.dirname(outputPath));
       await writeManagedFile(outputPath, content);
       created.push(relativePath);
     }
@@ -283,7 +286,7 @@ export class FmWebRuntimeGenerator {
     const outputDir = this.getGeneratedLayoutsRoot();
     const outputPath = path.join(outputDir, `${layout.id}.layout.json`);
 
-    const skipped = await writeGeneratedFiles([{ path: outputPath, content: `${JSON.stringify({ $comment: GENERATED_MARKER, ...layout }, null, 2)}\n` }], this.fmWebProjectService.getProjectRoot());
+    const skipped = await writeGeneratedFiles([{ path: outputPath, content: `${JSON.stringify({ $comment: GENERATED_MARKER, ...layout }, null, 2)}\n` }], this.fmWebProjectService.getWorkspaceRoot?.() ?? this.fmWebProjectService.getProjectRoot());
     if (skipped.length) throw new GenerationSkippedError(outputPath);
 
     return {
@@ -307,6 +310,7 @@ export class FmWebRuntimeGenerator {
     }
 
     const runtimeRoot = this.getGeneratedRuntimeRoot();
+    await this.assertSafeFolder(runtimeRoot);
     await mkdir(runtimeRoot, { recursive: true });
     await this.ensureRuntimeGitignore(runtimeRoot);
     const envPath = path.join(runtimeRoot, '.env.local');
@@ -345,6 +349,10 @@ export class FmWebRuntimeGenerator {
     const prefix = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
     await refuseSymlink(gitignorePath);
     await writeFile(gitignorePath, `${current}${prefix}${missing.join('\n')}\n`, 'utf8');
+  }
+
+  private async assertSafeFolder(directory: string): Promise<void> {
+    await assertSafeOutputFolder(directory, this.fmWebProjectService.getWorkspaceRoot?.() ?? this.fmWebProjectService.getProjectRoot());
   }
 
   public getGeneratedRuntimeRoot(): string {
@@ -455,15 +463,6 @@ async function writeOwnerOnlyFile(target: string, content: string): Promise<void
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
-  }
-}
-
-/** A folder inside the generated runtime that is really a link elsewhere must not receive writes. */
-async function assertInsideRoot(root: string, dir: string): Promise<void> {
-  const [realRoot, realDir] = await Promise.all([realpath(root), realpath(dir)]);
-  const relative = path.relative(realRoot, realDir);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(`${path.relative(root, dir) || '.'} in the generated runtime is a link to a folder outside it; remove it and try again.`);
   }
 }
 

@@ -117,6 +117,13 @@ describe('Record Editor create mode (stubbed services)', () => {
     }
   });
 
+  it('names a repeating field made empty by removing NUL, and sends the cleaned repeats only after consent', async () => {
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce('Remove the character and continue' as never).mockResolvedValueOnce('Create' as never);
+    await panel.send({ ...create, payload: { ...create.payload, fieldData: { Name: ['\0'] } } });
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('will leave these fields empty: Name.');
+    expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: [''] });
+  });
+
   it('lists the layout fields without any record id', async () => {
     await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } });
     expect(panel.last('layoutFields')?.payload).toMatchObject({ metadataSupported: true, fields: [{ name: 'Name' }, { name: 'Age' }] });

@@ -600,7 +600,8 @@ export class RecordEditorPanel {
     const names = nulTextFields(fields);
     if (names.length === 0) return fields;
     const cleaned = removeNulText(fields) as Record<string, unknown>;
-    const emptied = names.filter((name) => cleaned[name] === '');
+    const empty = (value: unknown): boolean => value === '' || (Array.isArray(value) && value.every(empty));
+    const emptied = names.filter((name) => empty(cleaned[name]));
     const emptyWarning = emptied.length ? ` Removing the character will leave these fields empty: ${emptied.join(', ')}. They will be sent as empty values if you continue.` : '';
     const choice = await vscode.window.showWarningMessage(
       `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING}${emptyWarning}`,
