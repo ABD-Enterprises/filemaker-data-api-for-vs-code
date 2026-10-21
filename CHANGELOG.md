@@ -28,7 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
-- Trusted certificates, custom CA files and older allow-self-signed profiles now work without changing a VS Code setting. A changed trusted certificate is refused before sending credentials; pinned connections selected for a proxy are refused with advice.
+- Trusted certificates (trusted by fingerprint) and older allow-self-signed profiles now work without changing a VS Code setting, so a server with FileMaker's default certificate can be trusted and used. A changed trusted certificate is refused before any credentials are sent; a trusted-fingerprint connection that would need a proxy is refused with advice. Custom CA file profiles are unchanged: they keep going through a proxy as before. An older allow-self-signed profile connects directly and does not use a VS Code or system proxy.
 
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 
