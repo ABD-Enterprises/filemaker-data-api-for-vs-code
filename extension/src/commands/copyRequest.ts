@@ -4,6 +4,7 @@ import type { FMClient } from '../services/fmClient';
 import type { Logger } from '../services/logger';
 import type { ProfileStore } from '../services/profileStore';
 import { deliverSnippet, type SnippetDelivery } from '../snippets/deliver';
+import { includeAuthByDefault } from '../snippets/settings';
 import {
   SNIPPET_FORMATS,
   SNIPPET_OPERATION_LABELS,
@@ -67,8 +68,7 @@ async function copyRequestAsCode(arg: unknown, profileStore: ProfileStore, fmCli
   }
 
   const given = typeof arg === 'object' && arg !== null ? (arg as Record<string, unknown>) : {};
-  const includeAuthHeader =
-    vscode.workspace.getConfiguration('filemaker').get<boolean>('snippets.includeAuthByDefault', false) === true;
+  const includeAuthHeader = includeAuthByDefault();
 
   // Programmatic use: a validated operation and format skip every question.
   const givenOperation = given.operation === undefined ? undefined : parseSnippetOperation(given.operation);

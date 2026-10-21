@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { ConnectionProfile } from '../types/fm';
 import { getOptionalBooleanField, getStringField, toRecord } from '../webviews/common/messageValidation';
 import { generateSnippet } from './index';
+import { includeAuthByDefault } from './settings';
 import {
   SNIPPET_FORMATS,
   isSnippetFormat,
@@ -118,7 +119,7 @@ export function parseRecordRequestPayload(raw: unknown): RecordRequestPayload | 
   // These panels have no "include auth" checkbox: they follow the setting.
   const includeAuthHeader =
     payload.includeAuthHeader === undefined
-      ? vscode.workspace.getConfiguration('filemaker').get<boolean>('snippets.includeAuthByDefault', false) === true
+      ? includeAuthByDefault()
       : delivery.includeAuthHeader;
 
   return { profileId, layout, recordId, kind, delivery: { ...delivery, includeAuthHeader }, draftFieldData };

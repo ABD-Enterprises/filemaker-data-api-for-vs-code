@@ -39,7 +39,7 @@ import {
   exactFieldNameOrUndefined,
   safeNameOrUndefined
 } from './aiText';
-import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
+import { assertUsableUrlName } from '../utils/urlSegment';
 
 export const SESSION_RECORD_QUOTA = 500;
 export const CALLS_PER_MINUTE = 30;
@@ -752,9 +752,8 @@ export class AiToolService {
     const layout = input.layout as string;
     const script = input.script as string;
     env.trace.script = script;
-    if (isDotSegment(script) || isDotSegment(layout)) {
-      throw new AiToolError(dotSegmentMessage(isDotSegment(script) ? 'script' : 'layout', isDotSegment(script) ? script : layout));
-    }
+    assertUsableUrlName(script, 'script', (message) => new AiToolError(message));
+    assertUsableUrlName(layout, 'layout', (message) => new AiToolError(message));
     const allowlist = this.deps.settings().scriptAllowlist[env.profile.id] ?? [];
     if (!allowlist.includes(script)) {
       throw new AiToolError('That script is not on the user\'s allowlist for this connection (filemaker.ai.scriptAllowlist), so it cannot be run.');

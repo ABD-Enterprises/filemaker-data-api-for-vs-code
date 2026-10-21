@@ -1,7 +1,7 @@
 import { isProxyProfile, type ConnectionProfile } from '../types/fm';
 import { buildProxyProfilePayload } from '../services/proxyClient';
 import { redactString, redactValue } from '../utils/redact';
-import { dotSegmentMessage, isDotSegment } from '../utils/urlSegment';
+import { assertNameProvided, assertUsableUrlName } from '../utils/urlSegment';
 import { cleanServerAddress } from './address';
 import { encodeComponent, encodeQuery, singleLine } from './escape';
 import {
@@ -55,18 +55,14 @@ function clip(value: string): string {
 
 /** The value exactly as given (a leading or trailing space is part of a name), or an error when it is blank. */
 function required(value: string | undefined, what: string): string {
-  if (value === undefined || value.trim() === '') {
-    throw new SnippetError(`${what} is required.`);
-  }
+  assertNameProvided(value, `${what} is required.`, (message) => new SnippetError(message));
   return value;
 }
 
 /** A layout, script or field called `.` or `..` would be resolved away by a web address: refuse, as the client does. */
 function segment(value: string | undefined, what: string, kind: string): string {
   const name = required(value, what);
-  if (isDotSegment(name)) {
-    throw new SnippetError(dotSegmentMessage(kind, name));
-  }
+  assertUsableUrlName(name, kind, (message) => new SnippetError(message));
   return name;
 }
 

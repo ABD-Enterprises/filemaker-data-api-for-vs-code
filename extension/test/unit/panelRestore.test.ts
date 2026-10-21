@@ -16,6 +16,12 @@ function sourceFiles(dir: string): string[] {
 describe('restored webview tabs', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('keeps apostrophes literal while escaping other HTML characters', () => {
+    const html = renderReopenPage({ cspSource: 'x' }, `A's <&>"`, `Run 'this' <&>"`);
+    expect(html).toContain(`<title>A's &lt;&amp;&gt;&quot;</title>`);
+    expect(html).toContain(`<strong>Run 'this' &lt;&amp;&gt;&quot;</strong>`);
+  });
+
   it('every panel type the extension can open has a serializer (so a new panel cannot be added without one)', () => {
     const opened = new Set<string>();
     for (const file of sourceFiles(path.resolve(__dirname, '../../src'))) {
