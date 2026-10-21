@@ -264,6 +264,13 @@ Two accounts (full access, read-only), one file without *fmrest*, one expired an
 
 ---
 
+### Collecting real-server findings with Test My Server
+
+Run **FileMaker: Test My Server** on an active test connection. Choose the read-only test first. It reports the actual HTTP status and FileMaker code for a no-match find, including 404 versus 500 with code 401, without exposing record values or credentials. It also reports the server version, observed TLS protocol, layout and script counts, and whether the old session is refused after logout. The optional write test needs both dialogs and a disposable SCRATCH layout; it captures the stale-modification code (expected 306) and always attempts to remove its test record. If removal fails, the report names its ID and layout. After an interrupted create with no returned ID, inspect the scratch layout for a leftover test record.
+
+Use **Copy report with server address hidden** when sharing findings, and review organization-specific names before sharing. A proxy's own session behavior cannot be proved by the old-token check and is marked skipped. Cancellation stops further tests but still attempts cleanup and logout. No containers or batches are tested. The no-records status and other real-server facts above remain **Unverified** until reports from real FileMaker Servers have been collected; fake clients and the repository mock with `NO_RECORDS_STATUS=404` or `500` prove only that the extension records either answer correctly.
+
+
 ## 7. Mock-server scenarios for the end-to-end agent
 
 The mock lives in `extension/test/mock-server/server.mjs` (HTTP, loopback only). Suggested admin hook:

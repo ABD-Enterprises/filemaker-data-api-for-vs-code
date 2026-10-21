@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 - [FIX] Trusted certificates, custom CA files and older allow-self-signed profiles now work without changing a VS Code setting. A changed trusted certificate is refused before sending credentials; pinned connections selected for a proxy are refused with advice.
 
 - [INTERNAL] Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.

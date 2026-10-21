@@ -28,6 +28,7 @@ import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerCopyRequestCommands } from './commands/copyRequest';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
+import { registerTestMyServerCommand } from './commands/testMyServer';
 import { activationLogLine, registerAboutCommand } from './about/aboutCommand';
 import { getRuntimeVersion, setRuntimeVersion } from './about/runtimeVersion';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
@@ -716,6 +717,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     layoutInspectorTree,
     layoutSelectionDisposable,
     ...coreCommandDisposables,
+    registerTestMyServerCommand({ context, profileStore, secretStore, settingsService, roleGuard, logger }),
     ...layoutInspectorDisposables,
     ...savedQueryDisposables,
     ...schemaDisposables,

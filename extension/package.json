@@ -191,6 +191,11 @@
     ],
     "commands": [
       {
+        "command": "filemakerDataApiTools.testMyServer",
+        "title": "Test My Server",
+        "category": "FileMaker"
+      },
+      {
         "command": "filemakerDataApiTools.openWelcomeWalkthrough",
         "title": "Open Getting Started Walkthrough",
         "category": "FileMaker"
@@ -770,6 +775,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "filemakerDataApiTools.testMyServer",
+          "when": "filemaker.hasProfiles"
+        },
         {
           "command": "filemakerDataApiTools.refreshExplorer",
           "when": "false"

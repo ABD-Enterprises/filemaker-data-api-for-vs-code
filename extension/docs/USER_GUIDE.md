@@ -42,6 +42,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | --- | --- | --- |
 | Open Getting Started Walkthrough | Opens the guided setup steps in VS Code. | Always shown. |
 | Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
+| Test My Server | Runs a safe server check and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
@@ -311,6 +312,22 @@ Profiles that had the older **Allow self-signed certificate** setting now go dir
 3. **Step 3 of 3: signing in.** "Reached the server, but sign-in failed: ..." on failure.
 
 In proxy mode the test opens a session through the proxy. A failed test shows its reason once, in the message under the badge. A test is you asking for a sign-in, so it goes ahead even while automatic sign-ins are paused.
+
+### Test my server
+
+Choose your connection, then run **FileMaker: Test My Server**. The first dialog lists every check. Choose **Run read-only test** to start safely. This uses the saved account and password, in a separate temporary session, and leaves your normal connection alone.
+
+The test checks the server version, signs in, tries the database list, counts layouts and scripts, and reads the fields of the first three layouts. A database list that your account cannot see is a warning, not a failed login. Choose a layout to find at most one record and read it by its ID; the last layout you chose is remembered for that connection. Then choose a text field for a search that should find nothing. This records the server's actual answer, including whether “no records match” uses HTTP 404 or 500 with FileMaker code 401. Cancel a picker to skip that check. No record values or script results go into the report.
+
+**Optional write test.** Only choose **Also run the write test** with a disposable test file. Pick a **SCRATCH layout** and an editable text field. A second dialog names that layout and asks permission to create, read, edit and delete one record. The test also tries an old modification ID to see whether the server refuses it with code 306. Required fields, automatic fields and server triggers can affect this test. Cleanup is attempted if a step fails or you cancel. If deletion fails, the report gives the record ID and layout: ask your administrator to remove that test record. If a create request times out, the server may have created a record without returning its ID; check the scratch layout before trying again.
+
+**Optional script.** This is skipped by default: leave the script name blank or cancel. To run one, type its exact name and parameter (the parameter can be blank), then confirm the named script. Only use a script you understand: it may change data or have other effects. Layout, field and script names keep their spaces exactly as entered.
+
+Writes and scripts are unavailable in Restricted Mode, when the enterprise role or policy blocks them, or when their Record Editor or Script Runner switch is off. Offline mode prevents the test. You can cancel from the progress notification; further tests stop, with cleanup and logout still attempted. Requests use your normal timeout setting. Even reads may cause server-side triggers or automatic actions, so use a test file first. Containers and batches are never tested.
+
+The test signs out and tries the old token once, without signing back in, to check that it is refused. A proxy owns its own sessions, so that last check is skipped for proxy connections. The report opens as an unsaved Markdown document. **PASS** means that step answered as expected; **WARN** means skipped or not confirmed; **FAIL** means it needs attention. It shows elapsed time, HTTP status, FileMaker code and message, observed facts and plain next steps. A TLS protocol is only shown when it was observed; plain HTTP has no TLS. Blank status or code means none was observed, never an assumed success.
+
+Choose **Copy report** or **Copy report with server address hidden** after it opens. Passwords, tokens, record values, script parameters and script results are excluded, and the report is scrubbed again before copying. Review it before sharing: layout and field names and server details can still identify your organization. Real server findings describe only the server you tested; mock-server results do not verify other servers.
 
 ### Profile templates for a team
 
