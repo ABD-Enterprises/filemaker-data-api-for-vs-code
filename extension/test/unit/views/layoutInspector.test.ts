@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../../fixtures/duplicatePhoto';
 import { LayoutInspectorProvider } from '../../../src/views/layoutInspector';
 import type { ConnectionProfile } from '../../../src/types/fm';
 
@@ -41,6 +42,17 @@ function createProvider() {
 }
 
 describe('LayoutInspectorProvider', () => {
+  it('renders both Photo container occurrences without crashing', async () => {
+    const { provider, schemaService } = createProvider();
+    schemaService.getLayoutSchema.mockResolvedValueOnce({ supported: true, fromCache: false, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata } as never);
+    provider.selectLayout('p1', 'Contact Details');
+    const categories = await provider.getChildren();
+    const fields = await provider.getChildren(categories[0]);
+    expect(fields.map((field) => field.label)).toEqual(['Photo', 'Photo']);
+    expect(fields.map((field) => field.description)).toEqual(['container', 'container']);
+    expect(fields[0]).not.toBe(fields[1]);
+  });
+
   it('renders the four layout inspector categories for the selected layout', async () => {
     const { provider } = createProvider();
     provider.selectLayout('p1', 'Contacts');

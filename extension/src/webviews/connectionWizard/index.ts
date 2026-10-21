@@ -987,7 +987,7 @@ export class ConnectionWizardPanel {
             <button type="button" id="reviewCertBtn" class="secondary">Review server certificate…</button>
             <button type="button" id="forgetCertBtn" class="secondary hidden">Forget trusted certificate</button>
           </div>
-          <div class="hint">For a private or self-signed server without a CA file: shows who the certificate is for, its dates and its SHA-256 fingerprint, and trusts exactly that one certificate if you agree. If the server later presents a different one, the connection is refused until you review it again. (This needs VS Code's http.proxySupport setting on fallback or off; with its default, override, VS Code's normal check applies instead.) Test Connection offers this when it meets a certificate problem.</div>
+          <div class="hint">For a private or self-signed server without a CA file: shows who the certificate is for, its dates and its SHA-256 fingerprint, and trusts exactly that one certificate if you agree. If the server later presents a different one, the connection is refused until you review it again. No VS Code setting change is needed. A trusted certificate requires a direct connection without a proxy. Test Connection offers this when it meets a certificate problem.</div>
         </div>
         <div id="legacyTlsWarning" class="field legacy-tls-warning hidden" role="alert">
           <strong>⚠ This connection skips ALL certificate checks.</strong>

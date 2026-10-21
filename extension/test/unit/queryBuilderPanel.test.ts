@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
 import { HistoryStore } from '../../src/services/historyStore';
 import { QueryBuilderPanel } from '../../src/webviews/queryBuilder';
 import { InMemoryMemento } from './mocks';
@@ -83,6 +84,12 @@ describe('QueryBuilderPanel messages', () => {
     vi.clearAllMocks();
     panel?.close();
     panel = openPanel();
+  });
+
+  it('loads duplicate Photo metadata without duplicate query choices', async () => {
+    panel.fmClient.getLayoutMetadata.mockResolvedValueOnce(duplicatePhotoMetadata);
+    await panel.send({ type: 'loadFieldNames', profileId: 'p1', layout: 'Contact Details' });
+    expect(panel.posted.find((message) => message.type === 'fieldNamesLoaded')).toMatchObject({ payload: { fieldNames: ['Photo'], fieldMetadata: [expect.objectContaining({ name: 'Photo', type: 'container' }), expect.objectContaining({ name: 'Photo', type: 'container' })] } });
   });
 
   it('loads every webview script under the nonce', () => {

@@ -222,6 +222,7 @@ export class TypeGenService {
     fields: FileMakerFieldMetadata[],
     metadataHash: string
   ): string {
+    fields = uniqueFields(fields);
     const timestamp = new Date().toISOString();
     fields = expandRepeatingFields(fields);
     const nameMap = createNameMap(fields.map((field) => field.name));
@@ -378,6 +379,16 @@ function normalizeLayouts(layouts: string[]): string[] {
   return normalized;
 }
 
+/** Data API fieldData has one key per exact field name, even for repeated layout objects. */
+function uniqueFields(fields: FileMakerFieldMetadata[]): FileMakerFieldMetadata[] {
+  const seen = new Set<string>();
+  return fields.filter((field) => {
+    if (seen.has(field.name)) return false;
+    seen.add(field.name);
+    return true;
+  });
+}
+
 function renderClientTypes(
   profile: ConnectionProfile,
   schemas: GeneratedClientSchema[],
@@ -386,7 +397,7 @@ function renderClientTypes(
 ): string {
   const layoutBlocks = schemas.map((schema) => {
     const suffix = typeSuffixForLayout(layoutNames, schema.layout);
-    const rows = expandRepeatingFields(schema.fields)
+    const rows = expandRepeatingFields(uniqueFields(schema.fields))
       .map(renderFieldRow)
       .join('\n');
 

@@ -26,6 +26,7 @@ import type { Logger } from './logger';
 import type { SecretStore } from './secretStore';
 import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
+import { assertNoNulText } from '../utils/nulText';
 import { normalizeError } from '../utils/normalizeError';
 import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 import { isCredentialRejection } from '../utils/fileMakerCodes';
@@ -148,8 +149,8 @@ function credentialStamp(profile: ConnectionProfile, username: string, password:
 
 /**
  * FileMaker reports "no records match the request" as error code 401. It is matched on that code,
- * whatever the HTTP status: Claris documents business errors as HTTP 500 and says nothing about 404
- * for this case, and servers differ.
+ * whatever the HTTP status. Verified on a real FileMaker Data API Engine (2026-10-21):
+ * HTTP 200, code 401, empty data. Older/other versions may use a different HTTP status.
  */
 function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
@@ -573,8 +574,9 @@ export class FMClient {
             trace
           );
         } catch (error) {
-          // FileMaker answers a find with no matches (or an offset past the last match)
-          // with code 401 on any HTTP status. That is a result, not a failure.
+          // FileMaker answers a find with no matches (or an offset past the last match) with code 401.
+          // A real server returns HTTP 200 with empty data; older/other versions may use another status:
+          // match the code alone. That is a result, not a failure.
           if (isNoRecordsFound(error)) {
             return emptyFindResult(error);
           }
@@ -669,6 +671,7 @@ export class FMClient {
       },
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
+        assertNoNulText(fieldDataPartial);
         if (isProxyProfile(profile)) {
           return this.proxyClient.editRecord(
             profile,
@@ -733,6 +736,7 @@ export class FMClient {
       },
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
+        assertNoNulText(fieldData);
         if (isProxyProfile(profile)) {
           return this.proxyClient.createRecord(profile, layout, fieldData, control?.signal);
         }

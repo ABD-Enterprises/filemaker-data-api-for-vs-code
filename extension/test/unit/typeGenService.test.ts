@@ -1,10 +1,12 @@
+import { execFileSync } from 'child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 // TypeScript 7 supplies the CLI; this alias keeps the compiler API for checking generated code.
 import * as ts from 'typescript6';
 import { describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
 import { TypeGenService } from '../../src/services/typeGenService';
 import type { ConnectionProfile } from '../../src/types/fm';
 
@@ -20,6 +22,25 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('TypeGenService', () => {
+  it('generates compiling layout types for duplicate Photo container metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fm-duplicate-types-'));
+    try {
+      const service = new TypeGenService({ getLayoutSchema: vi.fn(async () => ({ supported: true, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata })) } as never,
+        {} as never, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, { getWorkspaceRoot: () => root });
+      const artifact = await service.generateTypesForLayout(createProfile(), 'Contact Details');
+      const program = ts.createProgram([artifact.filePath], { noEmit: true, strict: true, types: [], skipLibCheck: true });
+      expect(ts.getPreEmitDiagnostics(program).map(formatDiagnostic)).toEqual([]);
+      expect(artifact.content.match(/"Photo"\?:/g)).toHaveLength(1);
+      expect(artifact.content).not.toContain('photo2');
+      const client = await service.generateTypeScriptClient(createProfile(), ['Contact Details'], join(root, 'client'));
+      const config = join(root, 'tsconfig.json');
+      await writeFile(config, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, types: [], skipLibCheck: true, lib: ['es2020', 'dom'] }, files: [artifact.filePath, client.typesPath] }));
+      expect(() => execFileSync(process.execPath, [join(dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { encoding: 'utf8' })).not.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('generates layout type files with field maps', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-typegen-'));
 
