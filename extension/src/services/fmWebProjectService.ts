@@ -26,6 +26,7 @@ import {
   type FmWebSyncSummary
 } from '../types/fmWeb';
 import { distinctFileName } from '../utils/safeText';
+import { assertSafeOutputFolder } from './generatedFileWriter';
 import { resolveConfinedFile } from '../utils/pathConfinement';
 import { designerLayoutMetadata, type DesignerLayoutMetadata } from '../fmweb/fieldMetadata';
 
@@ -96,6 +97,7 @@ export class FmWebProjectService {
   }
 
   public async ensureProjectInitialized(): Promise<FmWebProjectConfig> {
+    await assertSafeOutputFolder(this.getProjectRoot(), this.requireWorkspaceRoot());
     const existing = await this.readProjectConfig();
     if (existing) {
       return existing;
@@ -342,11 +344,10 @@ export class FmWebProjectService {
 
   private async ensureProjectDirectories(): Promise<void> {
     const projectRoot = this.getProjectRoot();
-    await mkdir(projectRoot, { recursive: true });
-    await mkdir(path.join(projectRoot, 'metadata'), { recursive: true });
-    await mkdir(path.join(projectRoot, 'metadata', 'layouts'), { recursive: true });
-    await mkdir(path.join(projectRoot, 'layouts'), { recursive: true });
-    await mkdir(path.join(projectRoot, 'generated'), { recursive: true });
+    const directories = [projectRoot, path.join(projectRoot, 'metadata'), path.join(projectRoot, 'metadata', 'layouts'),
+      path.join(projectRoot, 'layouts'), path.join(projectRoot, 'generated')];
+    for (const directory of directories) await assertSafeOutputFolder(directory, this.requireWorkspaceRoot());
+    for (const directory of directories) await mkdir(directory, { recursive: true });
   }
 
   private async readLayoutFromPath(filePath: string): Promise<LayoutDefinition> {
@@ -392,6 +393,7 @@ export class FmWebProjectService {
   }
 
   private async writeJson(filePath: string, payload: unknown): Promise<void> {
+    await assertSafeOutputFolder(filePath, this.requireWorkspaceRoot());
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   }

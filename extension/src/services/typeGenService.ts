@@ -51,7 +51,10 @@ export class TypeGenService {
 
     const metadataHash = hashObject(schema.metadata ?? schema.fields);
     const content = this.renderTypeFile(profile, layout, schema.fields, metadataHash);
-    const filePath = await this.writeTypeFile(layout, content);
+    const filePath = await this.writeTypeFile(layout, content).catch((error: unknown) => {
+      if (error instanceof GenerationCancelledError || error instanceof GenerationSkippedError) throw error;
+      throw new GenerationOutputError(error instanceof Error ? error.message : String(error), { cause: error });
+    });
 
     return {
       layout,
@@ -69,7 +72,7 @@ export class TypeGenService {
       try {
         artifacts.push(await this.generateTypesForLayout(profile, layout));
       } catch (error) {
-        if (error instanceof GenerationCancelledError) throw error;
+        if (error instanceof GenerationCancelledError || error instanceof GenerationOutputError) throw error;
         this.logger.warn('Skipping type generation for layout due to metadata error.', {
           profileId: profile.id,
           layout,
@@ -305,6 +308,9 @@ export interface ${findResponseTypeName} {
     }
   }
 }
+
+/** Filesystem refusals must reach the command, even when generating several layouts. */
+class GenerationOutputError extends Error {}
 
 interface GeneratedClientSchema {
   layout: string;

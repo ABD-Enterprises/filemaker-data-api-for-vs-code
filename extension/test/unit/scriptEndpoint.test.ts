@@ -191,6 +191,20 @@ describe('running a script uses the documented endpoint', () => {
       expect(error.code).toBe('SCRIPT_UNSUPPORTED');
     });
 
+    it('reports an empty layout after HTTP 405 without calling it unsupported', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.includes('/script/')) {
+          response.statusCode = 405;
+          response.end('{}');
+        } else response.end(fmError('401'));
+      }));
+      const { fm, profile } = await client(server.url);
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S' })).rejects.toMatchObject({
+        code: '401', message: expect.stringContaining('The script did not run because this layout has no records')
+      });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET']);
+    });
+
     it('a record in context uses GET records/<id>?script=...&script.param=... (query parameters, as documented for GET)', async () => {
       const server = await serve(withLogin((_entry, response) => response.end(ok({ data: [], scriptResult: 'r', scriptError: '0' }))));
       const { fm, profile } = await client(server.url);
@@ -208,7 +222,7 @@ describe('running a script uses the documented endpoint', () => {
     it('uses a wildcard text find for a long parameter, limited to one record', async () => {
       const server = await serve(withLogin((entry, response) => {
         if (entry.path.endsWith('/layouts/Contacts')) response.end(ok({ fieldMetaData: [{ name: ' Exact text ', result: 'text' }] }));
-        else response.end(ok({ data: [], scriptResult: 'long ok', scriptError: '0' }));
+        else response.end(ok({ data: [{ recordId: '1', fieldData: { Private: 'hidden' } }], scriptResult: 'long ok', scriptError: '0' }));
       }));
       const { fm, profile } = await client(server.url);
       const param = 'é|'.repeat(3000);
@@ -216,6 +230,44 @@ describe('running a script uses the documented endpoint', () => {
       expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'POST']);
       expect(calls(server.seen)[1]).toMatchObject({ path: expect.stringMatching(/\/_find$/), body: { query: [{ ' Exact text ': '*' }], limit: 1, script: 'Echo', 'script.param': param } });
       expect(result.response).toEqual({ scriptResult: 'long ok', scriptError: '0' });
+    });
+
+    it('returns the script result when scriptError is present even with empty data', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [{ name: 'Name', result: 'text', type: 'normal' }] }));
+        else response.end(ok({ data: [], scriptResult: 'ran', scriptError: '0' }));
+      }));
+      const { fm, profile } = await client(server.url);
+      const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) });
+      expect(result.response).toEqual({ scriptResult: 'ran', scriptError: '0' });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'POST']);
+    });
+
+    it('reports that the script did not run after a 401 find and an empty layout read', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [{ name: 'Name', result: 'text', type: 'normal' }] }));
+        else response.end(fmError('401'));
+      }));
+      const { fm, profile } = await client(server.url);
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({
+        code: '401', message: expect.stringContaining('The script did not run because this layout has no records')
+      });
+      const sent = calls(server.seen);
+      expect(sent.map((entry) => entry.method)).toEqual(['GET', 'POST', 'GET']);
+      expect(sent[2]?.path).toMatch(/\/records$/);
+      expect(Object.fromEntries(sent[2]!.query)).toEqual({ _limit: '1' });
+    });
+
+    it.each([[], [{ recordId: '1', fieldData: {} }]].map((data) => ({ data })))('requires scriptError even when a find returns scriptResult (data=$data)', async ({ data }) => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [{ name: 'Name', result: 'text', type: 'normal' }] }));
+        else response.end(ok({ data, scriptResult: 'unconfirmed' }));
+      }));
+      const { fm, profile } = await client(server.url);
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({
+        code: 'SCRIPT_NOT_CONFIRMED', isRetryable: false
+      });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'POST']);
     });
 
     it('stays on the script endpoint at the limit and uses a find just over it', async () => {
@@ -228,6 +280,8 @@ describe('running a script uses the documented endpoint', () => {
       await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix) });
       await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + 1) });
       expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET', 'POST']);
+      await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET', 'POST', 'POST']);
     });
 
     it('with a record in context there is no body form, so a too-long parameter is a clear error and nothing is sent', async () => {
@@ -375,11 +429,28 @@ describe('running a script uses the documented endpoint', () => {
     });
 
     it('refuses a long parameter when the metadata has no text field', async () => {
-      const server = await serve(withLogin(withRecord));
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [{ name: 'Count', result: 'number', type: 'normal' }] }));
+        else response.end(ok({ data: [{ recordId: '1', fieldData: { Count: 1 } }] }));
+      }));
       const { fm, profile } = await client(server.url);
       await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET']);
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET']);
       expect(calls(server.seen)[0]?.path).toMatch(/\/layouts\/L$/);
+      expect(calls(server.seen)[1]?.path).toMatch(/\/layouts\/L\/records$/);
+      expect(Object.fromEntries(calls(server.seen)[1]!.query)).toEqual({ _limit: '1' });
+    });
+
+    it('reports that a long-parameter script did not run when a no-text-field layout has zero records', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [] }));
+        else response.end(ok({ data: [] }));
+      }));
+      const { fm, profile } = await client(server.url);
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({
+        code: '401', message: expect.stringContaining('The script did not run because this layout has no records')
+      });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET']);
     });
 
     it('Layout Mode\'s result detail and the preview bridge\'s reply carry no record', async () => {

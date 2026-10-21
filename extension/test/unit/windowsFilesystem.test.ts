@@ -127,10 +127,10 @@ describe.skipIf(!windows)('links and access rights on Windows', () => {
       const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
       const generator = new FmWebRuntimeGenerator(
         { extensionUri: { fsPath: extensionDir } } as never,
-        { isWorkspaceTrusted: () => true, getGeneratedDirPath: () => generated, ensureProjectInitialized: async () => undefined } as never,
+        { isWorkspaceTrusted: () => true, getGeneratedDirPath: () => generated, getWorkspaceRoot: () => dir, ensureProjectInitialized: async () => undefined } as never,
         logger
       );
-      await expect(generator.generateRuntimeAppTemplate()).rejects.toThrow(/link to a folder outside/);
+      await expect(generator.generateRuntimeAppTemplate()).rejects.toThrow(/symlink/);
       expect(await readdir(outside)).toEqual([]);
     });
   });

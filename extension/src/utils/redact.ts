@@ -7,6 +7,9 @@ const BEARER_OR_BASIC_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9\-._~+/]+=*/gi;
 const QUERY_PARAM_PATTERN =
   /((?:^|[?&])[\w.-]{0,40}?(?:token|password|passwd|api[_-]?key|session|secret|signature)[\w.-]{0,40}=)([^&#\s]+)/gi;
 
+/** API keys also appear as assignments in otherwise unstructured error text. */
+const API_KEY_ASSIGNMENT_PATTERN = /\b(api[_-]?key[ \t]*=[ \t]*)([^&#\s]+)/gi;
+
 /** A key in JSON text that names a secret: `sessionToken`, `access_token`, `proxyApiKey`, `clientSecret`... */
 const JSON_PAIR_PATTERN =
   /("[\w.-]{0,64}?(?:authorization|password|passwd|token|secret|api[_-]?key|session)[\w.-]{0,64}"\s*:\s*)(?:"((?:[^"\\]|\\.)+)"|(\d+))/gi;
@@ -16,7 +19,7 @@ const SINGLE_QUOTED_PAIR_PATTERN =
   /('[\w.-]{0,64}?(?:authorization|password|passwd|token|secret|api[_-]?key|session)[\w.-]{0,64}'\s*:\s*)(?:'((?:[^'\\]|\\.)+)'|(\d+))/gi;
 
 /** A header line printed as plain text: `Cookie: a=b`, `Set-Cookie: ...`, `Authorization: ...`. The whole value is secret. */
-const HEADER_LINE_PATTERN = /\b((?:set-)?cookie|(?:proxy-)?authorization)([ \t]*:[ \t]*)(?![ \t])(?!(?:(?:Bearer|Basic)[ \t]+)?\*\*\*(?:[ \t]+(?:(?:Bearer|Basic)[ \t]+)?\*\*\*)*[ \t]*(?:[\r\n]|$))[^\r\n]+/gi;
+const HEADER_LINE_PATTERN = /\b((?:set-)?cookie|(?:proxy-)?authorization|x-fm-data-access-token)([ \t]*:[ \t]*)(?![ \t])(?!(?:(?:Bearer|Basic)[ \t]+)?\*\*\*(?:[ \t]+(?:(?:Bearer|Basic)[ \t]+)?\*\*\*)*[ \t]*(?:[\r\n]|$))[^\r\n]+/gi;
 
 /** The FileMaker Data API puts the session token in the path: `DELETE /sessions/<token>`. A layout called "sessions" is left alone. */
 const SESSION_PATH_PATTERN = /(?<!\/layouts)(\/sessions\/)(?!\{token\})[^/\s?#"'`]+/gi;
@@ -28,6 +31,7 @@ export function redactString(input: string): string {
   return input
     .replace(BEARER_OR_BASIC_PATTERN, '$1 ***')
     .replace(QUERY_PARAM_PATTERN, '$1***')
+    .replace(API_KEY_ASSIGNMENT_PATTERN, '$1***')
     .replace(SESSION_PATH_PATTERN, '$1***')
     .replace(URL_USERINFO_PATTERN, '$1***@')
     .replace(JSON_PAIR_PATTERN, (_match, key: string) => `${key}"***"`)

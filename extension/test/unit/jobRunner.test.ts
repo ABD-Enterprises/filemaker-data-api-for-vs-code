@@ -105,3 +105,30 @@ it.each(['complete', 'fail'])('never retains cancelling details after a job sett
   expect(handle.getState().details).not.toContain('Cancelling');
   expect(runner.getRecentSummaries()[0]?.details).not.toContain('Cancelling');
 });
+
+it.each([999, 1000, 1001, 12000])('persists bounded batch lists of %s entries and retains complete session results', async (count) => {
+  const runner = new JobRunner(new InMemoryMemento() as never);
+  const ids = Array.from({ length: count }, (_, i) => String(i + 1));
+  const result = { total: count * 3, attempted: count * 2, successCount: count, failureCount: count, notAttempted: count,
+    updatedIds: ids, notAttemptedIds: [...ids], failures: ids.map((recordId) => ({ recordId, code: '301', reason: 'Record locked' })) };
+  const handle = runner.startJob('Large batch', async () => result);
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(handle.getState().result).toEqual(result);
+  const saved = runner.getRecentSummaries()[0]?.result as typeof result & Record<string, unknown>;
+  expect(saved).toMatchObject({ total: count * 3, attempted: count * 2, successCount: count, failureCount: count, notAttempted: count });
+  for (const key of ['updatedIds', 'notAttemptedIds', 'failures'] as const) {
+    expect(saved[key]).toEqual(result[key].slice(0, 1000));
+    expect(saved[`${key}Truncated`]).toBe(count > 1000 ? true : undefined);
+  }
+  expect(runner.listJobs()[0]?.result).toEqual(result);
+});
+
+it('reports a cancelled export as no file written even when rows were fetched', async () => {
+  const runner = new JobRunner(new InMemoryMemento() as never);
+  let finish!: (result: { exportedRecords: number; cancelled: boolean }) => void;
+  const handle = runner.startJob('Export', () => new Promise((resolve) => { finish = resolve; }));
+  handle.cancel(); finish({ exportedRecords: 7, cancelled: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(handle.getState().details).toBe('Cancelled; no file was written');
+  expect(jobStatusText(runner.getRecentSummaries()[0]!)).toBe('Cancelled; no file was written');
+});

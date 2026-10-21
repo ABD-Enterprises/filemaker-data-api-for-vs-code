@@ -64,7 +64,7 @@ export async function writeGeneratedFiles(files: Array<{ path: string; content: 
 }
 
 /** Check every existing ancestor before creating folders or following them to files. */
-async function assertSafeOutputFolder(directory: string, workspaceRoot?: string): Promise<void> {
+export async function assertSafeOutputFolder(directory: string, workspaceRoot?: string): Promise<void> {
   const configuredRoot = workspaceRoot ?? vscode.workspace.workspaceFolders?.find((folder) => {
     const rel = relative(folder.uri.fsPath, directory);
     return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
@@ -80,8 +80,8 @@ async function assertSafeOutputFolder(directory: string, workspaceRoot?: string)
   }
   // Resolve the root once so realpath comparisons use the same filesystem spelling.
   const canonicalRoot = await realpath(root);
-  let current = root;
-  for (const part of ['', ...rel.split(sep).filter(Boolean)]) {
+  let current = canonicalRoot;
+  for (const part of rel.split(sep).filter(Boolean)) {
     current = resolve(current, part);
     try {
       const info = await lstat(current);

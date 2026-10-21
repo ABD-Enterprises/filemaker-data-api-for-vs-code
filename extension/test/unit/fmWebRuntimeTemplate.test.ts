@@ -347,7 +347,7 @@ describe('FM Web runtime template', () => {
     await mkdir(path.join(dir, 'runtime-next'), { recursive: true });
     await symlink(elsewhere, path.join(dir, 'runtime-next', 'lib'));
 
-    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/link to a folder outside/);
+    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/symlink/);
     expect(await readFile(path.join(elsewhere, 'bridge-client.ts'), 'utf8')).toBe(legacy);
   });
 
@@ -357,7 +357,7 @@ describe('FM Web runtime template', () => {
     await mkdir(path.join(dir, 'runtime-next'), { recursive: true });
     await symlink(elsewhere, path.join(dir, 'runtime-next', 'lib'));
 
-    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/link to a folder outside/);
+    await expect(generator().generateRuntimeAppTemplate()).rejects.toThrow(/symlink/);
     await expect(stat(path.join(elsewhere, 'bridge-client.ts'))).rejects.toThrow();
   });
 

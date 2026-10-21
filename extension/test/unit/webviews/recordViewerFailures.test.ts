@@ -89,6 +89,22 @@ describe.skipIf(!JSDOM)('Record Viewer host failures reach the page', () => {
     expect(page.postMessage).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ presentationFields: [] }) }));
   });
 
+  it('allows retrying Load more after an error and keeps the loaded portal rows', async () => {
+    const page = viewer({});
+    page.send({ type: 'recordLoaded', payload: { ...payload(), record: { ...record(), portalData: { ' Lines ': [{ A: 'keep' }] },
+      portalDataInfo: [{ portalObjectName: ' Lines ', foundCount: 60, returnedCount: 1 }] } } });
+    const more = page.document.querySelectorAll('#relatedDataContainer button')[0];
+    expect(more).toBeDefined();
+    more!.click();
+    expect(more!.getAttribute('disabled')).not.toBeNull();
+    page.send({ type: 'error', message: 'Portal request failed.' });
+    expect(page.document.getElementById('status')?.textContent).toBe('Portal request failed.');
+    expect(more!.getAttribute('disabled')).toBeNull();
+    more!.click();
+    expect(page.posted.filter((message) => message.type === 'loadRecord')).toHaveLength(2);
+    expect(page.document.getElementById('relatedDataContainer')?.textContent).toContain('keep');
+  });
+
   it('shows layout-list failures', async () => {
     const page = viewer({ listLayouts: vi.fn().mockRejectedValue(new Error('Layouts unavailable.')) });
     page.receive({ type: 'loadLayouts', profileId: 'p' });

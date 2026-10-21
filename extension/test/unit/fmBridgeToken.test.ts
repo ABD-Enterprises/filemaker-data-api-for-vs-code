@@ -138,6 +138,7 @@ describe('writeBridgeEnv', () => {
       {
         isWorkspaceTrusted: () => trusted,
         getGeneratedDirPath: () => dir,
+        getWorkspaceRoot: () => dir,
         ensureProjectInitialized: async () => undefined
       } as never,
       logger

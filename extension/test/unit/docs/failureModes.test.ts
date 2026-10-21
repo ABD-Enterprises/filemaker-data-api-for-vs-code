@@ -17,3 +17,21 @@ it('every backtick file reference in the failure-mode catalogue exists', () => {
     expect(bases.some((base) => existsSync(path.join(root, base, file))), file).toBe(true);
   }
 });
+
+it('keeps the no-match troubleshooting row to four cells, including the empty-page count advice', () => {
+  const document = readFileSync(path.join(root, 'docs/FILEMAKER_FAILURE_MODES.md'), 'utf8');
+  const row = document.split('\n').find((line) => line.startsWith('| A find shows nothing |'))!;
+  const cells = row.split('|').slice(1, -1).map((cell) => cell.trim());
+  expect(cells).toHaveLength(4);
+  expect(cells[2]).toContain('empty page');
+  expect(cells[2]).toContain('supplied match count');
+});
+
+it('uses the current AI append button and records the owner-supplied real-server omit finding', () => {
+  const guide = readFileSync(path.join(root, 'extension/docs/USER_GUIDE.md'), 'utf8');
+  expect(guide).toContain('if you choose **Add to the file**, appends');
+  for (const document of [guide, readFileSync(path.join(root, 'docs/FILEMAKER_FAILURE_MODES.md'), 'utf8')]) {
+    expect(document).toContain('{"Last Name":"==Smith","omit":"true"}');
+    expect(document).toMatch(/empty find.*code 400/i);
+  }
+});

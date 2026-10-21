@@ -112,3 +112,9 @@ describe('redact: places a secret used to slip through', () => {
     }
   });
 });
+
+it.each(['request failed: api_key=private-value', 'api_key=private-value&other=ok', 'X-FM-Data-Access-Token: private-value', 'response headers: x-fm-data-access-token: private-value'])('masks free text secrets in %s', (text) => {
+  expect(redactString(text)).not.toContain('private-value');
+  expect(redactString(text)).toContain('***');
+  expect(redactString(redactString(text))).toBe(redactString(text));
+});

@@ -30,8 +30,8 @@ describe('diagnostic causes (the mock TLS modes are the oracle)', () => {
     ['expired', { certificate: { ...certificate, expired: true } }, /expired on Jan 1 2040/],
     ['notyet', { certificate: { ...certificate, notYetValid: true } }, /not valid until Jan 1 2020/],
     ['proxy', { pin: 'match', environmentProxy: true }, /NO_PROXY/],
-    ['VS Code override with pin transport unavailable', { pin: 'match', hostReplaced: true }, /http.proxySupport.*fallback/],
-    ['VS Code override with unpinned untrusted certificate', { verified: false, hostReplaced: true }, /does not trust the authority.*Certificate authority file/],
+    ['trusted fingerprint on a replaced transport route', { pin: 'match', hostReplaced: true }, /http.proxySupport.*fallback/],
+    ['unpinned certificate from an untrusted authority', { verified: false, hostReplaced: true }, /does not trust the authority.*Certificate authority file/],
     ['claris-default-cert', { verified: false, certificate: { ...certificate, noNames: true, nameMatch: false, chainBeyondLeaf: false } }, /No host names listed.*trust it by fingerprint.*AA:AA:AA/],
     ['wronghost', { verified: false, certificate: { ...certificate, nameMatch: false } }, /different server name/],
     ['untrusted CA', { verified: false }, /does not trust the authority.*Certificate authority file/],
@@ -287,4 +287,18 @@ describe('ordered, bounded, unauthenticated diagnosis', () => {
     expect((await runConnectionDiagnostics(profile, settings, fake, controller.signal)).cancelled).toBe(true);
     expect(fake.dns).not.toHaveBeenCalled(); expect(fake.tcp).not.toHaveBeenCalled();
   });
+});
+
+it.each(['CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID'])('does not blame the configured CA file for %s', (code) => {
+  const report = { ...base(), verified: false, caFileConfigured: true, verificationFailureCode: code,
+    certificate: { ...certificate, expired: code === 'CERT_HAS_EXPIRED', notYetValid: code === 'CERT_NOT_YET_VALID' } };
+  const causes = rankDiagnosticCauses(report);
+  expect(causes[0]).toMatch(code === 'CERT_HAS_EXPIRED' ? /expired/ : /not valid until/);
+  expect(causes.join(' ')).not.toMatch(/does not trust|set its CA file/);
+});
+
+it('ranks a non-certificate Data API failure ahead of legacy fingerprint advice', () => {
+  const causes = rankDiagnosticCauses({ ...base(), allowSelfSigned: true, steps: [fail('Data API')], http: 503, dataApiCertificateFailure: false });
+  expect(causes[0]).toMatch(/Data API did not answer.*503/);
+  expect(causes.join(' ')).toContain('switch to trusting the fingerprint');
 });
