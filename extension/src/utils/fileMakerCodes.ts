@@ -48,6 +48,7 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
     category: 'privilege',
     advice: ADMIN_PRIVILEGE
   },
+  10: { meaning: 'Missing required property.', category: 'request', advice: 'Enter at least one field value to search, or use Get records to list records.' },
   100: {
     meaning: 'File is missing.',
     category: 'config',
@@ -129,7 +130,7 @@ const KNOWN: Record<number, FileMakerErrorInfo> = {
     meaning: 'The record modification ID does not match: the record was changed by someone else since it was read.',
     category: 'conflict'
   },
-  400: { meaning: 'Find criteria are empty.', category: 'request', advice: 'Enter at least one find criterion.' },
+  400: { meaning: 'Find criteria are empty.', category: 'request', advice: 'Enter at least one field value to search, or use Get records to list records.' },
   401: { meaning: 'No records match the request.', category: 'notFound' },
   500: { meaning: 'The date value does not meet the validation entry options.', category: 'request' },
   501: { meaning: 'The time value does not meet the validation entry options.', category: 'request' },

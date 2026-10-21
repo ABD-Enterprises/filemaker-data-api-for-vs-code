@@ -155,15 +155,15 @@ describe('running a script uses the documented endpoint', () => {
   });
 
   describe('the documented alternative, only where the endpoint itself is refused', () => {
-    it('on HTTP 405 the script is attached to a find limited to one record, parameters in the BODY (not the URL), after one GET', async () => {
+    it('on HTTP 405 the script is attached to GET records limited to one, with query parameters', async () => {
       const server = await serve(
         withLogin((entry, response) => {
-          if (entry.method === 'GET') {
+          if (entry.path.includes('/script/')) {
             response.statusCode = 405;
             response.end('{"messages":[{"code":"-1","message":"Method not allowed"}]}');
             return;
           }
-          response.end(ok({ data: [], scriptResult: 'via find', scriptError: '0' }));
+          response.end(ok({ data: [], scriptResult: 'via records', scriptError: '0' }));
         })
       );
       const { fm, profile } = await client(server.url);
@@ -171,11 +171,10 @@ describe('running a script uses the documented endpoint', () => {
       const result = await fm.runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: 'x y' });
 
       const sent = calls(server.seen);
-      expect(sent.map((entry) => entry.method)).toEqual(['GET', 'POST']);
-      expect(sent[1]?.path).toMatch(/\/layouts\/Contacts\/_find$/);
-      expect(sent[1]?.query.size).toBe(0);
-      expect(sent[1]?.body).toEqual({ query: [{}], limit: 1, script: 'Echo', 'script.param': 'x y' });
-      expect(result.response.scriptResult).toBe('via find');
+      expect(sent.map((entry) => entry.method)).toEqual(['GET', 'GET']);
+      expect(sent[1]?.path).toMatch(/\/layouts\/Contacts\/records$/);
+      expect(Object.fromEntries(sent[1]!.query)).toEqual({ _limit: '1', script: 'Echo', 'script.param': 'x y' });
+      expect(result.response.scriptResult).toBe('via records');
     });
 
     it('a bare 404 (wrong address, Data API off) is NOT taken for "unsupported": one request, an error', async () => {
@@ -206,27 +205,22 @@ describe('running a script uses the documented endpoint', () => {
   });
 
   describe('a long parameter', () => {
-    it(`goes in the body of the find from the start when the URL would pass ${MAX_SCRIPT_URL_LENGTH} characters (one request, nothing lost)`, async () => {
+    it(`refuses a parameter over ${MAX_SCRIPT_URL_LENGTH} URL characters before sending`, async () => {
       const server = await serve(withLogin((_entry, response) => response.end(ok({ data: [], scriptResult: 'long ok', scriptError: '0' }))));
       const { fm, profile } = await client(server.url);
       const param = 'é|'.repeat(3000);
 
-      const result = await fm.runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: param });
-
-      const sent = calls(server.seen);
-      expect(sent.map((entry) => entry.method)).toEqual(['POST']);
-      expect(sent[0]?.body['script.param']).toBe(param);
-      expect(sent[0]?.url.length).toBeLessThan(200);
-      expect(result.response.scriptResult).toBe('long ok');
+      await expect(fm.runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: param })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
+      expect(calls(server.seen)).toEqual([]);
     });
 
-    it('stays on the script endpoint just under the limit and moves to the body just over it', async () => {
+    it('stays on the script endpoint at the limit and refuses just over it', async () => {
       const server = await serve(withLogin((_entry, response) => response.end(ok({ scriptError: '0' }))));
       const { fm, profile } = await client(server.url);
       const prefix = `${server.url}/fmi/data/vLatest/databases/Sales%20Db/layouts/L/script/S?script.param=`.length;
       await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix) });
-      await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + 1) });
-      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'POST']);
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + 1) })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET']);
     });
 
     it('with a record in context there is no body form, so a too-long parameter is a clear error and nothing is sent', async () => {
@@ -358,7 +352,7 @@ describe('running a script uses the documented endpoint', () => {
       response.end(ok({ data: [{ recordId: '1', modId: '0', fieldData: { Secret: 'top secret' } }], dataInfo: { foundCount: 1 }, scriptResult: 'r', scriptError: '0' }));
     };
 
-    it('after the fallback to a find, FMClient drops data and dataInfo and keeps the script keys', async () => {
+    it('after the fallback to GET records, FMClient drops data and dataInfo and keeps the script keys', async () => {
       const server = await serve(withLogin(withRecord));
       const { fm, profile } = await client(server.url);
       const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S' });
@@ -373,11 +367,11 @@ describe('running a script uses the documented endpoint', () => {
       expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
     });
 
-    it('with a long parameter (body form) as well', async () => {
+    it('refuses a long parameter before reading any record', async () => {
       const server = await serve(withLogin(withRecord));
       const { fm, profile } = await client(server.url);
-      const result = await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) });
-      expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
+      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
+      expect(calls(server.seen)).toEqual([]);
     });
 
     it('Layout Mode\'s result detail and the preview bridge\'s reply carry no record', async () => {

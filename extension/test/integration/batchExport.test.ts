@@ -78,7 +78,7 @@ describe('batch export + update integration (mocked HTTP)', () => {
       profile,
       'Contacts',
       {
-        query: [{}]
+        query: [{ Name: '*' }]
       },
       {
         outputPath,

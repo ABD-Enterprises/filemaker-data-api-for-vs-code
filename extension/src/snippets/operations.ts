@@ -1,3 +1,4 @@
+import { EMPTY_FIND_ADVICE, hasFindCriteria } from '../utils/findCriteria';
 import { isProxyProfile, type ConnectionProfile } from '../types/fm';
 import { buildProxyProfilePayload } from '../services/proxyClient';
 import { redactString, redactValue } from '../utils/redact';
@@ -68,6 +69,9 @@ function segment(value: string | undefined, what: string, kind: string): string 
 
 /** Builds the request the extension would send for `operation`, with every secret replaced by a placeholder. */
 export function buildRequestSpec(profile: ConnectionProfile, operation: SnippetOperation): RequestSpec {
+  if (operation.kind === 'find' && !hasFindCriteria(operation.request.query)) {
+    throw new SnippetError(`Find criteria are empty. ${EMPTY_FIND_ADVICE}`);
+  }
   const redactor = new Redactor();
   const spec = isProxyProfile(profile)
     ? buildProxySpec(profile, operation, redactor)
@@ -196,19 +200,7 @@ function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation
       const query: Array<[string, string]> = scriptParam === undefined ? [] : [['script.param', scriptParam]];
       const url = `${host}${scriptPath}${query.length > 0 ? `?${encodeQuery(query)}` : ''}`;
       if (url.length > MAX_SCRIPT_URL_LENGTH) {
-        // Too long for a web address: the documented body form, a find limited to one record.
-        notes.push('The parameter is too long for a web address, so the script is attached to a find limited to one record (this reads that record).');
-        return make('POST', `${layout}/_find`, 'records', {
-          body: {
-            kind: 'json',
-            value: {
-              query: [{}],
-              limit: 1,
-              script: scriptName,
-              ...(scriptParam !== undefined ? { 'script.param': scriptParam } : {})
-            }
-          }
-        });
+        throw tooLong();
       }
       return make('GET', scriptPath, 'script', { query });
     }
@@ -235,7 +227,7 @@ function buildDirectSpec(profile: ConnectionProfile, operation: SnippetOperation
 
 function tooLong(): SnippetError {
   return new SnippetError(
-    `The script parameter is too long to send in a web address (the limit is about ${MAX_SCRIPT_URL_LENGTH} characters including the server and script name) when a record is in context. Shorten it, for example by passing an id.`
+    `The script parameter is too long to send in a web address (the limit is about ${MAX_SCRIPT_URL_LENGTH} characters including the server and script name). Shorten it, for example by passing an id.`
   );
 }
 

@@ -171,7 +171,7 @@ describe.skipIf(!hasCurl)('copied requests run against the mock Data API', () =>
 
   it.each(FORMATS)('layouts named with a slash, a percent sign and a question mark work as %s', async (format) => {
     for (const layout of ['A/B', 'Percent%20Layout', 'Question?Mark']) {
-      const result = await send({ kind: 'find', layout, request: { query: [{}], limit: 1 } }, format);
+      const result = await send({ kind: 'find', layout, request: { query: [{ Name: '*' }], limit: 1 } }, format);
       expect(result.ok, `${layout}: ${result.failure ?? JSON.stringify(result.response).slice(0, 120)}`).toBe(true);
       expect(JSON.stringify(result.response)).toContain(`"layout":"${layout}"`);
     }
@@ -208,9 +208,7 @@ describe.skipIf(!hasCurl)('copied requests run against the mock Data API', () =>
     expect(withRecord.response.scriptResult).toBe('with record');
 
     const long = 'x'.repeat(2500);
-    const viaFind = await send({ kind: 'runScript', layout: 'Customers', scriptName: 'Echo', scriptParam: long }, format);
-    expect(viaFind.ok, viaFind.failure).toBe(true);
-    expect(viaFind.response.scriptResult).toBe(long);
+    expect(() => generateSnippet(profile, { kind: 'runScript', layout: 'Customers', scriptName: 'Echo', scriptParam: long }, format)).toThrow(/too long/);
   });
 
   it.each(FORMATS)('create, edit with the modId, a stale modId, upload and delete work as %s', async (format) => {

@@ -84,7 +84,7 @@ describe('high-scale export integration', () => {
       profile,
       'Contacts',
       {
-        query: [{}]
+        query: [{ Name: '*' }]
       },
       {
         outputPath,

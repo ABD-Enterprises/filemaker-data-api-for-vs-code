@@ -2,7 +2,7 @@ export type AuthMode = 'direct' | 'proxy';
 export type SavedQueryScope = 'workspace' | 'global';
 export type SchemaSnapshotStorage = 'workspaceState' | 'workspaceFiles';
 export type SchemaSnapshotSource = 'manual' | 'auto';
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 export type BatchExportFormat = 'jsonl' | 'csv';
 export type EnterpriseRole = 'viewer' | 'developer' | 'admin';
 export type PerformanceMode = 'standard' | 'high-scale';
@@ -312,6 +312,7 @@ export interface JobSummary {
   status: JobStatus;
   progress: number;
   details?: string;
+  result?: unknown;
 }
 
 export interface JobRuntimeState<T = unknown> extends JobSummary {
@@ -351,6 +352,7 @@ export interface BatchUpdateOptions {
 
 export interface BatchUpdateFailure {
   recordId: string;
+  code?: string;
   reason: string;
 }
 
@@ -361,6 +363,8 @@ export interface BatchUpdateResult {
   successCount: number;
   failureCount: number;
   failures: BatchUpdateFailure[];
+  updatedIds?: string[];
+  notAttemptedIds?: string[];
   /** The job stopped early because the account cannot do this; the reason is FileMaker's message. */
   stoppedReason?: string;
   /** Records that were never attempted because the job stopped. */

@@ -192,6 +192,7 @@ describe('FMClient (unit)', () => {
           messages: [{ code: '0', message: 'OK' }]
         }
       }))
+      .mockResolvedValueOnce(createAxiosResponse({ data: { response: {}, messages: [{ code: '0', message: 'OK' }] } }))
       .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
@@ -205,7 +206,7 @@ describe('FMClient (unit)', () => {
 
     await expect(client.listLayouts(profile)).resolves.toEqual(['Contacts']);
     await expect(secretStore.getSessionToken(profile.id)).resolves.toBe('new-token');
-    expect(axios.request).toHaveBeenCalledTimes(4);
+    expect(axios.request).toHaveBeenCalledTimes(5);
   });
 
   it.each([

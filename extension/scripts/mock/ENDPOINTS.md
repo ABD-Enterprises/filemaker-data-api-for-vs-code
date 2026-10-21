@@ -99,7 +99,7 @@ Status: **Y** implemented, **P** partial, **N** intentionally not implemented.
 Success: HTTP 200 with `{"response": {...}, "messages": [{"code": "0", "message": "OK"}]}`.
 Errors: `{"messages": [{"code": "<n>", "message": "..."}]}`.
 
-**Basis column.** The guide's error-responses page only states that an invalid URL gives HTTP 404. Every other
+**Basis column.** The guide's error-responses page only states that an invalid URL gives HTTP 404. Except for the owner-verified empty and missing find criteria below, every other
 code-to-HTTP-status mapping below is an assumption of this mock (it matches what servers have been observed to
 do in field reports and the extension's own tests, but nobody re-checked it against a real server here). Rows
 marked "unverified" must not be read as the product's specification.
@@ -112,7 +112,8 @@ marked "unverified" must not be read as the product's specification.
 | No records match (find, or `_offset` past the end)                               | 404  | 401 (body also has `response: {}`)                         | unverified; a switch: `NO_RECORDS_STATUS=500` or `POST /__admin/config {"noRecordsStatus":500}` (default 404) |
 | Insufficient privileges (writes or scripts for `reader`)                         | 403  | 9                                                          | unverified                                                                                                    |
 | Invalid parameter (bad `_offset`, `_limit=0`, malformed JSON, bad `dateformats`) | 400  | 960                                                        | unverified                                                                                                    |
-| Empty find criteria (`query: []`)                                                | 500  | 400                                                        | unverified                                                                                                    |
+| Empty find criteria (`query: []` or `query: [{}]`) | 500 | 400, "Find criteria are empty" | verified by the owner on a real FileMaker Server, 2026-10-21 |
+| Missing `query` property in a find | 400 | 10, "Missing required property: query" | verified by the owner on a real FileMaker Server, 2026-10-21 |
 | Unknown layout / field / script / record                                         | 500  | 105 / 102 / 104 / 101                                      | unverified                                                                                                    |
 | modId mismatch                                                                   | 500  | 306                                                        | unverified                                                                                                    |
 | Validation                                                                       | 500  | 500, 502, 504, 506, 509; 201 field cannot be modified; 205 | unverified                                                                                                    |

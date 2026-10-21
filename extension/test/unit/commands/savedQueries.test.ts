@@ -190,7 +190,7 @@ describe('saved query commands', () => {
     expect(store.saveSavedQuery).not.toHaveBeenCalled();
   });
 
-  it.each([['not-json', ''], ['{}', ''], ['[{}]', 'not-json']])('rejects invalid edited find/sort JSON (%s, %s)', async (find, sort) => {
+  it.each([['not-json', ''], ['{}', ''], ['[{"Name":"*"}]', 'not-json']])('rejects invalid edited find/sort JSON (%s, %s)', async (find, sort) => {
     const { store } = setup();
     vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('Name').mockResolvedValueOnce(find).mockResolvedValueOnce(sort);
     await manage('edit');
@@ -254,11 +254,11 @@ describe('saved query commands', () => {
     expect(persistedStore.createSavedQuery(query).name).toBe(query.name.trim());
     expect((await persistedStore.saveSavedQuery(query)).name).toBe(query.name.trim());
     store.saveSavedQuery.mockImplementation((edited: SavedQuery) => persistedStore.saveSavedQuery(edited));
-    vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(query.name).mockResolvedValueOnce('[{}]').mockResolvedValueOnce('');
+    vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(query.name).mockResolvedValueOnce('[{"Name":"*"}]').mockResolvedValueOnce('');
     await manage('edit');
     expect(store.saveSavedQuery).toHaveBeenCalledOnce();
     expect(await persistedStore.getSavedQuery(query.id)).toEqual(expect.objectContaining({
-      name: query.name.trim(), layout, findJson: [{}]
+      name: query.name.trim(), layout, findJson: [{ Name: '*' }]
     }));
   });
 
@@ -321,7 +321,7 @@ describe('saved query commands', () => {
         store.removeSavedQuery.mockRejectedValue(error);
         await expect(manage('delete')).resolves.toBeUndefined();
       } else {
-        vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('Name').mockResolvedValueOnce('[{}]').mockResolvedValueOnce('');
+        vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('Name').mockResolvedValueOnce('[{"Name":"*"}]').mockResolvedValueOnce('');
         store.saveSavedQuery.mockRejectedValue(error);
         await expect(manage('edit')).resolves.toBeUndefined();
       }

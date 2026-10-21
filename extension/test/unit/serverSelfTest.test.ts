@@ -19,6 +19,7 @@ function harness() {
     listLayouts: vi.fn(async () => success([layout, 'Second', 'Third', 'Fourth'])),
     listScripts: vi.fn(async () => success(['DO NOT PRINT THIS SCRIPT'])),
     getLayoutMetadata: vi.fn<SelfTestClient['getLayoutMetadata']>(async () => success({ fieldMetaData: [{ name: field, result: 'text', type: 'normal' }, { name: 'Calc', result: 'text', type: 'calculation' }] })),
+    listRecords: vi.fn(async () => success({ data: [{ recordId: '7', modId: '1', fieldData: { [field]: 'PRIVATE RECORD VALUE' } }] })),
     findRecords: vi.fn(async (_profile, _layout, body) => {
       if (Object.keys(body.query[0] ?? {}).length) {
         observed = { status: 500, code: '401', message: 'No records match the request' };
@@ -65,8 +66,8 @@ describe('Test My Server', () => {
     const { run, client, ui } = harness();
     const report = (await run())!;
     expect(client.getLayoutMetadata.mock.calls.map((call) => call[1])).toEqual([layout, 'Second', 'Third']);
-    expect(client.findRecords).toHaveBeenNthCalledWith(1, profile, layout, { query: [{}], limit: 1 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
-    expect(client.findRecords.mock.calls[1]?.[2].query[0]).toHaveProperty(field);
+    expect(client.listRecords).toHaveBeenCalledWith(profile, layout, { limit: 1 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(client.findRecords.mock.calls[0]?.[2].query[0]).toHaveProperty(field);
     expect(client.getRecord).toHaveBeenCalledWith(profile, layout, '7', expect.anything());
     expect(client.createRecord).not.toHaveBeenCalled();
     expect(ui.confirmWrite).not.toHaveBeenCalled();
@@ -94,7 +95,7 @@ describe('Test My Server', () => {
 
   it('records a no-records finding from the first find even without a second probe', async () => {
     const h = harness();
-    h.client.findRecords.mockImplementation(async () => {
+    h.client.listRecords.mockImplementation(async () => {
       h.setObservation({ status: 404, code: '401', message: 'No records match' });
       return { data: [] };
     });
@@ -220,7 +221,8 @@ describe('Test My Server', () => {
   it('skips the error probe when no text field is selected', async () => {
     const h = harness(); h.ui.pickField.mockResolvedValue(undefined);
     await h.run();
-    expect(h.client.findRecords).toHaveBeenCalledOnce();
+    expect(h.client.listRecords).toHaveBeenCalledOnce();
+    expect(h.client.findRecords).not.toHaveBeenCalled();
   });
 
   it('requires typed script and confirmation; preserves script and parameter exactly', async () => {

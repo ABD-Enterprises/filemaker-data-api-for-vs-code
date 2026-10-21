@@ -898,9 +898,10 @@ export function createEngine(options = {}) {
 
   async function find(ctx, db, layout, table) {
     const body = ctx.body ?? {};
+    if (!Object.hasOwn(body, 'query')) throw err(10, 'Missing required property: query', 400);
     if (!Array.isArray(body.query) || !body.query.every(isPlainObject))
       throw err(960, 'Find query is invalid');
-    if (body.query.length === 0) throw err(400);
+    if (body.query.length === 0 || body.query.some((request) => !Object.entries(request).some(([key, value]) => key !== 'omit' && value !== '' && value !== null))) throw err(400);
     const q = readQuery(ctx.query, body);
     const offset = intParam(body.offset, 1);
     const limit = intParam(body.limit, 100);

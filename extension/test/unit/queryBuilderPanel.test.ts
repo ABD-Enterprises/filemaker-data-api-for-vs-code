@@ -105,6 +105,12 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
   });
 
+  it.each(['[]', '[{}]', '[{"omit":"true"}]', '[{"Name":""}]'])('refuses an empty form %s before sending a find', async (findJson) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson, runId: 4 } });
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', message: expect.stringContaining('Enter at least one field value to search'), runId: 4 }));
+  });
+
   it('tags a failed run with its run id', async () => {
     panel.close();
     panel = openPanel({ findRecords: vi.fn(async () => Promise.reject(new Error('Field is missing'))) });

@@ -15,7 +15,7 @@ export interface SelfTestObservation {
 }
 export interface SelfTestClient extends Pick<FMClient,
   'getProductInfo' | 'createSession' | 'listHostedDatabases' | 'listLayouts' | 'listScripts' |
-  'getLayoutMetadata' | 'findRecords' | 'getRecord' | 'createRecord' | 'editRecord' |
+  'getLayoutMetadata' | 'listRecords' | 'findRecords' | 'getRecord' | 'createRecord' | 'editRecord' |
   'deleteRecord' | 'runScript' | 'deleteSession'> {
   resetObservation(): void;
   observation(): SelfTestObservation;
@@ -127,7 +127,7 @@ export async function testMyServer(
     const layout = await ui.pickLayout(layouts, false);
     check();
     if (layout !== undefined && layouts.includes(layout)) {
-      const found = await step('Read-only find (limit 1)', () => client.findRecords(profile, layout, { query: [{}], limit: 1 }, control));
+      const found = await step('Read a record (limit 1)', () => client.listRecords(profile, layout, { limit: 1 }, control));
       const first = found?.data[0];
       if (first) await step('Get found record by ID', () => client.getRecord(profile, layout, first.recordId, control));
       else skip('Get found record by ID', 'No record was found.');
@@ -139,7 +139,7 @@ export async function testMyServer(
         await step('No-records error check', () => client.findRecords(profile, layout, { query: [{ [field]: `==__FileMaker_self_test_${randomUUID()}__` }], limit: 1 }, control), '401');
       } else skip('No-records error check', 'Skipped: no text field chosen.');
     } else {
-      skip('Read-only find / get / no-records check', 'Skipped: no layout chosen.');
+      skip('Read a record / get / no-records check', 'Skipped: no layout chosen.');
     }
     check();
     if (mode === 'write' && ui.allowed('write')) {

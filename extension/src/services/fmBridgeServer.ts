@@ -1,3 +1,4 @@
+import { assertFindCriteria } from '../utils/findCriteria';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
 
@@ -39,7 +40,7 @@ export class FmBridgeServer {
     private readonly profileStore: Pick<ProfileStore, 'getActiveProfileId' | 'getProfile'>,
     private readonly fmClient: Pick<
       FMClient,
-      'findRecords' | 'getRecord' | 'editRecord' | 'createRecord' | 'deleteRecord' | 'runScript'
+      'listRecords' | 'findRecords' | 'getRecord' | 'editRecord' | 'createRecord' | 'deleteRecord' | 'runScript'
     >,
     private readonly fmWebProjectService: Pick<FmWebProjectService, 'isWorkspaceTrusted' | 'readProjectConfig'>,
     private readonly logger: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>,
@@ -248,10 +249,11 @@ export class FmBridgeServer {
 
     try {
       if (route === '/find') {
-        const layout = requireString(payload.layout, 'layout');
+        const layout = payload.layout;
+        if (typeof layout !== 'string' || /^\s*$/.test(layout)) throw new Error('layout is required.');
         const query = payload.query;
-        if (!Array.isArray(query) || query.length === 0) {
-          throw new Error('find route requires a non-empty query array.');
+        if (!Array.isArray(query)) {
+          throw new Error('find route requires a query array.');
         }
 
         const request: FindRecordsRequest = {
@@ -261,6 +263,11 @@ export class FmBridgeServer {
           offset: parseOptionalNumber(payload.offset)
         };
 
+        // Runtime Find All uses [] or [{}] at the local bridge, never an empty Data API find.
+        if (query.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item) && Object.keys(item).length === 0)) {
+          return await this.fmClient.listRecords(profile, layout, { limit: request.limit, offset: request.offset, sort: request.sort }, { signal: controller.signal }) as unknown as Record<string, unknown>;
+        }
+        assertFindCriteria(request.query);
         const result = await this.fmClient.findRecords(profile, layout, request, {
           signal: controller.signal
         });

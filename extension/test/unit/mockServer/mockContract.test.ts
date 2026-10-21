@@ -80,6 +80,15 @@ const admin = async (route: string, body?: unknown): Promise<any> =>
   ).json();
 const L = (name: string) => `/databases/Quality/layouts/${encodeURIComponent(name)}`;
 
+describe('owner-verified empty find contract', () => {
+  it.each([{ query: [] }, { query: [{}] }, {}])('returns the real-server status, code and message for %j', async (body) => {
+    const response = await http.call('POST', `${L('Customers')}/_find`, { token, body });
+    const missing = !('query' in body);
+    expect(response.status).toBe(missing ? 400 : 500);
+    expect(response.body.messages).toEqual([{ code: missing ? '10' : '400', message: missing ? 'Missing required property: query' : 'Find criteria are empty' }]);
+  });
+});
+
 describe('documented response shapes', () => {
   it('login returns the token in the body and the X-FM-Data-Access-Token header', async () => {
     const r = await http.call('POST', '/databases/Quality/sessions', {

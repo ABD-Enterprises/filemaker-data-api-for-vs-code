@@ -81,9 +81,9 @@ describe('runScript integration (mocked HTTP)', () => {
         messages: [{ code: '501', message: 'Not Implemented' }]
       });
 
-    // The documented "another request" form: the script is in the BODY of a find limited to one record.
+    // The alternative reads at most one record, with the script in the GET query.
     nock(server)
-      .post(`${apiBase}/layouts/Contacts/_find`, (body: Record<string, unknown>) => body.script === 'MyScript' && body.limit === 1)
+      .get(`${apiBase}/layouts/Contacts/records`).query({ script: 'MyScript', _limit: 1 })
       .reply(501, {
         messages: [{ code: '501', message: 'Not Implemented' }]
       });
