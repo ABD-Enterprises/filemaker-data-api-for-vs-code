@@ -24,10 +24,11 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 
 ### [FIX]
 
+- Trusted certificates (trusted by fingerprint) and older allow-self-signed profiles now work without changing a VS Code setting, so a server with FileMaker's default certificate can be trusted and used. A changed trusted certificate is refused before any credentials are sent; a trusted-fingerprint connection that would need a proxy is refused with advice. Custom CA file profiles are unchanged: they keep going through a proxy as before. An older allow-self-signed profile connects directly and does not use a VS Code or system proxy.
 - Warn before NUL characters can lose text in record edits and creation, refuse affected batch rows and AI writes, and generate valid types when a layout lists a field twice. Record the real-server findings and the remaining gap for creating portal rows.
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 

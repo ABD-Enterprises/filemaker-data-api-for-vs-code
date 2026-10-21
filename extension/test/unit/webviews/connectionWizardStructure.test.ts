@@ -25,6 +25,14 @@ const wizardHtmlSource = readFileSync(wizardHtmlSourcePath, 'utf8');
 const wizardJsSource = readFileSync(wizardJsPath, 'utf8');
 
 describe('Connection wizard HTML/JS structural contract', () => {
+  it('explains certificate trust without requiring a VS Code setting change', () => {
+    for (const source of [wizardHtmlSource, wizardJsSource]) {
+      expect(source).toContain('No VS Code setting change is needed.');
+      expect(source).not.toContain('setting on fallback or off');
+      expect(source).not.toContain('setting is fallback or off');
+    }
+  });
+
   it('HTML template emits a <form id="wizardForm"> element', () => {
     // The form id is what the UI script looks up. Without this, input/change/submit
     // listeners cannot install and the wizard breaks silently.

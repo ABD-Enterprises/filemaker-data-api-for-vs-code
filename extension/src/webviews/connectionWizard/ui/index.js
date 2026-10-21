@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       certificateStatus.textContent = certPin
         ? 'Trusted by you: the certificate with SHA-256 ' + certPin.sha256.toUpperCase().replace(/(..)(?=.)/g, '$1:') +
           (certPin.allowExpired ? ' (you accepted that it is expired or not yet valid).' : '.') +
-          ' This only applies while VS Code\'s http.proxySupport setting is fallback or off; with its default, override, VS Code\'s normal certificate check applies instead.'
+          ' No VS Code setting change is needed. A trusted certificate requires a direct connection without a proxy.'
         : 'No certificate has been trusted by hand. The server\'s certificate is checked the normal way.';
     }
     if (forgetCertBtn) forgetCertBtn.classList.toggle('hidden', !certPin);

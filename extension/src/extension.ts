@@ -28,6 +28,7 @@ import { registerAiContextCommands } from './commands/aiContext';
 import { registerSchemaSnapshotCommands } from './commands/schemaSnapshots';
 import { registerCopyRequestCommands } from './commands/copyRequest';
 import { registerScriptRunnerCommands } from './commands/scriptRunner';
+import { registerTestMyServerCommand } from './commands/testMyServer';
 import { activationLogLine, registerAboutCommand } from './about/aboutCommand';
 import { getRuntimeVersion, setRuntimeVersion } from './about/runtimeVersion';
 import { registerShowDiagnosticsCommand } from './commands/showDiagnostics';
@@ -242,8 +243,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         setSystemCertificatePolicy(() =>
           vscode.workspace.getConfiguration('http').get<boolean>('systemCertificates', true)
         );
-        // http.proxySupport "override" (VS Code's default) replaces the extension's agent, so a
-        // pinned certificate could not be checked; pinned requests are then refused with the fix.
+        // Keep the fallback for unexpected certificate failures aware of VS Code's networking patch.
         proxySupport.installAgentReplacedPolicy();
         warmSystemCertificates();
         loadedFmClient = new FMClient(
@@ -717,6 +717,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     layoutInspectorTree,
     layoutSelectionDisposable,
     ...coreCommandDisposables,
+    registerTestMyServerCommand({ context, profileStore, secretStore, settingsService, roleGuard, logger }),
     ...layoutInspectorDisposables,
     ...savedQueryDisposables,
     ...schemaDisposables,
