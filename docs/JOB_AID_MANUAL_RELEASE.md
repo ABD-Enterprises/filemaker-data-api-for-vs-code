@@ -29,7 +29,7 @@ npm run build
 npm run package:check
 ```
 
-`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.6.0.vsix` (about 1.9 MB, 53 files; the size varies slightly by build, about 2,011,500 bytes, well under the 5 MiB budget).
+`package:check` first checks that `extension/THIRD_PARTY_NOTICES.txt` is current and then runs `vsce package`. The file is written to `artifacts/filemaker-data-api-tools-1.6.0.vsix` (about 1.9 MB, 53 files; the size varies slightly by build, about 2,011,500 bytes, well under the 3 MiB budget).
 
 Verify it:
 
@@ -98,7 +98,7 @@ Checked 2026-10-19 (<https://cli.github.com/manual/gh_release_create>): without 
 4. Pushing the tag in step 2 started a `CI` run for `v1.6.0`. It runs `build-test` and `package` and then waits at `publish`. **The Reject button does not exist at first.** It appears only after the `build-test` and `package` jobs finish, a few minutes after the tag push (the run page then shows `publish` as waiting). Wait for it; do not approve in the meantime. Then **open the run, choose Review deployments, tick `marketplace`, and click Reject** (checked 2026-10-19 against <https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/reviewing-deployments>: the buttons are "Approve and deploy" and "Reject"; rejecting makes the run fail). The run ends red; that is expected. Do not approve it: the publish job cannot publish (the Azure variables are unset) and the `release` job would try to create a release that already exists.
 5. The tag run also builds the VSIX in CI (artifact `extension-vsix`). Its bytes differ from yours (build time stamps), so compare the version and file list, not the hash.
 
-There is no supported way to avoid that red run with the current workflow (it only triggers on tags); the Entra setup removes the problem. A draft release or `--target` does not avoid it either, and when the tag appears in those cases is undocumented, so they are not used here.
+There is no supported way to avoid that red run with the current workflow (the release jobs run only for tags; CI also runs on pull requests and pushes to `main`); the Entra setup removes the problem. A draft release or `--target` does not avoid it either, and when the tag appears in those cases is undocumented, so they are not used here.
 
 ## 4. After publishing
 
