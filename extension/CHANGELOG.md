@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.
 - [INTERNAL] Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
 
 - [INTERNAL] Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
