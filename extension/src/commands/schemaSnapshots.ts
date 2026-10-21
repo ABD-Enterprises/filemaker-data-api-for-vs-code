@@ -92,47 +92,47 @@ export function registerSchemaSnapshotCommands(
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.diffSchemaSnapshots', async (arg: unknown) => {
-      const contextArg = parseLayoutArg(arg);
-      const profile = await resolveProfileFromArg(contextArg, profileStore, true);
-      if (!profile) {
-        return;
-      }
-
-      const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
-      if (!layout) {
-        return;
-      }
-
-      const snapshots = await snapshotStore.listSnapshots({
-        profileId: profile.id,
-        layout
-      });
-      if (snapshots.length < 2) {
-        vscode.window.showInformationMessage('At least two snapshots are required to diff.');
-        return;
-      }
-
-      const older = await pickSnapshot('Select older snapshot', snapshots);
-      if (!older) {
-        return;
-      }
-
-      const newer = await pickSnapshot(
-        'Select newer snapshot',
-        snapshots.filter((snapshot) => snapshot.id !== older.id)
-      );
-      if (!newer) {
-        return;
-      }
-
-      const olderSnapshot = await snapshotStore.getSnapshot(older.id);
-      const newerSnapshot = await snapshotStore.getSnapshot(newer.id);
-      if (!olderSnapshot || !newerSnapshot) {
-        vscode.window.showErrorMessage('Unable to load one or both selected snapshots.');
-        return;
-      }
-
       try {
+        const contextArg = parseLayoutArg(arg);
+        const profile = await resolveProfileFromArg(contextArg, profileStore, true);
+        if (!profile) {
+          return;
+        }
+
+        const layout = contextArg.layout ?? (await promptForLayout(profile, fmClient));
+        if (!layout) {
+          return;
+        }
+
+        const snapshots = await snapshotStore.listSnapshots({
+          profileId: profile.id,
+          layout
+        });
+        if (snapshots.length < 2) {
+          vscode.window.showInformationMessage('At least two snapshots are required to diff.');
+          return;
+        }
+
+        const older = await pickSnapshot('Select older snapshot', snapshots);
+        if (!older) {
+          return;
+        }
+
+        const newer = await pickSnapshot(
+          'Select newer snapshot',
+          snapshots.filter((snapshot) => snapshot.id !== older.id)
+        );
+        if (!newer) {
+          return;
+        }
+
+        const olderSnapshot = await snapshotStore.getSnapshot(older.id);
+        const newerSnapshot = await snapshotStore.getSnapshot(newer.id);
+        if (!olderSnapshot || !newerSnapshot) {
+          vscode.window.showErrorMessage('Unable to load one or both selected snapshots.');
+          return;
+        }
+
         const diff = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,

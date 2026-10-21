@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 import type { AiMcpController } from '../ai/mcp/aiMcpController';
 import { buildMcpConfig, discoveryDirectory, installShim } from '../ai/mcp/mcpConfig';
+import { toUserErrorMessage } from '../utils/errorUx';
 
 export const TOGGLE_SERVER_COMMAND = 'filemakerDataApiTools.toggleAiServer';
 export const COPY_MCP_CONFIG_COMMAND = 'filemakerDataApiTools.copyAiMcpConfig';
@@ -54,7 +55,7 @@ export function registerAiMcpCommands(deps: Deps): vscode.Disposable[] {
           );
         }
       } catch (error) {
-        void vscode.window.showErrorMessage((error as Error).message);
+        void vscode.window.showErrorMessage(toUserErrorMessage(error));
       }
       deps.refresh();
     }),

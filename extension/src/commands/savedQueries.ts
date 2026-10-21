@@ -33,142 +33,196 @@ export function registerSavedQueriesCommands(
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.runSavedQuery', async (arg: unknown) => {
-      const selected = await resolveSavedQuery(arg, savedQueriesStore);
-      if (!selected) {
-        return;
-      }
+      try {
+        const selected = await resolveSavedQuery(arg, savedQueriesStore);
+        if (!selected) {
+          return;
+        }
 
-      await runSavedQuery(selected, profileStore, savedQueriesStore, fmClient);
+        await runSavedQuery(selected, profileStore, savedQueriesStore, fmClient);
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to run saved query.',
+          logger,
+          logMessage: 'Failed to run saved query.'
+        });
+      }
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.openSavedQuery', async (arg: unknown) => {
-      const selected = await resolveSavedQuery(arg, savedQueriesStore);
-      if (!selected) {
-        return;
-      }
+      try {
+        const selected = await resolveSavedQuery(arg, savedQueriesStore);
+        if (!selected) {
+          return;
+        }
 
-      QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
-        profileId: selected.profileId,
-        layout: selected.layout,
-        savedQuery: selected
-      });
+        QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
+          profileId: selected.profileId,
+          layout: selected.layout,
+          savedQuery: selected
+        });
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to open saved query.',
+          logger,
+          logMessage: 'Failed to open saved query.'
+        });
+      }
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.deleteSavedQuery', async (arg: unknown) => {
-      const selected = await resolveSavedQuery(arg, savedQueriesStore);
-      if (!selected) {
-        return;
+      try {
+        const selected = await resolveSavedQuery(arg, savedQueriesStore);
+        if (!selected) {
+          return;
+        }
+
+        await deleteSavedQuery(selected, savedQueriesStore, refreshExplorer);
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to delete saved query.',
+          logger,
+          logMessage: 'Failed to delete saved query.'
+        });
       }
-
-      const confirmation = await vscode.window.showWarningMessage(
-        `Delete saved query "${selected.name}"?`,
-        { modal: true },
-        'Delete'
-      );
-
-      if (confirmation !== 'Delete') {
-        return;
-      }
-
-      await savedQueriesStore.removeSavedQuery(selected.id);
-      refreshExplorer();
-      vscode.window.showInformationMessage(`Deleted saved query "${selected.name}".`);
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.manageSavedQueries', async () => {
-      const selected = await resolveSavedQuery(undefined, savedQueriesStore);
-      if (!selected) {
-        return;
-      }
-
-      const action = await vscode.window.showQuickPick(
-        [
-          { label: 'Run', value: 'run' },
-          { label: 'Open in Query Builder', value: 'open' },
-          { label: 'Edit', value: 'edit' },
-          { label: 'Delete', value: 'delete' },
-          { label: 'Export This Query', value: 'export' }
-        ],
-        {
-          title: `Manage Saved Query: ${selected.name}`
+      try {
+        const selected = await resolveSavedQuery(undefined, savedQueriesStore);
+        if (!selected) {
+          return;
         }
-      );
 
-      if (!action) {
-        return;
-      }
+        const action = await vscode.window.showQuickPick(
+          [
+            { label: 'Run', value: 'run' },
+            { label: 'Open in Query Builder', value: 'open' },
+            { label: 'Edit', value: 'edit' },
+            { label: 'Delete', value: 'delete' },
+            { label: 'Export This Query', value: 'export' }
+          ],
+          {
+            title: `Manage Saved Query: ${selected.name}`
+          }
+        );
 
-      switch (action.value) {
-        case 'run':
-          await runSavedQuery(selected, profileStore, savedQueriesStore, fmClient);
-          break;
-        case 'open':
-          QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
-            profileId: selected.profileId,
-            layout: selected.layout,
-            savedQuery: selected
-          });
-          break;
-        case 'edit':
-          await editSavedQuery(selected, savedQueriesStore);
-          refreshExplorer();
-          break;
-        case 'delete':
-          await savedQueriesStore.removeSavedQuery(selected.id);
-          refreshExplorer();
-          vscode.window.showInformationMessage(`Deleted saved query "${selected.name}".`);
-          break;
-        case 'export':
-          await exportSingleQuery(selected);
-          break;
-        default:
-          break;
+        if (!action) {
+          return;
+        }
+
+        switch (action.value) {
+          case 'run':
+            await runSavedQuery(selected, profileStore, savedQueriesStore, fmClient);
+            break;
+          case 'open':
+            QueryBuilderPanel.createOrShow(context, profileStore, savedQueriesStore, fmClient, logger, {
+              profileId: selected.profileId,
+              layout: selected.layout,
+              savedQuery: selected
+            });
+            break;
+          case 'edit':
+            await editSavedQuery(selected, savedQueriesStore);
+            refreshExplorer();
+            break;
+          case 'delete':
+            await deleteSavedQuery(selected, savedQueriesStore, refreshExplorer);
+            break;
+          case 'export':
+            await exportSingleQuery(selected);
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to manage saved queries.',
+          logger,
+          logMessage: 'Failed to manage saved queries.'
+        });
       }
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.exportSavedQueries', async () => {
-      const payload = await savedQueriesStore.exportSavedQueries();
-      const uri = await vscode.window.showSaveDialog({
-        title: 'Export Saved Queries',
-        filters: {
-          JSON: ['json']
-        },
-        saveLabel: 'Export Saved Queries',
-        defaultUri: vscode.Uri.file('saved-queries.json')
-      });
+      try {
+        const payload = await savedQueriesStore.exportSavedQueries();
+        const uri = await vscode.window.showSaveDialog({
+          title: 'Export Saved Queries',
+          filters: {
+            JSON: ['json']
+          },
+          saveLabel: 'Export Saved Queries',
+          defaultUri: vscode.Uri.file('saved-queries.json')
+        });
 
-      if (!uri) {
-        return;
+        if (!uri) {
+          return;
+        }
+
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(payload, null, 2), 'utf8'));
+        vscode.window.showInformationMessage(`Exported ${payload.queries.length} saved queries.`);
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to export saved queries.',
+          logger,
+          logMessage: 'Failed to export saved queries.'
+        });
       }
-
-      await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(payload, null, 2), 'utf8'));
-      vscode.window.showInformationMessage(`Exported ${payload.queries.length} saved queries.`);
     }),
 
     vscode.commands.registerCommand('filemakerDataApiTools.importSavedQueries', async () => {
-      const picks = await vscode.window.showOpenDialog({
-        title: 'Import Saved Queries',
-        canSelectFiles: true,
-        canSelectMany: false,
-        filters: {
-          JSON: ['json']
+      try {
+        const picks = await vscode.window.showOpenDialog({
+          title: 'Import Saved Queries',
+          canSelectFiles: true,
+          canSelectMany: false,
+          filters: {
+            JSON: ['json']
+          }
+        });
+
+        const file = picks?.[0];
+        if (!file) {
+          return;
         }
-      });
 
-      const file = picks?.[0];
-      if (!file) {
-        return;
+        const rawBuffer = await vscode.workspace.fs.readFile(file);
+        const result = await savedQueriesStore.importSavedQueries(Buffer.from(rawBuffer).toString('utf8'));
+
+        refreshExplorer();
+        vscode.window.showInformationMessage(
+          `Imported saved queries: ${result.imported} added, ${result.updated} updated, ${result.skipped} skipped.`
+        );
+      } catch (error) {
+        await showCommandError(error, {
+          fallbackMessage: 'Failed to import saved queries.',
+          logger,
+          logMessage: 'Failed to import saved queries.'
+        });
       }
-
-      const rawBuffer = await vscode.workspace.fs.readFile(file);
-      const result = await savedQueriesStore.importSavedQueries(Buffer.from(rawBuffer).toString('utf8'));
-
-      refreshExplorer();
-      vscode.window.showInformationMessage(
-        `Imported saved queries: ${result.imported} added, ${result.updated} updated, ${result.skipped} skipped.`
-      );
     })
   ];
+}
+
+async function deleteSavedQuery(
+  selected: SavedQuery,
+  savedQueriesStore: SavedQueriesStore,
+  refreshExplorer: () => void
+): Promise<void> {
+  const confirmation = await vscode.window.showWarningMessage(
+    `Delete saved query "${selected.name}"?`,
+    { modal: true },
+    'Delete'
+  );
+
+  if (confirmation !== 'Delete') {
+    return;
+  }
+
+  await savedQueriesStore.removeSavedQuery(selected.id);
+  refreshExplorer();
+  vscode.window.showInformationMessage(`Deleted saved query "${selected.name}".`);
 }
 
 export async function runSavedQuery(

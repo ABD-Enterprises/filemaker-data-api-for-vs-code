@@ -262,23 +262,76 @@ describe('saved query commands', () => {
     }));
   });
 
-  // These desired behaviors fail in the current handlers. Keep them visible without
-  // changing production behavior in this coverage-only task; a fix must remove .fails.
-  it.fails('known gap: Manage Delete requires modal confirmation before removing a query', async () => {
-    const { store } = setup();
+  it.each([undefined, 'Cancel', 'Delete'])('Manage Delete requires modal confirmation (%s)', async (choice) => {
+    const { store, refreshExplorer } = setup();
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(choice as never);
     await manage('delete');
     expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(`Delete saved query "${query.name}"?`, { modal: true }, 'Delete');
-    expect(store.removeSavedQuery).not.toHaveBeenCalled();
+    if (choice === 'Delete') {
+      expect(store.removeSavedQuery).toHaveBeenCalledWith(query.id);
+      expect(refreshExplorer).toHaveBeenCalledOnce();
+    } else {
+      expect(store.removeSavedQuery).not.toHaveBeenCalled();
+      expect(refreshExplorer).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    }
   });
 
-  it.fails('known gap: redacts credentials in a plain service Error before showing the toast', async () => {
+  it('redacts credentials in a plain service Error before showing the toast', async () => {
     const { client } = setup();
     client.findRecords.mockRejectedValue(new Error('Operation failed: Authorization: Bearer command-secret'));
     await command('runSavedQuery')({ queryId: query.id });
     expectSafeError();
   });
 
-  it.fails.each(['import', 'export', 'delete', 'resolve'])('known gap: handles a saved-query %s service failure without rejecting', async (action) => {
+  it.each(['runSavedQuery', 'openSavedQuery', 'deleteSavedQuery', 'manageSavedQueries'])(
+    '%s handles a query list failure without rejecting', async (name) => {
+      const { store, refreshExplorer } = setup();
+      store.listSavedQueries.mockRejectedValue(new Error('Lookup failed: Bearer command-secret'));
+      await expect(command(name)()).resolves.toBeUndefined();
+      expectSafeError();
+      expect(refreshExplorer).not.toHaveBeenCalled();
+    }
+  );
+
+  it('handles a saved query profile lookup failure without rejecting', async () => {
+    const { profiles, client } = setup();
+    profiles.getProfile.mockRejectedValue(new Error('Lookup failed: Bearer command-secret'));
+    await expect(command('runSavedQuery')({ queryId: query.id })).resolves.toBeUndefined();
+    expectSafeError();
+    expect(client.findRecords).not.toHaveBeenCalled();
+  });
+
+  it.each(['read', 'write', 'single export', 'manage delete', 'edit'])(
+    'handles a saved-query %s failure without reporting success', async (action) => {
+      const { store, refreshExplorer } = setup();
+      const error = new Error('Operation failed: Bearer command-secret');
+      if (action === 'read') {
+        vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file('/tmp/input.json')]);
+        vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(error);
+        await expect(command('importSavedQueries')()).resolves.toBeUndefined();
+        expect(store.importSavedQueries).not.toHaveBeenCalled();
+      } else if (action === 'write' || action === 'single export') {
+        vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(vscode.Uri.file('/tmp/output.json'));
+        vi.mocked(vscode.workspace.fs.writeFile).mockRejectedValue(error);
+        if (action === 'write') await expect(command('exportSavedQueries')()).resolves.toBeUndefined();
+        else await expect(manage('export')).resolves.toBeUndefined();
+      } else if (action === 'manage delete') {
+        vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Delete' as never);
+        store.removeSavedQuery.mockRejectedValue(error);
+        await expect(manage('delete')).resolves.toBeUndefined();
+      } else {
+        vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('Name').mockResolvedValueOnce('[{}]').mockResolvedValueOnce('');
+        store.saveSavedQuery.mockRejectedValue(error);
+        await expect(manage('edit')).resolves.toBeUndefined();
+      }
+      expectSafeError();
+      expect(refreshExplorer).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['import', 'export', 'delete', 'resolve'])('handles a saved-query %s service failure without rejecting', async (action) => {
     const { store } = setup();
     let result: unknown;
     if (action === 'import') {

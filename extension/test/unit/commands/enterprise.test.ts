@@ -224,7 +224,17 @@ describe('enterprise commands', () => {
     expect(vscode.window.showTextDocument).toHaveBeenCalledWith({}, { preview: false });
   });
 
-  it.fails('known gap: handles report comparison failures without rejecting', async () => {
+  it('handles report write failures without reporting success', async () => {
+    await setup();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ value: 'json' } as never);
+    vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(vscode.Uri.file('/tmp/report.json'));
+    vi.mocked(vscode.workspace.fs.writeFile).mockRejectedValue(new Error('Write failed: Bearer command-secret'));
+    await expect(command('exportEnvironmentComparisonReport')(arg)).resolves.toBeUndefined();
+    expectSafeError();
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it('handles report comparison failures without rejecting', async () => {
     const { service } = await setup();
     service.compareEnvironmentSet.mockRejectedValue(serviceError());
     await expect(command('exportEnvironmentComparisonReport')(arg)).resolves.toBeUndefined();

@@ -139,6 +139,21 @@ describe('schema snapshot commands', () => {
     expect(diffSchemaSnapshotsInWorker).not.toHaveBeenCalled();
   });
 
+  it.each(['list', 'older', 'newer'])('reports a snapshot %s lookup failure safely', async (failure) => {
+    const { snapshotStore } = setup();
+    pickSnapshots();
+    const error = new Error('Operation failed: Bearer command-secret');
+    if (failure === 'list') snapshotStore.listSnapshots.mockRejectedValue(error);
+    else snapshotStore.getSnapshot.mockImplementation(async (id: string) => {
+      if (id === `${failure}-id`) throw error;
+      return older;
+    });
+    await expect(command('diffSchemaSnapshots')(arg)).resolves.toBeUndefined();
+    expectSafeError();
+    expect(diffSchemaSnapshotsInWorker).not.toHaveBeenCalled();
+    expect(SchemaDiffPanel.createOrShow).not.toHaveBeenCalled();
+  });
+
   it('reports a worker failure safely without opening a diff panel', async () => {
     setup();
     pickSnapshots();
