@@ -52,7 +52,7 @@ describe('restored webview tabs', () => {
   });
 
   it('the page escapes the title, has a locked-down policy, and names a command that exists', () => {
-    const html = renderReopenPage({ cspSource: 'x' }, '<img src=x onerror=alert(1)>', 'FileMaker: Open Query Builder');
+    const html = renderReopenPage('<img src=x onerror=alert(1)>', 'FileMaker: Open Query Builder');
     expect(html).not.toContain('<img');
     expect(html).toContain('&lt;img');
     expect(html).toMatch(/Content-Security-Policy" content="default-src 'none'; style-src 'nonce-[A-Za-z0-9+/=_-]+';"/);

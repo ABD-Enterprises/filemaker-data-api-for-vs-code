@@ -26,7 +26,7 @@ export const RESTORABLE_PANELS: ReadonlyArray<{ viewType: string; reopenWith: st
 ];
 
 /** A static page: no script, nothing from the saved state. */
-export function renderReopenPage(webview: Pick<vscode.Webview, 'cspSource'>, title: string, reopenWith: string): string {
+export function renderReopenPage(title: string, reopenWith: string): string {
   const nonce = createNonce();
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8" />
@@ -47,7 +47,7 @@ export function registerPanelRestoreGuards(): vscode.Disposable[] {
   return RESTORABLE_PANELS.map(({ viewType, reopenWith }) =>
     vscode.window.registerWebviewPanelSerializer(viewType, {
       deserializeWebviewPanel: async (panel: vscode.WebviewPanel) => {
-        panel.webview.html = renderReopenPage(panel.webview, panel.title || 'FileMaker', reopenWith);
+        panel.webview.html = renderReopenPage(panel.title || 'FileMaker', reopenWith);
       }
     })
   );
