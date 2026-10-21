@@ -17,7 +17,7 @@ describe('restored webview tabs', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('keeps apostrophes literal while escaping other HTML characters', () => {
-    const html = renderReopenPage({ cspSource: 'x' }, `A's <&>"`, `Run 'this' <&>"`);
+    const html = renderReopenPage(`A's <&>"`, `Run 'this' <&>"`);
     expect(html).toContain(`<title>A's &lt;&amp;&gt;&quot;</title>`);
     expect(html).toContain(`<strong>Run 'this' &lt;&amp;&gt;&quot;</strong>`);
   });
