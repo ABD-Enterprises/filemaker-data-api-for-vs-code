@@ -23,6 +23,7 @@ export interface DiagnosticReport {
   verified?: boolean; pin?: 'match' | 'mismatch' | 'none' | 'invalid';
   hostReplaced?: boolean; environmentProxy?: boolean; http?: number; fmCode?: string;
   allowSelfSigned?: boolean; dataApiFailureCode?: string; dataApiCertificateFailure?: boolean;
+  caFileConfigured?: boolean; verificationFailureCode?: string;
   cancelled?: boolean;
 }
 export interface NetworkSettings { proxySupport: string; proxyConfigured: boolean; systemCertificates: boolean; proxyVariables: string[]; hostReplaced: boolean }
@@ -111,7 +112,8 @@ export function rankDiagnosticCauses(report: DiagnosticReport): string[] {
   if (cert && report.pin !== 'match' && !legacy && (!cert.nameMatch || !report.verified)) {
     if (cert.noNames) causes.push(`No host names listed, so verification by name cannot pass: trust it by fingerprint. Ask the administrator to confirm it, then run Connect and choose Trust; SHA-256: ${formatFingerprint(cert.fingerprint)}.`);
     else if (!cert.nameMatch) causes.push('The certificate is for a different server name. Use a name listed on the certificate, or ask the administrator to replace it.');
-    else if (!cert.chainBeyondLeaf && !cert.selfSigned && report.verified === false) causes.push('The server did not send its intermediate certificate. Ask the administrator to install the full chain on the server, including the intermediate certificate; a root CA file on this computer does not repair the server chain.');
+    else if (!cert.chainBeyondLeaf && !cert.selfSigned && report.verified === false && report.caFileConfigured && ['UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(report.verificationFailureCode ?? '')) causes.push('The server did not send its intermediate certificate. Ask the administrator to install the full chain on the server, including the intermediate certificate; a root CA file on this computer does not repair the server chain.');
+    else if (!cert.selfSigned) causes.push("This computer does not trust the authority that issued this certificate. If your organization runs its own certificate authority, set its CA file (Certificate authority file) in the profile. If the certificate comes from a public authority (for example Let's Encrypt), the server may not be sending its intermediate certificate: install the full certificate chain on the server.");
     else causes.push(`This computer does not trust the certificate${cert.selfSigned ? ' (it is self-signed)' : ''}. Ask the administrator for the CA file or a public certificate, or confirm the fingerprint and run Connect and choose Trust; SHA-256: ${formatFingerprint(cert.fingerprint)}.`);
   }
   // hostReplaced describes an affected route, not merely the presence of VS Code's patch.
@@ -179,7 +181,7 @@ async function bounded<T>(task: (signal: AbortSignal) => Promise<T>, signal: Abo
 
 export async function runConnectionDiagnostics(profile: ConnectionProfile, settings: NetworkSettings, probes: DiagnosticProbes, signal: AbortSignal, timeoutMs = 8000): Promise<DiagnosticReport> {
   const url = validateDiagnosticAddress(profile.serverUrl);
-  const report: DiagnosticReport = { address: url?.origin ?? '(invalid address)', steps: [], allowSelfSigned: profile.allowSelfSigned };
+  const report: DiagnosticReport = { address: url?.origin ?? '(invalid address)', steps: [], allowSelfSigned: profile.allowSelfSigned, caFileConfigured: Boolean(profile.caBundlePath) };
   const step = async <T>(name: string, task: (signal: AbortSignal) => Promise<T>, describe: (value: T) => string): Promise<T | undefined> => {
     const start = Date.now();
     try {
@@ -211,7 +213,10 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
       cert.noNames ? 'No host names listed, so verification by name cannot pass: trust it by fingerprint.' : `Host name or IP matches: ${cert.nameMatch}`
     ].join('\n'));
     if (signal.aborted) { report.cancelled = true; return report; }
-    const verification = await step('Certificate verification', async (s) => { await probes.verify(host, port, profile, s); return true; }, () => 'Node accepts this certificate with the extension’s CA and system-root settings and strict verification.');
+    const verification = await step('Certificate verification', async (s) => {
+      try { await probes.verify(host, port, profile, s); return true; }
+      catch (error) { report.verificationFailureCode = failureCode(error); throw error; }
+    }, () => 'Node accepts this certificate with the extension’s CA and system-root settings and strict verification.');
     report.verified = verification === true;
     const pin = normalizeSha256(profile.pinnedCertSha256);
     report.pin = profile.pinnedCertSha256 && !pin ? 'invalid' : !pin ? 'none' : report.certificate ? pin === report.certificate.fingerprint ? 'match' : 'mismatch' : undefined;

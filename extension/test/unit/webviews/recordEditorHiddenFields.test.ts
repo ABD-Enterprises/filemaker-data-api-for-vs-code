@@ -101,6 +101,18 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     const several = load({ Name: 'A' }, [{ name: 'Name' }, ...['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((name) => ({ name }))]);
     expect(several?.textContent).toMatch(/^7 fields on this layout are not shown .*: a, b, c, d, e, and 2 more\./);
   });
+  it('sends edited text and dates as exact strings, and edited number fields as numbers', () => {
+    const { window, document, send, posted } = loadPage(pageHtml(), uiSource);
+    send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'Test' }], activeProfileId: 'p' } });
+    send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: [' Layout '] } });
+    document.getElementById('recordIdInput')!.value = '1';
+    send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', record: { recordId: '1', fieldData: { ' Text ': 'before', Number: 1, Date: 'before' } },
+      presentationFields: [{ name: ' Text ', type: 'text' }, { name: 'Number', type: 'number' }, { name: 'Date', type: 'date' }] } });
+    window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = '10.50'; input.dispatchEvent(new Event('input')); }`);
+    document.getElementById('previewButton')!.click();
+    expect(posted.at(-1)).toMatchObject({ type: 'previewPatch', payload: { layout: ' Layout ', draftFieldData: { ' Text ': '10.50', Number: 10.5, Date: '10.50' } } });
+  });
+
 });
 
 it.skipIf(!JSDOM)('keeps prototype-like fields in new-record forms and create payloads', () => {

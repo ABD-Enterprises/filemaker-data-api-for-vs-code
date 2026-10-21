@@ -6,6 +6,9 @@
 
 - [FEATURE] Run Diagnose Connection to check a saved server or type an address without saving it. It checks the network, certificate and Data API without signing in, explains likely fixes, and can copy a bug report with the server address hidden.
 
+- [FIX] Keep number-looking text and spaces unchanged when importing CSV or editing records. Keep record IDs separate from fields with the same names, include fields missing from the first row, show when portal rows are incomplete and let the Record Viewer load more. Failed or cancelled exports leave your existing file untouched. CSV can be saved for Excel, and unsupported import files get clear messages.
+
+- [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 - [FIX] Generated types now use the real field type and repeating field names. Generated clients handle empty finds and explain server errors. Special names stay intact; timeouts, paging and error messages give clearer next steps.
 
 - [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.

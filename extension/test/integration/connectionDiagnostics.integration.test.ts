@@ -39,8 +39,10 @@ describe('connection diagnosis against mock TLS modes (requires real sockets)', 
     ['claris-default-cert', false, /No host names listed.*trust it by fingerprint/],
     ['expired', true, /certificate has expired/],
     ['wronghost', true, /different server name/],
-    ['ca', false, /does not trust the certificate/],
-    ['ca', true, /checks passed without signing in/]
+    ['ca', false, /^This computer does not trust the authority.*Certificate authority file.*server may not be sending its intermediate certificate/],
+    ['ca', true, /checks passed without signing in/],
+    ['missing-intermediate', false, /^This computer does not trust the authority.*server may not be sending its intermediate certificate/],
+    ['missing-intermediate', true, /^The server did not send its intermediate certificate.*full chain/]
   ] as const)('%s (trust CA: %s)', async (mode, trustCa, expected) => {
     const dir = mkdtempSync(join(tmpdir(), 'fm-diagnose-'));
     let server: Server | undefined;
@@ -62,6 +64,10 @@ describe('connection diagnosis against mock TLS modes (requires real sockets)', 
       if (mode === 'claris-default-cert') {
         expect(report.certificate).toMatchObject({ noNames: true, chainBeyondLeaf: false, selfSigned: false });
         expect(requests).toHaveLength(0);
+      }
+      if (mode === 'ca' || mode === 'missing-intermediate') {
+        expect(report.certificate).toMatchObject({ chainBeyondLeaf: false, selfSigned: false });
+        if (!trustCa) expect(rankDiagnosticCauses(report)[0]).not.toContain('did not send its intermediate');
       }
       if (mode === 'ca' && trustCa) {
         expect(report.http).toBe(200); expect(report.fmCode).toBe('0'); expect(requests).toHaveLength(1);

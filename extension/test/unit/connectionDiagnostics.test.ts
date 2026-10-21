@@ -31,10 +31,10 @@ describe('diagnostic causes (the mock TLS modes are the oracle)', () => {
     ['notyet', { certificate: { ...certificate, notYetValid: true } }, /not valid until Jan 1 2020/],
     ['proxy', { pin: 'match', environmentProxy: true }, /NO_PROXY/],
     ['VS Code override with pin transport unavailable', { pin: 'match', hostReplaced: true }, /http.proxySupport.*fallback/],
-    ['VS Code override with unpinned untrusted certificate', { verified: false, hostReplaced: true }, /CA file or a public certificate/],
+    ['VS Code override with unpinned untrusted certificate', { verified: false, hostReplaced: true }, /does not trust the authority.*Certificate authority file/],
     ['claris-default-cert', { verified: false, certificate: { ...certificate, noNames: true, nameMatch: false, chainBeyondLeaf: false } }, /No host names listed.*trust it by fingerprint.*AA:AA:AA/],
     ['wronghost', { verified: false, certificate: { ...certificate, nameMatch: false } }, /different server name/],
-    ['untrusted CA', { verified: false }, /CA file or a public certificate/],
+    ['untrusted CA', { verified: false }, /does not trust the authority.*Certificate authority file/],
     ['self-signed', { verified: false, certificate: { ...certificate, selfSigned: true } }, /self-signed/],
     ['TLS unavailable', { certificate: undefined, steps: [fail('TLS')] }, /supported TLS version/],
     ['Data API HTTP error', { steps: [fail('Data API')], http: 503, fmCode: '802' }, /HTTP 503.*FileMaker 802/],
@@ -122,17 +122,34 @@ describe('ordered, bounded, unauthenticated diagnosis', () => {
     const pinned = await runConnectionDiagnostics({ ...profile, allowSelfSigned: true, pinnedCertSha256: certificate.fingerprint }, settings, fake, new AbortController().signal);
     expect(rankDiagnosticCauses(pinned).join(' ')).not.toContain('accepts any certificate');
   });
-  it.each([undefined, '/configured-root.pem'])('names a missing intermediate even with CA file %s', async (caBundlePath) => {
+  it.each(['UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'])('explains unknown private roots and possible missing intermediates for %s without a CA file', async (code) => {
     const fake = probes();
     vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, chainBeyondLeaf: false });
-    vi.mocked(fake.verify).mockRejectedValue({ code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' });
-    const report = await runConnectionDiagnostics({ ...profile, caBundlePath }, settings, fake, new AbortController().signal);
-    expect(rankDiagnosticCauses(report)[0]).toMatch(/The server did not send its intermediate certificate.*full chain/);
-    expect(rankDiagnosticCauses(report).join(' ')).not.toContain('ask the administrator for the CA file');
+    vi.mocked(fake.verify).mockRejectedValue({ code });
+    const report = await runConnectionDiagnostics(profile, settings, fake, new AbortController().signal);
+    expect(report).toMatchObject({ caFileConfigured: false, verificationFailureCode: code, verified: false });
+    expect(rankDiagnosticCauses(report)[0]).toBe("This computer does not trust the authority that issued this certificate. If your organization runs its own certificate authority, set its CA file (Certificate authority file) in the profile. If the certificate comes from a public authority (for example Let's Encrypt), the server may not be sending its intermediate certificate: install the full certificate chain on the server.");
+  });
+  it.each(['UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'])('ranks a missing intermediate first for %s with a configured CA file', async (code) => {
+    const fake = probes();
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, chainBeyondLeaf: false });
+    vi.mocked(fake.verify).mockRejectedValue({ code });
+    const report = await runConnectionDiagnostics({ ...profile, caBundlePath: '/configured-root.pem' }, settings, fake, new AbortController().signal);
+    expect(report).toMatchObject({ caFileConfigured: true, verificationFailureCode: code, verified: false });
+    expect(rankDiagnosticCauses(report)[0]).toMatch(/^The server did not send its intermediate certificate.*full chain/);
+    expect(buildDiagnosticReport(report)).not.toContain('/configured-root.pem');
     report.verified = true;
     expect(rankDiagnosticCauses(report)[0]).toContain('checks passed');
     report.verified = false; report.certificate!.selfSigned = true;
     expect(rankDiagnosticCauses(report)[0]).toContain('self-signed');
+  });
+  it.each(['CERT_UNTRUSTED', 'EPROTO', 'ENOENT', undefined])('does not infer a missing intermediate from a configured CA file and error %s', async (code) => {
+    const fake = probes();
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, chainBeyondLeaf: false });
+    vi.mocked(fake.verify).mockRejectedValue({ code });
+    const report = await runConnectionDiagnostics({ ...profile, caBundlePath: '/configured-root.pem' }, settings, fake, new AbortController().signal);
+    expect(rankDiagnosticCauses(report)[0]).toMatch(/^This computer does not trust the authority/);
+    expect(rankDiagnosticCauses(report)[0]).not.toContain('did not send its intermediate');
   });
   it.each([{}, { pinnedCertSha256: certificate.fingerprint }, { allowSelfSigned: true }, { caBundlePath: '/ca.pem' }])('does not blame VS Code override on a direct profile %j', async (options) => {
     const fake = probes();
