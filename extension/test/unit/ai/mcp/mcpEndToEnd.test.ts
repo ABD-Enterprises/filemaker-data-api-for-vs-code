@@ -11,7 +11,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { buildSync } from 'esbuild';
 import nock from 'nock';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AuditEntry } from '../../../../src/ai/aiAudit';
 import { AiToolService } from '../../../../src/ai/aiToolService';
@@ -82,14 +82,10 @@ beforeAll(async () => {
   const port = await freePort();
   mock = spawn(process.execPath, [join(repo, 'test/mock-server/server.mjs')], { env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'] });
   mockBase = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      await fetch(`${mockBase}/__admin/reset`, { method: 'POST' });
-      break;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
+  await vi.waitFor(async () => {
+    const response = await fetch(`${mockBase}/__admin/reset`, { method: 'POST' });
+    expect(response.ok).toBe(true);
+  }, { timeout: 6000 });
 
   const secrets = new SecretStore(new InMemorySecretStorage() as never);
   await secrets.setPassword('p1', 'testpass1');
@@ -131,7 +127,7 @@ afterEach(async () => {
     await w.server.stop();
     await rm(w.file, { force: true });
   }
-  service.setKilled(false);
+  service?.setKilled(false);
 });
 
 afterAll(async () => {
@@ -228,8 +224,7 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
 
     service.setKilled(true);
     window.server.notifyIfToolsChanged();
-    for (let i = 0; i < 50 && changed === 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(changed).toBe(1);
+    await vi.waitFor(() => expect(changed).toBe(1));
     expect((await client.listTools()).tools).toEqual([]);
     const refused = await client.callTool({ name: 'fm_list_layouts', arguments: {} });
     expect(refused.isError).toBe(true);
@@ -237,8 +232,7 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
 
     service.setKilled(false);
     window.server.notifyIfToolsChanged();
-    for (let i = 0; i < 50 && changed < 2; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(changed).toBe(2);
+    await vi.waitFor(() => expect(changed).toBe(2));
   });
 
   it('does not connect when the discovery token is wrong, and says only that it was refused', async () => {
@@ -317,7 +311,7 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
     child.stdout?.on('data', (data) => (stdout += data));
     const exited = new Promise<number | null>((resolve) => child.once('close', resolve));
     child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' })}\n`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.waitFor(() => expect(stdout).toContain('"id":1'));
     child.stdin?.write(`{"pad":"${'x'.repeat(10_000)}"}\n`);
     await exited;
     expect(stdout).toContain('Message too large');
@@ -344,8 +338,7 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
     children.push(child);
     const code = await new Promise<number | null>((resolve) => child.once('exit', resolve));
     expect(code).toBe(0);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(window.server.connectionCount()).toBe(0);
+    await vi.waitFor(() => expect(window.server.connectionCount()).toBe(0));
   });
 
   it('shuts down cleanly: stopping the server ends the shim with 0 and the client sees the close', async () => {
@@ -354,8 +347,7 @@ describe('MCP end to end (real shim, real socket, SDK client)', () => {
     let closed = false;
     client.onclose = () => void (closed = true);
     await window.server.stop();
-    for (let i = 0; i < 100 && !closed; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(closed).toBe(true);
+    await vi.waitFor(() => expect(closed).toBe(true), { timeout: 2000 });
     const child = spawn(process.execPath, [shimPath, '--dir', window.directory], { stdio: ['pipe', 'pipe', 'pipe'] });
     children.push(child);
     const code = await new Promise<number | null>((resolve) => child.once('exit', resolve));

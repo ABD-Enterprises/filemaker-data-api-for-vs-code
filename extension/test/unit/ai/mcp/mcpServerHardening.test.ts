@@ -12,7 +12,6 @@ import { createEndpoint } from '../../../../src/ai/mcp/socketPath';
 import { RawClient } from './mcpClientHelper';
 
 const posix = process.platform !== 'win32';
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('AiMcpServer hardening', () => {
   let base: string;
@@ -74,8 +73,7 @@ describe('AiMcpServer hardening', () => {
         silent.push(await RawClient.connect(endpoint));
         clients.push(silent[i] as RawClient);
       }
-      await wait(50);
-      expect(silent.filter((c) => !c.closed)).toHaveLength(2);
+      await vi.waitFor(() => expect(silent.filter((c) => !c.closed)).toHaveLength(2));
       const legitimate = await client();
       legitimate.send({ jsonrpc: '2.0', id: 1, method: 'ping' });
       expect((await legitimate.json()).result).toEqual({});
@@ -86,7 +84,8 @@ describe('AiMcpServer hardening', () => {
       const authed = [await client(), await client(), await client()];
       const silent = [await RawClient.connect(endpoint), await RawClient.connect(endpoint)];
       clients.push(...silent);
-      await wait(50);
+      // Deliberate short observation window: silent peers must not displace authenticated ones.
+      await new Promise((resolve) => setTimeout(resolve, 30));
       expect(server.connectionCount()).toBe(3);
       expect(authed.every((c) => !c.closed)).toBe(true);
       expect(silent.every((c) => !c.closed)).toBe(true);
@@ -111,16 +110,14 @@ describe('AiMcpServer hardening', () => {
         process.execPath,
         [
           '-e',
-          `const net = require('net');
-           setInterval(() => { for (let i = 0; i < ${flood.perTick}; i += 1) { const s = net.connect(process.argv[1]); s.on('error', () => {}); setTimeout(() => s.destroy(), 1500); } }, ${flood.everyMs});
-           console.log('flooding');`,
+          `const net = require('net'); let announced = false;
+           setInterval(() => { for (let i = 0; i < ${flood.perTick}; i += 1) { const s = net.connect(process.argv[1]); s.on('error', () => {}); s.once('connect', () => { if (!announced) { announced = true; console.log('flooding'); } }); setTimeout(() => s.destroy(), 1500); } }, ${flood.everyMs});`,
           endpoint
         ],
         { stdio: ['ignore', 'pipe', 'inherit'] }
       );
       try {
         await new Promise<void>((resolve) => flooder.stdout?.once('data', () => resolve()));
-        await wait(300);
         let succeeded = 0;
         const attempts = flood.attempts;
         for (let i = 0; i < attempts; i += 1) {
@@ -133,7 +130,8 @@ describe('AiMcpServer hardening', () => {
             if ((await c.next(500)).includes('"result"')) succeeded += 1;
           }
           c.close();
-          await wait(5);
+          // Deliberate load pacing: give the separate flooder time between attempts.
+          await new Promise((resolve) => setTimeout(resolve, 5));
         }
         expect(succeeded / attempts).toBeGreaterThanOrEqual(0.95);
       } finally {
@@ -146,11 +144,17 @@ describe('AiMcpServer hardening', () => {
     it('does not close a connection while a call is in flight, and closes it once it is idle', async () => {
       await start({ idleTimeoutMs: 100 });
       const c = await initialized();
+      let release: () => void = () => undefined;
       core.invoke.mockImplementationOnce(async () => {
-        await wait(400);
+        await new Promise<void>((resolve) => { release = resolve; });
         return { done: true };
       });
       c.send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'fm_list_layouts' } });
+      await vi.waitFor(() => expect(core.invoke).toHaveBeenCalledOnce());
+      // Deliberate silence across an idle deadline: an in-flight call must keep the peer open.
+      expect(await c.next(150)).toBe('<timeout>');
+      expect(c.closed).toBe(false);
+      release();
       const reply = await c.json(3000);
       expect(reply.result.isError).toBe(false);
       expect(c.closed).toBe(false);
@@ -173,10 +177,8 @@ describe('AiMcpServer hardening', () => {
       c.socket.pause();
       for (let i = 0; i < 6; i += 1) {
         c.send({ jsonrpc: '2.0', id: 200 + i, method: 'tools/call', params: { name: 'fm_list_layouts' } });
-        await wait(30);
       }
-      await wait(200);
-      expect(server.connectionCount()).toBe(0);
+      await vi.waitFor(() => expect(server.connectionCount()).toBe(0));
     });
 
     it('lets a client that reads keep receiving large results', async () => {
@@ -195,28 +197,31 @@ describe('AiMcpServer hardening', () => {
       await start();
       const c = await initialized();
       let release: () => void = () => undefined;
-      core.invoke.mockImplementationOnce(async () => {
+      let signal: AbortSignal | undefined;
+      core.invoke.mockImplementationOnce(async (_n: string, _i: unknown, ctx: { signal: AbortSignal }) => {
+        signal = ctx.signal;
         await new Promise<void>((resolve) => (release = resolve));
         return { late: true };
       });
       c.send({ jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'fm_list_layouts' } });
-      await wait(50);
+      await vi.waitFor(() => expect(signal).toBeDefined());
       c.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 20 } });
-      await wait(50);
+      await vi.waitFor(() => expect(signal?.aborted).toBe(true));
       release();
-      await wait(100);
       c.send({ jsonrpc: '2.0', id: 21, method: 'ping' });
       expect((await c.json()).id).toBe(21);
       expect(c.lines).toEqual([]);
 
+      signal = undefined;
       core.invoke.mockImplementationOnce(async (_n: string, _i: unknown, ctx: { signal: AbortSignal }) => {
+        signal = ctx.signal;
         await new Promise((resolve) => ctx.signal.addEventListener('abort', resolve));
         throw new AiToolError('cancelled');
       });
       c.send({ jsonrpc: '2.0', id: 22, method: 'tools/call', params: { name: 'fm_list_layouts' } });
-      await wait(50);
+      await vi.waitFor(() => expect(signal).toBeDefined());
       c.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 22 } });
-      await wait(100);
+      await vi.waitFor(() => expect(signal?.aborted).toBe(true));
       c.send({ jsonrpc: '2.0', id: 23, method: 'ping' });
       expect((await c.json()).id).toBe(23);
       expect(c.lines).toEqual([]);
@@ -250,7 +255,7 @@ describe('AiMcpServer hardening', () => {
       const a = await client();
       expect(events).toEqual([{ type: 'connected', count: 1 }]);
       a.close();
-      await wait(100);
+      await vi.waitFor(() => expect(events).toHaveLength(2));
       expect(events).toEqual([
         { type: 'connected', count: 1 },
         { type: 'disconnected', count: 0 }

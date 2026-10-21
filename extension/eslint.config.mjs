@@ -39,6 +39,20 @@ export default [
     },
   },
   {
+    files: ["src/webviews/*/ui/*.js"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "script",
+      // Local status elements can shadow the legacy window.status property.
+      globals: { ...globals.browser, ...globals.es2022, status: "off", acquireVsCodeApi: "readonly", FieldStandards: "readonly" },
+    },
+  },
+  {
+    // These pure browser helpers also support CommonJS for unit tests.
+    files: ["src/webviews/queryBuilder/ui/findForm.js", "src/webviews/queryBuilder/ui/cellText.js"],
+    languageOptions: { globals: { module: "readonly" } },
+  },
+  {
     // Node scripts: the mock server and the real-VS-Code UI tests.
     files: ["test/mock-server/**/*.mjs", "e2e-ui/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: {

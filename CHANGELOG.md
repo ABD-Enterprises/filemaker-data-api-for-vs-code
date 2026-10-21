@@ -34,10 +34,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
 - Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in confirmations and error handling.
 
 - Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
 - Refresh non-certificate failure-mode documentation against current code, check its file references, and clarify the upgrade guide’s AI switch behavior. Keep webview asset tests out of the build folder, and test Record Viewer failures, stale loads and its older fallback layout.
+- Run designer and runtime tests in CI, lint browser scripts, check mock API compatibility and packaged bundles, and tighten the VSIX size and coverage budgets. Cancel superseded pull request runs, share the verified GitHub CLI setup, and remove an obsolete dependency ignore.
 - Make command-context tests wait for completion, test process lookups without repeatedly starting PowerShell, and keep one real-process check with a longer timeout. Remove unused designer test tooling, align the zod version range, explain the TypeScript test alias, and add a complete command reference with a coverage check.
 - Remove unused snippet and helper code, keep documented utilities and command handlers, and check for unused locals and parameters during typecheck.
 - Add a support page with help channels and safe bug-report guidance, remove the unused `shx` development dependency (build and package scripts already use Node), and align workspace `@types/node` declarations with the supported Node 22 runtime.
