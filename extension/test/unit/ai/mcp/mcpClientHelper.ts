@@ -53,16 +53,25 @@ export class RawClient {
     return this.next();
   }
 
+  private waitForChange(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const wake = () => {
+        clearTimeout(timer);
+        this.waiters = this.waiters.filter((waiter) => waiter !== wake);
+        resolve();
+      };
+      const timer = setTimeout(wake, timeoutMs);
+      this.waiters.push(wake);
+    });
+  }
+
   /** The next line, or '<closed>' if the connection closes first. */
   public async next(timeoutMs = 2000): Promise<string> {
     const deadline = Date.now() + timeoutMs;
     while (this.lines.length === 0) {
       if (this.closed) return '<closed>';
-      if (Date.now() > deadline) return '<timeout>';
-      await new Promise<void>((resolve) => {
-        this.waiters.push(resolve);
-        setTimeout(resolve, 20);
-      });
+      if (Date.now() >= deadline) return '<timeout>';
+      await this.waitForChange(deadline - Date.now());
     }
     return this.lines.shift() as string;
   }
@@ -74,7 +83,7 @@ export class RawClient {
   public async waitClosed(timeoutMs = 2000): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     while (!this.closed && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await this.waitForChange(deadline - Date.now());
     }
     return this.closed;
   }
