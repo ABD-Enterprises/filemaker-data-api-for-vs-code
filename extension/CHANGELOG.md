@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [FIX] Warn before NUL characters can lose text in record edits and creation, refuse affected batch rows and AI writes, and generate valid types when a layout lists a field twice. Record the real-server findings and the remaining gap for creating portal rows.
 - [INTERNAL] Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - [INTERNAL] Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.
 - [FIX] Deleting a saved query from Manage now asks for confirmation. Saved-query commands, comparison report exports and snapshot comparisons now show handled errors when a file or stored item cannot be read or written.

@@ -148,8 +148,8 @@ function credentialStamp(profile: ConnectionProfile, username: string, password:
 
 /**
  * FileMaker reports "no records match the request" as error code 401. It is matched on that code,
- * whatever the HTTP status: Claris documents business errors as HTTP 500 and says nothing about 404
- * for this case, and servers differ.
+ * whatever the HTTP status. Verified on a real FileMaker Data API Engine (2026-10-21):
+ * HTTP 200, code 401, empty data. Older/other versions may use a different HTTP status.
  */
 function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
@@ -566,8 +566,8 @@ export class FMClient {
             trace
           );
         } catch (error) {
-          // FileMaker answers a find with no matches (or an offset past the last match)
-          // with HTTP 404 and error 401, not an empty list. That is a result, not a failure.
+          // Real-server no-match finds return HTTP 200, code 401 and empty data.
+          // Older/other servers may use another status; match the FileMaker code alone.
           if (isNoRecordsFound(error)) {
             return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
           }

@@ -28,6 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Warn before NUL characters can lose text in record edits and creation, refuse affected batch rows and AI writes, and generate valid types when a layout lists a field twice. Record the real-server findings and the remaining gap for creating portal rows.
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 
 - Webviews and Layout Mode controls now follow light, dark and high-contrast editor themes, with readable fields, messages and schema differences.

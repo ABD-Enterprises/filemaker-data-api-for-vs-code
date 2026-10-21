@@ -210,6 +210,7 @@ export class TypeGenService {
     fields: FileMakerFieldMetadata[],
     metadataHash: string
   ): string {
+    fields = uniqueFields(fields);
     const timestamp = new Date().toISOString();
     const nameMap = createNameMap(fields.map((field) => field.name));
     const baseName = toPascalCaseIdentifier(layout);
@@ -338,6 +339,16 @@ function normalizeLayouts(layouts: string[]): string[] {
   return normalized;
 }
 
+/** Data API fieldData has one key per exact field name, even for repeated layout objects. */
+function uniqueFields(fields: FileMakerFieldMetadata[]): FileMakerFieldMetadata[] {
+  const seen = new Set<string>();
+  return fields.filter((field) => {
+    if (seen.has(field.name)) return false;
+    seen.add(field.name);
+    return true;
+  });
+}
+
 function renderClientTypes(
   profile: ConnectionProfile,
   schemas: GeneratedClientSchema[],
@@ -346,7 +357,7 @@ function renderClientTypes(
 ): string {
   const layoutBlocks = schemas.map((schema) => {
     const suffix = typeSuffixForLayout(layoutNames, schema.layout);
-    const rows = schema.fields
+    const rows = uniqueFields(schema.fields)
       .map((field) => `  ${JSON.stringify(field.name)}?: ${toTsType(field)};`)
       .join('\n');
 

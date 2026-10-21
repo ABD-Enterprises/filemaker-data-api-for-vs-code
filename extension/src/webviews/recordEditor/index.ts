@@ -1,3 +1,4 @@
+import { NUL_TEXT_WARNING, nulTextFields, removeNulText } from '../../utils/nulText';
 import { designerLayoutMetadata } from '../../fmweb/fieldMetadata';
 import * as vscode from 'vscode';
 
@@ -352,6 +353,10 @@ export class RecordEditorPanel {
       return;
     }
 
+    const safePatch = await this.confirmNulText(preview.patch);
+    if (!safePatch) return;
+    const draftFieldData = { ...payload.draftFieldData, ...safePatch };
+
     const confirmation = await vscode.window.showWarningMessage(
       `Save ${preview.changedFields.length} field changes to record ${payload.recordId}? (${preview.changedFields.join(', ')})\nRollback guidance: export the current record before save, then reapply previous values if needed.`,
       { modal: true },
@@ -384,7 +389,7 @@ export class RecordEditorPanel {
           payload.layout,
           payload.recordId,
           payload.originalFieldData,
-          payload.draftFieldData,
+          draftFieldData,
           modId !== undefined ? { modId } : undefined
         );
       } catch (error) {
@@ -514,7 +519,7 @@ export class RecordEditorPanel {
       return;
     }
 
-    const nonEmptyFields = Object.fromEntries(
+    let nonEmptyFields = Object.fromEntries(
       Object.entries(payload.fieldData).filter(([, v]) => v !== '' && v !== undefined && v !== null)
     );
     const names = Object.keys(nonEmptyFields);
@@ -534,6 +539,10 @@ export class RecordEditorPanel {
         return;
       }
     }
+
+    const safeFields = await this.confirmNulText(nonEmptyFields);
+    if (!safeFields) return;
+    nonEmptyFields = safeFields;
 
     const validation = this.recordEditService.validateDraft(nonEmptyFields, known);
     if (!validation.valid) {
@@ -569,6 +578,22 @@ export class RecordEditorPanel {
     } finally {
       this.saving = false;
     }
+  }
+
+  private async confirmNulText(fields: Record<string, unknown>): Promise<Record<string, unknown> | undefined> {
+    const names = nulTextFields(fields);
+    if (names.length === 0) return fields;
+    const choice = await vscode.window.showWarningMessage(
+      `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING}`,
+      { modal: true },
+      'Remove the character and continue',
+      'Cancel'
+    );
+    if (choice !== 'Remove the character and continue') {
+      await this.panel.webview.postMessage({ type: 'saveCancelled' });
+      return undefined;
+    }
+    return removeNulText(fields) as Record<string, unknown>;
   }
 
   private async exportCurrentRecord(): Promise<void> {
@@ -699,6 +724,7 @@ export class RecordEditorPanel {
       <h2>Field Data</h2>
       <p id="hiddenNote" class="status hidden" role="note"></p>
       <div id="fieldEditor"></div>
+      <p id="duplicateFieldNote" class="status hidden" role="note"></p>
       <p id="fieldsFootnote" class="status" role="note">Fields your account cannot see are not listed here.</p>
       <h3>Patch Preview</h3>
       <pre id="patchPreview" class="raw"></pre>

@@ -88,6 +88,21 @@ describe('Record Editor create mode (stubbed services)', () => {
 
   const create = { type: 'createRecord', payload: { profileId: 'p1', layout: 'People', fieldData: { Name: 'Ada', Age: 36, Blank: '' } } };
 
+  it.each([undefined, 'Cancel', 'Remove the character and continue'])('handles NUL before creating: %s', async (choice) => {
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Create' as never);
+    await panel.send({ ...create, payload: { ...create.payload, fieldData: { Name: 'A\0B\u200bC\ufeffD' } } });
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Name'), { modal: true }, 'Remove the character and continue', 'Cancel'
+    );
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('FileMaker keeps only the text before this character and drops the rest.');
+    if (choice === 'Remove the character and continue') {
+      expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: 'AB\u200bC\ufeffD' });
+    } else {
+      expect(createRecord).not.toHaveBeenCalled();
+      expect(panel.last('saveCancelled')).toBeDefined();
+    }
+  });
+
   it('lists the layout fields without any record id', async () => {
     await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } });
     expect(panel.last('layoutFields')?.payload).toMatchObject({ metadataSupported: true, fields: [{ name: 'Name' }, { name: 'Age' }] });

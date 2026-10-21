@@ -81,13 +81,13 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Generate Snippets for Layout | Writes and opens editor snippets for a layout. | Shown with a profile; needs workspace trust and a layout. |
 | Generate TypeScript Client | Generates a typed client for selected layouts in a chosen folder. | Shown with a profile; needs workspace trust. |
 | Open Generated Types Folder | Creates the configured types folder if needed and reveals it in the file manager. | Always shown; needs a trusted workspace folder. |
-| Open Record Editor | Opens the editor for an existing record. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
+| Open Record Editor | Opens the editor for an existing record; warns before saving text with a NUL character. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
 | Edit Record by ID | Prompts for a record ID and opens the record editor. | Shown with a profile; needs record editing enabled and allowed and a layout. |
-| Create Record | Opens the editor in create mode. | Shown with a profile; needs record editing enabled and allowed and a layout. |
+| Create Record | Opens the editor in create mode; warns before sending text with a NUL character. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
 | Batch Export (Find) | Exports matching records to CSV or JSONL as a background job. | Shown with a profile; needs batch operations enabled and workspace trust. |
-| Batch Update from CSV/JSON | Previews or applies record updates from a chosen CSV or JSON file. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
+| Batch Update from CSV/JSON | Previews or applies updates; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
 | Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
 | Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
@@ -475,6 +475,16 @@ The default size limit is 100 MB (`filemaker.containerUploadMaxBytes`). Uploadin
 
 ---
 
+### Text with a NUL character and repeated field names
+
+A NUL character (U+0000) is invisible and can arrive in pasted text. FileMaker keeps only the text before this character and drops the rest. This was verified on a real server (FileMaker Data API Engine, 2026-10-21).
+
+Before saving or creating a record, the editor names the affected fields and asks you to choose **Remove the character and continue** or **Cancel**. Removing it keeps all the text on both sides and leaves other characters alone. You still confirm the save or creation afterwards. Batch update/import refuses the whole affected row, reports its record ID and field names, and continues with the other rows. A dry run flags those rows too. Remove the character in the source file before trying again. AI write tools refuse the value and explain why. Zero-width space and BOM alone were not tested on the real server; the extension does not remove them.
+
+Some layouts list the same field more than once. The editor shows one value per name and a note naming repeated fields. Query Builder offers one choice per field name. Generated types have one property per name, copied requests keep the exact names, and Layout Inspector shows both occurrences.
+
+**Known gap: creating related records.** FileMaker accepts related records when creating a record, but this extension's Create Record sends only the main record's fields. It cannot yet create portal rows. A real-server check created a related record in **Phone Numbers**, with **Phone Numbers::Number** and **Phone Numbers::Type**; that support has not been added to the extension.
+
 ## Batch export and batch update
 
 Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in the sidebar while they exist.
@@ -494,6 +504,8 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
 **Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 
 ### Update
+
+Rows containing a NUL character are refused before sending any fields from that row; see [Text with a NUL character and repeated field names](#text-with-a-nul-character-and-repeated-field-names).
 
 1. Run **FileMaker: Batch Update from CSV/JSON** (or the layout's right-click menu).
 2. Choose a `.csv` or `.json` file.
@@ -1085,7 +1097,7 @@ Connection errors name the step that failed and what to do. The most common firs
 
 | What you see | What it means and what to do |
 | --- | --- |
-| A find returns nothing | FileMaker reports "no records match" as error code 401 (sent with HTTP 404 or 500, whatever the HTTP status), and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
+| A find returns nothing | FileMaker reports "no records match" as error code 401: verified on a real server (FileMaker Data API Engine, 2026-10-21) as HTTP 200 with an empty data list. Older/other versions may use another status; the extension accepts code 401 on any status, and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
 | Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
 | "The script parameter is too long to send in a web address" | A script run with a record ID and a parameter longer than about 2,000 characters (the address limit, including the server and script name). Shorten the parameter, or run the script without a record ID (then it is sent in the body of a find). See [Run scripts](#run-scripts). |
 | "Script runner is not supported on this server/profile." | The server refused both the script endpoint and the attach-to-another-request form (405, 501 or a FileMaker 404). Check the layout and script exist for the account and the server version supports the Data API script calls. |

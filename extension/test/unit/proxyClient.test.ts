@@ -385,11 +385,11 @@ describe('ProxyClient keeps what FileMaker said (proxy error envelope)', () => {
     expect(error.message).toMatch(/redirected to a different address/);
   });
 
-  it('through FMClient, "no records match" from the proxy is an empty result and a 306 is a conflict', async () => {
+  it.each([200, 404, 500])('through FMClient, proxy code 401 at upstream HTTP %i is an empty result', async (status) => {
     const { FMClient } = await import('../../src/services/fmClient');
     const fm = new FMClient(createSecretStore() as never, createLogger() as never, 5000);
 
-    nock(PROXY_URL).post(PROXY_PATH).reply(200, { ok: false, error: 'No records match the request', fmCode: '401', status: 404 });
+    nock(PROXY_URL).post(PROXY_PATH).reply(200, { ok: false, error: 'No records match the request', fmCode: '401', status });
     expect(await fm.findRecords(createProfile(), 'L', { query: [{ a: 1 }] })).toEqual({
       data: [],
       dataInfo: { foundCount: 0, returnedCount: 0 }
