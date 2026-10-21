@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { escapeHtml } from '../../utils/escapeHtml';
 import { createNonce } from './csp';
 
 /**
@@ -24,23 +25,20 @@ export const RESTORABLE_PANELS: ReadonlyArray<{ viewType: string; reopenWith: st
   { viewType: 'filemakerEffectiveSettings', reopenWith: 'FileMaker: Show Effective Settings' }
 ];
 
-const escapeHtml = (text: string): string =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
 /** A static page: no script, nothing from the saved state. */
 export function renderReopenPage(title: string, reopenWith: string): string {
   const nonce = createNonce();
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';" />
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(title, false)}</title>
 <style nonce="${nonce}">
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background, #ffffff); padding: 24px; line-height: 1.5; }
   code { font-family: var(--vscode-editor-font-family); }
 </style></head>
 <body>
-<h2>${escapeHtml(title)}</h2>
-<p>This panel was closed when VS Code reloaded, so it has nothing to show. Close this tab and open it again: run <strong>${escapeHtml(reopenWith)}</strong> from the Command Palette.</p>
+<h2>${escapeHtml(title, false)}</h2>
+<p>This panel was closed when VS Code reloaded, so it has nothing to show. Close this tab and open it again: run <strong>${escapeHtml(reopenWith, false)}</strong> from the Command Palette.</p>
 </body></html>`;
 }
 

@@ -5,7 +5,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import { describeScriptErrors, extractScriptErrors } from '../../services/responseGuard';
-import { assertUsableUrlName } from '../../utils/urlSegment';
+import { assertNameProvided, assertUsableUrlName } from '../../utils/urlSegment';
 import type { RunScriptRequest } from '../../types/fm';
 import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
 import type { SnippetFormat } from '../../snippets/model';
@@ -473,14 +473,10 @@ function validateRunScriptPayload(payload: RunScriptPayload): RunScriptRequest {
   // Script and layout names are used exactly as given: a leading or trailing space is part of the name.
   const scriptName = payload.scriptName;
 
-  if (!scriptName.trim()) {
-    throw new FMClientError('Script name is required.');
-  }
+  assertNameProvided(scriptName, 'Script name is required.');
 
   const layout = payload.layout;
-  if (!layout.trim()) {
-    throw new FMClientError('Layout is required.');
-  }
+  assertNameProvided(layout, 'Layout is required.');
   assertUsableUrlName(scriptName, 'script');
   assertUsableUrlName(layout, 'layout');
 
