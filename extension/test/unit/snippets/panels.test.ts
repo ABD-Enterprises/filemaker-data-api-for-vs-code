@@ -199,6 +199,18 @@ describe('Script Runner: Copy request', () => {
     expect(panel.posted.some((m) => m.type === 'unsupported')).toBe(true);
   });
 
+  it.each([
+    ['   ', 'Contacts', 'Script name is required.'],
+    ['Send Welcome', '   ', 'Layout is required.'],
+    ['.', '   ', 'Layout is required.'],
+    ['.', '..', 'The script name "." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.'],
+    ['Send Welcome', '..', 'The layout name ".." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.']
+  ])('keeps the exact validation message for script %j and layout %j', async (scriptName, layout, message) => {
+    await panel.send({ type: 'copyRequest', payload: { ...payload, scriptName, layout, format: 'curl' } });
+    expect(errors(panel)).toEqual([message]);
+    expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
   it('the page has the Copy request menu with every format', () => {
     const html = panel.html();
     for (const id of ['copyRequestMenu', 'copyCurlButton', 'copyFetchButton', 'copyHttpButton', 'copyPostmanButton', 'copyTypeScriptButton', 'saveHttpButton']) {

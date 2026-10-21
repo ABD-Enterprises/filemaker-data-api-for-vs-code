@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildSync } from 'esbuild';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -165,6 +166,17 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
       const selector = surface === 'recordEditor' ? '#fieldEditor' : '#fieldDataContainer';
       expect(page.document.querySelectorAll(`${selector} tbody tr`)).toHaveLength(fields.length);
       expect(page.document.getElementById('status')?.textContent).toContain('2');
+      if (surface === 'recordViewer') {
+        expect(page.document.querySelectorAll(`${selector} .table-scroll-wrapper table`)).toHaveLength(1);
+        expect(page.document.querySelectorAll(`${selector} .fm-field-table, ${selector} .fm-fields, ${selector} textarea`)).toHaveLength(0);
+        const rows = page.document.querySelectorAll(`${selector} tbody tr`);
+        rows.forEach((row) => {
+          expect(row.querySelectorAll('td')).toHaveLength(3);
+          expect(row.querySelectorAll('td:nth-child(2) > span')).toHaveLength(1);
+          expect(row.querySelector('td:nth-child(3) > button')?.textContent).toBe('Copy');
+        });
+        expect(rows[1]?.querySelector('td:nth-child(2) > span')?.textContent).toBe(' 2 ');
+      }
     }
   });
 
@@ -215,13 +227,24 @@ it('the browser build generates bounded CSS from the shared rules, with narrow w
   expect(css.split('{')).toHaveLength(css.split('}').length);
   expect(css.length).toBeLessThan(10000);
   expect(compiled).not.toMatch(/require\(/);
-  execFileSync(process.execPath, [path.join(root, 'extension/scripts/copy-webviews.mjs')], { cwd: root });
-  for (const surface of ['queryBuilder', 'recordEditor', 'recordViewer']) {
-    const output = `extension/dist/webviews/${surface}/ui/fieldStandards`;
-    expect(read(`${output}.css`)).toBe(css);
-    const browserBundle = read(`${output}.js`);
-    expect(browserBundle).not.toMatch(/require\(/);
-    const api = new Function(`${browserBundle}; return FieldStandards;`)() as { standardFieldSize: (field: { type: string }) => { width: number; height: number } };
-    fields.forEach((field, index) => expect(api.standardFieldSize(field)).toEqual({ width: sizes[index]![0], height: sizes[index]![1] }));
+  const outputDir = mkdtempSync(path.join(tmpdir(), 'filemaker-webviews-'));
+  try {
+    execFileSync(process.execPath, [path.join(root, 'extension/scripts/copy-webviews.mjs'), outputDir], { cwd: root });
+    for (const surface of ['queryBuilder', 'recordEditor', 'recordViewer']) {
+      const output = path.join(outputDir, 'webviews', surface, 'ui', 'fieldStandards');
+      expect(readFileSync(`${output}.css`, 'utf8')).toBe(css);
+      expect(readFileSync(path.join(outputDir, 'webviews', surface, 'ui', 'index.js'), 'utf8')).toBe(read(`extension/src/webviews/${surface}/ui/index.js`));
+      const browserBundle = readFileSync(`${output}.js`, 'utf8');
+      expect(browserBundle).not.toMatch(/require\(/);
+      const api = new Function(`${browserBundle}; return FieldStandards;`)() as { standardFieldSize: (field: { type: string }) => { width: number; height: number } };
+      fields.forEach((field, index) => expect(api.standardFieldSize(field)).toEqual({ width: sizes[index]![0], height: sizes[index]![1] }));
+    }
+    for (const asset of ['index.js', 'index.css']) {
+      const designerAsset = path.join(root, 'designer-ui/dist', asset);
+      const expected = existsSync(designerAsset) ? designerAsset : path.join(root, 'extension/src/webviews/layoutMode/ui', asset);
+      expect(readFileSync(path.join(outputDir, 'webviews/layoutMode/ui', asset), 'utf8')).toBe(readFileSync(expected, 'utf8'));
+    }
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true });
   }
 });
