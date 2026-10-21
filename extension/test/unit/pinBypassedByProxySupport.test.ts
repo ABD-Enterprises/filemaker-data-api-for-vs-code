@@ -1,7 +1,7 @@
 import type { AxiosInstance } from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { FMClientError } from '../../src/services/errors';
+import { FMClientError } from '../../src/services/errors';
 import { FMClient } from '../../src/services/fmClient';
 import { reviewAndTrustCertificate } from '../../src/services/certificateTrust';
 import { ProxyClient } from '../../src/services/proxyClient';
@@ -12,6 +12,7 @@ import { InMemorySecretStorage } from './mocks';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const PIN = 'a'.repeat(64);
+const untrusted = new FMClientError('untrusted', { kind: 'certificate', networkCode: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' });
 const OK = {
   response: { productInfo: { name: 'Stub Engine' }, token: 'stub-token' },
   messages: [{ code: '0', message: 'OK' }]
@@ -60,40 +61,40 @@ async function failure(run: () => Promise<unknown>): Promise<FMClientError> {
 describe('a pinned certificate when the host replaces the agent (http.proxySupport "override")', () => {
   afterEach(() => setAgentReplacedPolicy(() => false));
 
-  it('does not stop the request: a server the host trusts anyway works with a stale pin', async () => {
+  it('leaves successful requests alone (a stubbed client does not open TLS)', async () => {
     setAgentReplacedPolicy(() => true);
     const c = await client(httpWith(() => OK));
     expect((await c.getProductInfo(profile({ pinnedCertSha256: PIN }))).name).toBe('Stub Engine');
   });
 
-  it('explains itself, with both fixes, and is quiet without a pin or when the host honours the agent', () => {
+  it('offers a fallback only after an untrusted failure on a custom TLS profile', () => {
     setAgentReplacedPolicy(() => true);
-    const error = pinBypassedByHost({ pinnedCertSha256: PIN });
+    const error = pinBypassedByHost({ pinnedCertSha256: PIN }, untrusted);
     expect(error?.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
     expect(error?.kind).toBe('certificate');
     expect(error?.message).toMatch(/http\.proxySupport/);
     expect(error?.message).toMatch(/"fallback"/);
     expect(error?.message).toMatch(/Forget trusted certificate/);
     expect(error?.message).toMatch(/does not help here/);
-    expect(pinBypassedByHost({})).toBeUndefined();
-    expect(pinBypassedByHost({ pinnedCertSha256: 'not-a-fingerprint' })).toBeUndefined();
-    setAgentReplacedPolicy(() => false);
     expect(pinBypassedByHost({ pinnedCertSha256: PIN })).toBeUndefined();
+    expect(pinBypassedByHost({ caBundlePath: '/test.pem' }, untrusted)).toBeDefined();
+    expect(pinBypassedByHost({ allowSelfSigned: true }, untrusted)).toBeDefined();
+    expect(pinBypassedByHost({}, untrusted)).toBeUndefined();
+    expect(pinBypassedByHost({ pinnedCertSha256: 'not-a-fingerprint' }, untrusted)).toBeUndefined();
+    setAgentReplacedPolicy(() => false);
+    expect(pinBypassedByHost({ pinnedCertSha256: PIN }, untrusted)).toBeUndefined();
   });
 });
 
 describe('which failures are explained', () => {
   afterEach(() => setAgentReplacedPolicy(() => false));
 
-  // Everything a pin would have covered: not trusted, wrong host name, outside its dates.
+  // Only untrusted-chain errors use the backup remedy; pin/date/name refusals keep their own explanation.
   it.each([
     'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
     'DEPTH_ZERO_SELF_SIGNED_CERT',
     'SELF_SIGNED_CERT_IN_CHAIN',
-    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
-    'ERR_TLS_CERT_ALTNAME_INVALID',
-    'CERT_HAS_EXPIRED',
-    'CERT_NOT_YET_VALID'
+    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'
   ])('replaces the generic error for %s on a pinned profile', async (code) => {
     setAgentReplacedPolicy(() => true);
     const c = await client(httpWith(() => certificateFailure(code)));
@@ -103,7 +104,7 @@ describe('which failures are explained', () => {
     expect(error.networkCode).toBeUndefined();
   });
 
-  it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'CERT_REVOKED'])(
+  it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'CERT_REVOKED', 'CERT_HAS_EXPIRED', 'CERT_NOT_YET_VALID', 'ERR_TLS_CERT_ALTNAME_INVALID'])(
     'leaves %s alone',
     async (code) => {
       setAgentReplacedPolicy(() => true);
@@ -153,7 +154,7 @@ describe('every route that can meet the failure explains it', () => {
   it('signed-in requests, where the failure comes after a session already exists', async () => {
     setAgentReplacedPolicy(() => true);
     const c = await client(
-      httpWith((url) => (url.endsWith('/sessions') ? OK : certificateFailure('CERT_HAS_EXPIRED')))
+      httpWith((url) => (url.endsWith('/sessions') ? OK : certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')))
     );
     const error = await failure(() => c.listLayouts(pinned));
     expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
@@ -197,15 +198,13 @@ describe('routes and hosts that need their own check', () => {
 
   it.each([
     'https://localhost:4443',
-    'https://127.0.0.1:4443',
-    'https://[::1]:4443',
-    'https://dev.localhost'
+    'https://127.0.0.1:4443'
   ])(
     'leaves a loopback address alone (%s): the host does not replace the agent there, so the pin did run',
     async (serverUrl) => {
       setAgentReplacedPolicy(() => true);
-      // The pin's own "not yet valid" refusal shares its code with the TLS one and must not be mislabelled.
-      const c = await client(httpWith(() => certificateFailure('CERT_NOT_YET_VALID')));
+      // These two exact hosts keep the supplied agent even in the host request patch.
+      const c = await client(httpWith(() => certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')));
       const error = await failure(() =>
         c.createSession(profile({ serverUrl, pinnedCertSha256: PIN }))
       );
@@ -213,14 +212,14 @@ describe('routes and hosts that need their own check', () => {
     }
   );
 
-  it('still explains a LAN address, which the host does replace', async () => {
+  it.each(['https://192.168.1.50:443', 'https://[::1]:4443', 'https://dev.localhost', 'https://127.0.0.2'])('still explains %s, which the host does replace', async (serverUrl) => {
     setAgentReplacedPolicy(() => true);
-    const c = await client(httpWith(() => certificateFailure('CERT_NOT_YET_VALID')));
+    const c = await client(httpWith(() => certificateFailure('UNABLE_TO_VERIFY_LEAF_SIGNATURE')));
     const error = await failure(() =>
-      c.createSession(profile({ serverUrl: 'https://192.168.1.50:443', pinnedCertSha256: PIN }))
+      c.createSession(profile({ serverUrl, pinnedCertSha256: PIN }))
     );
     expect(error.code).toBe('PIN_BYPASSED_BY_PROXY_SUPPORT');
-    expect(error.message).toMatch(/CERT_NOT_YET_VALID/); // the specific cause is kept in the text
+    expect(error.message).toMatch(/UNABLE_TO_VERIFY_LEAF_SIGNATURE/); // the specific cause is kept in the text
   });
 
   it('judges a proxy profile by its proxy address', async () => {
@@ -231,7 +230,7 @@ describe('routes and hosts that need their own check', () => {
         authMode: 'proxy',
         serverUrl: 'https://fms.example.test',
         proxyEndpoint: 'https://localhost:9000/api'
-      })
+      }, untrusted)
     ).toBeUndefined();
     expect(
       pinBypassedByHost({
@@ -239,7 +238,7 @@ describe('routes and hosts that need their own check', () => {
         authMode: 'proxy',
         serverUrl: 'https://localhost',
         proxyEndpoint: 'https://proxy.example.test/api'
-      })
+      }, untrusted)
     ).toBeDefined();
   });
 
@@ -311,12 +310,11 @@ describe('the trust dialog tells the truth about what trusting will do', () => {
     expect(await detailFor('https://fms.example.test')).toMatch(/warn you if it ever changes/);
   });
 
-  it('says the trust cannot take effect while VS Code replaces the connection, and names the setting', async () => {
+  it('promises certificate enforcement under override without asking for a setting change', async () => {
     setAgentReplacedPolicy(() => true);
     const text = await detailFor('https://fms.example.test');
-    expect(text).toMatch(/http\.proxySupport/);
-    expect(text).toMatch(/"fallback"/);
-    expect(text).not.toMatch(/warn you if it ever changes/);
+    expect(text).not.toMatch(/http\.proxySupport/);
+    expect(text).toMatch(/warn you if it ever changes/);
   });
 
   it('keeps the promise for a loopback address, where the host leaves the connection alone', async () => {
@@ -341,8 +339,8 @@ describe("the dialog learns VS Code's setting by itself, before any request has 
   };
   // A fresh module state each time: nothing has installed a policy, as when "Review server certificate" is the first thing used.
   it.each([
-    ['override', true],
-    [undefined, true],
+    ['override', false],
+    [undefined, false],
     ['fallback', false],
     ['off', false],
     ['on', false]

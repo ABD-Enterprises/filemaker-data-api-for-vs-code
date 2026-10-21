@@ -242,8 +242,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         setSystemCertificatePolicy(() =>
           vscode.workspace.getConfiguration('http').get<boolean>('systemCertificates', true)
         );
-        // http.proxySupport "override" (VS Code's default) replaces the extension's agent, so a
-        // pinned certificate could not be checked; pinned requests are then refused with the fix.
+        // Keep the fallback for unexpected certificate failures aware of VS Code's networking patch.
         proxySupport.installAgentReplacedPolicy();
         warmSystemCertificates();
         loadedFmClient = new FMClient(

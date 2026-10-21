@@ -28,6 +28,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Trusted certificates, custom CA files and older allow-self-signed profiles now work without changing a VS Code setting. A changed trusted certificate is refused before sending credentials; pinned connections selected for a proxy are refused with advice.
+
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 
 - Webviews and Layout Mode controls now follow light, dark and high-contrast editor themes, with readable fields, messages and schema differences.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FIX] Trusted certificates, custom CA files and older allow-self-signed profiles now work without changing a VS Code setting. A changed trusted certificate is refused before sending credentials; pinned connections selected for a proxy are refused with advice.
+
 - [INTERNAL] Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - [INTERNAL] Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.
 - [FIX] Deleting a saved query from Manage now asks for confirmation. Saved-query commands, comparison report exports and snapshot comparisons now show handled errors when a file or stored item cannot be read or written.

@@ -2074,6 +2074,7 @@
     "@typescript-eslint/eslint-plugin": "^8.72.0",
     "@typescript-eslint/parser": "^8.33.1",
     "@vitest/coverage-v8": "^5.0.5",
+    "@vscode/proxy-agent": "^0.45.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
