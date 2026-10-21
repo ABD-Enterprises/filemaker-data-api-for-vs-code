@@ -155,6 +155,13 @@ function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
 }
 
+/** Preserve the match count when an offset is beyond the last record. */
+function emptyFindResult(error: unknown): FindRecordsResult {
+  const details = error instanceof FMClientError ? error.details as { response?: { dataInfo?: FindRecordsResult['dataInfo'] }; dataInfo?: FindRecordsResult['dataInfo'] } | undefined : undefined;
+  const dataInfo = details?.response?.dataInfo ?? details?.dataInfo;
+  return { data: [], dataInfo: { ...dataInfo, foundCount: dataInfo?.foundCount ?? 0, returnedCount: 0 } };
+}
+
 const CERTIFICATE_LOOK_TTL_MS = 60_000;
 
 export class FMClient {
@@ -529,7 +536,7 @@ export class FMClient {
           } catch (error) {
             // The proxy passes FileMaker's code on, so "no records match" is an empty result here too.
             if (isNoRecordsFound(error)) {
-              return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+              return emptyFindResult(error);
             }
             throw error;
           }
@@ -567,9 +574,9 @@ export class FMClient {
           );
         } catch (error) {
           // FileMaker answers a find with no matches (or an offset past the last match)
-          // with HTTP 404 and error 401, not an empty list. That is a result, not a failure.
+          // with code 401 on any HTTP status. That is a result, not a failure.
           if (isNoRecordsFound(error)) {
-            return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+            return emptyFindResult(error);
           }
           throw error;
         }

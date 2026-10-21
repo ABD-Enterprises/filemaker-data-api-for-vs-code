@@ -20,7 +20,7 @@ function createProvider() {
       supported: true,
       fromCache: false,
       fields: [
-        { name: 'Name', result: 'text' },
+        { name: 'Name', type: 'normal', result: 'number', maxRepeat: 2 },
         { name: 'GlobalStatus', result: 'text', isGlobal: true, validation: { notEmpty: true } }
       ],
       metadata: {
@@ -71,4 +71,14 @@ describe('LayoutInspectorProvider', () => {
     expect(schemaService.invalidateLayout).toHaveBeenCalledWith(profile, 'Contacts');
     expect(schemaService.getLayoutSchema).toHaveBeenCalledTimes(2);
   });
+});
+
+it('shows result type, kind and repetitions in the Fields tree', async () => {
+  const { provider } = createProvider();
+  provider.selectLayout('p1', 'Contacts');
+  const categories = await provider.getChildren();
+  const fields = await provider.getChildren(categories[0]);
+  expect(fields[0]?.description).toContain('number');
+  expect(fields[0]?.tooltip).toContain('Kind: normal');
+  expect(fields[0]?.tooltip).toContain('Repetitions: 2');
 });

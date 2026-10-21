@@ -49,7 +49,7 @@ export function parseCompoundFindQuery(
   return query.map((request) => {
     const omit = request.omit === 'true' || request.omit === true;
 
-    const criteria: Record<string, string> = {};
+    const criteria: Record<string, string> = Object.create(null) as Record<string, string>;
     for (const [key, value] of Object.entries(request)) {
       if (key !== 'omit' && typeof value === 'string') {
         criteria[key] = value;

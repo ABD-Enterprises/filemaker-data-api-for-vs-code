@@ -55,7 +55,7 @@ export function prepareDuplicateFieldData(
     return fieldData;
   }
 
-  const filtered: Record<string, unknown> = {};
+  const filtered: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   for (const [key, value] of Object.entries(fieldData)) {
     if (!isLikelyAutoEnterField(key)) {

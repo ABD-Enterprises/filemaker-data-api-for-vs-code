@@ -417,7 +417,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
       continue;
     }
 
-    const fieldData: Record<string, unknown> = {};
+    const fieldData: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     headers.forEach((header, index) => {
       if (metaColumn(header)) {
         return;

@@ -245,8 +245,8 @@ describe('registerCoreCommands', () => {
     expect(prompts[0]?.validateInput?.('{')).toContain('valid JSON');
     expect(prompts[1]?.validateInput?.('{}')).toContain('array');
     expect(prompts[1]?.validateInput?.('')).toBeUndefined();
-    expect(prompts[2]?.validateInput?.('-1')).toContain('non-negative integer');
-    expect(prompts[3]?.validateInput?.('1.5')).toContain('non-negative integer');
+    expect(prompts[2]?.validateInput?.('-1')).toContain('must be at least 1');
+    expect(prompts[3]?.validateInput?.('1.5')).toContain('must be at least 1');
   });
 
   it('warns when a script reported an error next to a find that worked, and stays quiet otherwise', async () => {

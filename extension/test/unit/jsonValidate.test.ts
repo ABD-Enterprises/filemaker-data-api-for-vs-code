@@ -84,3 +84,8 @@ describe('validateServerUrl', () => {
     expect(isUnencryptedRemoteUrl('http://127.0.0.1:18080')).toBe(false);
   });
 });
+
+it.each(['Limit', 'Offset'])('rejects zero %s before calling FileMaker', (label) => {
+  expect(() => parseOptionalNonNegativeInteger('0', label)).toThrow(`${label} must be an integer and must be at least 1.`);
+  expect(parseOptionalNonNegativeInteger('1', label)).toBe(1);
+});

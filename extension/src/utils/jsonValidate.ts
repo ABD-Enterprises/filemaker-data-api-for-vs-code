@@ -73,8 +73,8 @@ export function parseOptionalNonNegativeInteger(value: string | undefined, label
   }
 
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new FMClientError(`${label} must be a non-negative integer.`);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new FMClientError(`${label} must be an integer and must be at least 1.`);
   }
 
   return parsed;

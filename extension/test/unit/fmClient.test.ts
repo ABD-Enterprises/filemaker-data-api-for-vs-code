@@ -281,3 +281,16 @@ describe('FMClient (unit)', () => {
     expect(axios.request).not.toHaveBeenCalled();
   });
 });
+
+it.each([200, 404, 500])('preserves foundCount for an empty page with FileMaker 401 on HTTP %s', async (status) => {
+  const axios = new FakeAxios();
+  const secrets = new SecretStore(new InMemorySecretStorage() as never);
+  const profile = createProfile();
+  await secrets.setSessionToken(profile.id, 'token');
+  const data = { response: { data: [], dataInfo: { foundCount: 157, returnedCount: 0, totalRecordCount: 200 } }, messages: [{ code: '401', message: 'No records match' }] };
+  if (status === 200) axios.request.mockResolvedValueOnce(createAxiosResponse({ data }));
+  else axios.request.mockRejectedValueOnce({ isAxiosError: true, response: { status, data } });
+  const client = new FMClient(secrets, { debug() {}, info() {}, warn() {}, error() {} }, 15_000, axios as never);
+  const result = await client.findRecords(profile, 'Contacts', { query: [{}], offset: 158 });
+  expect(result).toEqual({ data: [], dataInfo: { foundCount: 157, returnedCount: 0, totalRecordCount: 200 } });
+});

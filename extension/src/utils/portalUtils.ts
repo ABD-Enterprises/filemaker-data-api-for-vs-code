@@ -69,7 +69,7 @@ export function extractPortalMetadata(
     return {};
   }
 
-  const result: Record<string, Array<{ name: string; type?: string; result?: string }>> = {};
+  const result: Record<string, Array<{ name: string; type?: string; result?: string }>> = Object.create(null) as Record<string, Array<{ name: string; type?: string; result?: string }>>;
 
   for (const [portalName, fields] of Object.entries(raw as Record<string, unknown>)) {
     if (!Array.isArray(fields)) {

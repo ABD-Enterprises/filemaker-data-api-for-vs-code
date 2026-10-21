@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [FIX] Generated types now use the real field type and repeating field names. Generated clients handle empty finds and explain server errors. Special names stay intact; timeouts, paging and error messages give clearer next steps.
+
 - [FEATURE] Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 
 - [INTERNAL] Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
