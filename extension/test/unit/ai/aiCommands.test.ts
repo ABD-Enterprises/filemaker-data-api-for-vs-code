@@ -36,7 +36,7 @@ describe('AI commands', () => {
     };
     audit = { read: vi.fn(async () => '{"tool":"a"}\n') };
     controller = new AiToolsController(h.service, { lm: undefined });
-    const statusBar = new AiStatusBar({ service: h.service, controller, profileStore: profileStore as never });
+    const statusBar = new AiStatusBar({ service: h.service, controller, profileStore: profileStore as never, reportHiddenFieldsProblem: vi.fn() });
     registerAiToolCommands({
       service: h.service,
       controller,
@@ -46,6 +46,20 @@ describe('AI commands', () => {
       statusBar
     });
     (vscode as unknown as { ConfigurationTarget: { Global: number } }).ConfigurationTarget.Global = 1;
+  });
+
+  it('reports malformed hidden fields on status refresh', async () => {
+    const reportHiddenFieldsProblem = vi.fn();
+    vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+      get: (_key: string, fallback?: unknown) => fallback,
+      inspect: (key: string) => key === 'ai.hiddenFields' ? { globalValue: 'SSN, Password' } : undefined
+    } as never);
+    const statusBar = new AiStatusBar({
+      service: h.service, controller, profileStore: profileStore as never, reportHiddenFieldsProblem
+    });
+    await statusBar.refresh();
+    expect(reportHiddenFieldsProblem).toHaveBeenCalledWith({ scope: 'globalValue', kind: 'string-as-name', count: 1 });
+    statusBar.dispose();
   });
 
   it('the kill switch turns tools off at once, and asks in a modal before turning them back on', async () => {

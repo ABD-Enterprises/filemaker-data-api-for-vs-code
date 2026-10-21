@@ -11,7 +11,7 @@ import {
   SHOW_ACTIVITY_COMMAND,
   computeAiStatus
 } from '../ai/aiRegistration';
-import { readAiSettings } from '../ai/aiSettings';
+import { readAiSettings, type HiddenFieldsProblemReporter } from '../ai/aiSettings';
 import type { AiToolService } from '../ai/aiToolService';
 import type { RoleGuard } from '../enterprise/roleGuard';
 import type { ProfileStore } from '../services/profileStore';
@@ -31,7 +31,7 @@ export class AiStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
 
   public constructor(
-    private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'>,
+    private readonly deps: Pick<Deps, 'service' | 'controller' | 'profileStore'> & { reportHiddenFieldsProblem: HiddenFieldsProblemReporter },
     private readonly mcp?: { isRunning(): boolean; connectionCount(): number }
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
@@ -41,7 +41,7 @@ export class AiStatusBar implements vscode.Disposable {
   }
 
   public async refresh(): Promise<void> {
-    const settings = readAiSettings(vscode.workspace.getConfiguration('filemaker'));
+    const settings = readAiSettings(vscode.workspace.getConfiguration('filemaker'), this.deps.reportHiddenFieldsProblem);
     const profile = settings.connection ? await this.deps.profileStore.getProfile(settings.connection) : undefined;
     const model = computeAiStatus(
       this.deps.service.listTools(),

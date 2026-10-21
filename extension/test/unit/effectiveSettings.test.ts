@@ -665,6 +665,6 @@ describe('the view refreshes when the situation changes', () => {
     expect(html).toContain('filemaker.ai.hiddenFields');
     expect(html).toContain('still hides one exact field name');
     expect(html).toContain('commas are not separators');
-    expect(collected.notes.join(' ')).toContain('["SSN", "Password"]');
+    expect(collected.notes).toContain('filemaker.ai.hiddenFields (globalValue): the value is a string, so it still hides one exact field name (commas are not separators); use an array of exact field names, for example ["SSN", "Password"].');
     expect(html).toContain('array');
   });

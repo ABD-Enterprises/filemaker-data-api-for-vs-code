@@ -52,6 +52,25 @@ export type HiddenFieldsProblemReporter = (problem: {
   count: number;
 }) => void;
 
+/** Warn once per scope, problem kind and count; share the reporter between settings readers. */
+export function createHiddenFieldsWarner(warn: (message: string) => void): HiddenFieldsProblemReporter {
+  const warnedHiddenFields = new Set<string>();
+  return ({ scope, kind, count }) => {
+    const key = `${scope}:${kind}:${count}`;
+    if (warnedHiddenFields.has(key)) {
+      return;
+    }
+    warnedHiddenFields.add(key);
+    const what =
+      kind === 'entries-ignored'
+        ? `${count} entr${count === 1 ? 'y is' : 'ies are'} not text and ${count === 1 ? 'was' : 'were'} ignored; the other names still hide`
+        : kind === 'string-as-name'
+          ? 'the value is a string, so it still hides one exact field name (commas are not separators)'
+          : 'the value is not a list of names and was ignored';
+    warn(`filemaker.ai.hiddenFields (${scope}): ${what}. Fix the setting to a list of field names, for example ["SSN", "Password"].`);
+  };
+}
+
 export function readAiSettings(configuration: Configuration, onHiddenFieldsProblem?: HiddenFieldsProblemReporter): AiSettings {
   const flag = (key: string): boolean => readUserScopeValue(configuration, key, isBoolean) === true;
   const connection = readUserScopeValue(configuration, 'ai.connection', isString)?.trim();

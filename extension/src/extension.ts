@@ -18,7 +18,7 @@ import { registerSavedQueriesCommands } from './commands/savedQueries';
 import { registerSchemaCommands } from './commands/schema';
 import { AuditLog } from './ai/aiAudit';
 import { AiToolsController, getLanguageModelApi } from './ai/aiRegistration';
-import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings, type HiddenFieldsProblemReporter } from './ai/aiSettings';
+import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings, createHiddenFieldsWarner } from './ai/aiSettings';
 import { AiMcpController, PERMISSION_EPOCH_KEY, PERMISSION_SEEN_KEY, STARTED_HERE_KEY } from './ai/mcp/aiMcpController';
 import { AiToolService } from './ai/aiToolService';
 import { registerChatParticipant } from './ai/chat/chatRegistration';
@@ -499,32 +499,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger
   });
 
+  const reportHiddenFieldsProblem = createHiddenFieldsWarner((message) => logger.warn(message));
   const aiContextDisposables = registerAiContextCommands({
     context,
     profileStore,
     fmClient,
     schemaService,
-    logger
+    logger,
+    reportHiddenFieldsProblem
   });
 
   // AI tools (ADR-0004 phase 2). The core owns all policy; the controller only registers
   // language-model tools for what the core offers right now.
-  // A malformed `filemaker.ai.hiddenFields` still hides every valid name; say so once per problem.
-  const warnedHiddenFields = new Set<string>();
-  const reportHiddenFieldsProblem: HiddenFieldsProblemReporter = ({ scope, kind, count }) => {
-    const key = `${scope}:${kind}:${count}`;
-    if (warnedHiddenFields.has(key)) {
-      return;
-    }
-    warnedHiddenFields.add(key);
-    const what =
-      kind === 'entries-ignored'
-        ? `${count} entr${count === 1 ? 'y is' : 'ies are'} not text and ${count === 1 ? 'was' : 'were'} ignored; the other names still hide`
-        : kind === 'string-as-name'
-          ? 'the value is a string, so it still hides one exact field name (commas are not separators)'
-          : 'the value is not a list of names and was ignored';
-    logger.warn(`filemaker.ai.hiddenFields (${scope}): ${what}. Fix the setting to a list of field names, for example ["SSN", "Password"].`);
-  };
   const aiAudit = new AuditLog(() => auditLogPath(context.globalStorageUri.fsPath));
   const aiService = new AiToolService({
     settings: () => readAiSettings(vscode.workspace.getConfiguration('filemaker'), reportHiddenFieldsProblem),
@@ -577,7 +563,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   // @filemaker chat participant (ADR-0005): another thin front end to aiService; absent where VS Code has no chat API.
   const chatParticipant = registerChatParticipant({ service: aiService });
-  const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore }, aiMcp);
+  const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore, reportHiddenFieldsProblem }, aiMcp);
   const refreshAi = (): void => {
     aiController.refresh();
     void aiStatusBar.refresh();

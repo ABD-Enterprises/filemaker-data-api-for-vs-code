@@ -90,6 +90,8 @@ describe('FileMaker: Write AI Context', () => {
     await rm(base, { recursive: true, force: true });
   });
 
+  const reportHiddenFieldsProblem = vi.fn();
+
   async function run(): Promise<void> {
     vi.mocked(vscode.commands.registerCommand).mockClear();
     registerAiContextCommands({
@@ -101,6 +103,7 @@ describe('FileMaker: Write AI Context', () => {
       fmClient: fmClient as never,
       schemaService: schemaService as never,
       logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      reportHiddenFieldsProblem,
       now: () => new Date('2026-10-18T12:00:00.000Z'),
       isTracked
     });
@@ -406,6 +409,7 @@ describe('FileMaker: Write AI Context', () => {
       fields(name, 'Name', 'Password');
       await run();
       const text = await readFile(defaultFile(), 'utf8');
+      expect(reportHiddenFieldsProblem).toHaveBeenCalledWith({ scope: 'globalValue', kind: 'string-as-name', count: 1 });
       expect(text).not.toContain(`"name": "${name}"`);
       expect(text).toContain('"name": "Name"');
       expect(text).toContain('"name": "Password"');
