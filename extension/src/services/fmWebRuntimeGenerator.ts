@@ -40,7 +40,10 @@ const MANAGED_MARKER = /^\/\/ fmweb-managed: runtime template v(\d+)/;
  * version marker, so an unmodified old copy can be recognised and refreshed safely.
  */
 const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
-  'app/layouts/[id]/page.tsx': ['0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266'],
+  'app/layouts/[id]/page.tsx': [
+    '0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266',
+    '645ed91229d76841ea407279e6d0472f9d8af64dd3dcd4313c7aa566789ae814'
+  ],
   'lib/bridge-client.ts': ['5498ff7031a1e12b4c74b1d1a5d8c08f286754732f5c26006760f8ea95d58d1f'],
   'lib/runtime-data.ts': ['3e382ec9f700d98c480e30fa714f1fdb322a758b3d71b431ef07624c37b400aa'],
   'lib/runtime-behavior.ts': ['6d5794b937c78c15a1a2f97ab4fec42d88f9a6fb0d366c6d0625c80aad8cef95'],

@@ -1,8 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from '../../../src/ai/aiSettings';
+import { createHiddenFieldsWarner, isAiFeatureSwitchOn, isExternalServerEnabled, readAiSettings } from '../../../src/ai/aiSettings';
 
 function configuration(values: Record<string, Record<string, unknown>>) {
   return {
@@ -188,5 +188,48 @@ describe('isExternalServerEnabled', () => {
     ).toBe(false);
     expect(isExternalServerEnabled({ get: () => true } as never)).toBe(false);
     expect(isExternalServerEnabled(configuration({ 'ai.externalServer.enabled': { globalValue: 'true' } }))).toBe(false);
+  });
+});
+
+describe('createHiddenFieldsWarner', () => {
+  const fix = 'Fix the setting to a list of field names, for example ["SSN", "Password"].';
+
+  it.each([
+    [' SSN, Password ', [' SSN, Password '], 'the value is a string, so it still hides one exact field name (commas are not separators)'],
+    ['', [''], 'the value is a string, so it still hides one exact field name (commas are not separators)'],
+    [[' Exact ', 42], [' Exact '], '1 entry is not text and was ignored; the other names still hide'],
+    [[' Exact ', null, false], [' Exact '], '2 entries are not text and were ignored; the other names still hide'],
+    [{}, [], 'the value is not a list of names and was ignored']
+  ])('warns for %j while retaining valid names and other scopes', (value, names, problem) => {
+    const warn = vi.fn();
+    const report = createHiddenFieldsWarner(warn);
+    const config = configuration({ 'ai.hiddenFields': { globalValue: value, workspaceValue: ['KeepHidden'] } });
+    expect(readAiSettings(config, report).hiddenFields).toEqual([...names, 'KeepHidden']);
+    expect(warn.mock.calls).toEqual([[`filemaker.ai.hiddenFields (globalValue): ${problem}. ${fix}`]]);
+    readAiSettings(config, report);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplicates by scope, kind and count across readers, with separate state for a new warner', () => {
+    const warn = vi.fn();
+    const report = createHiddenFieldsWarner(warn);
+    const problem = { scope: 'globalValue', kind: 'entries-ignored' as const, count: 1 };
+    report(problem);
+    report(problem);
+    report({ ...problem, scope: 'workspaceValue' });
+    report({ ...problem, count: 2 });
+    report({ ...problem, kind: 'string-as-name' });
+    expect(warn).toHaveBeenCalledTimes(4);
+    createHiddenFieldsWarner(warn)(problem);
+    expect(warn).toHaveBeenCalledTimes(5);
+  });
+
+  it.each([[], undefined, null])('does not warn for an empty or unset value %j, or remove hiding from another scope', (value) => {
+    const warn = vi.fn();
+    const settings = readAiSettings(configuration({
+      'ai.hiddenFields': { globalValue: ['KeepHidden'], workspaceValue: value }
+    }), createHiddenFieldsWarner(warn));
+    expect(settings.hiddenFields).toEqual(['KeepHidden']);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
