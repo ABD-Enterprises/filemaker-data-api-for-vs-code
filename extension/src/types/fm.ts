@@ -2,7 +2,7 @@ export type AuthMode = 'direct' | 'proxy';
 export type SavedQueryScope = 'workspace' | 'global';
 export type SchemaSnapshotStorage = 'workspaceState' | 'workspaceFiles';
 export type SchemaSnapshotSource = 'manual' | 'auto';
-export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | `completed with ${number} failed row${'' | 's'}`;
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelling' | 'cancelled';
 export type BatchExportFormat = 'jsonl' | 'csv';
 export type EnterpriseRole = 'viewer' | 'developer' | 'admin';
 export type PerformanceMode = 'standard' | 'high-scale';
@@ -49,20 +49,23 @@ export interface FileMakerLayoutInfo {
 export interface PortalDataInfo {
   portalObjectName?: string;
   table?: string;
-  foundCount?: number;
-  returnedCount?: number;
+  foundCount: number;
+  returnedCount: number;
 }
 
+export type PortalPaging = Record<string, { limit: number; offset?: number }>;
+
 export interface FileMakerRecord {
-  portalDataInfo?: PortalDataInfo[];
   recordId: string;
   modId?: string;
   fieldData: Record<string, unknown>;
+  portalDataInfo?: PortalDataInfo[];
   portalData?: Record<string, Array<Record<string, unknown>>>;
   [key: string]: unknown;
 }
 
 export interface FindRecordsRequest {
+  portal?: PortalPaging;
   script?: string;
   'script.param'?: string;
   'script.prerequest'?: string;
@@ -320,7 +323,6 @@ export interface JobLogEntry {
 }
 
 export interface JobSummary {
-  result?: unknown;
   id: string;
   name: string;
   startedAt: string;
@@ -328,6 +330,7 @@ export interface JobSummary {
   status: JobStatus;
   progress: number;
   details?: string;
+  result?: unknown;
 }
 
 export interface JobRuntimeState<T = unknown> extends JobSummary {
@@ -346,6 +349,7 @@ export interface BatchExportOptions {
   maxRecords: number;
   outputPath: string;
   pageSize?: number;
+  excelCompatible?: boolean;
 }
 
 export interface BatchExportResult {
@@ -353,9 +357,15 @@ export interface BatchExportResult {
   format: BatchExportFormat;
   exportedRecords: number;
   truncated: boolean;
+  cancelled?: boolean;
+  unknownColumnValues?: number;
+  warnings?: string[];
 }
 
 export interface BatchUpdateEntry {
+  /** CSV values are converted using layout result types at job start. */
+  sourceFormat?: 'csv';
+  csvRecordColumn?: string;
   recordId: string;
   fieldData: Record<string, unknown>;
 }
@@ -366,8 +376,8 @@ export interface BatchUpdateOptions {
 }
 
 export interface BatchUpdateFailure {
-  code?: string;
   recordId: string;
+  code?: string;
   reason: string;
 }
 
@@ -378,6 +388,8 @@ export interface BatchUpdateResult {
   successCount: number;
   failureCount: number;
   failures: BatchUpdateFailure[];
+  updatedIds?: string[];
+  notAttemptedIds?: string[];
   /** The job stopped early because the account cannot do this; the reason is FileMaker's message. */
   stoppedReason?: string;
   /** Records that were never attempted because the job stopped. */

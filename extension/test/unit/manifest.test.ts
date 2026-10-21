@@ -27,6 +27,13 @@ const palette = new Map((menus.commandPalette ?? []).map((entry) => [entry.comma
 const id = (name: string): string => `filemakerDataApiTools.${name}`;
 
 describe('extension manifest UX contract', () => {
+  it('offers diagnosis and its copy command even before any profile exists', () => {
+    for (const name of ['diagnoseConnection', 'copyConnectionDiagnosis']) {
+      expect(commandIds.has(id(name))).toBe(true);
+      expect(palette.has(id(name))).toBe(false);
+    }
+  });
+
   it('groups every command under the FileMaker category without a duplicated prefix', () => {
     for (const command of commands) {
       expect(command.category, command.command).toBe('FileMaker');

@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type * as vscode from 'vscode';
 
 import type { JobContext, JobLogEntry, JobRuntimeState, JobSummary } from '../types/fm';
-import { redactString } from '../utils/redact';
+import { redactString, redactValue } from '../utils/redact';
 
 const JOBS_RECENT_KEY = 'filemaker.jobs.recent';
 const DEFAULT_RECENT_LIMIT = 25;
@@ -62,7 +62,7 @@ export class JobRunner {
     const state = this.activeJobs.get(id);
     if (!controller || !state || !['queued', 'running'].includes(state.status)) return false;
     controller.cancelled = true;
-    state.status = 'cancelled';
+    state.status = 'cancelling';
     state.details = 'Cancelling; waiting for requests already sent to finish.';
     this.emit(state);
     return true;
@@ -119,13 +119,15 @@ export class JobRunner {
       state.result = result;
       if (controller.cancelled) {
         state.status = 'cancelled';
+        if (result && typeof result === 'object' && 'attempted' in result && 'total' in result) {
+          state.details = `Cancelled after ${result.attempted} of ${result.total}`;
+        }
       } else {
         state.status = 'completed';
         state.progress = 100;
         const counts = batchCounts(result);
         if (counts) {
           state.details = `${counts.successCount} succeeded, ${counts.failureCount} failed`;
-          if (counts.failureCount > 0) state.status = `completed with ${counts.failureCount} failed row${counts.failureCount === 1 ? '' : 's'}`;
         }
       }
     } catch (error) {
@@ -154,7 +156,7 @@ export class JobRunner {
         status: state.status,
         progress: state.progress,
         details: state.details,
-        ...(batchCounts(state.result) ? { result: sanitizeBatchResult(state.result) } : {})
+        result: redactValue(state.result)
       },
       ...current.filter((item) => item.id !== state.id)
     ].slice(0, normalizeRecentLimit(this.getRecentLimit()));
@@ -197,6 +199,10 @@ function batchCounts(result: unknown): { successCount: number; failureCount: num
     ? counts as { successCount: number; failureCount: number } : undefined;
 }
 
-function sanitizeBatchResult(result: unknown): unknown {
-  return JSON.parse(redactString(JSON.stringify(result))) as unknown;
+export function jobStatusText(job: Pick<JobSummary, 'status' | 'details' | 'result'>): string {
+  const counts = batchCounts(job.result);
+  if (job.status === 'completed' && counts && counts.failureCount > 0) {
+    return `completed with ${counts.failureCount} failed row${counts.failureCount === 1 ? '' : 's'}`;
+  }
+  return job.status === 'cancelled' && job.details ? job.details : job.status;
 }

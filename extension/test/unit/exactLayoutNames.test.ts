@@ -76,7 +76,7 @@ describe('layout (and script and field) names are used exactly, ` Sales` is not 
   it('reads, finds and edits use the exact name too', async () => {
     const { fm, profile, paths } = await serve();
     await fm.getRecord(profile, ' Sales', '7').catch(() => undefined);
-    await fm.findRecords(profile, ' Sales', { query: [{}] });
+    await fm.findRecords(profile, ' Sales', { query: [{ Name: '*' }] });
     await fm.editRecord(profile, ' Sales', '7', { A: '1' }).catch(() => undefined);
     expect(forLayout(paths).every((line) => /\/layouts\/%20Sales\//.test(line))).toBe(true);
     expect(forLayout(paths).length).toBeGreaterThanOrEqual(3);

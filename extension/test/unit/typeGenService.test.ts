@@ -1,3 +1,4 @@
+import { runInNewContext } from 'vm';
 import { execFileSync } from 'child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -128,6 +129,27 @@ describe('TypeGenService', () => {
       expect(entry.description).toContain(' Age : number (kind: normal)');
       expect(entry.description).toContain('Photo: container (kind: normal)');
     }
+  });
+
+  it('generated finds refuse empty criteria before fetch and the example supplies a field', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fm-generated-find-'));
+    try {
+      const service = new TypeGenService({ getLayoutSchema: async () => ({ supported: true, fields: [{ name: ' Name ', type: 'text' }], metadata: {} }) } as never,
+        {} as never, { debug() {}, info() {}, warn() {}, error() {} }, { getWorkspaceRoot: () => root });
+      const artifacts = await service.generateTypeScriptClient(createProfile(), ['Contacts'], root);
+      const source = await readFile(artifacts.clientPath, 'utf8');
+      const exports: { FileMakerDataApiClient?: new (config: unknown) => { findContacts(request: unknown): Promise<unknown> } } = {};
+      runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports });
+      const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>().mockResolvedValue(new Response(JSON.stringify({ response: { data: [] }, messages: [] })));
+      const client = new exports.FileMakerDataApiClient!({ serverUrl: 'https://fm.local', database: 'Sales', token: 't', fetch });
+      for (const query of [[], [{}], [{ omit: 'true' }], [{ ' Name ': '' }]]) {
+        await expect(client.findContacts({ query })).rejects.toThrow('Enter at least one field value to search');
+      }
+      expect(fetch).not.toHaveBeenCalled();
+      await client.findContacts({ query: [{ ' Name ': '*' }] });
+      expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body as string)).toMatchObject({ query: [{ ' Name ': '*' }] });
+      expect(await readFile(artifacts.readmePath, 'utf8')).not.toContain('query: [{}]');
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it('generates a compiling TypeScript client with typed find results', async () => {

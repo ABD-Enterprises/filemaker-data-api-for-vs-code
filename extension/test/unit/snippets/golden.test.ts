@@ -29,6 +29,10 @@ describe('golden files: every operation in every format', () => {
   for (const operationName of Object.keys(OPERATIONS)) {
     for (const format of FORMATS) {
       it(`direct profile, ${operationName}, ${format}`, () => {
+        if (operationName === 'runScriptLongParam') {
+          expect(() => render(directProfile, operationName, format, false)).toThrow(/too long/);
+          return;
+        }
         check(`direct/${operationName}.${format}.${EXTENSION[format]}`, render(directProfile, operationName, format, false));
       });
     }

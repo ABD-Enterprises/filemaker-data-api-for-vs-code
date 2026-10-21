@@ -24,6 +24,8 @@ interface RecordViewerOpenOptions {
 }
 
 interface LoadRecordPayload {
+  portal?: string;
+  portalLimit?: number;
   profileId: string;
   layout: string;
   recordId: string;
@@ -200,11 +202,30 @@ export class RecordViewerPanel {
           .then((metadata) => designerLayoutMetadata(payload.layout, metadata).fields)
           .catch(() => []) // Presentation metadata must never prevent viewing a record.
         : Promise.resolve([]);
-      const [record, presentationFields] = await Promise.all([
-        this.fmClient.getRecord(profile, payload.layout, payload.recordId),
+      const [loadedRecord, presentationFields] = await Promise.all([
+        payload.portal && payload.portalLimit
+          ? this.fmClient.getRecord(profile, payload.layout, payload.recordId, { portal: { [payload.portal]: { limit: payload.portalLimit, offset: 1 } } })
+          : this.fmClient.getRecord(profile, payload.layout, payload.recordId),
         presentation
       ]);
       if (loadVersion !== this.recordLoadVersion) return;
+      let record = loadedRecord;
+      const previous = this.lastRecord;
+      if (payload.portal && previous?.profileId === payload.profileId && previous.layout === payload.layout && previous.record.recordId === payload.recordId) {
+        const portalName = payload.portal;
+        record = {
+          ...loadedRecord,
+          portalData: {
+            ...previous.record.portalData,
+            ...(Object.hasOwn(loadedRecord.portalData ?? {}, portalName)
+              ? { [portalName]: loadedRecord.portalData![portalName]! } : {})
+          },
+          portalDataInfo: [
+            ...(previous.record.portalDataInfo ?? []).filter((info) => (info.portalObjectName ?? info.table) !== portalName),
+            ...(loadedRecord.portalDataInfo ?? []).filter((info) => (info.portalObjectName ?? info.table) === portalName)
+          ]
+        };
+      }
       this.lastRecord = {
         profileId: payload.profileId,
         layout: payload.layout,
@@ -327,11 +348,10 @@ export class RecordViewerPanel {
       return undefined;
     }
 
-    return {
-      profileId,
-      layout,
-      recordId
-    };
+    const portal = typeof payload.portal === 'string' && payload.portal.length > 0 ? payload.portal : undefined;
+    const portalLimit = typeof payload.portalLimit === 'number' && Number.isInteger(payload.portalLimit) && payload.portalLimit > 0 && payload.portalLimit <= 250_000 ? payload.portalLimit : undefined;
+    if (portal && !portalLimit) return undefined;
+    return { profileId, layout, recordId, ...(portal ? { portal, portalLimit } : {}) };
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {

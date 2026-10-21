@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { JobRunner } from '../../src/services/jobRunner';
+import { JobRunner, jobStatusText } from '../../src/services/jobRunner';
 import { InMemoryMemento } from './mocks';
 
 async function waitFor(condition: () => boolean, timeoutMs = 1000): Promise<void> {
@@ -35,6 +35,7 @@ describe('JobRunner', () => {
     expect(recent).toHaveLength(1);
     const first = recent.at(0);
     expect(first?.name).toBe('Example Job');
+    expect(first?.result).toEqual({ ok: true });
   });
 
   it('supports cancellation', async () => {
@@ -63,16 +64,32 @@ describe('job outcomes', () => {
     const runner = new JobRunner(new InMemoryMemento() as never);
     let finish!: (value: { successCount: number }) => void;
     const handle = runner.startJob('Partial', () => new Promise((resolve) => { finish = resolve; }));
-    handle.cancel(); finish({ successCount: 2 });
+    expect(runner.cancelJob(handle.id)).toBe(true);
+    expect(handle.getState().status).toBe('cancelling');
+    expect(runner.cancelJob(handle.id)).toBe(false);
+    expect(runner.getRecentSummaries()).toHaveLength(0);
+    finish({ successCount: 2 });
     await new Promise((resolve) => setImmediate(resolve));
     expect(handle.getState()).toMatchObject({ status: 'cancelled', result: { successCount: 2 } });
+    expect(runner.getRecentSummaries()[0]?.result).toEqual({ successCount: 2 });
+    expect(runner.cancelJob(handle.id)).toBe(false);
   });
   it('reports row failures explicitly and preserves them in recent history', async () => {
     const runner = new JobRunner(new InMemoryMemento() as never);
     const result = { total: 3, attempted: 3, successCount: 2, failureCount: 1, failures: [{ recordId: '2', reason: 'FileMaker 1708: invalid value' }] };
     const handle = runner.startJob('Batch', async () => result);
     await new Promise((resolve) => setImmediate(resolve));
-    expect(handle.getState()).toMatchObject({ status: 'completed with 1 failed row', details: '2 succeeded, 1 failed', result });
+    expect(handle.getState()).toMatchObject({ status: 'completed', details: '2 succeeded, 1 failed', result });
+    expect(jobStatusText(handle.getState())).toBe('completed with 1 failed row');
     expect(runner.getRecentSummaries()[0]).toMatchObject({ result });
+  });
+  it('masks secrets in persisted results without losing failure codes or partial ids', async () => {
+    const runner = new JobRunner(new InMemoryMemento() as never);
+    runner.startJob('Batch', async () => ({ total: 3, attempted: 2, successCount: 1, failureCount: 1,
+      updatedIds: ['1'], notAttemptedIds: ['3'], failures: [{ recordId: '2', code: '1708', reason: 'Authorization: Bearer private-value' }],
+      token: 'private-token' }));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(runner.getRecentSummaries()[0]?.result).toEqual({ total: 3, attempted: 2, successCount: 1, failureCount: 1,
+      updatedIds: ['1'], notAttemptedIds: ['3'], failures: [{ recordId: '2', code: '1708', reason: 'Authorization: Bearer ***' }], token: '***' });
   });
 });

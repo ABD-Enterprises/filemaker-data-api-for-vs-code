@@ -30,9 +30,26 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 22. [Security behavior you will notice](#security-behavior-you-will-notice)
 23. [Troubleshooting](#troubleshooting)
 24. [FAQ](#faq)
-25. [Command reference](#command-reference)
+25. [Connection won't work? Diagnose Connection](#connection-wont-work-diagnose-connection)
+26. [Command reference](#command-reference)
 
 ---
+
+## Connection won't work? Diagnose Connection
+
+Open the Command Palette and run **FileMaker: Diagnose Connection**. Choose the active connection, another saved profile, or **Type a server address (without saving)** for a quick check. Enter an address such as `https://fm.example.com` or `https://fm.example.com:8443`. A saved address with a path prefix, such as `https://fm.example.com/fm`, works too. Nothing is saved for a typed check.
+
+The report opens as a new Markdown document in your editor and follows your editor theme. Each check shows **PASS**, **WARN** or **FAIL** and the time it took. It checks the address, looks up the server name, tries the port, reads the secure connection's certificate, checks VS Code's network settings, and asks the Data API for its product information. It does **not** sign in, send credentials, or change your certificate trust. Each network check has an eight-second limit. Use **Cancel** on the progress notification to stop.
+
+Start with **Most likely cause** at the end of the report. For a certificate with no server names (including FileMaker Server's default certificate), ask your administrator to confirm the fingerprint, then run **Connect** and choose **Trust**. For an expired certificate, ask the administrator to renew it. The report shows the full SHA-256 fingerprint in uppercase pairs separated by colons, just like the Trust dialog. A server sending only its leaf certificate may use a private root authority or may be missing an intermediate; the leaf alone cannot distinguish them. If your organization runs its own authority, set its CA file (**Certificate authority file**) in the profile. For a public authority such as Let's Encrypt, ask the administrator to check and install the full server chain. The report puts missing-intermediate advice first only when a CA file is already configured, the server sends only the leaf, and verification still fails with an issuer error; a missing intermediate is then likely, though the CA file could also be wrong. If your profile uses the older **Allow self-signed** setting, it already accepts any certificate; switch to trusting the confirmed fingerprint instead. A certificate from a public authority is usually the easiest long-term solution.
+
+Trusted-fingerprint profiles and older **Allow self-signed** profiles work with VS Code's default `http.proxySupport` setting on direct connections. The extension uses a connection path VS Code does not replace. Custom CA profiles still go through VS Code and system proxies as before. A trusted-fingerprint profile that needs a proxy is refused with `PIN_THROUGH_PROXY`: exclude the server in the proxy settings or, for an environment proxy, add it to `NO_PROXY`. An older Allow self-signed profile behind an environment proxy keeps its previous proxy route. If that route cannot apply its certificate settings, the report may suggest trying `http.proxySupport` set to `fallback`. Proxy setting and environment-variable values are hidden in the report. The DNS, port and certificate checks connect directly; the Data API check uses the extension's actual connection settings. For a proxy profile, this check diagnoses the **FileMaker Server address**, not the middleware's sign-in or certificate. It requests `/fmi/data/vLatest/productInfo` after any server path prefix; a custom API path can still need attention afterwards.
+
+Diagnose Connection was checked on one real server on 2026-10-21: the server had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted.
+
+Choose **Copy for bug report** when the report is ready, or run **FileMaker: Copy Connection Diagnosis for Bug Report** later. Answer **Hide the server address?** before anything is copied. Hiding also removes the port and certificate details that could reveal the address. The report leaves out passwords, tokens, API keys, request headers and cookies. The copy command copies the original diagnosis, even if you have edited the open document.
+
+Turn off offline mode before running a check. In Restricted Mode, you can check your own saved connection or type an address yourself; an address from the workspace's profile template is refused until you trust the workspace. This read-only check follows the same connection policy as Test Connection and does not need permission to edit records.
 
 ## Command reference
 
@@ -42,7 +59,11 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | --- | --- | --- |
 | Open Getting Started Walkthrough | Opens the guided setup steps in VS Code. | Always shown. |
 | Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
+| Diagnose Connection | Checks a saved server or a typed address, without signing in, and explains likely fixes. | Always shown; turn off offline mode. Uses saved profiles or an address you type; never reads a workspace template. |
+| Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
 | Test My Server | Runs a safe server check and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
+
+| Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
@@ -55,7 +76,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | List Layouts | Opens a JSON list of the profile's layouts. | Shown with a profile. |
 | Run Find (JSON) | Prompts for find, sort and paging options and opens the result as JSON. | Shown with a profile; choose a layout. |
 | Get Record by ID | Reads one record and opens it as JSON. | Shown with a profile; choose a layout and record ID. |
-| Open Record Viewer | Opens a record or browses records in a layout. | Shown with a profile; choose a layout. |
+| Open Record Viewer | Opens a record and shows related row counts, with Load more on direct connections. | Shown with a profile; choose a layout. |
 | Open Query Builder | Opens the visual find form and results table. | Shown with a profile. |
 | Open Layout Metadata | Opens layout metadata, field count and cache status as JSON. | Shown with a profile; needs metadata support for the chosen layout. |
 | Select Layout for Inspector | Selects a layout and focuses the Layout Inspector. | Shown with a profile. |
@@ -82,15 +103,15 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Generate Snippets for Layout | Writes and opens editor snippets for a layout. | Shown with a profile; needs workspace trust and a layout. |
 | Generate TypeScript Client | Generates a typed client for selected layouts in a chosen folder. | Shown with a profile; needs workspace trust. |
 | Open Generated Types Folder | Creates the configured types folder if needed and reveals it in the file manager. | Always shown; needs a trusted workspace folder. |
-| Open Record Editor | Opens the editor for an existing record; warns before saving text with a NUL character. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
+| Open Record Editor | Opens an existing record for editing, keeping number-looking text as text and warning before saving text with a NUL character. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
 | Edit Record by ID | Prompts for a record ID and opens the record editor. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Create Record | Opens the editor in create mode; warns before sending text with a NUL character. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
-| Batch Export (Find) | Exports matching records to CSV or JSONL as a background job. | Shown with a profile; needs batch operations enabled and workspace trust. |
-| Batch Update from CSV/JSON | Previews or applies updates; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
-| Cancel Job | Stops sending new work for a running job and keeps partial results. | Shown in power-user mode; also on running jobs in the Jobs view and jobs menu. |
-| Show Jobs | Lists jobs once, shows results and failed rows, and offers cancellation or Copy failures. | Shown in power-user mode; needs an active or recent job. |
+| Batch Export (Find) | Saves matching records to CSV or JSONL safely as a background job, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
+| Batch Update from CSV/JSON | Previews or applies updates, using field types for CSV and leaving empty CSV cells unchanged; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
+| Cancel Job | Stops sending new work for a running job, waits for pending requests and keeps partial results. | Shown in power-user mode; also on running jobs in the Jobs view and jobs menu. |
+| Show Jobs | Lists active and recent jobs once, shows counts and details as JSON including changed, failed and untouched record IDs after a cancelled batch update, and offers cancellation or Copy failures. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
 | Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
 | Diff Layout Across Environments | Shows field differences for one layout across an environment set. | Shown in enterprise mode; needs a set with at least two existing profiles. |
@@ -322,13 +343,17 @@ In proxy mode the test opens a session through the proxy. A failed test shows it
 
 Choose your connection, then run **FileMaker: Test My Server**. The first dialog lists every check. Choose **Run read-only test** to start safely. This uses the saved account and password, in a separate temporary session, and leaves your normal connection alone.
 
-The test checks the server version, signs in, tries the database list, counts layouts and scripts, and reads the fields of the first three layouts. A database list that your account cannot see is a warning, not a failed login. Choose a layout to find at most one record and read it by its ID; the last layout you chose is remembered for that connection. Then choose a text field for a search that should find nothing. This records the server's actual answer, including whether “no records match” uses HTTP 404 or 500 with FileMaker code 401. Cancel a picker to skip that check. No record values or script results go into the report.
+The test checks the server version, signs in, tries the database list, counts layouts and scripts, and reads the fields of the first three layouts. A database list that your account cannot see is a warning, not a failed login. Choose a layout to read at most one record using Get records, without sending an empty search, and read it by its ID; the last layout you chose is remembered for that connection. Then choose a text field for a search that should find nothing. This records the server's actual answer, including whether “no records match” uses HTTP 404 or 500 with FileMaker code 401. Cancel a picker to skip that check. No record values or script results go into the report.
 
 **Optional write test.** Only choose **Also run the write test** with a disposable test file. Pick a **SCRATCH layout** and an editable text field. A second dialog names that layout and asks permission to create, read, edit and delete one record. The test also tries an old modification ID to see whether the server refuses it with code 306. Required fields, automatic fields and server triggers can affect this test. Cleanup is attempted if a step fails or you cancel. If deletion fails, the report gives the record ID and layout: ask your administrator to remove that test record. If a create request times out, the server may have created a record without returning its ID; check the scratch layout before trying again.
 
 **Optional script.** This is skipped by default: leave the script name blank or cancel. To run one, type its exact name and parameter (the parameter can be blank), then confirm the named script. Only use a script you understand: it may change data or have other effects. Layout, field and script names keep their spaces exactly as entered.
 
 Writes and scripts are unavailable in Restricted Mode, when the enterprise role or policy blocks them, or when their Record Editor or Script Runner switch is off. Offline mode prevents the test. You can cancel from the progress notification; further tests stop, with cleanup and logout still attempted. Requests use your normal timeout setting. Even reads may cause server-side triggers or automatic actions, so use a test file first. Containers and batches are never tested.
+
+Cancelling a request while signing in stops only that request; other waiting requests continue. When the extension renews a direct connection, it tries to close the previous session with a short timeout. A failed close does not fail your request; the old session then expires on the server.
+
+The Get records step needs a direct connection; the existing proxy protocol has no action to list records without a search.
 
 The test signs out and tries the old token once, without signing back in, to check that it is refused. A proxy owns its own sessions, so that last check is skipped for proxy connections. The report opens as an unsaved Markdown document. **PASS** means that step answered as expected; **WARN** means skipped or not confirmed; **FAIL** means it needs attention. It shows elapsed time, HTTP status, FileMaker code and message, observed facts and plain next steps. A TLS protocol is only shown when it was observed; plain HTTP has no TLS. Blank status or code means none was observed, never an assumed success.
 
@@ -444,6 +469,8 @@ Results:
 
 **Save…** stores the query under the profile in the sidebar (**Saved Queries**). Saved queries live in the workspace by default; set `filemaker.savedQueries.scope` to `global` to keep them in your user data. Run one from its right-click menu or **FileMaker: Run Saved Query**. **FileMaker: Export Saved Queries (JSON)** and **FileMaker: Import Saved Queries (JSON)** share them with a team. The panel keeps a short **Request history**, the last `filemaker.history.maxEntries` requests (default 10).
 
+**Empty searches.** Enter at least one field value to search. An empty form, `[]`, or `[{}]` is refused before searching; it does not mean “all records.” This also applies to saved queries, batch exports, AI searches, generated clients and copied code. To search for an empty field, choose **is empty** (the `=` search value). Get records lists records without searching; Test My Server uses it to read one record. FM Web’s **Find All** also uses Get records through the local preview bridge.
+
 For a quick check without the panel, **FileMaker: Run Find (JSON)** asks for a layout and a find body.
 
 ---
@@ -513,6 +540,8 @@ Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in 
 
 Use **FileMaker: Cancel Job**, the Cancel action on a running job in the sidebar, or the jobs menu opened from the status bar. Cancellation stops new requests. Requests already sent finish, and their results and failed rows are kept. Cancelling does not undo successful updates.
 
+After you cancel an update, its status stays **cancelling** while edits already sent finish. No further edit or retry starts. It then shows **Cancelled after N of M**; N counts records attempted, including failures. Open **FileMaker: Show Jobs** and choose the job to see `updatedIds`, `failures` (record IDs, reasons and FileMaker codes when supplied), and `notAttemptedIds`. The same details stay in recent jobs after a restart. Cancelling does not undo changes.
+
 ### Export
 
 1. Run **FileMaker: Batch Export (Find)** (or use the layout's right-click menu).
@@ -521,9 +550,19 @@ Use **FileMaker: Cancel Job**, the Cancel action on a running job in the sidebar
 
 Large results are fetched page by page. The export stops at `filemaker.batch.maxRecords` records (default 10,000; the hard limit is 250,000). With `filemaker.performance.mode` set to `high-scale`, exports are always written as JSONL.
 
+**Safe export files.** The extension writes a temporary file in the same folder and replaces your chosen file only when the export finishes successfully. A failed or cancelled export leaves the existing file untouched and removes the temporary file; no partial file is kept. A successful CSV export with no matches still has its column headings. New export files use owner-only permissions on macOS and Linux; replacements keep the existing file's permissions. A destination symlink is replaced without changing the file it points to. CSV includes repeating fields as `Name(1)`, `Name(2)`, etc., followed by any extra fields found in the first page. When field information is unavailable, CSV uses the columns found in the first 100 records. Fields appearing after the column list is fixed are omitted; the job result lists their names and the final warning reports how many values were not exported.
+
+**CSV for Excel.** Choose **Standard CSV** for the usual UTF-8 file, or **Excel-compatible CSV (UTF-8 BOM)** so Excel on Windows recognizes accents. Standard CSV is the default. This choice is available for batch CSV exports and Query Builder's **Save results as CSV…**.
+
+**Related rows in exports.** FileMaker often returns only the first 50 rows of each portal. CSV has a note column and JSONL has an `exportNote` when rows are missing, for example `Orders: showing 50 of 170`. These exports do not fetch the missing related rows. In the Record Viewer, each portal shows how many rows were returned out of the total. Choose **Load more** to request another 50, until all rows are shown. Portal names keep their spaces exactly. Loading more is available on direct connections; a proxy connection shows a message explaining this limit.
+
 **Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** and **Copy results as table** in the Query Builder.
 
-**Editing and re-importing a CSV export.** A CSV export has `recordId` and `modId` columns followed by every field the layout returns. Batch update skips the `recordId` and `modId` columns as fields (using `recordId` to find each record), so a layout with plain fields can be edited and imported back. But the export also writes related (`Table::Field`), calculation, summary and container columns, and import sends every column back as a field. Before importing, delete the columns for related, calculation, summary and container fields and keep only the fields you want to change. Empty cells are skipped. A cell that looks like JSON (for example `{"a":1}`, `[1,2]`, `true`, `null` or a number) is sent as JSON, not as text. A JSONL export cannot be imported: batch update accepts `.csv` and `.json` only.
+**Editing and re-importing a CSV export.** The first two CSV columns identify the record: `recordId` and `modId`. If a layout has a field with either name (including different capitals), the record columns use `__recordId` and `__modId` instead. Extra underscores are used if those names are also fields. Keep these two columns together at the start of the file. The layout fields follow, including fields missing from the first record. Duplicate column names are refused because the record or field to change would be unclear. An older CSV using plain record columns on a layout with clashing field names is also refused when the field list can be read; export it again to get the reserved columns. The last column, `__portalNote (export information)`, is a note about missing related rows, not a field; import skips it. Keep that note last or remove it before importing.
+
+Text fields keep exactly what you typed, including `10.50`, `null`, `true`, brackets and spaces. Number fields receive numbers only for valid decimal numbers within the safe range (up to 9,007,199,254,740,991 in either direction). Other number entries are kept as text, with a warning for each affected row in the job log, so large numbers are not rounded. Dates and times stay as written. Field types are checked once when the update job starts; if they cannot be read, values stay as text and the job log warns you. Empty CSV cells are still skipped: they leave the field unchanged, so a CSV cannot clear a field. A space in a text cell is kept as a space. The Record Editor also uses the field's type, keeping number-looking text as text.
+
+Before importing, remove columns for related (`Table::Field`), calculation, summary and container fields, keeping only fields you want to change. JSONL files cannot be imported; batch update accepts comma-separated CSV or a JSON array of updates. A semicolon-separated file or JSONL file gets a message asking for comma-separated CSV instead.
 
 **Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 
@@ -556,7 +595,9 @@ While a query, script, record load, save or creation is running, its button is d
 
 **What is sent.** The script runs with the request the Claris Data API Guide documents for it: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<parameter>`. It is one request and it reads no record. The script name, layout name and parameter are percent-encoded exactly (a space is `%20`, never `+`; accented letters, `|`, `&` and `/` arrive as typed). The answer carries the script's error number and, if the script exits with a result, that result; if a record or find was part of the request, its data is not shown.
 
-**Parameter length.** A web address should stay under about 2,000 characters (the guide's advice), and this count includes the server address, layout and script name. A longer parameter cannot go in the address, so the extension sends it in the body of a find limited to one record, which is the guide's other documented form. That request reads that one record and has your script attached to it. If you also gave a **Record ID** and the parameter is too long, the run is refused with a message; shorten the parameter (pass an id or a key and let the script read the rest).
+**Parameter length.** The extension limits the complete percent-encoded web address to 2,000 characters, including the server address, layout, script name and parameter. Without a record ID, a longer parameter goes in a find body: the extension uses the layout metadata's first field whose result type is text, keeps its name exactly, searches for `*`, and limits the response to one record. An empty search cannot carry the parameter: FileMaker rejects it. If the layout has no text field, the extension falls back to Get records limited to one record only when its complete encoded URL fits the same 2,000-character limit. Otherwise it says: "This parameter is too long to send. Shorten it or run the script from a layout with a text field". With a record ID, the script must use that record's URL; shorten a parameter that exceeds the limit, or clear the record ID and use a layout with a text field.
+
+**Verified on a real server (2026-10-21).** A `POST /layouts/{layout}/_find` with `{"query":[{"<text field>":"*"}],"limit":1,"script":"<name>","script.param":"<3000 characters>"}` ran the script: HTTP 200 and `scriptError: "0"`. A find that matches no records returns code 401 and does **not** run the attached script; its response has no `scriptError`. The runner reports: "The script did not run because this layout has no records. Add a record or use a layout that has records." A `GET /layouts/{layout}/records?_limit=1&script=<name>&script.param=<1500 characters>` also worked. Both attached forms read records; the runner shows only the script's answer. An answer without `scriptError` is never treated as confirmed execution. If an older server refuses the script endpoint, a short call uses the Get records form too.
 
 **With a record ID.** The script is attached to a request for that record (`?script=<name>&script.param=<parameter>`), because the script endpoint cannot take a record in context.
 
@@ -605,7 +646,7 @@ Any request the extension sends can be copied as text, to try it in a terminal, 
 
 **Details worth knowing.**
 
-- **Run a script** is copied in the form the Claris Data API Guide documents: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<text>`. With a record in context the script is attached to a `GET` of that record (`?script=<name>&script.param=<text>`). A parameter too long for an address (more than about 2000 characters with the server and script name) is copied as a find limited to one record, which reads that record; with a record in context a parameter that long is refused.
+- **Run a script** is copied in the form the Claris Data API Guide documents: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<text>`. With a record in context the script is attached to a `GET` of that record (`?script=<name>&script.param=<text>`). A parameter too long for an address (more than about 2000 characters with the server and script name) is refused; shorten it before copying.
 - **Edit** carries `"modId": "<modId>"` (`{{modId}}` in `.http` and Postman). Put in the modId from the record you read: FileMaker refuses the edit with error 306 if the record changed since. The Record Editor copies the fields you changed in the form; without changes (and in the Record Viewer) it shows one field to fill in.
 - **Delete** really deletes when sent. The copied text says so.
 - **Container upload** is a multipart request with the file at `./file-to-upload`: change the path. Add the modId to the address for a checked upload.
@@ -1138,7 +1179,10 @@ Connection errors name the step that failed and what to do. The most common firs
 | --- | --- |
 | A find returns nothing | FileMaker reports "no records match" as error code 401: verified on a real server (FileMaker Data API Engine, 2026-10-21) as HTTP 200 with an empty data list. Older/other versions may use another status; the extension accepts code 401 on any status, and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
 | Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
-| "The script parameter is too long to send in a web address" | A script run with a record ID and a parameter longer than about 2,000 characters (the address limit, including the server and script name). Shorten the parameter, or run the script without a record ID (then it is sent in the body of a find). See [Run scripts](#run-scripts). |
+| "Find criteria are empty" / "Missing required property" (400 / 10) | Enter at least one field value to search, or use Get records to list records. An empty search cannot list records. |
+| "This parameter is too long to send" | The encoded URL exceeds 2,000 characters and a text-field find cannot carry it. Shorten it or use a layout with a text field without a record ID. See [Run scripts](#run-scripts). |
+| "The script did not run because this layout has no records" | The wildcard find returned code 401 and did not run the script. Add a record or use a layout that has records. |
+| "The server did not confirm that the script ran" | The response had no `scriptError`. Check the script before trying again; the runner cannot confirm execution. |
 | "Script runner is not supported on this server/profile." | The server refused both the script endpoint and the attach-to-another-request form (405, 501 or a FileMaker 404). Check the layout and script exist for the account and the server version supports the Data API script calls. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
 | Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |

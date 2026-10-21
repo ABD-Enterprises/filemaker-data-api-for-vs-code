@@ -493,7 +493,25 @@ function updatePortalSections(relatedData, portalKeys) {
     }
 
     const entries = Array.isArray(relatedData[portalKey]) ? relatedData[portalKey] : [];
-    section.summary.textContent = `${portalKey} (${entries.length})`;
+    const info = (state.lastRecord?.record?.portalDataInfo || []).find((item) => (item.portalObjectName || item.table) === portalKey);
+    section.summary.textContent = info
+      ? `${portalKey}: showing ${entries.length} of ${info.foundCount}`
+      : `${portalKey} (${entries.length})`;
+    if (info && entries.length < info.foundCount) {
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.textContent = 'Load more';
+      more.addEventListener('click', (event) => {
+        event.preventDefault();
+        more.disabled = true;
+        vscode.postMessage({ type: 'loadRecord', payload: {
+          profileId: state.lastRecord.profileId, layout: state.lastRecord.layout,
+          recordId: state.lastRecord.record.recordId, portal: portalKey,
+          portalLimit: Math.min(entries.length + 50, info.foundCount)
+        } });
+      });
+      section.summary.appendChild(more);
+    }
     section.content.textContent = entries.length ? JSON.stringify(entries, null, 2) : 'No related rows.';
   });
 }

@@ -694,13 +694,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const jobsSubscription = jobRunner.onDidChange(() => {
     refreshExplorer();
-    const running = jobRunner.listJobs().find((job) => job.status === 'running' || job.status === 'queued');
+    const running = jobRunner.listJobs().find((job) => job.status === 'running' || job.status === 'queued' || job.status === 'cancelling');
     if (!running) {
       jobsStatusBar.text = '$(history) FM Jobs: idle';
       return;
     }
 
-    jobsStatusBar.text = `$(sync~spin) FM Job: ${running.name} ${running.progress}%`;
+    jobsStatusBar.text = `$(sync~spin) FM Job: ${running.name} ${running.status === 'cancelling' ? 'cancelling ' : ''}${running.progress}%`;
   });
 
   const offlineStatusBar = new OfflineStatusBar(offlineModeService, {

@@ -105,6 +105,11 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           ? replaceExtension(outputUri.fsPath, '.jsonl')
           : outputUri.fsPath;
 
+      const csvChoice = format === 'csv'
+        ? await vscode.window.showQuickPick(['Standard CSV', 'Excel-compatible CSV (UTF-8 BOM)'], { title: 'CSV format' })
+        : 'Standard CSV';
+      if (!csvChoice) return;
+
       const job = jobRunner.startJob(`Batch Export ${layout}`, async (jobContext) => {
         jobContext.log('info', `Starting export to ${outputPath}`);
 
@@ -117,12 +122,17 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
           },
           {
             outputPath,
+            excelCompatible: csvChoice.startsWith('Excel'),
             format,
             maxRecords
           },
           jobContext
         );
 
+        if (result.cancelled) return result;
+        if (result.unknownColumnValues) {
+          void vscode.window.showWarningMessage(`${result.unknownColumnValues} values were not exported because their columns were unknown. See the export job for column names.`);
+        }
         jobContext.log(
           'info',
           `Finished export. Records=${result.exportedRecords}, truncated=${result.truncated}`

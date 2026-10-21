@@ -154,9 +154,15 @@ describe('fm_find_records: closed grammar', () => {
     expect(h.client.findRecords).not.toHaveBeenCalled();
   });
 
+  it.each([[], [{ fields: {} }], [{ fields: { Name: '' } }]].map((requests) => ({ requests })))('gives plain advice for empty AI criteria $requests', async ({ requests }) => {
+    const h = ready();
+    expect(await failure(find(h, { requests }))).toContain('Enter at least one field value to search, or use Get records to list records');
+    expect(h.client.findRecords).not.toHaveBeenCalled();
+  });
+
   it('rejects an empty request and a find made only of omit requests', async () => {
     const h = ready();
-    expect(await failure(find(h, { requests: [{ fields: {} }] }))).toMatch(/at least one field/);
+    expect(await failure(find(h, { requests: [{ fields: {} }] }))).toContain('Enter at least one field value to search, or use Get records to list records');
     expect(await failure(find(h, { requests: [{ fields: { Name: 'a' }, omit: true }] }))).toMatch(/must not be an omit/);
   });
 

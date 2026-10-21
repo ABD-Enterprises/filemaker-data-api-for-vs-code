@@ -95,6 +95,7 @@ describe('FMClient — proactive session refresh (#47)', () => {
       .mockResolvedValueOnce(mockSessionResponse('tok-A'))
       .mockResolvedValueOnce(mockListLayoutsResponse())
       .mockResolvedValueOnce(mockSessionResponse('tok-B'))
+      .mockResolvedValueOnce(createAxiosResponse({ data: { response: {}, messages: [{ code: '0', message: 'OK' }] } }))
       .mockResolvedValueOnce(mockListLayoutsResponse());
 
     const client = new FMClient(
@@ -118,9 +119,9 @@ describe('FMClient — proactive session refresh (#47)', () => {
     client.invalidateProfileCache(profile.id); // bypass listLayouts cache
     await client.listLayouts(profile); // should refresh to tok-B before listing
 
-    // call sequence: createSession A, list, createSession B, list = 4
-    expect(axios.request).toHaveBeenCalledTimes(4);
-    const lastCall = axios.request.mock.calls[3]?.[0] as Record<string, unknown>;
+    // call sequence: createSession A, list, createSession B, delete A, list = 5
+    expect(axios.request).toHaveBeenCalledTimes(5);
+    const lastCall = axios.request.mock.calls[4]?.[0] as Record<string, unknown>;
     const headers = lastCall.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer tok-B');
   });

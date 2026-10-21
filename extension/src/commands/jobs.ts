@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import type { JobRunner } from '../services/jobRunner';
+import { jobStatusText, type JobRunner } from '../services/jobRunner';
 import type { JobSummary } from '../types/fm';
 import { openJsonDocument } from './common';
 
@@ -28,8 +28,8 @@ export function registerJobsCommands({ jobRunner }: RegisterJobsCommandsDeps): v
       const picked = arg?.jobId ? jobs.find((job) => job.id === arg.jobId) : undefined;
       const selection = picked ? { id: picked.id } : await vscode.window.showQuickPick([
         ...(active.some((job) => ['queued', 'running'].includes(job.status)) ? [{ label: 'Cancel Job', id: 'cancel' }] : []),
-        ...jobs.map((job) => ({ label: `${job.name} (${job.status})`, description: `${job.progress}%`,
-          detail: `Started ${job.startedAt}${job.details ? ` • ${job.details}` : ''}`, id: job.id }))
+        ...jobs.map((job) => ({ label: `${job.name} (${jobStatusText(job)})`, description: `${job.progress}%`,
+          detail: `Started ${job.startedAt}${job.finishedAt ? ` • Finished ${job.finishedAt}` : ''}${job.details ? ` • ${job.details}` : ''}`, id: job.id }))
       ], { title: 'FileMaker Jobs' });
       if (!selection) return;
       if (selection.id === 'cancel') { await vscode.commands.executeCommand('filemakerDataApiTools.cancelJob'); return; }
@@ -40,7 +40,7 @@ export function registerJobsCommands({ jobRunner }: RegisterJobsCommandsDeps): v
         { label: 'View details', id: 'view' },
         ...(failures.length ? [{ label: 'Copy failures', description: `${failures.length} failed rows`, id: 'copy' }] : []),
         ...(['queued', 'running'].includes(job.status) ? [{ label: 'Cancel Job', id: 'cancel' }] : [])
-      ], { title: `${job.name}: ${job.status}${job.details ? ` • ${job.details}` : ''}` });
+      ], { title: `${job.name}: ${jobStatusText(job)}${job.details && jobStatusText(job) !== job.details ? ` • ${job.details}` : ''}` });
       if (action?.id === 'cancel') await vscode.commands.executeCommand('filemakerDataApiTools.cancelJob', { jobId: job.id });
       if (action?.id === 'copy') await vscode.env.clipboard.writeText(JSON.stringify(failures, null, 2));
       if (action?.id === 'view') await openJsonDocument(job);

@@ -8,8 +8,10 @@ import { describeScriptErrors } from '../../services/responseGuard';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { SavedQueriesStore } from '../../services/savedQueriesStore';
-import type { FindRecordsRequest, SavedQuery } from '../../types/fm';
+import type { FileMakerRecord, FindRecordsRequest, SavedQuery } from '../../types/fm';
 import { recordsToCsv } from '../../utils/exportCsv';
+import { exportColumns, exportRow } from '../../utils/exportRecords';
+import { atomicExport } from '../../utils/atomicExport';
 import { isFormulaNeutralizationOn } from '../../utils/userScopeSetting';
 import { extractLayoutFieldNames } from '../../utils/layoutFields';
 import { parseFindJson, parseSortJson } from '../../utils/jsonValidate';
@@ -548,7 +550,10 @@ export class QueryBuilderPanel {
     }
 
     const rows = this.toCsvRows(this.lastResult);
+    const excelChoice = await vscode.window.showQuickPick(['Standard CSV', 'Excel-compatible CSV (UTF-8 BOM)'], { title: 'CSV format' });
+    if (!excelChoice) return;
     const csv = recordsToCsv(rows, {
+      excelCompatible: excelChoice.startsWith('Excel'),
       neutralizeFormulas: isFormulaNeutralizationOn(vscode.workspace.getConfiguration('filemaker'))
     });
 
@@ -564,29 +569,19 @@ export class QueryBuilderPanel {
       return;
     }
 
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(csv, 'utf8'));
+    const file = await atomicExport(uri.fsPath);
+    try { await file.write(csv); await file.close(); }
+    catch (error) { await file.abort(); throw error; }
     vscode.window.showInformationMessage('Exported query results CSV file.');
   }
 
-  private toCsvRows(result: QueryExecutionResult): Array<Record<string, unknown>> {
-    const rows: Array<Record<string, unknown>> = [];
-
-    for (const item of result.result.data) {
-      const fieldData =
-        item && typeof item === 'object' && item.fieldData && typeof item.fieldData === 'object'
-          ? (item.fieldData as Record<string, unknown>)
-          : {};
-
-      rows.push({
-        recordId:
-          item && typeof item === 'object' && 'recordId' in item
-            ? (item as Record<string, unknown>).recordId
-            : undefined,
-        ...fieldData
-      });
-    }
-
-    return rows;
+  private toCsvRows(result: QueryExecutionResult): Array<Map<string, unknown>> {
+    const records = result.result.data as FileMakerRecord[];
+    const names = [...new Set(records.flatMap((record) => Object.keys(record.fieldData ?? {})))];
+    const meta = exportColumns(names);
+    let noteColumn = '__portalNote (export information)';
+    while (names.includes(noteColumn)) noteColumn = '_' + noteColumn;
+    return records.map((record) => exportRow(record, meta, noteColumn));
   }
 
   private async copyRequest(payload: CopySnippetPayload): Promise<void> {

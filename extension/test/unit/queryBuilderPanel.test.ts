@@ -1,3 +1,5 @@
+import { recordsToCsv } from '../../src/utils/exportCsv';
+import { parseBatchUpdateInput } from '../../src/services/batchService';
 import * as vscode from 'vscode';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -86,6 +88,14 @@ describe('QueryBuilderPanel messages', () => {
     panel = openPanel();
   });
 
+  it('exports colliding and digit-only fields with unambiguous ordered metadata', () => {
+    const panelType = QueryBuilderPanel as unknown as { prototype: { toCsvRows(input: unknown): Map<string, unknown>[] } };
+    const rows = panelType.prototype.toCsvRows({ result: { data: [{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }] } });
+    const csv = recordsToCsv(rows);
+    expect(csv.split('\n')[0]).toBe('__recordId,__modId,123,recordId,modId,__portalNote (export information)');
+    expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }]);
+  });
+
   it('loads duplicate Photo metadata without duplicate query choices', async () => {
     panel.fmClient.getLayoutMetadata.mockResolvedValueOnce(duplicatePhotoMetadata);
     await panel.send({ type: 'loadFieldNames', profileId: 'p1', layout: 'Contact Details' });
@@ -103,6 +113,12 @@ describe('QueryBuilderPanel messages', () => {
     await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '', runId: 3 } });
     expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 3 }));
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+  });
+
+  it.each(['[]', '[{}]', '[{"omit":"true"}]', '[{"Name":""}]'])('refuses an empty form %s before sending a find', async (findJson) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson, runId: 4 } });
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', message: expect.stringContaining('Enter at least one field value to search'), runId: 4 }));
   });
 
   it.each(['limit', 'offset'])('refuses zero %s with a next step', async (field) => {

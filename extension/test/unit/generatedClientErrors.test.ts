@@ -24,18 +24,18 @@ describe('generated client responses (stub fetch, no sockets)', () => {
 
   it.each([200, 404, 500])('returns an empty find for FileMaker 401 on HTTP %s', async (status) => {
     const client = makeClient(async () => new Response(JSON.stringify({ response: { data: [], dataInfo: { foundCount: 157 } }, messages: [{ code: '401', message: 'No records match the request' }] }), { status }));
-    expect(await client.findContacts({ query: [{}], offset: 158 })).toEqual([]);
+    expect(await client.findContacts({ query: [{ Name: '*' }], offset: 158 })).toEqual([]);
     await expect(client.createContacts({})).rejects.toMatchObject({ code: '401', status });
   });
 
   it.each([200, 500])('exposes FileMaker code, HTTP status and messages for 102 on HTTP %s', async (status) => {
     const messages = [{ code: '102', message: 'Field is missing' }];
     const client = makeClient(async () => new Response(JSON.stringify({ response: {}, messages }), { status }));
-    await expect(client.findContacts({ query: [{}] })).rejects.toMatchObject({ code: '102', status, messages });
+    await expect(client.findContacts({ query: [{ Name: '*' }] })).rejects.toMatchObject({ code: '102', status, messages });
   });
 
   it.each([200, 502])('explains an HTML response on HTTP %s', async (status) => {
     const client = makeClient(async () => new Response('<html>Bad gateway</html>', { status }));
-    await expect(client.findContacts({ query: [{}] })).rejects.toMatchObject({ status, messages: [], message: expect.stringMatching(/not.*Data API JSON.*check/i) });
+    await expect(client.findContacts({ query: [{ Name: '*' }] })).rejects.toMatchObject({ status, messages: [], message: expect.stringMatching(/not.*Data API JSON.*check/i) });
   });
 });

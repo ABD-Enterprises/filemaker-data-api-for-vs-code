@@ -45,7 +45,7 @@ describe('host request guards', () => {
     const client = { getLayoutMetadata: async () => ({}), findRecords: operation, runScript: operation, getRecord: operation };
     const { receive } = open(kind, client);
     const type = kind === 'queryBuilder' ? 'runQuery' : kind === 'scriptRunner' ? 'runScript' : 'loadRecord';
-    const payload = { profileId: 'p1', layout: ' Contacts ', recordId: '42', scriptName: ' Go ', findJson: '[{}]', runId: 1 };
+    const payload = { profileId: 'p1', layout: ' Contacts ', recordId: '42', scriptName: ' Go ', findJson: '[{" Name ":"*"}]', runId: 1 };
     for (let i = 0; i < 15; i++) receive({ type, payload });
     await tick();
     expect(operation).toHaveBeenCalledTimes(1);

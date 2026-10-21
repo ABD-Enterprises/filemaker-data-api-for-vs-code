@@ -1,3 +1,4 @@
+import { EMPTY_FIND_ADVICE, hasFindCriteria } from '../utils/findCriteria';
 import { containsNulText, NUL_TEXT_WARNING } from '../utils/nulText';
 import type { EnterpriseFeatureId, FeatureGuardResult } from '../enterprise/roleGuard';
 import type {
@@ -236,6 +237,10 @@ export class AiToolService {
     try {
       profile = await this.gate(definition);
       this.takeCallSlot();
+      if (definition.name === 'fm_find_records' && input && typeof input === 'object' &&
+          Array.isArray((input as Obj).requests) && ((input as Obj).requests as unknown[]).length === 0) {
+        throw new AiToolError(EMPTY_FIND_ADVICE);
+      }
       validateInput(definition.inputSchema, input);
       context.signal?.throwIfAborted();
     } catch (error) {
@@ -503,7 +508,7 @@ export class AiToolService {
     const query = requests.map((request) => {
       const entries = Object.entries(request.fields);
       if (entries.length === 0) {
-        throw new AiToolError('Each find request needs at least one field.');
+        throw new AiToolError(EMPTY_FIND_ADVICE);
       }
       // No prototype, so a field called "__proto__" or "constructor" is only a key.
       const criteria = Object.create(null) as Obj;
@@ -515,6 +520,7 @@ export class AiToolService {
       }
       return criteria;
     });
+    if (!hasFindCriteria(query)) throw new AiToolError(EMPTY_FIND_ADVICE);
     if (query.every((criteria) => criteria.omit === 'true')) {
       throw new AiToolError('At least one find request must not be an omit request.');
     }

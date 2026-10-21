@@ -587,6 +587,10 @@ function renderLayoutClientMethods(layout: string, suffix: string): string {
   const encodedLayout = `\${encodeURIComponent(${JSON.stringify(layout)})}`;
 
   return `public async find${suffix}(request: ${suffix}FindRequest): Promise<${suffix}Record[]> {
+  if (!Array.isArray(request.query) || request.query.length === 0 || request.query.some((criteria) =>
+    !criteria || !Object.entries(criteria).some(([field, value]) => field !== 'omit' && value !== '' && value !== null && value !== undefined))) {
+    throw new Error('Find criteria are empty. Enter at least one field value to search, or use Get records to list records.');
+  }
   const envelope = await this.request<FindResponse<${suffix}Record>>(
     \`/layouts/${encodedLayout}/_find\`,
     {
@@ -674,11 +678,15 @@ const client = new FileMakerDataApiClient({
 });
 
 const criteria: Partial<${firstMethod}FieldData> = Object.create(null);
+// Replace this placeholder with a field on your layout and a non-empty search value.
+Object.assign(criteria, { "REPLACE_WITH_A_FIELD_NAME": "REPLACE_WITH_A_SEARCH_VALUE" });
 const records = await client.find${firstMethod}({
   query: [criteria],
   limit: 10
 });
 \`\`\`
+
+Replace the field name and search value above with a field on your layout and the value to search for. A find needs at least one field value.
 
 Selected layouts:
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { selectErrorActions } from '../../src/utils/errorUx';
 import { normalizeError } from '../../src/utils/normalizeError';
 import { isRetryableConnectError } from '../../src/commands';
-import { FMClient } from '../../src/services/fmClient';
+import { FMClient, MAX_SCRIPT_URL_LENGTH } from '../../src/services/fmClient';
 import { SecretStore } from '../../src/services/secretStore';
 import type { ConnectionProfile } from '../../src/types/fm';
 import { createAxiosResponse, InMemorySecretStorage } from './mocks';
@@ -26,10 +26,101 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('FMClient (unit)', () => {
+  describe('verified script parameter carriers', () => {
+    const layout = ' Exact/Layout ü ';
+    const textName = ' Table::First text / ü ';
+    const noRecordsMessage = 'The script did not run because this layout has no records. Add a record or use a layout that has records.';
+    const tooLongMessage = 'This parameter is too long to send. Shorten it or run the script from a layout with a text field';
+    const reply = (response: Record<string, unknown>, code = '0', status = 200) => ({
+      ...createAxiosResponse({ data: { response, messages: [{ code, message: code === '0' ? 'OK' : 'No records match the request' }] } }), status
+    });
+    async function harness(fields: unknown[] = [{ name: 'Number', result: 'number', type: 'text' }, { name: textName, result: 'text', type: 'normal' }, { name: 'Second text', result: 'text' }]) {
+      const secrets = new SecretStore(new InMemorySecretStorage() as never);
+      const profile = createProfile();
+      await secrets.setSessionToken(profile.id, 'tok');
+      const http = new FakeAxios();
+      http.request.mockResolvedValue(reply({ scriptError: '0', scriptResult: 'done', data: [{ fieldData: { Private: 'hidden' } }], dataInfo: { foundCount: 1 } }));
+      http.request.mockResolvedValueOnce(reply({ fieldMetaData: fields }));
+      const client = new FMClient(secrets, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, 3000, http as never);
+      return { client, profile, http };
+    }
+
+    it.each([false, true])('uses the first text result field exactly, limit 1 and a body parameter (cached=%s)', async (cached) => {
+      const h = await harness();
+      if (cached) await h.client.getLayoutMetadata(h.profile, layout);
+      const signal = new AbortController().signal;
+      const scriptParam = 'é|& +'.repeat(600);
+      const result = await h.client.runScript(h.profile, { layout, scriptName: ' Echo/ü ', scriptParam }, { signal });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+      expect(h.http.request.mock.calls[0]?.[0]).toMatchObject({ method: 'GET', url: expect.stringContaining(`/layouts/${encodeURIComponent(layout)}`) });
+      expect(h.http.request.mock.calls[1]?.[0]).toMatchObject({
+        method: 'POST', url: expect.stringContaining(`/layouts/${encodeURIComponent(layout)}/_find`), signal,
+        data: { query: [{ [textName]: '*' }], limit: 1, script: ' Echo/ü ', 'script.param': scriptParam }
+      });
+      expect(h.http.request.mock.calls[1]?.[0].params).toBeUndefined();
+      expect(result.response).toEqual({ scriptError: '0', scriptResult: 'done' });
+    });
+
+    it.each([200, 404, 500])('reports a no-records find as not run on HTTP %s without trying another carrier', async (status) => {
+      const h = await harness();
+      h.http.request.mockResolvedValueOnce(reply({}, '401', status));
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .rejects.toMatchObject({ code: '401', message: noRecordsMessage, isRetryable: false });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves other find errors without attempting the script again', async () => {
+      const h = await harness();
+      h.http.request.mockResolvedValueOnce(reply({}, '102', 500));
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .rejects.toMatchObject({ code: '102' });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([[], [{ name: 'Only number', type: 'text', result: 'number' }], [{ name: 'Unknown', result: 42 }]].map((fields) => ({ fields })))('refuses an unsafe URL without a text result field: $fields', async ({ fields }) => {
+      const h = await harness(fields);
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG', message: tooLongMessage });
+      expect(h.http.request).toHaveBeenCalledTimes(1);
+    });
+
+    it('without text fields uses GET records only within the encoded URL limit, and refuses one character more', async () => {
+      const h = await harness([]);
+      const scriptName = 'Long script name ü'.repeat(8);
+      h.http.request.mockReset().mockRejectedValueOnce({ isAxiosError: true, response: { status: 405 } }).mockResolvedValue(reply({ scriptError: '0', scriptResult: 'done' }));
+      const recordsUrl = `${h.profile.serverUrl}/fmi/data/vLatest/databases/TestDB/layouts/L/records`;
+      const prefix = `${recordsUrl}?_limit=1&script=${encodeURIComponent(scriptName)}&script.param=`;
+      const scriptParam = 'x'.repeat(MAX_SCRIPT_URL_LENGTH - prefix.length);
+      expect(scriptParam.length).toBeGreaterThan(1500);
+      const result = await h.client.runScript(h.profile, { layout: 'L', scriptName, scriptParam });
+      expect(result.response).toEqual({ scriptError: '0', scriptResult: 'done' });
+      const sent = h.http.request.mock.calls.at(-1)?.[0];
+      expect(sent).toMatchObject({ method: 'GET', url: recordsUrl, params: { _limit: 1, script: scriptName, 'script.param': scriptParam } });
+      expect(`${prefix}${scriptParam}`).toHaveLength(MAX_SCRIPT_URL_LENGTH);
+      h.http.request.mockRejectedValueOnce({ isAxiosError: true, response: { status: 405 } });
+      await expect(h.client.runScript(h.profile, { layout: 'L', scriptName, scriptParam: scriptParam + 'x' }))
+        .rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG', message: tooLongMessage });
+      expect(h.http.request).toHaveBeenCalledTimes(3);
+    });
+
+    it.each(['endpoint', 'find', 'record', 'records', 'proxy'])('requires scriptError from the %s carrier even when scriptResult exists', async (carrier) => {
+      const h = await harness();
+      h.http.request.mockReset().mockResolvedValue(reply({ scriptResult: 'unconfirmed' }));
+      if (carrier === 'find') h.http.request.mockResolvedValueOnce(reply({ fieldMetaData: [{ name: textName, result: 'text' }] }));
+      if (carrier === 'records') h.http.request.mockRejectedValueOnce({ isAxiosError: true, response: { status: 405 } });
+      const proxy = { runScript: vi.fn(async () => ({ response: { scriptResult: 'unconfirmed' }, messages: [{ code: '0', message: 'OK' }] })) };
+      if (carrier === 'proxy') h.client = new FMClient(new SecretStore(new InMemorySecretStorage() as never), { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, 3000, h.http as never, proxy as never);
+      await expect(h.client.runScript({ ...h.profile, authMode: carrier === 'proxy' ? 'proxy' : 'direct' }, {
+        layout, scriptName: 'Echo', scriptParam: carrier === 'find' ? 'x'.repeat(3000) : 'short', recordId: carrier === 'record' ? '12' : undefined
+      })).rejects.toMatchObject({ code: 'SCRIPT_NOT_CONFIRMED', isRetryable: false, message: expect.stringContaining('no scriptError') });
+      expect(h.http.request).toHaveBeenCalledTimes(carrier === 'proxy' ? 0 : ['find', 'records'].includes(carrier) ? 2 : 1);
+    });
+  });
+
   it.each((['direct', 'proxy'] as const).flatMap((authMode) => [
     { operation: 'createSession', uncertain: false, call: (client: FMClient, profile: ConnectionProfile) => client.createSession(profile) },
     { operation: 'deleteSession', uncertain: false, call: (client: FMClient, profile: ConnectionProfile) => client.deleteSession(profile) },
-    { operation: 'findRecords', uncertain: false, call: (client: FMClient, profile: ConnectionProfile) => client.findRecords(profile, 'Contacts', { query: [{}] }) },
+    { operation: 'findRecords', uncertain: false, call: (client: FMClient, profile: ConnectionProfile) => client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }] }) },
     { operation: 'getLayoutMetadata', uncertain: false, call: (client: FMClient, profile: ConnectionProfile) => client.getLayoutMetadata(profile, 'Contacts') },
     { operation: 'createRecord', uncertain: true, call: (client: FMClient, profile: ConnectionProfile) => client.createRecord(profile, 'Contacts', {}) },
     { operation: 'editRecord', uncertain: true, call: (client: FMClient, profile: ConnectionProfile) => client.editRecord(profile, 'Contacts', '1', { Name: 'Changed' }) },
@@ -38,7 +129,7 @@ describe('FMClient (unit)', () => {
     { operation: 'runScript', uncertain: true, call: (client: FMClient, profile: ConnectionProfile) => client.runScript(profile, { layout: 'Contacts', scriptName: 'Slow' }) },
     ...(['script', 'script.prerequest', 'script.presort'] as const).map((key) => ({
       operation: `findRecords with ${key}`, uncertain: true,
-      call: (client: FMClient, profile: ConnectionProfile) => client.findRecords(profile, 'Contacts', { query: [{}], [key]: 'Slow' })
+      call: (client: FMClient, profile: ConnectionProfile) => client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], [key]: 'Slow' })
     }))
   ].map((test) => ({ authMode, ...test }))))('classifies $authMode $operation timeout by the logical request', async ({ authMode, operation, uncertain, call }) => {
     // Some adapters omit axios config on errors; the recorded request must suffice.
@@ -234,6 +325,7 @@ describe('FMClient (unit)', () => {
           messages: [{ code: '0', message: 'OK' }]
         }
       }))
+      .mockResolvedValueOnce(createAxiosResponse({ data: { response: {}, messages: [{ code: '0', message: 'OK' }] } }))
       .mockResolvedValueOnce(createAxiosResponse({
         data: {
           response: {
@@ -247,7 +339,7 @@ describe('FMClient (unit)', () => {
 
     await expect(client.listLayouts(profile)).resolves.toEqual(['Contacts']);
     await expect(secretStore.getSessionToken(profile.id)).resolves.toBe('new-token');
-    expect(axios.request).toHaveBeenCalledTimes(4);
+    expect(axios.request).toHaveBeenCalledTimes(5);
   });
 
   it.each([
@@ -354,20 +446,21 @@ it.each([200, 404, 500])('preserves foundCount for an empty page with FileMaker 
   if (status === 200) axios.request.mockResolvedValueOnce(createAxiosResponse({ data }));
   else axios.request.mockRejectedValueOnce({ isAxiosError: true, response: { status, data } });
   const client = new FMClient(secrets, { debug() {}, info() {}, warn() {}, error() {} }, 15_000, axios as never);
-  const result = await client.findRecords(profile, 'Contacts', { query: [{}], offset: 158 });
+  const result = await client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], offset: 158 });
   expect(result).toEqual({ data: [], dataInfo: { foundCount: 157, returnedCount: 0, totalRecordCount: 200 } });
 });
 
-describe('getRecord portal totals', () => {
-  it.each(['record', 'dataInfo'] as const)('preserves portalDataInfo supplied on %s', async (where) => {
+describe('record portal totals', () => {
+  it.each(['record', 'dataInfo', 'response'] as const)('preserves portalDataInfo supplied on %s in getRecord and findRecords', async (where) => {
     const secrets = new SecretStore(new InMemorySecretStorage() as never);
     const profile = createProfile();
     await secrets.setSessionToken(profile.id, 'token');
     const info = [{ portalObjectName: ' Lines ', foundCount: 60, returnedCount: 20 }];
     const record = { recordId: '1', fieldData: {}, portalData: { ' Lines ': [] }, ...(where === 'record' ? { portalDataInfo: info } : {}) };
     const axios = new FakeAxios();
-    axios.request.mockResolvedValue(createAxiosResponse({ data: { response: { data: [record], ...(where === 'dataInfo' ? { dataInfo: { portalDataInfo: info } } : {}) }, messages: [{ code: '0', message: 'OK' }] } }));
+    axios.request.mockResolvedValue(createAxiosResponse({ data: { response: { data: [record], ...(where === 'dataInfo' ? { dataInfo: { portalDataInfo: info } } : {}), ...(where === 'response' ? { portalDataInfo: info } : {}) }, messages: [{ code: '0', message: 'OK' }] } }));
     const client = new FMClient(secrets, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, 1500, axios as never);
     expect(await client.getRecord(profile, ' Contacts ', '1')).toMatchObject({ portalDataInfo: info });
+    expect(await client.findRecords(profile, ' Contacts ', { query: [{ Name: '*' }] })).toMatchObject({ data: [{ portalDataInfo: info }] });
   });
 });
