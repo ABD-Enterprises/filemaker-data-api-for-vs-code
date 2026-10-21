@@ -488,6 +488,10 @@ export function httpsTransportFor(profile: TlsProfileOptions, url: string): Http
   if (!/^https:/i.test(url) || !hasCustomTls(profile)) return { httpsAgent };
   const pinned = normalizeSha256(profile.pinnedCertSha256) !== undefined;
   if (pinned && environmentProxyFor(url)) throw pinThroughProxy();
+  // A CA-file or legacy self-signed profile behind an environment proxy keeps axios's own CONNECT
+  // tunnel (and its https-proxy-agent), which a hand-built ClientRequest cannot drive: the proxy route
+  // is unchanged from before, and VS Code's networking owns it.
+  if (!pinned && environmentProxyFor(url)) return { httpsAgent };
   return {
     httpsAgent,
     ...(pinned ? { proxy: false as const } : {}),
