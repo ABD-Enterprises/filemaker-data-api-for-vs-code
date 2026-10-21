@@ -5,6 +5,7 @@ import path from 'node:path';
 import { build, transform } from 'esbuild';
 
 const extensionDir = path.resolve(import.meta.dirname, '..');
+const outputDir = process.argv[2] ? path.resolve(process.argv[2]) : path.join(extensionDir, 'dist');
 const pages = ['queryBuilder', 'recordViewer', 'scriptRunner', 'schemaDiff', 'recordEditor', 'connectionWizard', 'layoutMode'];
 
 // Bundle only the dependency-free presentation module, not React or the layout schema.
@@ -15,7 +16,7 @@ const { standardFieldsCss } = await import(`data:text/javascript;base64,${Buffer
 const browserStandards = await transform(moduleText, { format: 'iife', globalName: 'FieldStandards' });
 
 for (const page of pages) {
-  const target = path.join(extensionDir, 'dist', 'webviews', page, 'ui');
+  const target = path.join(outputDir, 'webviews', page, 'ui');
   mkdirSync(target, { recursive: true });
   cpSync(path.join(extensionDir, 'src', 'webviews', page, 'ui'), target, { recursive: true });
   if (['queryBuilder', 'recordEditor', 'recordViewer'].includes(page)) {
@@ -27,5 +28,5 @@ for (const page of pages) {
 // The designer UI build (when present) is laid over the Layout Mode page.
 const designerDist = path.resolve(extensionDir, '..', 'designer-ui', 'dist');
 if (existsSync(designerDist)) {
-  cpSync(designerDist, path.join(extensionDir, 'dist', 'webviews', 'layoutMode', 'ui'), { recursive: true });
+  cpSync(designerDist, path.join(outputDir, 'webviews', 'layoutMode', 'ui'), { recursive: true });
 }
