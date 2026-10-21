@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
 const lazyModules = vi.hoisted(() => ({
@@ -98,6 +98,8 @@ describe('extension lazy FM runtime loading', () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.mocked(vscode.commands.executeCommand).mockReset();
+    vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValue(undefined);
     installActivationVsCodeMocks();
     // Avoid filesystem reads from an earlier activation completing during the next test.
     const { FmWebProjectService } = await import('../../src/services/fmWebProjectService');
@@ -105,6 +107,8 @@ describe('extension lazy FM runtime loading', () => {
     vi.spyOn(FmWebProjectService.prototype, 'readProjectConfig').mockResolvedValue(undefined);
     vi.spyOn(SchemaSnapshotStore.prototype, 'listSnapshots').mockResolvedValue([]);
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it('does not load FM client, retry, batch, or circuit-breaker modules during activation', async () => {
     const { activate } = await import('../../src/extension');
@@ -304,6 +308,174 @@ describe('extension lazy FM runtime loading', () => {
     const registered = vi.mocked(vscode.window.registerWebviewPanelSerializer).mock.calls.map(([viewType]) => viewType);
     disposeSubscriptions(context);
     expect(registered.sort()).toEqual(RESTORABLE_PANELS.map((panel) => panel.viewType).sort());
+  });
+
+  it.each(['openWelcomeWalkthrough', 'openUserGuide'])('opens the requested %s help surface', async (name) => {
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    vi.mocked(vscode.commands.executeCommand).mockClear();
+    await registeredCommand(`filemakerDataApiTools.${name}`)();
+    if (name === 'openWelcomeWalkthrough') {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openWalkthrough',
+        { category: `${context.extension.id}#filemakerGettingStarted` }, false);
+    } else {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('markdown.showPreview',
+        expect.objectContaining({ fsPath: 'docs/USER_GUIDE.md' }));
+    }
+    disposeSubscriptions(context);
+  });
+
+  it.each(['openWelcomeWalkthrough', 'openUserGuide'])('%s logs a host command failure without rejecting', async (name) => {
+    const { Logger } = await import('../../src/services/logger');
+    const warn = vi.spyOn(Logger.prototype, 'warn');
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    vi.mocked(vscode.commands.executeCommand).mockRejectedValueOnce(new Error('host unavailable'));
+    await expect(registeredCommand(`filemakerDataApiTools.${name}`)()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(name === 'openWelcomeWalkthrough' ? 'Failed to open getting-started walkthrough.' : 'Failed to open user guide.', expect.anything());
+    disposeSubscriptions(context);
+  });
+
+  it.each([true, false])('only marks the first-run walkthrough shown after it opens (host succeeds=%s)', async (succeeds) => {
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    vi.mocked(vscode.commands.executeCommand).mockImplementation((async (id: string) => {
+      if (id === 'workbench.action.openWalkthrough' && !succeeds) throw new Error('host unavailable');
+    }) as never);
+    await activate(context);
+    if (succeeds) {
+      await vi.waitFor(() => expect(context.globalState.update).toHaveBeenCalledWith('filemaker.walkthrough.shownOnce', true));
+    } else {
+      expect(context.globalState.update).not.toHaveBeenCalledWith('filemaker.walkthrough.shownOnce', true);
+    }
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openWalkthrough',
+      { category: `${context.extension.id}#filemakerGettingStarted` }, false);
+    disposeSubscriptions(context);
+    vi.mocked(vscode.commands.executeCommand).mockReset();
+  });
+
+  it('does not reopen the walkthrough after the first-run flag was saved', async () => {
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    const originalGet = vi.mocked(context.globalState.get).getMockImplementation()!;
+    vi.mocked(context.globalState.get).mockImplementation(((key: string, fallback: unknown) =>
+      key === 'filemaker.walkthrough.shownOnce' ? true : originalGet(key, fallback)) as never);
+    await activate(context);
+    expect(vi.mocked(vscode.commands.executeCommand).mock.calls.some(([id]) => id === 'workbench.action.openWalkthrough')).toBe(false);
+    disposeSubscriptions(context);
+  });
+
+  it.each(['dismiss', 'settings', 'empty', 'one', 'many', 'failure'])('handles the deprecated-settings offer: %s', async (action) => {
+    const { SettingsService } = await import('../../src/services/settingsService');
+    vi.spyOn(SettingsService.prototype, 'consumeDeprecatedSettingsUsed').mockReturnValue(['filemakerDataApiTools.requestTimeoutMs']);
+    const migrate = vi.spyOn(SettingsService.prototype, 'migrateDeprecatedSettings').mockResolvedValue(
+      action === 'empty' ? [] : action === 'many' ? ['filemaker.requestTimeoutMs', 'filemaker.logging.level'] : ['filemaker.requestTimeoutMs']
+    );
+    if (action === 'failure') migrate.mockRejectedValue(new Error('settings locked'));
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue((action === 'dismiss' ? undefined : action === 'settings' ? 'Open Settings' : 'Migrate Settings') as never);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('filemaker.requestTimeoutMs'), 'Migrate Settings', 'Open Settings');
+    if (action === 'dismiss' || action === 'settings') {
+      expect(migrate).not.toHaveBeenCalled();
+      if (action === 'settings') expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'filemakerDataApiTools');
+    } else if (action === 'failure') {
+      await vi.waitFor(() => expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('FileMaker: could not migrate settings. Edit them in Settings instead.'));
+    } else {
+      await vi.waitFor(() => expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        action === 'empty' ? 'FileMaker: nothing to migrate in user or workspace settings. Check folder-level settings.' :
+          `FileMaker: migrated ${action === 'many' ? '2 settings' : '1 setting'} to the filemaker.* names.`
+      ));
+    }
+    disposeSubscriptions(context);
+    vi.mocked(vscode.window.showWarningMessage).mockReset();
+  });
+
+  it('reapplies roles and reloads plugins when workspace trust is granted', async () => {
+    const { RoleGuard } = await import('../../src/enterprise/roleGuard');
+    const { PluginRegistry } = await import('../../src/plugins/pluginRegistry');
+    const apply = vi.spyOn(RoleGuard.prototype, 'applyContexts').mockResolvedValue(undefined);
+    const reload = vi.spyOn(PluginRegistry.prototype, 'reload').mockResolvedValue(undefined);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    apply.mockClear();
+    reload.mockClear();
+    for (const [listener] of vi.mocked(vscode.workspace.onDidGrantWorkspaceTrust).mock.calls) await listener();
+    expect(apply).toHaveBeenCalledOnce();
+    expect(reload).toHaveBeenCalledOnce();
+    expect(apply.mock.invocationCallOrder[0]!).toBeLessThan(reload.mock.invocationCallOrder[0]!);
+    disposeSubscriptions(context);
+  });
+
+  it('serializes role changes, logs failures and still processes the next setting change', async () => {
+    const { RoleGuard } = await import('../../src/enterprise/roleGuard');
+    const { PluginRegistry } = await import('../../src/plugins/pluginRegistry');
+    const { Logger } = await import('../../src/services/logger');
+    const apply = vi.spyOn(RoleGuard.prototype, 'applyContexts').mockResolvedValue(undefined);
+    const reload = vi.spyOn(PluginRegistry.prototype, 'reload').mockResolvedValue(undefined);
+    const error = vi.spyOn(Logger.prototype, 'error');
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    apply.mockClear();
+    reload.mockClear();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    apply.mockReturnValueOnce(pending).mockRejectedValueOnce(new Error('configuration failed')).mockResolvedValue(undefined);
+    const notify = () => {
+      for (const [listener] of vi.mocked(vscode.workspace.onDidChangeConfiguration).mock.calls) {
+        listener({ affectsConfiguration: (key: string) => key === 'filemaker.enterprise.role' } as never);
+      }
+    };
+    notify();
+    notify();
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+    expect(reload).not.toHaveBeenCalled();
+    release();
+    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Failed to apply FileMaker configuration change.', expect.anything()));
+    expect(reload).toHaveBeenCalledOnce();
+    notify();
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+    expect(apply).toHaveBeenCalledTimes(3);
+    disposeSubscriptions(context);
+  });
+
+  it('does not run a queued role change after disposal', async () => {
+    const { RoleGuard } = await import('../../src/enterprise/roleGuard');
+    const { PluginRegistry } = await import('../../src/plugins/pluginRegistry');
+    const apply = vi.spyOn(RoleGuard.prototype, 'applyContexts').mockResolvedValue(undefined);
+    const reload = vi.spyOn(PluginRegistry.prototype, 'reload').mockResolvedValue(undefined);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    apply.mockClear();
+    reload.mockClear();
+    for (const [listener] of vi.mocked(vscode.workspace.onDidChangeConfiguration).mock.calls) {
+      listener({ affectsConfiguration: (key: string) => key === 'filemaker.performance.mode' } as never);
+    }
+    disposeSubscriptions(context);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(apply).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('selects the exact explorer layout and ignores non-layout selections', async () => {
+    const { LayoutInspectorProvider } = await import('../../src/views/layoutInspector');
+    const select = vi.spyOn(LayoutInspectorProvider.prototype, 'selectLayout').mockImplementation(() => undefined);
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    const tree = vi.mocked(vscode.window.createTreeView).mock.results[0]!.value;
+    const onSelection = vi.mocked(tree.onDidChangeSelection).mock.calls[0]![0];
+    onSelection({ selection: [{ kind: 'profile', profileId: 'p1' }] } as never);
+    expect(select).not.toHaveBeenCalled();
+    onSelection({ selection: [{ kind: 'layout', profileId: 'p1', layoutName: ' Exact layout ' }] } as never);
+    expect(select).toHaveBeenCalledWith('p1', ' Exact layout ');
+    disposeSubscriptions(context);
   });
 
   it('deactivate closes the sockets of every cached TLS agent (once the TLS module has been loaded), and is harmless before', async () => {
