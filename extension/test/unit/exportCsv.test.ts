@@ -66,3 +66,9 @@ describe('exportCsv round trip', () => {
     expect(restoreFormulaText("'plain")).toBe("'plain");
   });
 });
+
+it('leaves missing prototype-like fields blank when exporting mixed rows', () => {
+  const columns = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+  const row = Object.fromEntries(columns.map((name) => [name, 'value']));
+  expect(recordsToCsv([row, {}], { columns, lineEnding: '\n' })).toBe(columns.join(',') + '\nvalue,value,value,value\n,,,');
+});

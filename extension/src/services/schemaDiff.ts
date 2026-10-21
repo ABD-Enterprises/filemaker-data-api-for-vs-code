@@ -264,7 +264,7 @@ function diffFieldAttributes(
 }
 
 function buildComparableField(field: FileMakerFieldMetadata): Record<string, unknown> {
-  const comparable: Record<string, unknown> = {};
+  const comparable: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   const keys = Object.keys(field).sort();
 

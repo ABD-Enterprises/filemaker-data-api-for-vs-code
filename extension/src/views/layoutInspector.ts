@@ -280,7 +280,8 @@ export class LayoutInspectorProvider implements vscode.TreeDataProvider<LayoutIn
           tooltip: [
             `Portal: ${portal.key}`,
             `Related table: ${portal.relatedTable}`,
-            `Field: ${field.name}`
+            `Field: ${field.name}`,
+            field.kind ? `Kind: ${field.kind}` : undefined
           ]
             .filter(Boolean)
             .join('\n'),
@@ -311,6 +312,7 @@ function toFieldItem(field: LayoutInspectorField): LayoutInspectorItem {
     tooltip: [
       `Field: ${field.name}`,
       field.type ? `Type: ${field.type}` : undefined,
+      field.kind ? `Kind: ${field.kind}` : undefined,
       field.isGlobal ? 'Global storage' : undefined,
       typeof field.repetitions === 'number' ? `Repetitions: ${field.repetitions}` : undefined
     ]

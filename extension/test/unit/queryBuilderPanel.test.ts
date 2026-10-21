@@ -111,6 +111,12 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', message: expect.stringContaining('Enter at least one field value to search'), runId: 4 }));
   });
 
+  it.each(['limit', 'offset'])('refuses zero %s with a next step', async (field) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Name":"Ada"}]', [field]: 0, runId: 4 } });
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 4, message: expect.stringContaining('must be at least 1') }));
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+  });
+
   it('tags a failed run with its run id', async () => {
     panel.close();
     panel = openPanel({ findRecords: vi.fn(async () => Promise.reject(new Error('Field is missing'))) });

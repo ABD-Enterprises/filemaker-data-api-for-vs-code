@@ -52,7 +52,8 @@ describe('runScript integration (mocked HTTP)', () => {
       .query({ 'script.param': 'abc' })
       .reply(200, {
         response: {
-          scriptResult: 'done'
+          scriptResult: 'done',
+          scriptError: '0'
         },
         messages: [{ code: '0', message: 'Command is valid.' }]
       });

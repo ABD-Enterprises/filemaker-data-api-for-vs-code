@@ -102,3 +102,19 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     expect(several?.textContent).toMatch(/^7 fields on this layout are not shown .*: a, b, c, d, e, and 2 more\./);
   });
 });
+
+it.skipIf(!JSDOM)('keeps prototype-like fields in new-record forms and create payloads', () => {
+  const { document, window, posted, send } = loadPage(pageHtml(), uiSource);
+  send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'Profile' }], activeProfileId: 'p', defaults: { mode: 'create', profileId: 'p', layout: '__proto__' } } });
+  send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['__proto__'] } });
+  const names = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
+  send({ type: 'layoutFields', payload: { profileId: 'p', layout: '__proto__', fields: names.map((name) => ({ name })), metadataSupported: true } });
+  const inputs = document.querySelectorAll('textarea[aria-label]');
+  expect(Array.from(inputs).map((input) => input.getAttribute('aria-label'))).toEqual(names.slice().sort());
+  for (const input of inputs) {
+    input.value = 'value';
+    (input as unknown as { dispatchEvent(event: unknown): void }).dispatchEvent(new window.Event('input'));
+  }
+  document.getElementById('createButton')!.click();
+  expect(JSON.parse(JSON.stringify(posted.at(-1)))).toMatchObject({ type: 'createRecord', payload: { fieldData: Object.fromEntries(names.map((name) => [name, 'value'])) } });
+});

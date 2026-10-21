@@ -70,14 +70,14 @@ export function assertObjectArray(value: unknown, label: string): JsonObjectArra
   return validated.value;
 }
 
-export function parseOptionalNonNegativeInteger(value: string | undefined, label: string): number | undefined {
+export function parseOptionalPositiveInteger(value: string | undefined, label: string): number | undefined {
   if (!value || value.trim().length === 0) {
     return undefined;
   }
 
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new FMClientError(`${label} must be a non-negative integer.`);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new FMClientError(`${label} must be an integer and must be at least 1.`);
   }
 
   return parsed;

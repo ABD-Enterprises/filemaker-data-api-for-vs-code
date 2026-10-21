@@ -12,6 +12,7 @@ import type {
   GeneratedSnippetsArtifacts,
   GeneratedTypeScriptClientArtifacts
 } from '../types/fm';
+import { fieldsForGeneration } from '../utils/generatedFields';
 import { hashObject } from '../utils/hash';
 import { createNameMap, toPascalCaseIdentifier } from '../utils/nameSanitize';
 import { commentText, distinctFileName, snippetPlaceholderText } from '../utils/safeText';
@@ -95,12 +96,24 @@ export class TypeGenService {
     const filePath = resolveSafeWorkspacePath(root, 'snippets', 'filemaker-data-api.code-snippets');
     await mkdir(snippetsDir, { recursive: true });
 
+    let fieldDescription = '';
+    try {
+      const schema = await this.schemaService.getLayoutSchema(profile, layout);
+      if (schema.supported && schema.fields.length > 0) {
+        fieldDescription = ' Fields: ' + fieldsForGeneration(schema.fields).map((field) =>
+          `${field.name}: ${field.result ?? field.type ?? 'unknown'}${field.type ? ` (kind: ${field.type})` : ''}`
+        ).join('; ');
+      }
+    } catch (error) {
+      this.logger.warn('Field metadata is unavailable for snippet descriptions.', { layout, error });
+    }
+
     const snippets = await this.readExistingSnippets(filePath);
     const keyPrefix = sanitizeSnippetKey(layout);
 
     snippets[`${keyPrefix} Find Records`] = {
       prefix: `fm find ${layout}`,
-      description: `Find ${layout} records via extension client`,
+      description: `Find ${layout} records via extension client.${fieldDescription}`,
       body: [
         "const result = await vscode.commands.executeCommand('filemakerDataApiTools.runFindJson', {",
         `  profileId: '\${1:${snippetPlaceholderText(profile.id)}}',`,
@@ -112,7 +125,7 @@ export class TypeGenService {
 
     snippets[`${keyPrefix} Get Record`] = {
       prefix: `fm get ${layout}`,
-      description: `Get ${layout} record by ID via extension client`,
+      description: `Get ${layout} record by ID via extension client.${fieldDescription}`,
       body: [
         "await vscode.commands.executeCommand('filemakerDataApiTools.getRecordById', {",
         `  profileId: '\${1:${snippetPlaceholderText(profile.id)}}',`,
@@ -210,7 +223,7 @@ export class TypeGenService {
     fields: FileMakerFieldMetadata[],
     metadataHash: string
   ): string {
-    fields = uniqueFields(fields);
+    fields = fieldsForGeneration(fields);
     const timestamp = new Date().toISOString();
     const nameMap = createNameMap(fields.map((field) => field.name));
     const baseName = toPascalCaseIdentifier(layout);
@@ -221,13 +234,13 @@ export class TypeGenService {
     const findResponseTypeName = `${baseName}FindResponse`;
 
     const rawTypeRows = fields
-      .map((field) => `  ${JSON.stringify(field.name)}?: ${toTsType(field)};`)
+      .map(renderFieldRow)
       .join('\n');
 
     const friendlyRows = nameMap.mappings
       .map(
         (mapping) =>
-          `  ${mapping.friendlyName}?: ${toTsType(findField(fields, mapping.rawName))}; // ${commentText(mapping.rawName)}`
+          `${fieldDoc(findField(fields, mapping.rawName))}  ${mapping.friendlyName}?: ${toTsType(findField(fields, mapping.rawName))}; // ${commentText(mapping.rawName)}`
       )
       .join('\n');
 
@@ -297,7 +310,7 @@ function toTsType(field: FileMakerFieldMetadata | undefined): string {
     return 'unknown';
   }
 
-  const type = `${field.type ?? field.result ?? ''}`.toLowerCase();
+  const type = `${field.result ?? field.type ?? ''}`.toLowerCase();
 
   if (type.includes('number') || type.includes('integer') || type.includes('float') || type.includes('decimal')) {
     return 'number';
@@ -312,7 +325,7 @@ function toTsType(field: FileMakerFieldMetadata | undefined): string {
   }
 
   if (type.includes('container')) {
-    return 'string | { src?: string }';
+    return 'string';
   }
 
   if (type.length > 0) {
@@ -320,6 +333,24 @@ function toTsType(field: FileMakerFieldMetadata | undefined): string {
   }
 
   return 'unknown';
+}
+
+function fieldDoc(field: FileMakerFieldMetadata | undefined): string {
+  const type = String(field?.result ?? field?.type ?? '').toLowerCase();
+  if (toTsType(field) === 'number') {
+    return '  /** FileMaker numbers beyond 2^53 can lose precision in JavaScript. */\n';
+  }
+  if (/date|time/.test(type)) {
+    return '  /** FileMaker date/time text uses the server locale; parse with that format. */\n';
+  }
+  if (type.includes('container')) {
+    return '  /** Container URL returned by FileMaker. */\n';
+  }
+  return '';
+}
+
+function renderFieldRow(field: FileMakerFieldMetadata): string {
+  return `${fieldDoc(field)}  ${JSON.stringify(field.name)}?: ${toTsType(field)};`;
 }
 
 function normalizeLayouts(layouts: string[]): string[] {
@@ -339,16 +370,6 @@ function normalizeLayouts(layouts: string[]): string[] {
   return normalized;
 }
 
-/** Data API fieldData has one key per exact field name, even for repeated layout objects. */
-function uniqueFields(fields: FileMakerFieldMetadata[]): FileMakerFieldMetadata[] {
-  const seen = new Set<string>();
-  return fields.filter((field) => {
-    if (seen.has(field.name)) return false;
-    seen.add(field.name);
-    return true;
-  });
-}
-
 function renderClientTypes(
   profile: ConnectionProfile,
   schemas: GeneratedClientSchema[],
@@ -357,8 +378,8 @@ function renderClientTypes(
 ): string {
   const layoutBlocks = schemas.map((schema) => {
     const suffix = typeSuffixForLayout(layoutNames, schema.layout);
-    const rows = uniqueFields(schema.fields)
-      .map((field) => `  ${JSON.stringify(field.name)}?: ${toTsType(field)};`)
+    const rows = fieldsForGeneration(schema.fields)
+      .map(renderFieldRow)
       .join('\n');
 
     return `export interface ${suffix}FieldData {
@@ -475,6 +496,15 @@ interface MutateResponse {
   modId?: string;
 }
 
+export class FileMakerDataApiError extends Error {
+  public readonly code: string | undefined;
+  public constructor(message: string, public readonly status: number, public readonly messages: FileMakerMessage[]) {
+    super(message);
+    this.name = 'FileMakerDataApiError';
+    this.code = messages[0]?.code;
+  }
+}
+
 export class FileMakerDataApiClient {
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
@@ -495,7 +525,8 @@ ${indent(methods, 2)}
 
   private async request<TResponse>(
     path: string,
-    init: RequestInit
+    init: RequestInit,
+    allowNoRecords = false
   ): Promise<DataApiEnvelope<TResponse>> {
     const response = await this.fetchImpl(\`\${this.baseUrl}\${path}\`, {
       ...init,
@@ -508,15 +539,29 @@ ${indent(methods, 2)}
     });
 
     const text = await response.text();
-    const body = text ? JSON.parse(text) as DataApiEnvelope<TResponse> : undefined;
-
-    if (!response.ok) {
-      const message = body?.messages?.map((item) => item.message).join('; ') || response.statusText;
-      throw new Error(\`FileMaker Data API request failed (\${response.status}): \${message}\`);
+    let body: DataApiEnvelope<TResponse> | undefined;
+    try {
+      body = text ? JSON.parse(text) as DataApiEnvelope<TResponse> : undefined;
+    } catch {
+      throw new FileMakerDataApiError(
+        \`The server did not return Data API JSON (HTTP \${response.status}). Check the server address, API path and any proxy or gateway.\`,
+        response.status, []
+      );
     }
-
-    if (!body) {
-      throw new Error('FileMaker Data API returned an empty response.');
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const code = messages[0]?.code;
+    if (allowNoRecords && String(code) === '401') {
+      return { response: { data: [] } as TResponse, messages };
+    }
+    if (!response.ok || (code !== undefined && String(code) !== '0')) {
+      const message = messages.map((item) => item.message).join('; ') || response.statusText;
+      throw new FileMakerDataApiError(\`FileMaker Data API request failed (\${response.status}): \${message}\`, response.status, messages);
+    }
+    if (!body || !body.response || typeof body.response !== 'object' || !Array.isArray(body.messages)) {
+      throw new FileMakerDataApiError(
+        \`The server did not return Data API JSON (HTTP \${response.status}). Check the server address, API path and any proxy or gateway.\`,
+        response.status, messages
+      );
     }
 
     return body;
@@ -542,7 +587,8 @@ function renderLayoutClientMethods(layout: string, suffix: string): string {
     {
       method: 'POST',
       body: JSON.stringify(request)
-    }
+    },
+    true
   );
   return envelope.response.data;
 }
@@ -613,6 +659,7 @@ Generated at ${generatedAt} for profile \`${commentText(profile.name)}\`.
 
 \`\`\`ts
 import { FileMakerDataApiClient } from './client';
+import type { ${firstMethod}FieldData } from './types';
 
 const client = new FileMakerDataApiClient({
   serverUrl: 'https://example.filemaker-cloud.com',
@@ -620,8 +667,11 @@ const client = new FileMakerDataApiClient({
   token: process.env.FM_DATA_API_TOKEN ?? ''
 });
 
+const criteria: Partial<${firstMethod}FieldData> = Object.create(null);
+// Replace this placeholder with a field on your layout and a non-empty search value.
+Object.assign(criteria, { "REPLACE_WITH_A_FIELD_NAME": "REPLACE_WITH_A_SEARCH_VALUE" });
 const records = await client.find${firstMethod}({
-  query: [{ "REPLACE_WITH_A_FIELD_NAME": "REPLACE_WITH_A_SEARCH_VALUE" }],
+  query: [criteria],
   limit: 10
 });
 \`\`\`
@@ -631,6 +681,12 @@ Replace the field name and search value above with a field on your layout and th
 Selected layouts:
 
 ${layouts.map((layout) => `- ${commentText(layout)}`).join('\n')}
+
+Start request fields with \`Object.create(null)\` as above, especially when a field is named \`constructor\`, \`toString\` or \`hasOwnProperty\`. This keeps those field names separate from JavaScript's built-in object properties.
+
+Numbers are typed as \`number\`. Values beyond JavaScript's safe integer range (2^53 - 1), or with many decimal digits, may lose precision. Keep exact large identifiers or amounts in FileMaker text fields when needed.
+Dates, times and timestamps are strings in FileMaker's locale format; they are not JavaScript Date objects. Containers are URL strings. Repeating fields use optional keys such as \`Name(1)\` through the maximum repetition.
+A find with FileMaker code 401 returns an empty array, whatever the HTTP status. Other failures throw \`FileMakerDataApiError\` with \`code\`, \`status\` and \`messages\`. A web page instead of JSON gives an address/proxy check message.
 
 Regenerating this client overwrites these files with a new timestamp.
 `;

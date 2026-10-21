@@ -89,7 +89,7 @@ export class RecordEditService {
     originalFieldData: Record<string, unknown>,
     draftFieldData: Record<string, unknown>
   ): Record<string, unknown> {
-    const patch: Record<string, unknown> = {};
+    const patch: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     const keys = new Set([...Object.keys(originalFieldData), ...Object.keys(draftFieldData)]);
 
     for (const key of keys) {

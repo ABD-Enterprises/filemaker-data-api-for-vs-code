@@ -68,6 +68,7 @@ interface HistoryContext {
 }
 
 interface RequestTrace {
+  operation: string;
   requestId: string;
   reauthCount: number;
   cacheHit: boolean;
@@ -155,6 +156,13 @@ function credentialStamp(profile: ConnectionProfile, username: string, password:
  */
 function isNoRecordsFound(error: unknown): boolean {
   return error instanceof FMClientError && error.code === '401';
+}
+
+/** Preserve the match count when an offset is beyond the last record. */
+function emptyFindResult(error: unknown): FindRecordsResult {
+  const details = error instanceof FMClientError ? error.details as { response?: { dataInfo?: FindRecordsResult['dataInfo'] }; dataInfo?: FindRecordsResult['dataInfo'] } | undefined : undefined;
+  const dataInfo = details?.response?.dataInfo ?? details?.dataInfo;
+  return { data: [], dataInfo: { ...dataInfo, foundCount: dataInfo?.foundCount ?? 0, returnedCount: 0 } };
 }
 
 const CERTIFICATE_LOOK_TTL_MS = 60_000;
@@ -319,6 +327,7 @@ export class FMClient {
           const failure = toFMClientError(
             normalizeError(error, {
               fallbackMessage: 'Failed to create FileMaker session.',
+              operation: trace.operation,
               requestId: trace.requestId,
               endpoint: 'POST /sessions'
             })
@@ -560,7 +569,7 @@ export class FMClient {
           } catch (error) {
             // The proxy passes FileMaker's code on, so "no records match" is an empty result here too.
             if (isNoRecordsFound(error)) {
-              return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+              return emptyFindResult(error);
             }
             throw error;
           }
@@ -582,6 +591,10 @@ export class FMClient {
           payload.offset = body.offset;
         }
 
+        for (const key of ['script', 'script.param', 'script.prerequest', 'script.prerequest.param', 'script.presort', 'script.presort.param'] as const) {
+          if (body[key] !== undefined) payload[key] = body[key];
+        }
+
         let envelope: DataApiEnvelope<DataApiListRecordsResponse>;
         try {
           envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
@@ -597,10 +610,11 @@ export class FMClient {
             trace
           );
         } catch (error) {
-          // Real-server no-match finds return HTTP 200, code 401 and empty data.
-          // Older/other servers may use another status; match the FileMaker code alone.
+          // FileMaker answers a find with no matches (or an offset past the last match) with code 401.
+          // A real server returns HTTP 200 with empty data; older/other versions may use another status:
+          // match the code alone. That is a result, not a failure.
           if (isNoRecordsFound(error)) {
-            return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+            return emptyFindResult(error);
           }
           throw error;
         }
@@ -972,8 +986,9 @@ export class FMClient {
    * Nothing else is requested: no record is read or changed.
    *
    * When a record is needed, or the script endpoint is unsupported, attach the script to a GET
-   * of the selected record or a GET records limited to one. Parameters too long for the URL are
-   * refused: an empty find is not a valid body carrier on FileMaker Server.
+   * of the selected record or a GET records limited to one. Without a record ID, long parameters
+   * use a wildcard find on the first text field, limited to one record. An empty find is invalid,
+   * and a find with no matches does not run the attached script (verified 2026-10-21).
    */
   public async runScript(
     profile: ConnectionProfile,
@@ -991,7 +1006,8 @@ export class FMClient {
         assertUsableUrlName(request.scriptName, 'script');
         assertUsableUrlName(request.layout, 'layout');
         if (isProxyProfile(profile)) {
-          return this.proxyClient.runScript(profile, request, control?.signal);
+          const result = await this.proxyClient.runScript(profile, request, control?.signal);
+          return { ...result, response: scriptResponse(result.response) };
         }
 
         // Names are used exactly as given (see uploadContainer): only an empty or all-blank name is refused.
@@ -1023,7 +1039,7 @@ export class FMClient {
               true,
               trace
             );
-            return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+            return { response: scriptResponse(envelope.response), messages: envelope.messages };
           }
           const path = `/layouts/${encodeURIComponent(layout)}/records`;
           const params = { _limit: 1, ...buildScriptParams(scriptName, scriptParam) };
@@ -1032,7 +1048,7 @@ export class FMClient {
           }
           const envelope = await this.requestWithAuth<Record<string, unknown>>(profile,
             { method: 'GET', path, params, strictQuery: true, signal: control?.signal }, true, trace);
-          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+          return { response: scriptResponse(envelope.response), messages: envelope.messages };
         };
 
         const failure = (error: unknown, endpoint: string): FMClientError =>
@@ -1041,6 +1057,7 @@ export class FMClient {
             toFMClientError(
               normalizeError(error, {
                 fallbackMessage: 'Failed to run FileMaker script.',
+                operation: trace.operation,
                 requestId: trace.requestId,
                 endpoint
               })
@@ -1066,7 +1083,38 @@ export class FMClient {
         const query: Record<string, string> = scriptParam === undefined ? {} : { 'script.param': scriptParam };
 
         if (ifTooLong(scriptPath, query)) {
-          throw tooLongScriptParameter();
+          const metadata = this.layoutMetadataCache.get(this.buildLayoutMetadataCacheKey(profile, layout))
+            ?? await this.getLayoutMetadata(profile, layout, { signal: control?.signal, recordHistory: false });
+          const fields = Array.isArray(metadata.fieldMetaData) ? metadata.fieldMetaData : [];
+          const textField = fields.find((field): field is { name: string; result: string } =>
+            field !== null && typeof field === 'object' && typeof field.name === 'string'
+            && typeof field.result === 'string' && field.result.toLowerCase() === 'text');
+          if (!textField) {
+            // With no text criterion, only the bounded GET records form is available.
+            // attach() enforces the same 2000-character encoded URL limit.
+            return attach();
+          }
+          try {
+            const envelope = await this.requestWithAuth<Record<string, unknown>>(
+              profile,
+              {
+                method: 'POST', path: `/layouts/${encodeURIComponent(layout)}/_find`,
+                data: { query: [{ [textField.name]: '*' }], limit: 1, ...buildScriptParams(scriptName, scriptParam) },
+                signal: control?.signal
+              },
+              true,
+              trace
+            );
+            return { response: scriptResponse(envelope.response), messages: envelope.messages };
+          } catch (error) {
+            if (isNoRecordsFound(error)) {
+              throw new FMClientError(
+                'The script did not run because this layout has no records. Add a record or use a layout that has records.',
+                { code: '401', kind: 'validation', isRetryable: false }
+              );
+            }
+            throw failure(error, `POST /layouts/${request.layout}/_find`);
+          }
         }
 
         try {
@@ -1076,7 +1124,7 @@ export class FMClient {
             true,
             trace
           );
-          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+          return { response: scriptResponse(envelope.response), messages: envelope.messages };
         } catch (error) {
           if (!isLikelyScriptUnsupportedError(error)) {
             throw failure(error, `GET /layouts/${request.layout}/script/${request.scriptName}`);
@@ -1589,6 +1637,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1668,6 +1719,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1732,6 +1786,7 @@ export class FMClient {
     execute: (trace: RequestTrace) => Promise<T>
   ): Promise<T> {
     const trace: RequestTrace = {
+      operation: context.operation,
       requestId: randomUUID(),
       reauthCount: 0,
       cacheHit: false,
@@ -1889,9 +1944,20 @@ function withoutRecordData(response: Record<string, unknown>): Record<string, un
   return rest;
 }
 
+/** An HTTP success without the main script's status does not confirm execution. */
+function scriptResponse(response: Record<string, unknown>): Record<string, unknown> {
+  if (response.scriptError === undefined || response.scriptError === null || response.scriptError === '') {
+    throw new FMClientError(
+      'The server did not confirm that the script ran (no scriptError in the response). Check the script before trying again.',
+      { code: 'SCRIPT_NOT_CONFIRMED', kind: 'server', isRetryable: false }
+    );
+  }
+  return withoutRecordData(response);
+}
+
 function tooLongScriptParameter(): FMClientError {
   return new FMClientError(
-    `The script parameter is too long to send in a web address (the limit is about ${MAX_SCRIPT_URL_LENGTH} characters including the server and script name). Shorten it, for example by passing an id or a key and letting the script read the rest.`,
+    'This parameter is too long to send. Shorten it or run the script from a layout with a text field',
     { code: 'SCRIPT_PARAMETER_TOO_LONG', kind: 'validation', isRetryable: false }
   );
 }

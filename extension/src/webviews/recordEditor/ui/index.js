@@ -23,8 +23,8 @@ const state = {
   defaults: undefined,
   layoutsByProfile: new Map(),
   loaded: undefined,
-  originalFieldData: {},
-  draftFieldData: {},
+  originalFieldData: Object.create(null),
+  draftFieldData: Object.create(null),
   presentationFields: []
 };
 
@@ -185,7 +185,7 @@ createButton.addEventListener('click', () => {
     return;
   }
 
-  const fieldData = {};
+  const fieldData = Object.create(null);
   for (const [name, value] of Object.entries(state.draftFieldData)) {
     if (value !== '' && value !== undefined && value !== null) {
       fieldData[name] = value;
@@ -288,8 +288,8 @@ function applyLayoutFields(payload) {
 
   showDuplicateFieldNote(payload.fields);
   state.presentationFields = payload.presentationFields || payload.fields || [];
-  state.originalFieldData = {};
-  state.draftFieldData = {};
+  state.originalFieldData = Object.create(null);
+  state.draftFieldData = Object.create(null);
   for (const field of payload.fields) {
     if (field && typeof field.name === 'string') {
       state.draftFieldData[field.name] = '';

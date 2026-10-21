@@ -4,7 +4,7 @@ import {
   isLoopbackUrl,
   isUnencryptedRemoteUrl,
   parseFindJson,
-  parseOptionalNonNegativeInteger,
+  parseOptionalPositiveInteger,
   parseSortJson,
   validateDatabaseName,
   validateObjectArray,
@@ -31,11 +31,11 @@ describe('jsonValidate', () => {
     expect(invalidItems.ok).toBe(false);
   });
 
-  it('parses optional non-negative integers', () => {
-    expect(parseOptionalNonNegativeInteger(undefined, 'Limit')).toBeUndefined();
-    expect(parseOptionalNonNegativeInteger('', 'Limit')).toBeUndefined();
-    expect(parseOptionalNonNegativeInteger('10', 'Limit')).toBe(10);
-    expect(() => parseOptionalNonNegativeInteger('-1', 'Limit')).toThrow();
+  it('parses optional positive integers', () => {
+    expect(parseOptionalPositiveInteger(undefined, 'Limit')).toBeUndefined();
+    expect(parseOptionalPositiveInteger('', 'Limit')).toBeUndefined();
+    expect(parseOptionalPositiveInteger('10', 'Limit')).toBe(10);
+    expect(() => parseOptionalPositiveInteger('-1', 'Limit')).toThrow();
   });
 });
 
@@ -83,4 +83,9 @@ describe('validateServerUrl', () => {
     expect(isUnencryptedRemoteUrl('https://fm.example.com')).toBe(false);
     expect(isUnencryptedRemoteUrl('http://127.0.0.1:18080')).toBe(false);
   });
+});
+
+it.each(['Limit', 'Offset'])('rejects zero %s before calling FileMaker', (label) => {
+  expect(() => parseOptionalPositiveInteger('0', label)).toThrow(`${label} must be an integer and must be at least 1.`);
+  expect(parseOptionalPositiveInteger('1', label)).toBe(1);
 });

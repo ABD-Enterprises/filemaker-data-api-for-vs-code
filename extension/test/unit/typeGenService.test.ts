@@ -8,6 +8,7 @@ import * as ts from 'typescript6';
 import { describe, expect, it, vi } from 'vitest';
 
 import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
+import { buildLayoutInspectorModel } from '../../src/utils/layoutInspector';
 import { TypeGenService } from '../../src/services/typeGenService';
 import type { ConnectionProfile } from '../../src/types/fm';
 
@@ -23,19 +24,33 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('TypeGenService', () => {
-  it('generates compiling layout types for duplicate Photo container metadata', async () => {
+  it('generates unique compiling keys for duplicate Photo, repeating Phones and literal Phones(2) together', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-duplicate-types-'));
     try {
-      const service = new TypeGenService({ getLayoutSchema: vi.fn(async () => ({ supported: true, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata })) } as never,
+      const fields = [
+        ...duplicatePhotoMetadata.fieldMetaData,
+        { name: 'Phones', type: 'normal', result: 'text', maxRepeat: 3 },
+        { name: 'Phones(2)', type: 'normal', result: 'text' }
+      ];
+      const schema = { supported: true, fromCache: false, fields, metadata: duplicatePhotoMetadata };
+      const service = new TypeGenService({ getLayoutSchema: vi.fn(async () => schema) } as never,
         {} as never, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, { getWorkspaceRoot: () => root });
       const artifact = await service.generateTypesForLayout(createProfile(), 'Contact Details');
-      const program = ts.createProgram([artifact.filePath], { noEmit: true, strict: true, types: [], skipLibCheck: true });
-      expect(ts.getPreEmitDiagnostics(program).map(formatDiagnostic)).toEqual([]);
-      expect(artifact.content.match(/"Photo"\?:/g)).toHaveLength(1);
-      expect(artifact.content).not.toContain('photo2');
       const client = await service.generateTypeScriptClient(createProfile(), ['Contact Details'], join(root, 'client'));
+      const expected = ['Photo', 'Phones(1)', 'Phones(2)', 'Phones(3)'];
+      for (const source of [artifact.content, await readFile(client.typesPath, 'utf8')]) {
+        const rawKeys = [...source.matchAll(/^ {2}"([^"\n]+)"\?:/gm)].map((match) => match[1]);
+        expect(rawKeys).toEqual(expected);
+        expect(source).not.toContain('photo2');
+      }
+      const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contact Details');
+      for (const entry of Object.values(JSON.parse(snippets.content)) as Array<{ description: string }>) {
+        const keys = entry.description.split(' Fields: ')[1]!.split('; ').map((field) => field.split(':')[0]);
+        expect(keys).toEqual(expected);
+      }
+      expect(buildLayoutInspectorModel(schema).fields.map((field) => field.name)).toEqual(expected);
       const config = join(root, 'tsconfig.json');
-      await writeFile(config, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, types: [], skipLibCheck: true, lib: ['es2020', 'dom'] }, files: [artifact.filePath, client.typesPath] }));
+      await writeFile(config, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, types: [], skipLibCheck: true, lib: ['es2020', 'dom'] }, files: [artifact.filePath, client.typesPath, client.clientPath] }));
       expect(() => execFileSync(process.execPath, [join(dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { encoding: 'utf8' })).not.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -52,7 +67,13 @@ describe('TypeGenService', () => {
         metadata: { fieldMetaData: [{ name: 'First Name', type: 'text' }] },
         fields: [
           { name: 'First Name', type: 'text' },
-          { name: 'Age', type: 'number' }
+          { name: 'Age', type: 'normal', result: 'number' },
+          { name: ' Photo ', type: 'normal', result: 'container' },
+          { name: 'Birthday', type: 'normal', result: 'date' },
+          { name: 'Clock', type: 'normal', result: 'time' },
+          { name: 'Stamp', type: 'normal', result: 'timeStamp' },
+          { name: 'Repeats', type: 'normal', result: 'number', maxRepeat: 3 },
+          ...['__proto__', 'constructor', 'toString', 'hasOwnProperty'].map((name) => ({ name, type: 'normal', result: 'text' }))
         ]
       })
     };
@@ -81,12 +102,16 @@ describe('TypeGenService', () => {
 
     const content = await readFile(artifact.filePath, 'utf8');
     expect(content).toContain('"firstName": "First Name"');
+    expect(content).toContain('"Age"?: number;');
+    expect(content).toContain('" Photo "?: string;');
+    expect(content).toContain('"Repeats(3)"?: number;');
+    expect(content).not.toContain('"Repeats"?:');
   });
 
   it('generates snippets file for a layout', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-snippets-'));
 
-    const service = new TypeGenService({} as never, {} as never, {
+    const service = new TypeGenService({ getLayoutSchema: async () => ({ supported: true, fields: [{ name: ' Age ', type: 'normal', result: 'number' }, { name: 'Photo', type: 'normal', result: 'container' }] }) } as never, {} as never, {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -99,6 +124,11 @@ describe('TypeGenService', () => {
     const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contacts');
     expect(snippets.filePath).toContain(join('snippets', 'filemaker-data-api.code-snippets'));
     expect(snippets.content).toContain('Contacts Find Records');
+    const entries = Object.values(JSON.parse(snippets.content)) as Array<{ description: string }>;
+    for (const entry of entries) {
+      expect(entry.description).toContain(' Age : number (kind: normal)');
+      expect(entry.description).toContain('Photo: container (kind: normal)');
+    }
   });
 
   it('generated finds refuse empty criteria before fetch and the example supplies a field', async () => {
@@ -132,7 +162,13 @@ describe('TypeGenService', () => {
         metadata: { fieldMetaData: [{ name: 'First Name', type: 'text' }] },
         fields: [
           { name: 'First Name', type: 'text' },
-          { name: 'Age', type: 'number' }
+          { name: 'Age', type: 'normal', result: 'number' },
+          { name: ' Photo ', type: 'normal', result: 'container' },
+          { name: 'Birthday', type: 'normal', result: 'date' },
+          { name: 'Clock', type: 'normal', result: 'time' },
+          { name: 'Stamp', type: 'normal', result: 'timeStamp' },
+          { name: 'Repeats', type: 'normal', result: 'number', maxRepeat: 3 },
+          ...['__proto__', 'constructor', 'toString', 'hasOwnProperty'].map((name) => ({ name, type: 'normal', result: 'text' }))
         ]
       })
     };
@@ -147,7 +183,7 @@ describe('TypeGenService', () => {
       isWorkspaceTrusted: () => true
     });
 
-    const artifacts = await service.generateTypeScriptClient(createProfile(), ['Contacts'], root);
+    const artifacts = await service.generateTypeScriptClient(createProfile(), ['Contacts', ' Contacts', 'Contacts', '__proto__', 'constructor', 'toString', 'hasOwnProperty'], root);
     const types = await readFile(artifacts.typesPath, 'utf8');
     const client = await readFile(artifacts.clientPath, 'utf8');
     const readme = await readFile(artifacts.readmePath, 'utf8');
@@ -155,6 +191,12 @@ describe('TypeGenService', () => {
     expect(types).toContain('export interface ContactsFieldData');
     expect(types).toContain('"First Name"?: string;');
     expect(types).toContain('"Age"?: number;');
+    for (const name of [' Photo ', 'Birthday', 'Clock', 'Stamp']) expect(types).toContain(`${JSON.stringify(name)}?: string;`);
+    for (const n of [1, 2, 3]) expect(types).toContain(`"Repeats(${n})"?: number;`);
+    expect(types).not.toContain('"Repeats"?:');
+    expect(types).toContain('2^53');
+    expect(types).toContain('locale');
+    expect(types).toContain('URL');
     expect(client).toContain('public async findContacts');
     expect(client).toContain('public async createContacts');
     expect(readme).toContain('Regenerating this client overwrites these files');
@@ -163,6 +205,9 @@ describe('TypeGenService', () => {
     await writeFile(
       usagePath,
       `import { FileMakerDataApiClient } from './client';
+
+const criteria: import('./types').ContactsFieldData = Object.create(null);
+criteria["First Name"] = "Ada";
 
 const fetchImpl: typeof fetch = async () =>
   new Response(JSON.stringify({ response: { data: [] }, messages: [] }));
@@ -175,7 +220,12 @@ const client = new FileMakerDataApiClient({
 });
 
 async function run(): Promise<string | undefined> {
-  const records = await client.findContacts({ query: [{ "First Name": "Ada" }] });
+  const records = await client.findContacts({ query: [criteria] });
+  const amount: number | undefined = records[0]?.fieldData["Repeats(3)"];
+  const photo: string | undefined = records[0]?.fieldData[" Photo "];
+  const special: string | undefined = records[0]?.fieldData["__proto__"];
+  void special;
+  void amount; void photo;
   return records[0]?.fieldData["First Name"];
 }
 

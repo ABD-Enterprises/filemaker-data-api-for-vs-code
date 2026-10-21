@@ -923,15 +923,17 @@ export function createEngine(options = {}) {
       if (def.type !== 'normal') return calcValue(db, layout, def, row);
       return row.fieldData[field] ?? row.fieldData[`${field}(1)`];
     };
+    let found = runFind(table.rows, body.query, valueOf);
+    found = sortRows(found, Array.isArray(body.sort) ? body.sort : [], db, layout, table);
+    // Verified on FileMaker Server 2026-10-21: a no-match find does not run or report
+    // its attached script. Check before any script can change the found set.
+    if (found.length === 0 || offset > found.length)
+      throw err(
+        401,
+        undefined,
+        takeFault('find-no-match-500', ctx) ? 500 : state.config.noRecordsStatus
+      );
     return withScripts(db, scriptParamsFrom(body, ctx.query), ctx, async () => {
-      let found = runFind(table.rows, body.query, valueOf);
-      found = sortRows(found, Array.isArray(body.sort) ? body.sort : [], db, layout, table);
-      if (found.length === 0 || offset > found.length)
-        throw err(
-          401,
-          undefined,
-          takeFault('find-no-match-500', ctx) ? 500 : state.config.noRecordsStatus
-        );
       return {
         response: recordsResponse(
           db,

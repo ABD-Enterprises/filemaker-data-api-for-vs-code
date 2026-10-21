@@ -218,12 +218,46 @@ describe('read and script GET carriers', () => {
     expect(h.http.request.mock.calls.at(-1)?.[0]).toMatchObject({ method: 'GET', params: { _limit: 1, script: ' Echo ', 'script.param': 'x y' } });
   });
 
-  it('refuses long script parameters before sending, also in copied requests', async () => {
+  it('refuses long script parameters without a text field, also in copied requests', async () => {
     const h = await setup();
     h.http.request.mockResolvedValue(ok({ token: 'unused', scriptError: '0' }));
     const request = { layout: 'Contacts', scriptName: 'Echo', scriptParam: 'x'.repeat(4000) };
     await expect(h.client.runScript(profile, request)).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-    expect(h.http.request).not.toHaveBeenCalled();
+    expect(h.http.request.mock.calls.map(([config]) => config.method)).toEqual(['POST', 'GET']);
+    expect(h.http.request.mock.calls.at(-1)?.[0].url).toContain('/layouts/Contacts');
     expect(() => buildRequestSpec(profile, { kind: 'runScript', ...request })).toThrow(/too long/);
+  });
+});
+
+
+describe('long script parameters through the mock engine without sockets', () => {
+  it.each(['200', '404', '500'])('executes a wildcard body script, then refuses an empty layout with HTTP %s / code 401', async (status) => {
+    const module = await import(path.resolve(__dirname, '../mock-server/lib/engine.mjs'));
+    const engine = module.createEngine({ env: { NO_RECORDS_STATUS: status } });
+    engine.state.config.noRecordsStatus = Number(status);
+    const h = await setup();
+    h.http.request.mockImplementation(async (config) => {
+      const url = new URL(config.url);
+      const reply = await engine.dispatch({ method: config.method, pathname: url.pathname, query: new URLSearchParams(config.params),
+        headers: { host: 'localhost', 'content-type': 'application/json', authorization: config.headers.Authorization },
+        body: Buffer.from(JSON.stringify(config.data ?? {})) });
+      return { ...createAxiosResponse({ data: reply.json }), status: reply.status };
+    });
+    const request = { layout: 'Contacts', scriptName: 'Echo', scriptParam: 'x'.repeat(3000) };
+    expect(await h.client.runScript(profile, request)).toMatchObject({ response: { scriptResult: request.scriptParam, scriptError: '0' } });
+    const customers = engine.state.dbs.Quality.tables.Customers;
+    const count = customers.rows.length;
+    const session = await engine.dispatch({ method: 'POST', pathname: '/fmi/data/vLatest/databases/Quality/sessions',
+      headers: { host: 'localhost', 'content-type': 'application/json', authorization: `Basic ${Buffer.from('tester:testpass1').toString('base64')}` }, body: Buffer.from('{}') });
+    const none = await engine.dispatch({ method: 'POST', pathname: '/fmi/data/vLatest/databases/Quality/layouts/Customers/_find',
+      headers: { host: 'localhost', 'content-type': 'application/json', authorization: `Bearer ${session.json.response.token}` },
+      body: Buffer.from(JSON.stringify({ query: [{ LastName: '==NEVER_MATCH_THIS_SCRIPT_FIND' }], limit: 1, script: 'Create Customer', 'script.prerequest': 'Create Customer', 'script.presort': 'Create Customer' })) });
+    expect(none).toMatchObject({ status: Number(status), json: { messages: [{ code: '401' }] } });
+    expect(Object.keys(none.json.response).some((key) => key.startsWith('script'))).toBe(false);
+    expect(customers.rows).toHaveLength(count);
+    engine.state.dbs.Sales.tables.Contacts.rows.length = 0;
+    await expect(h.client.runScript(profile, request)).rejects.toMatchObject({ code: '401',
+      message: 'The script did not run because this layout has no records. Add a record or use a layout that has records.' });
+    expect(h.http.request.mock.calls.filter(([config]) => config.url.includes('/script/'))).toHaveLength(0);
   });
 });

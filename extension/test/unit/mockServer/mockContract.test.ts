@@ -326,10 +326,22 @@ describe('documented response shapes', () => {
   });
   it('a script can be attached to a find in the BODY (the documented form for a long parameter), limited to one record', async () => {
     const param = 'x'.repeat(5000);
-    const r = await http.call('POST', `${L('Customers')}/_find`, { token, body: { query: [{}], limit: 1, script: 'Echo', 'script.param': param } });
+    const r = await http.call('POST', `${L('Customers')}/_find`, { token, body: { query: [{ LastName: '*' }], limit: 1, script: 'Echo', 'script.param': param } });
     expect(r.body.response.data).toHaveLength(1);
     expect(r.body.response.scriptResult).toBe(param);
     expect(r.body.response.scriptError).toBe('0');
+  });
+  it('a no-match find does not run or report its attached script', async () => {
+    const before = await http.call('GET', `${L('Customers')}/records?_limit=1`, { token });
+    const r = await http.call('POST', `${L('Customers')}/_find`, {
+      token, body: { query: [{ LastName: '==NEVER_MATCH_THIS_SCRIPT_FIND' }], limit: 1, script: 'Create Customer', 'script.prerequest': 'Create Customer', 'script.presort': 'Create Customer' }
+    });
+    expect(r.body.messages[0].code).toBe('401');
+    expect(r.body.response).not.toHaveProperty('scriptError');
+    expect(r.body.response).not.toHaveProperty('scriptResult');
+    expect(Object.keys(r.body.response).some((key) => key.startsWith('script'))).toBe(false);
+    const after = await http.call('GET', `${L('Customers')}/records?_limit=1`, { token });
+    expect(after.body.response.dataInfo.totalRecordCount).toBe(before.body.response.dataInfo.totalRecordCount);
   });
   it('v1 and v2 URLs are accepted', async () => {
     for (const v of ['v1', 'v2']) {

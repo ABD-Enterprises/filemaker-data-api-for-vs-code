@@ -205,22 +205,29 @@ describe('running a script uses the documented endpoint', () => {
   });
 
   describe('a long parameter', () => {
-    it(`refuses a parameter over ${MAX_SCRIPT_URL_LENGTH} URL characters before sending`, async () => {
-      const server = await serve(withLogin((_entry, response) => response.end(ok({ data: [], scriptResult: 'long ok', scriptError: '0' }))));
+    it('uses a wildcard text find for a long parameter, limited to one record', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/Contacts')) response.end(ok({ fieldMetaData: [{ name: ' Exact text ', result: 'text' }] }));
+        else response.end(ok({ data: [], scriptResult: 'long ok', scriptError: '0' }));
+      }));
       const { fm, profile } = await client(server.url);
       const param = 'é|'.repeat(3000);
-
-      await expect(fm.runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: param })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-      expect(calls(server.seen)).toEqual([]);
+      const result = await fm.runScript(profile, { layout: 'Contacts', scriptName: 'Echo', scriptParam: param });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'POST']);
+      expect(calls(server.seen)[1]).toMatchObject({ path: expect.stringMatching(/\/_find$/), body: { query: [{ ' Exact text ': '*' }], limit: 1, script: 'Echo', 'script.param': param } });
+      expect(result.response).toEqual({ scriptResult: 'long ok', scriptError: '0' });
     });
 
-    it('stays on the script endpoint at the limit and refuses just over it', async () => {
-      const server = await serve(withLogin((_entry, response) => response.end(ok({ scriptError: '0' }))));
+    it('stays on the script endpoint at the limit and uses a find just over it', async () => {
+      const server = await serve(withLogin((entry, response) => {
+        if (entry.path.endsWith('/layouts/L')) response.end(ok({ fieldMetaData: [{ name: 'Name', result: 'text' }] }));
+        else response.end(ok({ scriptError: '0' }));
+      }));
       const { fm, profile } = await client(server.url);
       const prefix = `${server.url}/fmi/data/vLatest/databases/Sales%20Db/layouts/L/script/S?script.param=`.length;
       await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix) });
-      await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + 1) })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET']);
+      await fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'a'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + 1) });
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET', 'GET', 'POST']);
     });
 
     it('with a record in context there is no body form, so a too-long parameter is a clear error and nothing is sent', async () => {
@@ -230,7 +237,7 @@ describe('running a script uses the documented endpoint', () => {
         .runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000), recordId: '1' })
         .catch((e: FMClientError) => e)) as FMClientError;
       expect(error.code).toBe('SCRIPT_PARAMETER_TOO_LONG');
-      expect(error.message).toMatch(/too long to send in a web address/);
+      expect(error.message).toContain('This parameter is too long to send.');
       expect(calls(server.seen)).toHaveLength(0);
     });
   });
@@ -367,11 +374,12 @@ describe('running a script uses the documented endpoint', () => {
       expect(result.response).toEqual({ scriptResult: 'r', scriptError: '0' });
     });
 
-    it('refuses a long parameter before reading any record', async () => {
+    it('refuses a long parameter when the metadata has no text field', async () => {
       const server = await serve(withLogin(withRecord));
       const { fm, profile } = await client(server.url);
       await expect(fm.runScript(profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(5000) })).rejects.toMatchObject({ code: 'SCRIPT_PARAMETER_TOO_LONG' });
-      expect(calls(server.seen)).toEqual([]);
+      expect(calls(server.seen).map((entry) => entry.method)).toEqual(['GET']);
+      expect(calls(server.seen)[0]?.path).toMatch(/\/layouts\/L$/);
     });
 
     it('Layout Mode\'s result detail and the preview bridge\'s reply carry no record', async () => {

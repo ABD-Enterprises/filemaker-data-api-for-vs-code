@@ -189,8 +189,9 @@ function createFieldCell(field, status, side, changes) {
 
   const metaList = document.createElement('dl');
   metaList.className = 'field-meta';
-  appendMeta(metaList, 'Type', field.type || field.result || '');
-  appendMeta(metaList, 'Reps', field.repetitions ?? '');
+  appendMeta(metaList, 'Type', field.result ?? field.type ?? '');
+  appendMeta(metaList, 'Kind', field.type ?? '');
+  appendMeta(metaList, 'Reps', field.maxRepeat ?? field.repetitions ?? '');
   cell.appendChild(metaList);
 
   if (changes.length > 0) {
@@ -257,7 +258,7 @@ function createTreeLeaf(row) {
   if (field) {
     const type = document.createElement('span');
     type.className = 'tree-field-type';
-    type.textContent = field.type || field.result || 'unknown';
+    type.textContent = `${field.result ?? field.type ?? 'unknown'}${field.type ? ` • Kind: ${field.type}` : ''}`;
     item.appendChild(type);
   }
 
