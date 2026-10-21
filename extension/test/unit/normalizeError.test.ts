@@ -82,20 +82,50 @@ describe('normalizeError', () => {
   });
 });
 
-it.each(['POST', 'PATCH', 'DELETE', 'GET script'])('warns against repeating an uncertain %s after a 1.5 second timeout', (operation) => {
-  const method = operation === 'GET script' ? 'GET' : operation;
-  const path = operation === 'GET script' ? '/layouts/Contacts/script/Slow' : '/layouts/Contacts/records';
-  const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout of 1500ms exceeded', config: { method, url: `https://fm.example${path}`, timeout: 1500 } });
+it.each([
+  ['POST', '/layouts/Contacts/_find'],
+  ['POST', '/sessions'],
+  ['DELETE', '/sessions/token'],
+  ['GET', '/layouts/Contacts/records/1'],
+  ['GET', '/layouts/Contacts/records'],
+  ['GET', '/layouts'],
+  ['GET', '/layouts/Contacts'],
+  ['GET', '/productInfo'],
+  ['POST', '/metadata'],
+  ['GET', '/globals']
+])('keeps a timed-out %s %s retryable with the normal timeout message', (method, path) => {
+  const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout', config: { method, url: `https://fm.example${path}`, timeout: 1500 } });
+  expect(error.kind).toBe('timeout');
+  expect(error.message).toBe('Request timed out after 1.5 s. If the server is slow, raise the setting filemaker.requestTimeoutMs.');
+  expect(error.isRetryable).toBe(true);
+});
+
+it.each([
+  ['POST', '/layouts/Contacts/records'],
+  ['PATCH', '/layouts/Contacts/records/1'],
+  ['DELETE', '/layouts/Contacts/records/1'],
+  ['POST', '/layouts/Contacts/records/1/containers/Photo/1'],
+  ['PATCH', '/globals'],
+  ['GET', '/layouts/Contacts/script/Slow']
+])('warns against repeating an uncertain %s %s after a timeout', (method, path) => {
+  const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout', config: { method, url: `https://fm.example${path}`, timeout: 1500 } });
   expect(error.message).toContain('after 1.5 s');
   expect(error.message).toContain('The change may have been applied. Check the record before trying again.');
   expect(error.isRetryable).toBe(false);
 });
 
-it('keeps a timed-out read retryable and shows a decimal', () => {
-  const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout', config: { method: 'GET', url: 'https://fm.example/layouts', timeout: 2000 } });
-  expect(error.message).toContain('after 2.0 s');
-  expect(error.message).not.toContain('change may');
-  expect(error.isRetryable).toBe(true);
+it.each(['createRecord', 'editRecord', 'deleteRecord', 'uploadContainer', 'runScript', 'setGlobalFields'])('uses logical operation %s without transport config', (operation) => {
+  const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout' }, { operation });
+  expect(error.isRetryable).toBe(false);
+  expect(error.message).toContain('The change may have been applied.');
+});
+
+it.each(['script', 'script.prerequest', 'script.presort'])('treats a find carrying %s as uncertain in both body encodings and query parameters', (key) => {
+  for (const config of [{ data: { [key]: 'Slow' } }, { data: JSON.stringify({ [key]: 'Slow' }) }, { params: { [key]: 'Slow' } }, { url: `https://fm.example/layouts/C/_find?${key}=Slow` }]) {
+    const error = normalizeError({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout', config: { method: 'POST', url: 'https://fm.example/layouts/C/_find', ...config } }, { operation: 'findRecords' });
+    expect(error.isRetryable).toBe(false);
+    expect(error.message).toContain('The change may have been applied.');
+  }
 });
 
 it.each([413, 429])('gives a next step for HTTP %s, including Retry-After', (status) => {

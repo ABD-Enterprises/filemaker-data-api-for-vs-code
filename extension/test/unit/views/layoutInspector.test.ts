@@ -42,15 +42,14 @@ function createProvider() {
 }
 
 describe('LayoutInspectorProvider', () => {
-  it('renders both Photo container occurrences without crashing', async () => {
+  it('renders one key for duplicate Photo containers', async () => {
     const { provider, schemaService } = createProvider();
     schemaService.getLayoutSchema.mockResolvedValueOnce({ supported: true, fromCache: false, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata } as never);
     provider.selectLayout('p1', 'Contact Details');
     const categories = await provider.getChildren();
     const fields = await provider.getChildren(categories[0]);
-    expect(fields.map((field) => field.label)).toEqual(['Photo', 'Photo']);
-    expect(fields.map((field) => field.description)).toEqual(['container', 'container']);
-    expect(fields[0]).not.toBe(fields[1]);
+    expect(fields.map((field) => field.label)).toEqual(['Photo']);
+    expect(fields.map((field) => field.description)).toEqual(['container']);
   });
 
   it('renders the four layout inspector categories for the selected layout', async () => {
@@ -65,7 +64,7 @@ describe('LayoutInspectorProvider', () => {
       'Value Lists',
       'Field Validation'
     ]);
-    expect(children.map((item) => item.description)).toEqual(['2', '1', '1', '1']);
+    expect(children.map((item) => item.description)).toEqual(['3', '1', '1', '1']);
   });
 
   it('uses its session cache until refresh is requested', async () => {

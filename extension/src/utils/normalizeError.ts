@@ -113,10 +113,7 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
   const timeoutLike = error.code === 'ECONNABORTED' || /timeout/i.test(error.message);
   if (timeoutLike) {
     const seconds = error.config?.timeout ? (error.config.timeout / 1000).toFixed(1) : undefined;
-    const operation = `${error.config?.method ?? ''} ${error.config?.url ?? ''} ${options?.endpoint ?? ''}`;
-    const params = toUnknownRecord(error.config?.params);
-    const uncertainChange = /\b(?:POST|PATCH|DELETE)\b|\/script\//i.test(operation) ||
-      Object.keys(params ?? {}).some((key) => key === 'script' || key === 'script.prerequest' || key === 'script.presort');
+    const uncertainChange = isUncertainChange(error, options);
     const warning = uncertainChange ? ' The change may have been applied. Check the record before trying again.' : '';
     return {
       kind: 'timeout',
@@ -173,6 +170,43 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
     details,
     originalName: error.name
   };
+}
+
+/** Classify the logical request before falling back to a direct Data API endpoint. */
+function isUncertainChange(error: AxiosError, options?: NormalizeErrorOptions): boolean {
+  const scriptKeys = ['script', 'script.prerequest', 'script.presort'];
+  const hasScript = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      try { value = JSON.parse(value); } catch { return false; }
+    }
+    const record = toUnknownRecord(value);
+    return scriptKeys.some((key) => Object.prototype.hasOwnProperty.call(record ?? {}, key));
+  };
+  if ([options?.requestParams, options?.requestData, error.config?.params, error.config?.data].some(hasScript)) {
+    return true;
+  }
+
+  const endpoint = options?.endpoint?.match(/^(GET|POST|PATCH|DELETE) (.+)$/i);
+  const method = (error.config?.method ?? endpoint?.[1] ?? '').toUpperCase();
+  let url: URL;
+  try {
+    url = new URL(error.config?.url ?? endpoint?.[2] ?? '', 'https://filemaker.invalid');
+  } catch {
+    url = new URL('https://filemaker.invalid');
+  }
+  if (scriptKeys.some((key) => url.searchParams.has(key))) return true;
+
+  // Operation names also cover proxy requests, where every transport call is a POST.
+  if (options?.operation) {
+    return ['createRecord', 'editRecord', 'deleteRecord', 'uploadContainer', 'runScript', 'setGlobalFields'].includes(options.operation);
+  }
+
+  const path = url.pathname;
+  if (/\/layouts\/[^/]+\/script\/[^/]+$/.test(path)) return true;
+  if (method === 'GET') return false;
+  return (['POST', 'PATCH', 'DELETE'].includes(method) && /\/layouts\/[^/]+\/records(?:\/[^/]+)?$/.test(path)) ||
+    (method === 'POST' && /\/layouts\/[^/]+\/records\/[^/]+\/containers\/[^/]+\/\d+$/.test(path)) ||
+    (method === 'PATCH' && /\/globals$/.test(path));
 }
 
 function isDroppedMidResponse(error: AxiosError): boolean {

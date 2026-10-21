@@ -5,9 +5,9 @@ import { buildLayoutInspectorModel } from '../../src/utils/layoutInspector';
 import type { SchemaMetadataResult } from '../../src/types/fm';
 
 describe('buildLayoutInspectorModel', () => {
-  it('keeps both Photo occurrences and all portal names', () => {
+  it('keeps unique Photo keys and all portal names', () => {
     const model = buildLayoutInspectorModel({ supported: true, fromCache: false, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata });
-    expect(model.fields.map((field) => field.name)).toEqual(['Photo', 'Photo']);
+    expect(model.fields.map((field) => field.name)).toEqual(['Photo']);
     expect(model.portals.map((portal) => portal.key)).toEqual(['Addresses', 'Email Addresses', 'Phone Numbers']);
   });
 

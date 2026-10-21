@@ -67,7 +67,7 @@ export function assertObjectArray(value: unknown, label: string): JsonObjectArra
   return validated.value;
 }
 
-export function parseOptionalNonNegativeInteger(value: string | undefined, label: string): number | undefined {
+export function parseOptionalPositiveInteger(value: string | undefined, label: string): number | undefined {
   if (!value || value.trim().length === 0) {
     return undefined;
   }

@@ -67,6 +67,7 @@ interface HistoryContext {
 }
 
 interface RequestTrace {
+  operation: string;
   requestId: string;
   reauthCount: number;
   cacheHit: boolean;
@@ -325,6 +326,7 @@ export class FMClient {
           const failure = toFMClientError(
             normalizeError(error, {
               fallbackMessage: 'Failed to create FileMaker session.',
+              operation: trace.operation,
               requestId: trace.requestId,
               endpoint: 'POST /sessions'
             })
@@ -557,6 +559,10 @@ export class FMClient {
 
         if (typeof body.offset === 'number') {
           payload.offset = body.offset;
+        }
+
+        for (const key of ['script', 'script.param', 'script.prerequest', 'script.prerequest.param', 'script.presort', 'script.presort.param'] as const) {
+          if (body[key] !== undefined) payload[key] = body[key];
         }
 
         let envelope: DataApiEnvelope<DataApiListRecordsResponse>;
@@ -1031,6 +1037,7 @@ export class FMClient {
             toFMClientError(
               normalizeError(error, {
                 fallbackMessage: 'Failed to run FileMaker script.',
+                operation: trace.operation,
                 requestId: trace.requestId,
                 endpoint
               })
@@ -1564,6 +1571,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1643,6 +1653,9 @@ export class FMClient {
         profile,
         toFMClientError(
           normalizeError(error, {
+            operation: trace?.operation,
+            requestData: request.data,
+            requestParams: request.params,
             fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
             requestId: trace?.requestId,
             endpoint: redactString(`${request.method} ${request.path}`)
@@ -1707,6 +1720,7 @@ export class FMClient {
     execute: (trace: RequestTrace) => Promise<T>
   ): Promise<T> {
     const trace: RequestTrace = {
+      operation: context.operation,
       requestId: randomUUID(),
       reauthCount: 0,
       cacheHit: false,

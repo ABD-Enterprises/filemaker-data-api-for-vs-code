@@ -7,6 +7,7 @@ import * as ts from 'typescript6';
 import { describe, expect, it, vi } from 'vitest';
 
 import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
+import { buildLayoutInspectorModel } from '../../src/utils/layoutInspector';
 import { TypeGenService } from '../../src/services/typeGenService';
 import type { ConnectionProfile } from '../../src/types/fm';
 
@@ -22,19 +23,33 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('TypeGenService', () => {
-  it('generates compiling layout types for duplicate Photo container metadata', async () => {
+  it('generates unique compiling keys for duplicate Photo, repeating Phones and literal Phones(2) together', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fm-duplicate-types-'));
     try {
-      const service = new TypeGenService({ getLayoutSchema: vi.fn(async () => ({ supported: true, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata })) } as never,
+      const fields = [
+        ...duplicatePhotoMetadata.fieldMetaData,
+        { name: 'Phones', type: 'normal', result: 'text', maxRepeat: 3 },
+        { name: 'Phones(2)', type: 'normal', result: 'text' }
+      ];
+      const schema = { supported: true, fromCache: false, fields, metadata: duplicatePhotoMetadata };
+      const service = new TypeGenService({ getLayoutSchema: vi.fn(async () => schema) } as never,
         {} as never, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, { getWorkspaceRoot: () => root });
       const artifact = await service.generateTypesForLayout(createProfile(), 'Contact Details');
-      const program = ts.createProgram([artifact.filePath], { noEmit: true, strict: true, types: [], skipLibCheck: true });
-      expect(ts.getPreEmitDiagnostics(program).map(formatDiagnostic)).toEqual([]);
-      expect(artifact.content.match(/"Photo"\?:/g)).toHaveLength(1);
-      expect(artifact.content).not.toContain('photo2');
       const client = await service.generateTypeScriptClient(createProfile(), ['Contact Details'], join(root, 'client'));
+      const expected = ['Photo', 'Phones(1)', 'Phones(2)', 'Phones(3)'];
+      for (const source of [artifact.content, await readFile(client.typesPath, 'utf8')]) {
+        const rawKeys = [...source.matchAll(/^ {2}"([^"\n]+)"\?:/gm)].map((match) => match[1]);
+        expect(rawKeys).toEqual(expected);
+        expect(source).not.toContain('photo2');
+      }
+      const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contact Details');
+      for (const entry of Object.values(JSON.parse(snippets.content)) as Array<{ description: string }>) {
+        const keys = entry.description.split(' Fields: ')[1]!.split('; ').map((field) => field.split(':')[0]);
+        expect(keys).toEqual(expected);
+      }
+      expect(buildLayoutInspectorModel(schema).fields.map((field) => field.name)).toEqual(expected);
       const config = join(root, 'tsconfig.json');
-      await writeFile(config, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, types: [], skipLibCheck: true, lib: ['es2020', 'dom'] }, files: [artifact.filePath, client.typesPath] }));
+      await writeFile(config, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, types: [], skipLibCheck: true, lib: ['es2020', 'dom'] }, files: [artifact.filePath, client.typesPath, client.clientPath] }));
       expect(() => execFileSync(process.execPath, [join(dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { encoding: 'utf8' })).not.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -1,4 +1,5 @@
 import type { FileMakerFieldMetadata, SchemaMetadataResult, ValueList } from '../types/fm';
+import { fieldsForGeneration } from './generatedFields';
 import { extractPortalMetadata } from './portalUtils';
 import { extractValueLists } from './valueListParser';
 
@@ -36,7 +37,7 @@ export interface LayoutInspectorModel {
 
 export function buildLayoutInspectorModel(schema: SchemaMetadataResult): LayoutInspectorModel {
   const metadata = schema.metadata ?? {};
-  const fields = schema.fields.map(toInspectorField);
+  const fields = fieldsForGeneration(schema.fields).map(toInspectorField);
   const portals = extractInspectorPortals(metadata);
   const valueLists = extractValueLists(metadata);
   const validations = fields
@@ -90,7 +91,7 @@ function extractInspectorPortals(metadata: Record<string, unknown>): LayoutInspe
         key,
         fields.map((field) => field.name)
       ),
-      fields: fields.map((field) => ({
+      fields: fieldsForGeneration(fields).map((field) => ({
         name: field.name,
         type: field.result ?? field.type,
         ...(field.type ? { kind: field.type } : {})

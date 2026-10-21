@@ -12,7 +12,7 @@ import type { SecretStore } from '../services/secretStore';
 import type { FindRecordsRequest } from '../types/fm';
 import {
   parseFindJson,
-  parseOptionalNonNegativeInteger,
+  parseOptionalPositiveInteger,
   parseSortJson,
   validateRecordId
 } from '../utils/jsonValidate';
@@ -377,8 +377,8 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         const request: FindRecordsRequest = {
           query: findValidation.value,
           sort: sortValidationValue,
-          limit: parseOptionalNonNegativeInteger(limitInput, 'Limit'),
-          offset: parseOptionalNonNegativeInteger(offsetInput, 'Offset')
+          limit: parseOptionalPositiveInteger(limitInput, 'Limit'),
+          offset: parseOptionalPositiveInteger(offsetInput, 'Offset')
         };
 
         const result = await fmClient.findRecords(profile, layout, request);
@@ -484,9 +484,9 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
 function validateOptionalInteger(value: string, label: string): string | undefined {
   try {
-    parseOptionalNonNegativeInteger(value, label);
+    parseOptionalPositiveInteger(value, label);
     return undefined;
   } catch (error) {
-    return error instanceof Error ? error.message : `${label} must be a non-negative integer.`;
+    return error instanceof Error ? error.message : `${label} must be a positive integer.`;
   }
 }

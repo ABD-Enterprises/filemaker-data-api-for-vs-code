@@ -12,6 +12,7 @@ import type {
   GeneratedSnippetsArtifacts,
   GeneratedTypeScriptClientArtifacts
 } from '../types/fm';
+import { fieldsForGeneration } from '../utils/generatedFields';
 import { hashObject } from '../utils/hash';
 import { createNameMap, toPascalCaseIdentifier } from '../utils/nameSanitize';
 import { commentText, distinctFileName, snippetPlaceholderText } from '../utils/safeText';
@@ -99,7 +100,7 @@ export class TypeGenService {
     try {
       const schema = await this.schemaService.getLayoutSchema(profile, layout);
       if (schema.supported && schema.fields.length > 0) {
-        fieldDescription = ' Fields: ' + schema.fields.map((field) =>
+        fieldDescription = ' Fields: ' + fieldsForGeneration(schema.fields).map((field) =>
           `${field.name}: ${field.result ?? field.type ?? 'unknown'}${field.type ? ` (kind: ${field.type})` : ''}`
         ).join('; ');
       }
@@ -222,9 +223,8 @@ export class TypeGenService {
     fields: FileMakerFieldMetadata[],
     metadataHash: string
   ): string {
-    fields = uniqueFields(fields);
+    fields = fieldsForGeneration(fields);
     const timestamp = new Date().toISOString();
-    fields = expandRepeatingFields(fields);
     const nameMap = createNameMap(fields.map((field) => field.name));
     const baseName = toPascalCaseIdentifier(layout);
     const fieldDataTypeName = `${baseName}FieldData`;
@@ -335,15 +335,6 @@ function toTsType(field: FileMakerFieldMetadata | undefined): string {
   return 'unknown';
 }
 
-function expandRepeatingFields(fields: FileMakerFieldMetadata[]): FileMakerFieldMetadata[] {
-  return fields.flatMap((field) => {
-    const count = field.maxRepeat ?? field.repetitions;
-    return typeof count === 'number' && Number.isInteger(count) && count > 1
-      ? Array.from({ length: count }, (_, index) => ({ ...field, name: `${field.name}(${index + 1})` }))
-      : [field];
-  });
-}
-
 function fieldDoc(field: FileMakerFieldMetadata | undefined): string {
   const type = String(field?.result ?? field?.type ?? '').toLowerCase();
   if (toTsType(field) === 'number') {
@@ -379,16 +370,6 @@ function normalizeLayouts(layouts: string[]): string[] {
   return normalized;
 }
 
-/** Data API fieldData has one key per exact field name, even for repeated layout objects. */
-function uniqueFields(fields: FileMakerFieldMetadata[]): FileMakerFieldMetadata[] {
-  const seen = new Set<string>();
-  return fields.filter((field) => {
-    if (seen.has(field.name)) return false;
-    seen.add(field.name);
-    return true;
-  });
-}
-
 function renderClientTypes(
   profile: ConnectionProfile,
   schemas: GeneratedClientSchema[],
@@ -397,7 +378,7 @@ function renderClientTypes(
 ): string {
   const layoutBlocks = schemas.map((schema) => {
     const suffix = typeSuffixForLayout(layoutNames, schema.layout);
-    const rows = expandRepeatingFields(uniqueFields(schema.fields))
+    const rows = fieldsForGeneration(schema.fields)
       .map(renderFieldRow)
       .join('\n');
 
