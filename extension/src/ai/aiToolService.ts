@@ -9,7 +9,6 @@ import type {
   RunScriptResult,
   SchemaMetadataResult
 } from '../types/fm';
-import { domainToUnicode } from 'url';
 
 import { FMClientError, isRecordModifiedConflict } from '../services/errors';
 import { redactString } from '../utils/redact';
@@ -19,10 +18,8 @@ import { AiInputError, validateInput } from './aiSchema';
 import type { AiSettings } from './aiSettings';
 import {
   AI_TOOL_DEFINITIONS,
-  MAX_DIALOG_DETAIL_CHARS,
   MAX_FIELDS_PER_WRITE,
   MAX_RECORDS_PER_CALL,
-  MAX_SCRIPT_PARAMETER_CHARS,
   MAX_WRITE_VALUE_CHARS,
   findToolDefinition,
   type AiToolDefinition
@@ -31,7 +28,6 @@ import {
   CONTAINER_MARKER,
   HiddenFields,
   PLACEHOLDER_MARKERS,
-  SERVER_MARKER,
   URL_OMITTED_MARKER,
   baseFieldName,
   scrubGenericText,
@@ -40,6 +36,18 @@ import {
   safeNameOrUndefined
 } from './aiText';
 import { assertUsableUrlName } from '../utils/urlSegment';
+import {
+  accountName,
+  buildCreateConfirmation,
+  buildDeleteConfirmation,
+  buildEditConfirmation,
+  buildScriptConfirmation,
+  valueText
+} from './aiConfirmations';
+import { scrub } from './aiScrub';
+
+export { buildCreateConfirmation, buildDeleteConfirmation, buildEditConfirmation, buildScriptConfirmation } from './aiConfirmations';
+export { scrub } from './aiScrub';
 
 export const SESSION_RECORD_QUOTA = 500;
 export const CALLS_PER_MINUTE = 30;
@@ -1051,13 +1059,6 @@ function prune(times: number[], now: number): void {
   }
 }
 
-function valueText(value: unknown): string {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  return typeof value === 'string' ? value : String(value);
-}
-
 function cut(value: string): string {
   return value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS)}…[truncated]` : value;
 }
@@ -1116,153 +1117,6 @@ function shapeValues(data: Record<string, unknown>, env: Pick<Env, 'hidden' | 'p
   return out;
 }
 
-function accountName(profile: ConnectionProfile): string {
-  return profile.username ?? (profile.authMode === 'proxy' ? '(set by the proxy)' : '(unknown)');
-}
-
-// -----------------------------------------------------------------------------------------
-// Confirmations. Host facts first; every change shown in full; the model's own words last and
-// labelled. A builder throws rather than build a dialog that would hide part of a write.
-
-function hostFacts(profile: ConnectionProfile, layout: string): string[] {
-  return [
-    `Connection: ${displayText(profile.name, 64)}`,
-    `Account: ${displayText(accountName(profile), 64)}`,
-    `Layout: ${displayText(layout, 64)}`
-  ];
-}
-
-function modelNote(description: string | undefined): string[] {
-  return description
-    ? ['', `The AI tool's own description (not verified): ${displayText(description, 200)}`]
-    : [];
-}
-
-/** A dialog whose text is longer than the budget could be clipped, hiding later fields or the model's note. */
-function assertDialogFits(detail: string): void {
-  if (detail.length > MAX_DIALOG_DETAIL_CHARS) {
-    throw new AiToolError(
-      `This write would make an approval dialog longer than ${MAX_DIALOG_DETAIL_CHARS} characters (escaped characters take extra room), so it was refused. Send fewer or shorter values.`
-    );
-  }
-}
-
-/** Returns the text if it fits the dialog budget, else refuses. */
-function fitted(detail: string): string {
-  assertDialogFits(detail);
-  return detail;
-}
-
-function assertShownInFull(count: number, values: string[]): void {
-  if (count > MAX_FIELDS_PER_WRITE || values.some((value) => Array.from(value).length > MAX_WRITE_VALUE_CHARS)) {
-    throw new AiToolError('This write is too large for the approval dialog to show in full, so it was refused.');
-  }
-}
-
-const OLD_VALUE_SHOWN = 100;
-
-export function buildEditConfirmation(args: {
-  profile: ConnectionProfile;
-  layout: string;
-  recordId: string;
-  changes: Array<{ name: string; oldValue: string; newValue: string }>;
-  description?: string;
-}): ConfirmSpec {
-  assertShownInFull(args.changes.length, args.changes.map((change) => change.newValue));
-  const lines = [
-    ...hostFacts(args.profile, args.layout),
-    `Record id: ${displayText(args.recordId, 20)}`,
-    `Fields changed: ${args.changes.length}`,
-    '',
-    // New values and field names in full. An old value that is long is cut with its length
-    // shown; it is replaced by the new value either way.
-    ...args.changes.map(
-      (change) =>
-        `${displayText(change.name, 128)}: ${displayText(redactString(change.oldValue), OLD_VALUE_SHOWN)} -> ${displayText(change.newValue, MAX_WRITE_VALUE_CHARS)}`
-    )
-  ];
-  return {
-    title: 'An AI tool wants to change a record',
-    message: 'An AI tool wants to change a FileMaker record. Approve only if you expected this change.',
-    detail: fitted([...lines, ...modelNote(args.description)].join('\n')),
-    confirmLabel: 'Change Record'
-  };
-}
-
-export function buildCreateConfirmation(args: {
-  profile: ConnectionProfile;
-  layout: string;
-  values: Array<[string, string]>;
-  description?: string;
-}): ConfirmSpec {
-  assertShownInFull(args.values.length, args.values.map(([, value]) => value));
-  const lines = [
-    ...hostFacts(args.profile, args.layout),
-    `Fields set: ${args.values.length}`,
-    '',
-    ...args.values.map(([name, value]) => `${displayText(name, 128)}: ${displayText(value, MAX_WRITE_VALUE_CHARS)}`)
-  ];
-  return {
-    title: 'An AI tool wants to create a record',
-    message: 'An AI tool wants to create a FileMaker record. Approve only if you expected this.',
-    detail: fitted([...lines, ...modelNote(args.description)].join('\n')),
-    confirmLabel: 'Create Record'
-  };
-}
-
-export function buildDeleteConfirmation(args: {
-  profile: ConnectionProfile;
-  layout: string;
-  recordId: string;
-  snapshot: Obj;
-  description?: string;
-}): ConfirmSpec {
-  const entries = Object.entries(args.snapshot);
-  // The snapshot is only a reminder of what is deleted, so it shrinks to fit the budget
-  // (fewer fields, announced in the heading) rather than blocking a delete.
-  for (let shown = Math.min(entries.length, MAX_FIELDS_PER_WRITE); shown >= 0; shown -= 1) {
-    const lines = [
-      ...hostFacts(args.profile, args.layout),
-      `Record id: ${displayText(args.recordId, 20)}`,
-      `The record as it is now (first ${shown} of ${entries.length} fields):`,
-      ...entries.slice(0, shown).map(([name, value]) => `${displayText(name, 128)}: ${displayText(valueText(value), 60)}`)
-    ];
-    const detail = [...lines, ...modelNote(args.description)].join('\n');
-    if (detail.length <= MAX_DIALOG_DETAIL_CHARS || shown === 0) {
-      return {
-        title: 'An AI tool wants to DELETE a record',
-        message: 'An AI tool wants to permanently delete a FileMaker record. You will be asked to type its id next.',
-        detail: fitted(detail),
-        confirmLabel: 'Continue'
-      };
-    }
-  }
-  throw new AiToolError('The approval dialog could not be built.');
-}
-
-export function buildScriptConfirmation(args: {
-  profile: ConnectionProfile;
-  layout: string;
-  script: string;
-  parameter?: string;
-  description?: string;
-}): ConfirmSpec {
-  if (args.parameter !== undefined && Array.from(args.parameter).length > MAX_SCRIPT_PARAMETER_CHARS) {
-    throw new AiToolError('The script parameter is too long for the approval dialog to show in full, so it was refused.');
-  }
-  return {
-    title: 'An AI tool wants to run a script',
-    message: 'An AI tool wants to run a FileMaker script. A script name does not say what the script does.',
-    detail: fitted([
-      ...hostFacts(args.profile, args.layout),
-      `Script (runs as the account above): ${displayText(args.script, 64)}`,
-      `Parameter: ${args.parameter === undefined ? '(none)' : displayText(args.parameter, MAX_SCRIPT_PARAMETER_CHARS)}`,
-      ...modelNote(args.description)
-    ].join('\n')),
-    confirmLabel: 'Run Script'
-  };
-}
-
 // -----------------------------------------------------------------------------------------
 // Errors
 
@@ -1292,109 +1146,4 @@ export function toModelError(error: unknown, profile: ConnectionProfile | undefi
     text = 'The request failed.';
   }
   return new AiToolError(scrubGenericText(scrub(redactString(text), profile)).slice(0, 500), 'error');
-}
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** An IPv6 address as eight lower-case four-digit groups, however it was written; undefined if it is not one. */
-function canonicalIPv6(address: string): string | undefined {
-  let lower = address.toLowerCase();
-  // An embedded IPv4 tail (`::ffff:10.1.2.3`) is two more groups.
-  const dotted = /^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(lower);
-  if (dotted) {
-    const octets = [dotted[2], dotted[3], dotted[4], dotted[5]].map(Number);
-    if (octets.some((octet) => octet > 255)) {
-      return undefined;
-    }
-    lower = `${dotted[1]}${((octets[0] as number) * 256 + (octets[1] as number)).toString(16)}:${((octets[2] as number) * 256 + (octets[3] as number)).toString(16)}`;
-  }
-  if (!/^[0-9a-f:]+$/.test(lower) || (lower.match(/::/g) ?? []).length > 1 || lower.includes(':::')) {
-    return undefined;
-  }
-  const [head = '', tail = ''] = lower.split('::');
-  const left = head ? head.split(':') : [];
-  const right = tail ? tail.split(':') : [];
-  const compressed = lower.includes('::');
-  const missing = 8 - left.length - right.length;
-  if (compressed ? missing < 1 : left.length !== 8) {
-    return undefined;
-  }
-  const groups = compressed ? [...left, ...Array<string>(missing).fill('0'), ...right] : left;
-  return groups.every((group) => /^[0-9a-f]{1,4}$/.test(group)) ? groups.map((group) => group.padStart(4, '0')).join(':') : undefined;
-}
-
-/**
- * Removes the server address of a profile from text, however it is written: the URL and
- * origin and `host:port` (any letter case), the host name as a whole token (so `fm` does not
- * match inside "confirm"), a host name in its Unicode and punycode forms, and an IP address
- * (IPv6 compressed, expanded or unpadded, with or without brackets). The user name is NOT
- * removed as a plain word ("contact the admin" stays); a name inside a URL or after `@` is
- * covered by the host and by redaction of credentials in URLs.
- */
-export function scrub(text: string, profile: ConnectionProfile | undefined): string {
-  if (!profile) {
-    return text;
-  }
-  const literals = new Set<string>();
-  /** `host` or `[v6]` forms: the port after them, if any, goes too. */
-  const hostLiterals = new Set<string>();
-  const hosts = new Set<string>();
-  const addresses = new Set<string>();
-  const addUrl = (value: string | undefined): void => {
-    if (!value) return;
-    literals.add(value);
-    try {
-      const url = new URL(value);
-      literals.add(url.origin);
-      literals.add(url.host);
-      hostLiterals.add(url.host);
-      const hostname = url.hostname.replace(/^\[|\]$/g, '');
-      if (url.hostname.startsWith('[')) {
-        const canonical = canonicalIPv6(hostname);
-        if (canonical) addresses.add(canonical);
-      } else {
-        hosts.add(hostname);
-        // An IPv4 server also appears as an IPv4-mapped IPv6 address (`::ffff:10.1.2.3`).
-        const mapped = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ? canonicalIPv6(`::ffff:${hostname}`) : undefined;
-        if (mapped) addresses.add(mapped);
-        const unicode = domainToUnicode(hostname);
-        if (unicode) hosts.add(unicode);
-      }
-    } catch {
-      // Not a URL: only the literal text is scrubbed.
-    }
-  };
-  addUrl(profile.serverUrl);
-  addUrl(profile.proxyEndpoint);
-
-  let result = text;
-  for (const literal of [...literals].filter((value) => value.length > 0).sort((a, b) => b.length - a.length)) {
-    const port = hostLiterals.has(literal) && !/:\d+$/.test(literal) ? '(?::\\d{1,5})?' : '';
-    result = result.replace(new RegExp(`${escapeRegExp(literal)}${port}`, 'gi'), SERVER_MARKER);
-  }
-  if (addresses.size > 0) {
-    // Any spelling of the address: bracketed (with a port) or bare, compressed, padded or not,
-    // with an IPv4 tail, and bare with a port (`2001:db8::10:443` is the address `2001:db8::10`
-    // and port 443, as well as a valid address of its own: both are the server's, so both go).
-    const isServer = (candidate: string): boolean => {
-      const canonical = canonicalIPv6(candidate);
-      return canonical !== undefined && addresses.has(canonical);
-    };
-    const matches = (token: string): boolean => {
-      if (isServer(token)) return true;
-      const port = /^(.*[0-9a-f:]):(\d{1,5})$/i.exec(token);
-      return port !== null && !token.endsWith('::') && isServer(port[1] as string);
-    };
-    result = result
-      .replace(/\[([0-9a-f:.]{3,})\](?::\d{1,5})?/gi, (match, inner: string) => (isServer(inner) ? SERVER_MARKER : match))
-      .replace(/(?<![0-9a-f:.])[0-9a-f:.]{3,}(?![0-9a-f:])/gi, (match) => {
-        const trailing = /\.+$/.exec(match)?.[0] ?? '';
-        const token = trailing ? match.slice(0, -trailing.length) : match;
-        return matches(token) ? `${SERVER_MARKER}${trailing}` : match;
-      });
-  }
-  for (const host of hosts) {
-    result = result.replace(new RegExp(`(?<![\\w.-])${escapeRegExp(host)}(?![\\w-])`, 'giu'), SERVER_MARKER);
-  }
-  return result;
 }
