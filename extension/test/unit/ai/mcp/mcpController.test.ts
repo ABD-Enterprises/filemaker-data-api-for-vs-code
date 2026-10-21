@@ -225,9 +225,10 @@ describe('AiMcpController', () => {
 
     it('stop waits for a start that is still in progress, so nothing is left running', async () => {
       let release: (value: string) => void = () => undefined;
-      const slow = make({ processStartTime: () => new Promise<string | undefined>((resolve) => (release = resolve)) });
+      const processStartTime = vi.fn(() => new Promise<string | undefined>((resolve) => (release = resolve)));
+      const slow = make({ processStartTime });
       const starting = slow.start();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await vi.waitFor(() => expect(processStartTime).toHaveBeenCalledOnce());
       const stopping = slow.stop();
       release((await getProcessStartTime(process.pid)) as string);
       await Promise.allSettled([starting, stopping]);
@@ -524,8 +525,7 @@ describe('AiMcpController', () => {
       expect(controller.connectionCount()).toBe(2);
       expect(changes).toHaveBeenCalledTimes(2);
       a.close();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(controller.connectionCount()).toBe(1);
+      await vi.waitFor(() => expect(controller.connectionCount()).toBe(1));
       expect(changes).toHaveBeenCalledTimes(3);
       b.close();
     });
@@ -749,7 +749,6 @@ describe('watchExternalServerSetting', () => {
       log
     });
     listener({ affectsConfiguration: () => true });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('boom'));
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith(expect.stringContaining('boom')));
   });
 });

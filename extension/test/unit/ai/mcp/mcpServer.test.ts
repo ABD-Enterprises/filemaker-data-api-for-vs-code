@@ -210,7 +210,7 @@ describe('AiMcpServer', () => {
         throw new AiToolError('cancelled');
       });
       c.send({ jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'fm_list_layouts' } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await vi.waitFor(() => expect(signal).toBeDefined());
       c.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 20 } });
       c.send({ jsonrpc: '2.0', id: 21, method: 'ping' });
       expect((await c.json()).id).toBe(21);
@@ -226,10 +226,9 @@ describe('AiMcpServer', () => {
         await new Promise(() => undefined);
       });
       c.send({ jsonrpc: '2.0', id: 22, method: 'tools/call', params: { name: 'fm_list_layouts' } });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await vi.waitFor(() => expect(signal).toBeDefined());
       c.close();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(signal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(signal?.aborted).toBe(true));
     });
 
     it('limits calls in flight per connection', async () => {
@@ -248,13 +247,16 @@ describe('AiMcpServer', () => {
       const c = await initialized();
       const other = await client();
       server.notifyIfToolsChanged();
-      expect(await c.next(200)).toBe('<timeout>');
+      // Deliberate short silence check: unchanged tools must send no notification.
+      expect(await c.next(50)).toBe('<timeout>');
       tools = [];
       server.notifyIfToolsChanged();
       expect(await c.json()).toEqual({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
-      expect(await other.next(200)).toBe('<timeout>'); // never initialized
+      // Deliberate short silence check: an uninitialized peer must receive nothing.
+      expect(await other.next(50)).toBe('<timeout>');
       server.notifyIfToolsChanged();
-      expect(await c.next(200)).toBe('<timeout>');
+      // Deliberate short silence check: unchanged tools must send no notification.
+      expect(await c.next(50)).toBe('<timeout>');
       tools = AI_TOOL_DEFINITIONS.filter((tool) => tool.kind === 'read');
       server.notifyIfToolsChanged();
       expect((await c.json()).method).toBe('notifications/tools/list_changed');
@@ -300,7 +302,7 @@ describe('AiMcpServer', () => {
       expect(await extra.next()).toBe('<closed>');
       expect(server.connectionCount()).toBe(3);
       accepted[0]?.close();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await vi.waitFor(() => expect(server.connectionCount()).toBe(2));
       await client();
     });
 
@@ -308,8 +310,7 @@ describe('AiMcpServer', () => {
       await start({ idleTimeoutMs: 100 });
       const c = await client();
       expect(await c.waitClosed(1500)).toBe(true);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(server.connectionCount()).toBe(0);
+      await vi.waitFor(() => expect(server.connectionCount()).toBe(0));
     });
   });
 

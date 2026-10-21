@@ -34,6 +34,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
+
 - Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
 
 - Make command-context tests wait for completion, test process lookups without repeatedly starting PowerShell, and keep one real-process check with a longer timeout. Remove unused designer test tooling, align the zod version range, explain the TypeScript test alias, and add a complete command reference with a coverage check.

@@ -92,6 +92,13 @@ describe('process identity lookups', () => {
     expect(await getProcessStartTime(42, platform)).toBeUndefined();
   });
 
+  it('normalizes Unix whitespace and rejects a truncated Linux stat record', async () => {
+    commandResult('  Tue\t Oct 20   12:00:00 2026\n');
+    expect(await getProcessStartTime(42, 'darwin')).toBe('ps:Tue Oct 20 12:00:00 2026');
+    vi.mocked(readFile).mockResolvedValue('42 (truncated name) S 0');
+    expect(await getProcessStartTime(42, 'linux')).toBeUndefined();
+  });
+
   it('rejects malformed Windows timestamps and Linux start ticks', async () => {
     commandResult('not a timestamp');
     expect(await getProcessStartTime(42, 'win32')).toBeUndefined();
