@@ -1,7 +1,7 @@
-import { mkdir, readFile } from 'fs/promises';
-import { basename, isAbsolute, relative, resolve } from 'path';
+import { readFile } from 'fs/promises';
+import { basename, isAbsolute, relative, resolve, sep } from 'path';
 
-import { GENERATED_MARKER, GenerationCancelledError, writeGeneratedFiles } from './generatedFileWriter';
+import { GENERATED_MARKER, GenerationSkippedError, GenerationCancelledError, writeGeneratedFiles } from './generatedFileWriter';
 import { hasInvisiblePathCharacter } from '../utils/pathConfinement';
 import type { FMClient } from './fmClient';
 import type { Logger } from './logger';
@@ -94,9 +94,7 @@ export class TypeGenService {
       throw new Error('Open a workspace folder to generate snippets.');
     }
 
-    const snippetsDir = resolveSafeWorkspacePath(root, 'snippets');
     const filePath = resolveSafeWorkspacePath(root, 'snippets', 'filemaker-data-api.code-snippets');
-    await mkdir(snippetsDir, { recursive: true });
 
     let fieldDescription = '';
     try {
@@ -137,8 +135,8 @@ export class TypeGenService {
     };
 
     const content = `// ${GENERATED_MARKER}\n${JSON.stringify(snippets, null, 2)}\n`;
-    const skipped = await writeGeneratedFiles([{ path: filePath, content }]);
-    if (skipped.length) throw new Error(`Skipped existing file: ${filePath}`);
+    const skipped = await writeGeneratedFiles([{ path: filePath, content }], root);
+    if (skipped.length) throw new GenerationSkippedError(filePath);
 
     return {
       filePath,
@@ -162,7 +160,6 @@ export class TypeGenService {
 
     if (/\.[a-z0-9]+$/i.test(basename(outputDirectory))) throw new Error('Choose an output folder, not a file name such as README.md.');
     const outputDir = resolve(outputDirectory);
-    await mkdir(outputDir, { recursive: true });
 
     const schemas: GeneratedClientSchema[] = [];
     for (const layout of selectedLayouts) {
@@ -185,11 +182,15 @@ export class TypeGenService {
     const clientPath = resolve(outputDir, 'client.ts');
     const readmePath = resolve(outputDir, 'README.md');
 
+    const workspaceRoot = this.getWorkspaceRoot();
+    const outputRelative = workspaceRoot ? relative(workspaceRoot, outputDir) : undefined;
+    const root = outputRelative !== undefined && outputRelative !== '..' && !outputRelative.startsWith(`..${sep}`) && !isAbsolute(outputRelative)
+      ? workspaceRoot : outputDir;
     const skippedPaths = await writeGeneratedFiles([
       { path: typesPath, content: typesContent },
       { path: clientPath, content: clientContent },
       { path: readmePath, content: readmeContent }
-    ]);
+    ], root);
 
     return {
       directory: outputDir,
@@ -213,12 +214,10 @@ export class TypeGenService {
 
     const outputDir = sanitizeRelativeOutputDir(this.getOutputDir());
     const fileName = `${sanitizeLayoutFileName(layout)}.ts`;
-    const outputLayoutsDir = resolveSafeWorkspacePath(root, outputDir, 'layouts');
     const filePath = resolveSafeWorkspacePath(root, outputDir, 'layouts', fileName);
 
-    await mkdir(outputLayoutsDir, { recursive: true });
-    const skipped = await writeGeneratedFiles([{ path: filePath, content }]);
-    if (skipped.length) throw new Error(`Skipped existing file: ${filePath}`);
+    const skipped = await writeGeneratedFiles([{ path: filePath, content }], root);
+    if (skipped.length) throw new GenerationSkippedError(filePath);
 
     return filePath;
   }

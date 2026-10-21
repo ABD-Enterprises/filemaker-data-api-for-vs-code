@@ -4,7 +4,7 @@ import path from 'path';
 
 import type * as vscode from 'vscode';
 
-import { GENERATED_MARKER, writeGeneratedFiles } from './generatedFileWriter';
+import { GENERATED_MARKER, GenerationSkippedError, writeGeneratedFiles } from './generatedFileWriter';
 import { migrateLayoutDefinition } from '../fmweb/layoutSchema';
 import { renameReplacing } from '../utils/renameReplacing';
 import type { Logger } from './logger';
@@ -283,9 +283,8 @@ export class FmWebRuntimeGenerator {
     const outputDir = this.getGeneratedLayoutsRoot();
     const outputPath = path.join(outputDir, `${layout.id}.layout.json`);
 
-    await mkdir(outputDir, { recursive: true });
-    const skipped = await writeGeneratedFiles([{ path: outputPath, content: `${JSON.stringify({ $comment: GENERATED_MARKER, ...layout }, null, 2)}\n` }]);
-    if (skipped.length) throw new Error(`Skipped existing file: ${outputPath}`);
+    const skipped = await writeGeneratedFiles([{ path: outputPath, content: `${JSON.stringify({ $comment: GENERATED_MARKER, ...layout }, null, 2)}\n` }], this.fmWebProjectService.getProjectRoot());
+    if (skipped.length) throw new GenerationSkippedError(outputPath);
 
     return {
       id: layout.id,

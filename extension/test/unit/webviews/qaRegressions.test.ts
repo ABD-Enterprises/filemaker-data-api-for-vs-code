@@ -30,7 +30,7 @@ function open(kind: 'queryBuilder' | 'scriptRunner' | 'recordEditor' | 'recordVi
   if (kind === 'recordViewer') RecordViewerPanel.createOrShow(context, store, client as never, logger);
   if (kind === 'connectionWizard') ConnectionWizardPanel.createOrShow(context, store, {} as never, client as never, logger);
   let source = readFileSync(path.resolve(__dirname, `../../../src/webviews/${kind}/ui/index.js`), 'utf8');
-  if (kind === 'queryBuilder') source = readFileSync(path.resolve(__dirname, '../../../src/webviews/queryBuilder/ui/findForm.js'), 'utf8') + '\n' + source;
+  if (kind === 'queryBuilder') source = readFileSync(path.resolve(__dirname, '../../../src/webviews/queryBuilder/ui/cellText.js'), 'utf8') + '\n' + readFileSync(path.resolve(__dirname, '../../../src/webviews/queryBuilder/ui/findForm.js'), 'utf8') + '\n' + source;
   return { html: panel.webview.html, source, receive, panel };
 }
 const init = { profiles: [profile], activeProfileId: 'p1' };
@@ -95,6 +95,43 @@ describe.skipIf(!JSDOM)('webview regression checks', () => {
     expect(document.getElementById(kind === 'queryBuilder' ? 'resultSummary' : 'summary')?.textContent).not.toMatch(/completed|Showing/);
     button.click();
     expect(posted.filter((m) => m.type === type)).toHaveLength(2);
+  });
+
+  it('query validation, copy and unrelated host errors preserve displayed results, while a failed run clears them', () => {
+    const view = open('queryBuilder');
+    const { document, window, send, posted } = loadPage(view.html, view.source);
+    send({ type: 'init', payload: init }); send({ type: 'layoutsLoaded', payload: layouts });
+    send({ type: 'queryResult', payload: { query: { layout: ' Contacts ' }, result: { data: [{ recordId: '1', fieldData: { Name: 'KEPT RESULT' } }] } } });
+    // Enable the control as if the saved-query list changed before the click.
+    window.eval("document.getElementById('loadSavedButton').disabled = false");
+    document.getElementById('loadSavedButton')!.click();
+    expect(document.getElementById('status')?.textContent).toContain('Choose a saved query');
+    expect(document.body.textContent).toContain('KEPT RESULT');
+    send({ type: 'error', message: 'Clipboard unavailable' });
+    expect(document.body.textContent).toContain('KEPT RESULT');
+    document.getElementById('copyTableButton')!.click();
+    expect(posted.some((m) => m.type === 'copyText' && String(m.text).includes('KEPT RESULT'))).toBe(true);
+    send({ type: 'queryResult', payload: { query: { layout: ' Contacts ' }, result: { data: [{ recordId: '1', fieldData: { Name: 'x'.repeat(5_000_001) } }] } } });
+    document.getElementById('copyTableButton')!.click();
+    expect(document.getElementById('status')?.textContent).toContain('too large to copy');
+    expect(document.getElementById('resultSummary')?.textContent).toContain('Showing');
+    document.getElementById('jsonTab')!.click(); document.getElementById('findJson')!.value = '[{}]';
+    document.getElementById('runButton')!.click();
+    send({ type: 'error', message: 'Failed run', runId: 1 });
+    expect(document.getElementById('resultSummary')?.textContent).not.toContain('Showing');
+  });
+
+  it.each(['serverUrl', 'username', 'modeProxyBtn'])('wizard stops advertising password reuse when %s changes', (field) => {
+    const view = open('connectionWizard');
+    const { document, window, send } = loadPage(view.html, view.source);
+    send({ type: 'loadProfile', payload: { ...profile, username: 'alice' }, hasPassword: true });
+    expect(document.getElementById('password')?.getAttribute('placeholder')).toContain('(saved)');
+    if (field === 'modeProxyBtn') document.getElementById(field)!.click();
+    else {
+      document.getElementById(field)!.value = field === 'serverUrl' ? 'https://other.example.com' : 'bob';
+      window.eval(`document.getElementById('${field}').dispatchEvent(new Event('input', { bubbles: true }))`);
+    }
+    expect(document.getElementById('password')?.getAttribute('placeholder')).toBe('Enter the password again');
   });
 
   it.each(['recordViewer', 'recordEditor'] as const)('%s disables Load and recovers after errors', (kind) => {

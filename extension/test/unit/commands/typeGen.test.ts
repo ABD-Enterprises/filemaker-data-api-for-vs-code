@@ -1,3 +1,4 @@
+import { GenerationCancelledError, GenerationSkippedError } from '../../../src/services/generatedFileWriter';
 import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
@@ -82,12 +83,12 @@ describe('type generation commands', () => {
     expect(service.generateTypesForLayout).toHaveBeenCalledWith(profile, layout);
   });
 
-  it('starts the client folder chooser in a dedicated generated folder that exists', async () => {
+  it('suggests a dedicated client folder without creating it when the chooser is cancelled', async () => {
     setup();
     (vscode.workspace as unknown as { workspaceFolders: unknown }).workspaceFolders = [{ uri: vscode.Uri.file('/tmp/project') }];
     vi.mocked(vscode.Uri.joinPath).mockImplementationOnce((base, ...segments) => vscode.Uri.file(join(base.fsPath, ...segments)));
     await command('generateTypeScriptClient')(arg);
-    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp/project', '.filemaker', 'generated', 'client') }));
+    expect(vscode.workspace.fs.createDirectory).not.toHaveBeenCalled();
     expect(vscode.window.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({ defaultUri: expect.objectContaining({ fsPath: join('/tmp/project', '.filemaker', 'generated', 'client') }) }));
   });
 
@@ -165,4 +166,14 @@ describe('type generation commands', () => {
     expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp', 'workspace', '.filemaker', 'types') }));
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('revealFileInOS', expect.objectContaining({ fsPath: join('/tmp', 'workspace', '.filemaker', 'types') }));
   });
+});
+
+it.each([new GenerationCancelledError(), new GenerationSkippedError('/tmp/mine.ts')])('shows generation decisions as plain information: %s', async (error) => {
+  resetCommandMocks();
+  const { service, log } = setup();
+  service.generateTypesForLayout.mockRejectedValue(error);
+  await command('generateTypesForLayout')(arg);
+  expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(error.message);
+  expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  expect(log.error).not.toHaveBeenCalled();
 });

@@ -291,11 +291,11 @@ async function deliver(
       throw error;
     }
     const choice = await vscode.window.showWarningMessage(
-      `${target.relativePath} already exists and has no FileMaker AI context section. Choose Overwrite to keep the current text and add the generated section at the end, Skip existing to leave the file alone, or Cancel to stop.`,
+      `${target.relativePath} already exists and has no FileMaker AI context section. Choose Add to the file to keep the current text and append the generated section, Skip existing to leave the file alone, or Cancel to stop.`,
       { modal: true },
-      'Overwrite', 'Skip existing', 'Cancel'
+      'Add to the file', 'Skip existing', 'Cancel'
     );
-    if (choice !== 'Overwrite') {
+    if (choice !== 'Add to the file') {
       return undefined;
     }
     applied = applyMarkerSection(existing, wrapped, true);

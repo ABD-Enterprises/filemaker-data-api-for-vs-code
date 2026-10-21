@@ -240,3 +240,20 @@ it('adds picker fields below objects in another column and moves overlapping fie
   expect(boxes[2].style.top).toBe('480px');
   expect(boxes[2].style.left).toBe('800px');
 });
+
+it('grows a 120px canvas to contain fields added by picker and toolbox, and undoes that growth', () => {
+  const { container } = render(<App />);
+  const layout = createBlankLayout('Narrow'); layout.canvas.width = 120;
+  init(layout);
+  const surface = () => Number.parseInt(container.querySelector<HTMLElement>('.design-surface')!.style.width);
+  const chip = Array.from(container.querySelectorAll('.field-chip')).find((element) => element.textContent === 'A')!;
+  fireEvent.click(chip);
+  fireEvent.click(screen.getByRole('button', { name: 'field' }));
+  for (const box of container.querySelectorAll<HTMLElement>('.object-hitbox')) {
+    expect(Number.parseInt(box.style.left) + Number.parseInt(box.style.width)).toBeLessThanOrEqual(surface());
+  }
+  expect(surface()).toBeGreaterThan(120);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(surface()).toBe(120);
+});

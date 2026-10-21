@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { jobStatusText, type JobRunner } from '../services/jobRunner';
 import type { JobSummary } from '../types/fm';
+import { redactValue } from '../utils/redact';
 import { openJsonDocument } from './common';
 
 interface RegisterJobsCommandsDeps {
@@ -50,5 +51,5 @@ export function registerJobsCommands({ jobRunner }: RegisterJobsCommandsDeps): v
 
 function jobFailures(job: JobSummary): unknown[] {
   const result = job.result as { failures?: unknown[] } | undefined;
-  return Array.isArray(result?.failures) ? result.failures : [];
+  return Array.isArray(result?.failures) ? redactValue(result.failures) as unknown[] : [];
 }

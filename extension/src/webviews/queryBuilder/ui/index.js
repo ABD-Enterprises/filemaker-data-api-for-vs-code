@@ -134,12 +134,11 @@ window.addEventListener('message', (event) => {
         if (message.runId !== state.latestRunId) {
           break; // a superseded run failed; the current one is still going
         }
+        state.lastResult = undefined;
+        renderResultView();
         setRunning(false);
       }
-      setRunning(false);
       setQuerySaving(false);
-      state.lastResult = undefined;
-      renderResultView();
       setStatus(message.message || 'Unknown error.', true);
       break;
     default:
@@ -1511,10 +1510,6 @@ function setRunning(isRunning) {
 }
 
 function setStatus(message, isError = false) {
-  if (isError) {
-    state.lastResult = undefined;
-    renderResultView();
-  }
   status.textContent = message;
   status.classList.toggle('error', isError);
 }

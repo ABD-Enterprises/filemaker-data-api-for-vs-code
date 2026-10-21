@@ -93,3 +93,15 @@ describe('job outcomes', () => {
       updatedIds: ['1'], notAttemptedIds: ['3'], failures: [{ recordId: '2', code: '1708', reason: 'Authorization: Bearer ***' }], token: '***' });
   });
 });
+
+it.each(['complete', 'fail'])('never retains cancelling details after a job settles: %s', async (outcome) => {
+  const runner = new JobRunner(new InMemoryMemento() as never);
+  const handle = runner.startJob('Settled', async (context) => {
+    context.reportProgress(30, 'Cancelling; waiting for requests already sent to finish.');
+    if (outcome === 'fail') throw new Error('Cancelling; waiting for requests already sent to finish.');
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(handle.getState().status).toBe(outcome === 'fail' ? 'failed' : 'completed');
+  expect(handle.getState().details).not.toContain('Cancelling');
+  expect(runner.getRecentSummaries()[0]?.details).not.toContain('Cancelling');
+});

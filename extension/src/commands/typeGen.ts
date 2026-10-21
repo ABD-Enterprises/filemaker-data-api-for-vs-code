@@ -186,7 +186,6 @@ async function promptForLayouts(profile: ConnectionProfile, fmClient: FMClient):
 async function promptForOutputDirectory(): Promise<string | undefined> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   const defaultUri = workspaceFolder ? vscode.Uri.joinPath(workspaceFolder.uri, '.filemaker', 'generated', 'client') : undefined;
-  if (defaultUri) await vscode.workspace.fs.createDirectory(defaultUri);
   const uris = await vscode.window.showOpenDialog({
     canSelectFiles: false,
     canSelectFolders: true,

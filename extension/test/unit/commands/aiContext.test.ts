@@ -216,9 +216,9 @@ describe('FileMaker: Write AI Context', () => {
     warningChoices = [undefined];
     await run();
     expect(await readFile(join(workspace, 'AGENTS.md'), 'utf8')).toBe('# Mine\n');
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('AGENTS.md'), { modal: true }, 'Overwrite', 'Skip existing', 'Cancel');
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('AGENTS.md'), { modal: true }, 'Add to the file', 'Skip existing', 'Cancel');
 
-    warningChoices = ['Overwrite'];
+    warningChoices = ['Add to the file'];
     await run();
     const text = await readFile(join(workspace, 'AGENTS.md'), 'utf8');
     expect(text.startsWith('# Mine\n\n')).toBe(true);
@@ -359,7 +359,7 @@ describe('FileMaker: Write AI Context', () => {
     await writeFile(target, '# Mine\n');
     vi.mocked(vscode.window.showWarningMessage).mockImplementation((async () => {
       await writeFile(target, '# Mine\nedited meanwhile\n');
-      return 'Overwrite';
+      return 'Add to the file';
     }) as never);
     await run();
 

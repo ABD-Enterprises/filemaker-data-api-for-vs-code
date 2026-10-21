@@ -119,9 +119,7 @@ export class JobRunner {
       state.result = result;
       if (controller.cancelled) {
         state.status = 'cancelled';
-        if (result && typeof result === 'object' && 'attempted' in result && 'total' in result) {
-          state.details = `Cancelled after ${result.attempted} of ${result.total}`;
-        }
+        state.details = cancelledDetails(result);
       } else {
         state.status = 'completed';
         state.progress = 100;
@@ -133,11 +131,13 @@ export class JobRunner {
     } catch (error) {
       if (controller.cancelled) {
         state.status = 'cancelled';
+        state.details = cancelledDetails(undefined);
       } else {
         state.status = 'failed';
         state.details = error instanceof Error ? sanitizeLogMessage(error.message) : 'Job failed.';
       }
     } finally {
+      if (state.details?.startsWith('Cancelling')) state.details = state.status === 'cancelled' ? cancelledDetails(state.result) : state.status;
       state.finishedAt = new Date().toISOString();
       this.emit(state);
       await this.persistSummary(state);
@@ -199,10 +199,18 @@ function batchCounts(result: unknown): { successCount: number; failureCount: num
     ? counts as { successCount: number; failureCount: number } : undefined;
 }
 
+function cancelledDetails(result: unknown): string {
+  if (result && typeof result === 'object') {
+    if ('attempted' in result && 'total' in result) return `Cancelled after ${result.attempted} of ${result.total}`;
+    if ('exportedRecords' in result) return `Cancelled after exporting ${result.exportedRecords} records`;
+  }
+  return 'Cancelled';
+}
+
 export function jobStatusText(job: Pick<JobSummary, 'status' | 'details' | 'result'>): string {
   const counts = batchCounts(job.result);
   if (job.status === 'completed' && counts && counts.failureCount > 0) {
     return `completed with ${counts.failureCount} failed row${counts.failureCount === 1 ? '' : 's'}`;
   }
-  return job.status === 'cancelled' && job.details ? job.details : job.status;
+  return job.status === 'cancelled' ? cancelledDetails(job.result) : job.status;
 }

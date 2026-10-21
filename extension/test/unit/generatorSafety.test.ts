@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { writeGeneratedFiles } from '../../src/services/generatedFileWriter';
 import { TypeGenService } from '../../src/services/typeGenService';
 
 const profile = { id: 'p', name: 'Dev', database: 'DB' } as never;
@@ -56,4 +57,52 @@ describe('safe generated files', () => {
     const { root, service } = await fixture();
     await expect(service.generateTypeScriptClient(profile, [' Contacts '], join(root, 'README.md'))).rejects.toThrow(/folder|file name/i);
   });
+});
+
+it.each(['filemaker-types', 'filemaker-types/layouts'])('refuses a symlinked output ancestor %s before creating anything outside the workspace', async (folder) => {
+  const { root, service } = await fixture();
+  const outside = await mkdtemp(join(tmpdir(), 'fm-outside-')); roots.push(outside);
+  await mkdir(join(root, folder, '..'), { recursive: true });
+  await symlink(outside, join(root, folder));
+  await expect(service.generateTypesForLayout(profile, 'Contacts')).rejects.toThrow(/symlink|outside/);
+  await expect(readFile(join(outside, folder.endsWith('layouts') ? 'Contacts.ts' : 'layouts/Contacts.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+it('refuses an output file symlink without changing its target', async () => {
+  const { root, service } = await fixture();
+  const artifact = await service.generateTypesForLayout(profile, 'Contacts');
+  const outside = join(root, 'mine.ts'); await writeFile(outside, 'keep my code');
+  await rm(artifact.filePath); await symlink(outside, artifact.filePath);
+  vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Overwrite' as never);
+  await expect(service.generateTypesForLayout(profile, 'Contacts')).rejects.toThrow(/regular file/);
+  expect(await readFile(outside, 'utf8')).toBe('keep my code');
+});
+
+it('also refuses output folder symlinks that point inside the workspace', async () => {
+  const { root, service } = await fixture();
+  await mkdir(join(root, 'real')); await symlink(join(root, 'real'), join(root, 'filemaker-types'));
+  await expect(service.generateTypesForLayout(profile, 'Contacts')).rejects.toThrow(/symlink/);
+  await expect(readFile(join(root, 'real/layouts/Contacts.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+it('rechecks output folders after the collision dialog closes', async () => {
+  const { root } = await fixture();
+  const outside = await mkdtemp(join(tmpdir(), 'fm-outside-')); roots.push(outside);
+  const folder = join(root, 'output'); await mkdir(folder);
+  const target = join(folder, 'types.ts'); await writeFile(target, 'mine');
+  await writeFile(join(outside, 'types.ts'), 'mine');
+  vi.mocked(vscode.window.showWarningMessage).mockImplementationOnce((async () => {
+    await rm(folder, { recursive: true }); await symlink(outside, folder);
+    return 'Overwrite';
+  }) as never);
+  await expect(writeGeneratedFiles([{ path: target, content: 'generated' }], root)).rejects.toThrow(/symlink|outside/);
+  expect(await readFile(join(outside, 'types.ts'), 'utf8')).toBe('mine');
+});
+it('rechecks file symlinks after confirmation even when the target has identical contents', async () => {
+  const { root } = await fixture();
+  const target = join(root, 'types.ts'), outside = join(root, 'mine.ts');
+  await writeFile(target, 'mine'); await writeFile(outside, 'mine');
+  vi.mocked(vscode.window.showWarningMessage).mockImplementationOnce((async () => {
+    await rm(target); await symlink(outside, target); return 'Overwrite';
+  }) as never);
+  await expect(writeGeneratedFiles([{ path: target, content: 'generated' }], root)).rejects.toThrow(/changed during/);
+  expect(await readFile(outside, 'utf8')).toBe('mine');
 });

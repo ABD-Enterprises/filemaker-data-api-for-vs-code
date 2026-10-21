@@ -471,7 +471,7 @@ export function App(): React.JSX.Element {
           return {
             ...current,
             objects: [...current.objects, object],
-            canvas: { ...current.canvas, height: Math.max(current.canvas.height, object.y + object.height + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.pageMargin) }
+            canvas: { ...current.canvas, width: Math.max(current.canvas.width, object.x + object.width + FIELD_LAYOUT.pageMargin), height: Math.max(current.canvas.height, object.y + object.height + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.pageMargin) }
           };
         }
       });

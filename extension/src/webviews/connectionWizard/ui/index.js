@@ -28,6 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let testState = { state: 'untested' };
   let pendingConfirmedSave = false;
   let populatingForm = false;
+  let savedPasswordIdentity;
+  function passwordIdentity() {
+    const origin = (value) => { try { return new URL(value).origin; } catch { return value; } };
+    return JSON.stringify([authMode, origin(getValue('serverUrl')), authMode === 'proxy' ? origin(getValue('proxyEndpoint')) : '', authMode === 'direct' ? getValue('username') : '']);
+  }
 
   // Mode toggle
   directBtn.addEventListener('click', () => {
@@ -207,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTemplateState();
         populateForm(message.payload);
         document.getElementById('password').value = '';
+        savedPasswordIdentity = message.hasPassword ? passwordIdentity() : undefined;
         document.getElementById('password').placeholder = message.hasPassword ? '••••••• (saved)' : '';
         break;
 
@@ -452,6 +458,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onFormChanged() {
     if (populatingForm) return;
+    if (savedPasswordIdentity) {
+      document.getElementById('password').placeholder = passwordIdentity() === savedPasswordIdentity
+        ? '••••••• (saved)' : 'Enter the password again';
+    }
     vscode.postMessage({ type: 'addressChanged', payload: { authMode, serverUrl: getValue('serverUrl'), proxyEndpoint: getValue('proxyEndpoint') } });
     pendingConfirmedSave = false;
     if (testState.state === 'success' || testState.state === 'failure') {
