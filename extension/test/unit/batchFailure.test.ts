@@ -214,8 +214,9 @@ describe('batch service failure scenarios', () => {
       job
     );
 
-    // Should have exported the first page then stopped
-    expect(result.exportedRecords).toBe(100);
+    // The buffered page is discarded on cancellation, so no records were published.
+    expect(result.exportedRecords).toBe(0);
+    expect(result.cancelled).toBe(true);
     expect(job.log).toHaveBeenCalledWith('warn', 'Batch export cancelled by user.');
   });
 });

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { RecordViewerPanel } from '../../../src/webviews/recordViewer';
+import type { FileMakerRecord } from '../../../src/types/fm';
 
 const profile = { id: 'p' };
 const payload = (layout = ' Layout ') => ({ profileId: 'p', layout, recordId: '1' });
@@ -13,14 +14,14 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function viewer(client: object, getProfile = async () => profile) {
-  const postMessage = vi.fn(async () => true);
+  const postMessage = vi.fn<(message: { payload: { record: FileMakerRecord } }) => Promise<boolean>>(async () => true);
   vi.mocked(vscode.window.createWebviewPanel).mockReturnValue({
     webview: { html: '', cspSource: 'x', asWebviewUri: (uri: unknown) => uri,
       postMessage, onDidReceiveMessage: vi.fn() },
     onDidDispose: vi.fn(), reveal: vi.fn()
   } as never);
   const panels = RecordViewerPanel as unknown as { currentPanel: {
-    handleLoadRecord: (input: ReturnType<typeof payload>) => Promise<void>;
+    handleLoadRecord: (input: ReturnType<typeof payload> & { portal?: string; portalLimit?: number }) => Promise<void>;
     exportRecord: () => Promise<void>;
   } | undefined };
   panels.currentPanel = undefined;
@@ -96,4 +97,33 @@ it('ignores a stale record error and a profile lookup that completes after a new
   await slowLoad;
   expect(second.postMessage).toHaveBeenCalledTimes(1);
   expect(client.getRecord).not.toHaveBeenCalledWith(profile, 'Slow', '1');
+});
+
+it('passes exact portal names and the cumulative limit to getRecord', async () => {
+  const getRecord = vi.fn(async () => record());
+  const { panel } = viewer({ getRecord, getLayoutMetadata: vi.fn(async () => metadata) });
+  await panel.handleLoadRecord({ ...payload(), portal: ' Orders ', portalLimit: 100 });
+  expect(getRecord).toHaveBeenCalledWith(profile, ' Layout ', '1', { portal: { ' Orders ': { limit: 100, offset: 1 } } });
+});
+
+it('Load more changes only the requested portal, preserving previously loaded rows and counts', async () => {
+  const orders = Array.from({ length: 100 }, (_, i) => ({ recordId: String(i) }));
+  const invoices = Array.from({ length: 150 }, (_, i) => ({ recordId: String(i) }));
+  const info = (name: string, returnedCount: number) => ({ portalObjectName: name, foundCount: 200, returnedCount });
+  const initial = { recordId: '1', fieldData: {}, portalData: { ' Orders ': orders, Invoices: invoices }, portalDataInfo: [info(' Orders ', 100), info('Invoices', 150)] };
+  const getRecord = vi.fn().mockResolvedValueOnce(initial)
+    .mockResolvedValueOnce({ ...initial, portalData: { ' Orders ': orders.concat({ recordId: '100' }), Invoices: invoices.slice(0, 50) }, portalDataInfo: [info(' Orders ', 101), info('Invoices', 50)] })
+    .mockResolvedValueOnce({ ...initial, portalData: { Invoices: invoices.concat({ recordId: '150' }) }, portalDataInfo: [info('Invoices', 151)] });
+  const { panel, postMessage } = viewer({ getRecord, getLayoutMetadata: vi.fn(async () => metadata) });
+  await panel.handleLoadRecord(payload());
+  await panel.handleLoadRecord({ ...payload(), portal: ' Orders ', portalLimit: 150 });
+  expect(postMessage.mock.lastCall![0].payload.record.portalData!.Invoices).toEqual(invoices);
+  expect(postMessage.mock.lastCall![0].payload.record.portalDataInfo).toContainEqual(info('Invoices', 150));
+  await panel.handleLoadRecord({ ...payload(), portal: 'Invoices', portalLimit: 200 });
+  expect(postMessage.mock.lastCall![0].payload.record.portalData).toEqual({ ' Orders ': orders.concat({ recordId: '100' }), Invoices: invoices.concat({ recordId: '150' }) });
+  expect(postMessage.mock.lastCall![0].payload.record.portalDataInfo).toEqual([info(' Orders ', 101), info('Invoices', 151)]);
+  // A full refresh must still use the new server response, rather than retaining old portals.
+  getRecord.mockResolvedValueOnce({ recordId: '1', fieldData: {}, portalData: {} });
+  await panel.handleLoadRecord(payload());
+  expect(postMessage.mock.lastCall![0].payload.record.portalData).toEqual({});
 });

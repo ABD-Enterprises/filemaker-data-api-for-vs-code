@@ -303,8 +303,8 @@ describe('parseBatchUpdateInput', () => {
     const csv = 'recordId,name,age\n1,Alice,30\n2,Bob,25\n';
     const entries = parseBatchUpdateInput(csv, 'csv');
     expect(entries).toHaveLength(2);
-    // parseBatchUpdateInput coerces numeric strings to numbers
-    expect(entries[0]).toEqual({ recordId: '1', fieldData: { name: 'Alice', age: 30 } });
+    // CSV stays text until the job has fetched field result types
+    expect(entries[0]).toEqual({ recordId: '1', fieldData: { name: 'Alice', age: '30' } });
   });
 });
 
@@ -352,13 +352,13 @@ describe('batch export then import round trip', () => {
     for (const [index, entry] of entries.entries()) {
       expect(Object.keys(entry.fieldData)).not.toContain('modId');
       expect(Object.keys(entry.fieldData)).not.toContain('recordId');
-      expect(entry.fieldData).toEqual(records[index]?.fieldData);
+      expect(entry.fieldData).toEqual(Object.fromEntries(Object.entries(records[index]!.fieldData).map(([key, value]) => [key, typeof value === 'object' ? JSON.stringify(value) : String(value)])));
     }
   });
 
-  it('ignores only the exact recordId and modId meta columns (whitespace and a BOM are allowed)', () => {
+  it('ignores exact metadata columns and BOM, preserving spaces in field names', () => {
     const entries = parseBatchUpdateInput('\uFEFFrecordId, modId ,name\n7,3,Zed\n', 'csv');
-    expect(entries).toEqual([{ recordId: '7', fieldData: { name: 'Zed' } }]);
+    expect(entries).toEqual([{ recordId: '7', fieldData: { ' modId ': '3', name: 'Zed' } }]);
   });
 
   it('does not take a field named RecordID for the record id', () => {
@@ -368,13 +368,13 @@ describe('batch export then import round trip', () => {
 
   it('writes user fields named RecordID and ModId as fields when a real recordId column exists', () => {
     const entries = parseBatchUpdateInput('recordId,RecordID,ModId,Name\n7,99,5,Alice\n', 'csv');
-    expect(entries).toEqual([{ recordId: '7', fieldData: { RecordID: 99, ModId: 5, Name: 'Alice' } }]);
+    expect(entries).toEqual([{ recordId: '7', fieldData: { RecordID: '99', ModId: '5', Name: 'Alice' } }]);
   });
 
-  it('documents the lossy cases: cells that look like JSON or numbers become JSON values, empty cells are skipped', async () => {
+  it('keeps number-looking and JSON-looking cells as text; empty cells are skipped', async () => {
     const csv = await exportRecords([record('1', { code: '12', flag: 'true', blank: '', text: 'plain' })]);
     expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
-      { recordId: '1', fieldData: { code: 12, flag: true, text: 'plain' } }
+      { recordId: '1', fieldData: { code: '12', flag: 'true', text: 'plain' } }
     ]);
   });
 });

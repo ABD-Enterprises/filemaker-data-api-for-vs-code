@@ -1,4 +1,5 @@
 export interface CsvExportOptions {
+  excelCompatible?: boolean;
   columns?: string[];
   includeHeader?: boolean;
   lineEnding?: '\n' | '\r\n';
@@ -57,7 +58,7 @@ export function escapeCsvValue(value: unknown, options?: { neutralizeFormulas?: 
 }
 
 export function recordsToCsv(
-  rows: Array<Record<string, unknown>>,
+  rows: Array<Record<string, unknown> | Map<string, unknown>>,
   options?: CsvExportOptions
 ): string {
   const lineEnding = options?.lineEnding ?? '\n';
@@ -67,7 +68,7 @@ export function recordsToCsv(
     options?.columns ??
     Array.from(
       rows.reduce((set, row) => {
-        Object.keys(row).forEach((key) => set.add(key));
+        (row instanceof Map ? [...row.keys()] : Object.keys(row)).forEach((key) => set.add(key));
         return set;
       }, new Set<string>())
     );
@@ -79,10 +80,10 @@ export function recordsToCsv(
   }
 
   for (const row of rows) {
-    lines.push(columns.map((column) => escapeCsvValue(Object.hasOwn(row, column) ? row[column] : undefined, options)).join(','));
+    lines.push(columns.map((column) => escapeCsvValue(row instanceof Map ? row.get(column) : (Object.hasOwn(row, column) ? row[column] : undefined), options)).join(','));
   }
 
-  return lines.join(lineEnding);
+  return (options?.excelCompatible ? '\uFEFF' : '') + lines.join(lineEnding);
 }
 
 /** Reverses `neutralizeFormula` when reading back a file this extension exported. */
