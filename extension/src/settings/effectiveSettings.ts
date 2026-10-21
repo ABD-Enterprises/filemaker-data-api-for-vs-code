@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import * as vscode from 'vscode';
 
+import { escapeHtml } from '../utils/escapeHtml';
 import { isRoleName } from '../enterprise/roles';
 import { readAiSettings, isExternalServerEnabled } from '../ai/aiSettings';
 import type { RoleGuard } from '../enterprise/roleGuard';
@@ -237,14 +238,6 @@ export async function collectExplanations(deps: Dependencies): Promise<Collected
   notes.push('Application-scope (User-only) settings in a workspace are read from the .code-workspace file and, in a single-folder workspace, from .vscode/settings.json.');
   return { rows, notes };
 }
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 
 const show = (value: unknown): string => (value === undefined ? '' : fmt(value, 200));
 

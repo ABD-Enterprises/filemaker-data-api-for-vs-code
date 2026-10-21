@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { escapeHtml } from '../../utils/escapeHtml';
 import type { EnvironmentCompareResult, LayoutEnvironmentDiffResult } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
 import { versionFooterHtml } from '../../about/runtimeVersion';
@@ -154,13 +155,4 @@ function renderLayoutDiff(diff: LayoutEnvironmentDiffResult): string {
     <p>Environment Set: ${escapeHtml(diff.environmentSetName)} • Baseline: ${escapeHtml(diff.baselineProfileId)}</p>
     ${details}
   </section>`;
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }

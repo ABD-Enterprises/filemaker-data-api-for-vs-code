@@ -211,6 +211,7 @@ export class DiagnosticsDashboardPanel {
       return String(Math.round((value || 0) * 100)) + '%';
     }
 
+    // Runs inside the browser template, where the extension-host escapeHtml utility cannot be imported.
     function escapeHtml(value) {
       return String(value)
         .replace(/&/g, '&amp;')

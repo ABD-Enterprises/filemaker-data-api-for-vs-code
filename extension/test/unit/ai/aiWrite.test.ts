@@ -273,6 +273,18 @@ describe('fm_delete_record', () => {
 });
 
 describe('fm_run_script', () => {
+  it.each([
+    ['.', '..', 'The script name "." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.'],
+    ['..', 'Contacts', 'The script name ".." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.'],
+    ['Archive Old', '.', 'The layout name "." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.'],
+    ['Archive Old', '..', 'The layout name ".." cannot be used in a request (a web address treats it as a folder reference). Rename it in FileMaker.']
+  ])('keeps the exact dot-name refusal for script %j and layout %j', async (script, layout, message) => {
+    const h = makeHarness();
+    expect(await failure(h.service.invoke('fm_run_script', { script, layout }))).toBe(message);
+    expect(h.client.runScript).not.toHaveBeenCalled();
+    expect(h.client.listScripts).not.toHaveBeenCalled();
+  });
+
   const run = (h: Harness, extra: Record<string, unknown> = {}) =>
     h.service.invoke('fm_run_script', { layout: 'Contacts', script: 'Archive Old', ...extra }) as Promise<Record<string, unknown>>;
 
