@@ -5,7 +5,7 @@ import type { NormalizeErrorOptions, NormalizedError, NormalizedErrorKind } from
 import { getFileMakerErrorInfo } from './fileMakerCodes';
 import { describeNetworkFailure, extractNetworkCode, extractNetworkMessage, targetOfUrl } from './networkErrors';
 import { plainTextPreview } from './plainText';
-import { redactHeaders, redactValue } from './redact';
+import { redactHeaders, redactString, redactValue } from './redact';
 
 interface FileMakerMessage {
   code: string;
@@ -323,7 +323,7 @@ function mergeOptions(error: NormalizedError, options: NormalizeErrorOptions | u
     endpoint: options?.endpoint ?? error.endpoint,
     status: options?.status ?? error.status,
     safeHeaders: options?.safeHeaders ?? error.safeHeaders,
-    message: error.message || options?.fallbackMessage || 'Unexpected error.'
+    message: redactString(error.message || options?.fallbackMessage || 'Unexpected error.')
   };
 }
 

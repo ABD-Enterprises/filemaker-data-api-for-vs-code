@@ -156,61 +156,69 @@ export function registerEnterpriseCommands(deps: RegisterEnterpriseCommandsDeps)
     vscode.commands.registerCommand(
       'filemakerDataApiTools.exportEnvironmentComparisonReport',
       async (arg: unknown) => {
-        const allowed = await roleGuard.assertFeature('environmentExport', 'Export environment comparison report');
-        if (!allowed) {
-          return;
-        }
-
-        const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
-
-        let result = lastCompareResult;
-
-        if (environmentSet) {
-          const profiles = await resolveProfilesForSet(environmentSet, profileStore);
-          result = await compareService.compareEnvironmentSet(environmentSet, profiles, {
-            concurrency: settingsService.getBatchConcurrency(),
-            hashAlgorithm: settingsService.getSchemaHashAlgorithm()
-          });
-          lastCompareResult = result;
-        }
-
-        if (!result) {
-          vscode.window.showInformationMessage('Run FileMaker: Compare Environments first.');
-          return;
-        }
-
-        const format = await vscode.window.showQuickPick(
-          [
-            { label: 'JSON', value: 'json' as const },
-            { label: 'Markdown', value: 'md' as const }
-          ],
-          {
-            title: 'Export environment comparison report as'
+        try {
+          const allowed = await roleGuard.assertFeature('environmentExport', 'Export environment comparison report');
+          if (!allowed) {
+            return;
           }
-        );
 
-        if (!format) {
-          return;
+          const environmentSet = await resolveEnvironmentSet(arg, environmentSetStore);
+
+          let result = lastCompareResult;
+
+          if (environmentSet) {
+            const profiles = await resolveProfilesForSet(environmentSet, profileStore);
+            result = await compareService.compareEnvironmentSet(environmentSet, profiles, {
+              concurrency: settingsService.getBatchConcurrency(),
+              hashAlgorithm: settingsService.getSchemaHashAlgorithm()
+            });
+            lastCompareResult = result;
+          }
+
+          if (!result) {
+            vscode.window.showInformationMessage('Run FileMaker: Compare Environments first.');
+            return;
+          }
+
+          const format = await vscode.window.showQuickPick(
+            [
+              { label: 'JSON', value: 'json' as const },
+              { label: 'Markdown', value: 'md' as const }
+            ],
+            {
+              title: 'Export environment comparison report as'
+            }
+          );
+
+          if (!format) {
+            return;
+          }
+
+          const extension = format.value === 'json' ? 'json' : 'md';
+          const uri = await vscode.window.showSaveDialog({
+            title: 'Export Environment Comparison Report',
+            defaultUri: vscode.Uri.file(`filemaker-environment-compare.${extension}`),
+            filters: format.value === 'json' ? { JSON: ['json'] } : { Markdown: ['md'] }
+          });
+
+          if (!uri) {
+            return;
+          }
+
+          const content =
+            format.value === 'json'
+              ? JSON.stringify(result, null, 2)
+              : compareService.toMarkdownReport(result);
+
+          await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+          vscode.window.showInformationMessage('Exported environment comparison report.');
+        } catch (error) {
+          await showCommandError(error, {
+            fallbackMessage: 'Failed to export environment comparison report.',
+            logger,
+            logMessage: 'Failed to export environment comparison report.'
+          });
         }
-
-        const extension = format.value === 'json' ? 'json' : 'md';
-        const uri = await vscode.window.showSaveDialog({
-          title: 'Export Environment Comparison Report',
-          defaultUri: vscode.Uri.file(`filemaker-environment-compare.${extension}`),
-          filters: format.value === 'json' ? { JSON: ['json'] } : { Markdown: ['md'] }
-        });
-
-        if (!uri) {
-          return;
-        }
-
-        const content =
-          format.value === 'json'
-            ? JSON.stringify(result, null, 2)
-            : compareService.toMarkdownReport(result);
-
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
-        vscode.window.showInformationMessage('Exported environment comparison report.');
       }
     ),
 

@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as vscode from 'vscode';
 
 import { aboutFactsMarkdown } from '../about/aboutCommand';
+import { redactString } from '../utils/redact';
 
 /**
  * Build a diagnostic dump as a markdown string. Designed to be pasted into
@@ -143,7 +144,7 @@ export function registerShowDiagnosticsCommand(
       await vscode.window.showTextDocument(doc, { preview: false });
     } catch (error) {
       vscode.window.showErrorMessage(
-        `Failed to build diagnostic report: ${error instanceof Error ? error.message : String(error)}`
+        redactString(`Failed to build diagnostic report: ${error instanceof Error ? error.message : String(error)}`)
       );
     }
   });

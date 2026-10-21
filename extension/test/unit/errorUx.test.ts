@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
 
+import { FMClientError } from '../../src/services/errors';
+import { normalizeError } from '../../src/utils/normalizeError';
 import { showErrorWithDetails, toUserErrorMessage } from '../../src/utils/errorUx';
 
 describe('showErrorWithDetails', () => {
@@ -16,6 +18,43 @@ describe('showErrorWithDetails', () => {
       'Details…',
       'Copy as Bug Report'
     );
+  });
+
+  it.each([
+    { label: 'plain error with Bearer and Basic tokens',
+      error: new Error('Request failed: Bearer bearer-secret and Basic YmFzaWMtc2VjcmV0'),
+      expected: 'Request failed: Bearer *** and Basic ***', secrets: ['bearer-secret', 'YmFzaWMtc2VjcmV0'] },
+    { label: 'URL credentials and query tokens',
+      error: new Error('Request failed: https://toast-user:toast-password@example.invalid/data?access_token=query-secret&api_key=key-secret'),
+      expected: 'Request failed: https://***@example.invalid/data?access_token=***&api_key=***',
+      secrets: ['toast-user', 'toast-password', 'query-secret', 'key-secret'] },
+    { label: 'FileMaker session token path',
+      error: new Error('DELETE https://example.invalid/fmi/data/vLatest/databases/Contacts/sessions/session-secret failed'),
+      expected: 'DELETE https://example.invalid/fmi/data/vLatest/databases/Contacts/sessions/*** failed', secrets: ['session-secret'] },
+    { label: 'axios error with an Authorization header',
+      error: Object.assign(new Error('Request failed: Authorization: Bearer header-secret'), {
+        isAxiosError: true, config: { headers: { Authorization: 'Bearer header-secret' } }
+      }), expected: 'Request failed: Authorization: Bearer ***', secrets: ['header-secret'] },
+    { label: 'already normalized error',
+      error: { kind: 'unknown', message: 'Request failed: Bearer normalized-secret', isRetryable: false },
+      expected: 'Request failed: Bearer ***', secrets: ['normalized-secret'] },
+    { label: 'client error', error: new FMClientError('Request failed: Basic Y2xpZW50LXNlY3JldA=='),
+      expected: 'Request failed: Basic ***', secrets: ['Y2xpZW50LXNlY3JldA=='] },
+    { label: 'plain FileMaker message', error: new FMClientError('FileMaker API error [101]: Record is missing'),
+      expected: 'FileMaker API error [101]: Record is missing', secrets: [] },
+    { label: 'FileMaker response', error: {
+      isAxiosError: true, message: 'Request failed', response: {
+        status: 500, data: { messages: [{ code: '9999', message: 'A plain FileMaker message.' }] }
+      }
+    }, expected: 'FileMaker API error (HTTP 500) [9999]: A plain FileMaker message.', secrets: [] }
+  ])('redacts $label on all normalized message surfaces', async ({ error, expected, secrets }) => {
+    vi.mocked(vscode.window.showErrorMessage).mockResolvedValue(undefined);
+    await showErrorWithDetails(error);
+    const toast = vi.mocked(vscode.window.showErrorMessage).mock.calls[0]![0];
+    expect(toast).toBe(expected);
+    expect(normalizeError(error).message).toBe(expected);
+    expect(toUserErrorMessage(error, '')).toBe(expected);
+    for (const secret of secrets) expect(toast).not.toContain(secret);
   });
 
   it('uses fallback message when error is not an Error', async () => {
