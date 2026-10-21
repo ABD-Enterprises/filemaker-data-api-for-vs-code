@@ -118,7 +118,7 @@ describe('names are used exactly as given', () => {
 
   it('refuses a layout, script or field called . or .. like the client does', () => {
     for (const operation of [
-      { kind: 'find', layout: '..', request: { query: [{}] } },
+      { kind: 'find', layout: '..', request: { query: [{ Name: '*' }] } },
       { kind: 'runScript', layout: 'L', scriptName: '.' },
       { kind: 'uploadContainer', layout: 'L', recordId: '1', fieldName: '..' }
     ] as const) {

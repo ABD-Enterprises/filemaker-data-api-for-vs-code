@@ -898,9 +898,10 @@ export function createEngine(options = {}) {
 
   async function find(ctx, db, layout, table) {
     const body = ctx.body ?? {};
+    if (!Object.hasOwn(body, 'query')) throw err(10, 'Missing required property: query', 400);
     if (!Array.isArray(body.query) || !body.query.every(isPlainObject))
       throw err(960, 'Find query is invalid');
-    if (body.query.length === 0) throw err(400);
+    if (body.query.length === 0 || body.query.some((request) => !Object.entries(request).some(([key, value]) => key !== 'omit' && value !== '' && value !== null))) throw err(400);
     const q = readQuery(ctx.query, body);
     const offset = intParam(body.offset, 1);
     const limit = intParam(body.limit, 100);
@@ -922,15 +923,17 @@ export function createEngine(options = {}) {
       if (def.type !== 'normal') return calcValue(db, layout, def, row);
       return row.fieldData[field] ?? row.fieldData[`${field}(1)`];
     };
+    let found = runFind(table.rows, body.query, valueOf);
+    found = sortRows(found, Array.isArray(body.sort) ? body.sort : [], db, layout, table);
+    // Verified on FileMaker Server 2026-10-21: a no-match find does not run or report
+    // its attached script. Check before any script can change the found set.
+    if (found.length === 0 || offset > found.length)
+      throw err(
+        401,
+        undefined,
+        takeFault('find-no-match-500', ctx) ? 500 : state.config.noRecordsStatus
+      );
     return withScripts(db, scriptParamsFrom(body, ctx.query), ctx, async () => {
-      let found = runFind(table.rows, body.query, valueOf);
-      found = sortRows(found, Array.isArray(body.sort) ? body.sort : [], db, layout, table);
-      if (found.length === 0 || offset > found.length)
-        throw err(
-          401,
-          undefined,
-          takeFault('find-no-match-500', ctx) ? 500 : state.config.noRecordsStatus
-        );
       return {
         response: recordsResponse(
           db,

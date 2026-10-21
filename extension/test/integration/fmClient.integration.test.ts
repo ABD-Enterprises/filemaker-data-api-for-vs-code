@@ -161,7 +161,7 @@ describe('FMClient integration (mocked HTTP)', () => {
         .post(`${apiBase}/layouts/Nope/_find`)
         .reply(404, { messages: [{ code: '105', message: 'Layout is missing' }], response: {} });
 
-      await expect(client.findRecords(profile, 'Nope', { query: [{}] })).rejects.toThrow(/105|Layout is missing/);
+      await expect(client.findRecords(profile, 'Nope', { query: [{ Name: '*' }] })).rejects.toThrow(/105|Layout is missing/);
     });
   });
 
@@ -190,7 +190,7 @@ describe('FMClient integration (mocked HTTP)', () => {
       nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer fresh').times(5).reply(200, okFind);
 
       const results = await Promise.all(
-        [1, 2, 3, 4, 5].map((limit) => client.findRecords(profile, 'Contacts', { query: [{}], limit }))
+        [1, 2, 3, 4, 5].map((limit) => client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], limit }))
       );
 
       expect(results).toHaveLength(5);
@@ -224,8 +224,8 @@ describe('FMClient integration (mocked HTTP)', () => {
       nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer fresh').times(2).reply(200, okFind);
 
       await Promise.all([
-        client.findRecords(profile, 'Contacts', { query: [{}], limit: 1 }),
-        client.findRecords(profile, 'Contacts', { query: [{}], limit: 2 })
+        client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], limit: 1 }),
+        client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], limit: 2 })
       ]);
 
       expect(sessions).toHaveBeenCalledTimes(1);
@@ -246,7 +246,7 @@ describe('FMClient integration (mocked HTTP)', () => {
       nock(server).post(`${apiBase}/layouts/Contacts/_find`).matchHeader('authorization', 'Bearer old').times(3).reply(401, rejected);
 
       const settled = await Promise.allSettled(
-        [1, 2, 3].map((limit) => client.findRecords(profile, 'Contacts', { query: [{}], limit }))
+        [1, 2, 3].map((limit) => client.findRecords(profile, 'Contacts', { query: [{ Name: '*' }], limit }))
       );
 
       expect(settled.every((entry) => entry.status === 'rejected')).toBe(true);

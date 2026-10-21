@@ -119,6 +119,13 @@ describe('FMExplorerProvider', () => {
       expect(kinds).not.toContain('jobsRoot');
     });
 
+    it('shows the final cancellation count in the Jobs list', async () => {
+      const deps = createMockDeps();
+      deps.jobRunner.listJobs.mockReturnValue([{ id: 'j1', name: 'Update', status: 'cancelled', details: 'Cancelled after 2 of 4', progress: 50, startedAt: '2026-01-01' }]);
+      const children = await createProvider(deps).getChildren(new FMExplorerItem({ kind: 'jobsRoot', label: 'Jobs' }));
+      expect(children[0]?.description).toContain('Cancelled after 2 of 4');
+    });
+
     it('shows Jobs root when jobs exist', async () => {
       const deps = createMockDeps();
       deps.jobRunner.listJobs = vi.fn().mockReturnValue([

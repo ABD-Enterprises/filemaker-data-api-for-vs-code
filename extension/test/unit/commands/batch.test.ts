@@ -133,10 +133,10 @@ describe('batch commands', () => {
   it.each([join('/tmp', 'results.csv'), join('/tmp', 'results.jsonl')])('forces streaming JSONL in high-scale mode (%s)', async (path) => {
     const { roleGuard, tasks, batchService } = setup();
     roleGuard.resolvePerformanceMode.mockReturnValue('high-scale');
-    exportInputs(path, '[{}]', '');
+    exportInputs(path, '[{"Name":"*"}]', '');
     await command('batchExportFind')(arg);
     await tasks[0]!({ log: vi.fn() } as never);
-    expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, { query: [{}], sort: undefined },
+    expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, { query: [{ Name: '*' }], sort: undefined },
       { outputPath: join('/tmp', 'results.jsonl'), format: 'jsonl', excelCompatible: false, maxRecords: 250 }, expect.anything());
   });
 
@@ -149,12 +149,12 @@ describe('batch commands', () => {
 
   it('does not schedule an export when the output dialog is cancelled', async () => {
     const { jobRunner } = setup();
-    vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('[{}]');
+    vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('[{"Name":"*"}]');
     await command('batchExportFind')(arg);
     expect(jobRunner.startJob).not.toHaveBeenCalled();
   });
 
-  it.each([['broken', ''], ['[{}]', 'broken']])('rejects invalid find/sort (%s, %s) without scheduling', async (find, sort) => {
+  it.each([['broken', ''], ['[{"Name":"*"}]', 'broken']])('rejects invalid find/sort (%s, %s) without scheduling', async (find, sort) => {
     const { jobRunner } = setup();
     exportInputs(join('/tmp', 'results.jsonl'), find, sort);
     await command('batchExportFind')(arg);

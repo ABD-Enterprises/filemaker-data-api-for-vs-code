@@ -1,3 +1,4 @@
+import { jobStatusText } from '../services/jobRunner';
 import * as vscode from 'vscode';
 
 import type { EnvironmentSetStore } from '../enterprise/environmentSetStore';
@@ -321,7 +322,7 @@ export class FMExplorerProvider implements vscode.TreeDataProvider<FMExplorerIte
       kind: 'job',
       label: job.name,
       jobId: job.id,
-      description: `${job.status} • ${job.progress}%`,
+      description: `${jobStatusText(job)} • ${job.progress}%`,
       tooltip: `${job.startedAt}${job.details ? `\n${job.details}` : ''}`,
       contextValue: 'fmJob',
       iconPath: new vscode.ThemeIcon(job.status === 'failed' ? 'error' : 'history'),

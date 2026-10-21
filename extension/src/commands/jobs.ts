@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import type { JobRunner } from '../services/jobRunner';
+import { jobStatusText, type JobRunner } from '../services/jobRunner';
 import { openJsonDocument } from './common';
 
 interface RegisterJobsCommandsDeps {
@@ -23,13 +23,13 @@ export function registerJobsCommands(deps: RegisterJobsCommandsDeps): vscode.Dis
       const picked = await vscode.window.showQuickPick(
         [
           ...active.map((job) => ({
-            label: `${job.name} (${job.status})`,
+            label: `${job.name} (${jobStatusText(job)})`,
             description: `${job.progress}%`,
             detail: `Started ${job.startedAt}${job.details ? ` • ${job.details}` : ''}`,
             value: { kind: 'active' as const, id: job.id }
           })),
           ...recent.map((job) => ({
-            label: `${job.name} (${job.status})`,
+            label: `${job.name} (${jobStatusText(job)})`,
             description: `${job.progress}%`,
             detail: `Started ${job.startedAt}${job.finishedAt ? ` • Finished ${job.finishedAt}` : ''}`,
             value: { kind: 'recent' as const, id: job.id }

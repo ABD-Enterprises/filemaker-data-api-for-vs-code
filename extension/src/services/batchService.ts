@@ -256,6 +256,7 @@ export class BatchService {
     let stoppedReason: string | undefined;
     let completed = 0;
     let successCount = 0;
+    const updatedIds: string[] = [];
     const failures: BatchUpdateResult['failures'] = [];
     const adaptive = new AdaptiveConcurrency({
       initial: configuredConcurrency,
@@ -279,7 +280,7 @@ export class BatchService {
     const inFlight = new Set<Promise<void>>();
 
     const scheduleNext = (): void => {
-      while (queue.length > 0 && inFlight.size < adaptive.getLimit()) {
+      while (!job?.isCancellationRequested() && stoppedReason === undefined && queue.length > 0 && inFlight.size < adaptive.getLimit()) {
         if (!breaker.canRequest()) {
           return;
         }
@@ -289,18 +290,20 @@ export class BatchService {
           return;
         }
 
-        const updatePromise = this.updateOneWithRetry(profile, layout, next, adaptive, breaker)
+        const updatePromise = this.updateOneWithRetry(profile, layout, next, adaptive, breaker, job)
           .then(() => {
             successCount += 1;
+            updatedIds.push(next.recordId);
           })
           .catch((error) => {
             failures.push({
               recordId: next.recordId,
+              code: error instanceof FMClientError ? error.code : undefined,
               reason: error instanceof Error ? error.message : 'Unknown update failure'
             });
             if (stoppedReason === undefined && stopsTheJob(error)) {
               stoppedReason = error instanceof Error ? error.message : 'The account cannot make this change.';
-              queue.length = 0;
+              // Keep the queued ids for the partial result.
             }
           })
           .finally(() => {
@@ -318,7 +321,7 @@ export class BatchService {
     };
 
     while (queue.length > 0 || inFlight.size > 0) {
-      if (job?.isCancellationRequested()) {
+      if (job?.isCancellationRequested() || stoppedReason !== undefined) {
         break;
       }
 
@@ -335,6 +338,9 @@ export class BatchService {
       await Promise.race(inFlight);
     }
 
+    // A cancellation stops scheduling; edits already sent must finish before reporting the result.
+    await Promise.all(inFlight);
+
     if (registry) {
       registry.unregister(breakerName);
     }
@@ -346,6 +352,9 @@ export class BatchService {
       successCount,
       failureCount: failures.length,
       failures,
+      updatedIds,
+      notAttemptedIds: queue.map((entry) => entry.recordId),
+      notAttempted: queue.length,
       ...(stoppedReason !== undefined
         ? { stoppedReason, notAttempted: Math.max(0, total - completed) }
         : {})
@@ -357,13 +366,16 @@ export class BatchService {
     layout: string,
     entry: BatchUpdateEntry,
     adaptive: AdaptiveConcurrency,
-    breaker: CircuitBreaker
+    breaker: CircuitBreaker,
+    job?: JobContext
   ): Promise<void> {
     const nulError = nulTextError(entry.fieldData);
     if (nulError) throw new Error(nulError);
     let attempt = 0;
+    let lastFailure: unknown;
 
     while (attempt < 3) {
+      if (job?.isCancellationRequested()) throw lastFailure ?? new Error('Update cancelled before it was sent.');
       const startedAt = Date.now();
       try {
         await this.fmClient.editRecord(profile, layout, entry.recordId, entry.fieldData);
@@ -371,6 +383,7 @@ export class BatchService {
         breaker.recordSuccess();
         return;
       } catch (error) {
+        lastFailure = error;
         const status = getStatusFromError(error);
         const retryable = isBatchRetryable(error);
         // Only trouble with the connection or the server slows the job down or opens the
@@ -381,7 +394,7 @@ export class BatchService {
           breaker.recordFailure();
         }
 
-        if (!retryable || attempt >= 2) {
+        if (job?.isCancellationRequested() || !retryable || attempt >= 2) {
           throw error;
         }
 

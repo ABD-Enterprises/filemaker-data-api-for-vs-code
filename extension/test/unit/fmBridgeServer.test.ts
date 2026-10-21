@@ -51,6 +51,25 @@ describe('FmBridgeServer', () => {
     }
   });
 
+  it.each([[], [{}]].map((query) => ({ query })))('lists records for Find All $query without sending a find', async ({ query }) => {
+    const listRecords = vi.fn(async () => ({ data: [{ recordId: '4', fieldData: {} }] }));
+    const client = createFmClientStub({ listRecords });
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const response = await invokeBridgeRequest(server, '/fm/find', { payload: { layout: ' Contacts ', query, limit: 10, offset: 3, sort: [{ fieldName: ' Name ', sortOrder: 'ascend' }] } });
+    expect(response.status).toBe(200);
+    expect(listRecords).toHaveBeenCalledWith(profile, ' Contacts ', { limit: 10, offset: 3, sort: [{ fieldName: ' Name ', sortOrder: 'ascend' }] }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(client.findRecords).not.toHaveBeenCalled();
+  });
+
+  it('refuses a mixed valid and empty bridge find instead of listing everything', async () => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const response = await invokeBridgeRequest(server, '/fm/find', { payload: { layout: 'Contacts', query: [{ Name: 'Ada' }, {}] } });
+    expect(response.json).toMatchObject({ error: expect.stringContaining('Enter at least one field value to search') });
+    expect(client.findRecords).not.toHaveBeenCalled();
+    expect(client.listRecords).not.toHaveBeenCalled();
+  });
+
   it('handles runScript requests through FMClient', async () => {
     const server = new FmBridgeServer(
       createProfileStoreStub(),
@@ -164,7 +183,7 @@ describe('FmBridgeServer', () => {
       origin: 'http://localhost:3000',
       payload: {
         layout: 'Contacts',
-        query: [{}],
+        query: [{ Name: '*' }],
         timeoutMs: 10
       }
     });
@@ -296,6 +315,7 @@ type BridgeClient = ConstructorParameters<typeof FmBridgeServer>[1];
 
 function createFmClientStub(overrides: Partial<BridgeClient> = {}): BridgeClient {
   return {
+    listRecords: vi.fn(async () => ({ data: [] })),
     findRecords: vi.fn(async () => ({ data: [] })),
     getRecord: vi.fn(async () => ({ recordId: '1', fieldData: {} })),
     editRecord: vi.fn(async () => ({ recordId: '1', response: {}, messages: [] })),
