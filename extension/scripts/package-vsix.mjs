@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { validateVsix } from './validate-vsix.mjs';
 
 const extensionDir = path.resolve(import.meta.dirname, '..');
 const artifacts = path.resolve(extensionDir, '..', 'artifacts');
@@ -13,6 +14,8 @@ const { version } = JSON.parse(readFileSync(path.join(extensionDir, 'package.jso
 const require = createRequire(import.meta.url);
 const vscePackage = require.resolve('@vscode/vsce/package.json');
 const vsceBin = path.join(path.dirname(vscePackage), JSON.parse(readFileSync(vscePackage, 'utf8')).bin.vsce);
+
+const vsixPath = path.join(artifacts, `filemaker-data-api-tools-${version}.vsix`);
 
 mkdirSync(artifacts, { recursive: true });
 execFileSync(
@@ -27,7 +30,9 @@ execFileSync(
     '--baseImagesUrl',
     'https://raw.githubusercontent.com/SureForgeTech/filemaker-data-api-for-vs-code/main/extension',
     '--out',
-    path.join(artifacts, `filemaker-data-api-tools-${version}.vsix`)
+    vsixPath
   ],
   { cwd: extensionDir, stdio: 'inherit' }
 );
+
+await validateVsix(vsixPath);

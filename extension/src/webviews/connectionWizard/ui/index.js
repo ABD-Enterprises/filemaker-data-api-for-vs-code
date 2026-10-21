@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (guard === 'warn' && !pendingConfirmedSave) {
-      showConfirmation(currentHash);
+      showConfirmation();
       return;
     }
 
@@ -549,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return testPolicy === 'block' ? 'block' : 'warn';
   }
 
-  function showConfirmation(hash) {
+  function showConfirmation() {
     const confirmed = window.confirm(
       'You have not run a successful Test Connection on the current values. Save anyway?'
     );

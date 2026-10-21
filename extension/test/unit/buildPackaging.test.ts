@@ -1,5 +1,7 @@
 import { execFileSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { createRequire } from 'module';
+import { tmpdir } from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 
@@ -76,4 +78,129 @@ describe('THIRD_PARTY_NOTICES.txt', () => {
       })
     ).not.toThrow();
   }, 60_000);
+});
+
+// Exercise real ZIPs, not the source file list: .vscodeignore and vsce decide what ships.
+describe('VSIX contents', () => {
+  const required = ['dist/extension.js', 'dist/aiMcpShim.js', 'dist/schemaDiffWorker.js'];
+  const layout = 'dist/webviews/layoutMode/ui/index.js';
+
+  async function checkArchive(options: { missing?: string; layoutBytes?: number; map?: string } = {}): Promise<void> {
+    const require = createRequire(path.join(extensionDir, 'package.json'));
+    const { ZipFile } = createRequire(require.resolve('@vscode/vsce/package.json'))('yazl');
+    const { createWriteStream } = await import('fs');
+    const { pipeline } = await import('stream/promises');
+    const dir = mkdtempSync(path.join(tmpdir(), 'vsix-contents-'));
+    try {
+      const zip = new ZipFile();
+      for (const file of required.filter((file) => file !== options.missing)) {
+        zip.addBuffer(Buffer.from('bundle'), `extension/${file}`);
+      }
+      if (options.missing !== layout) zip.addBuffer(Buffer.alloc(options.layoutBytes ?? 205_000, 120), `extension/${layout}`);
+      if (options.map) zip.addBuffer(Buffer.from('{}'), `extension/${options.map}`);
+      zip.end();
+      const archive = path.join(dir, 'test.vsix');
+      await pipeline(zip.outputStream, createWriteStream(archive));
+      const { validateVsix } = await import(/* @vite-ignore */ script('validate-vsix.mjs'));
+      await validateVsix(archive);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('accepts all production bundles and a real Layout Mode bundle', async () => {
+    await expect(checkArchive()).resolves.toBeUndefined();
+  });
+
+  it.each(required)('rejects a VSIX missing %s', async (missing) => {
+    await expect(checkArchive({ missing })).rejects.toThrow(missing);
+  });
+
+  it('rejects a missing Layout Mode bundle', async () => {
+    await expect(checkArchive({ missing: layout })).rejects.toThrow('Layout Mode');
+  });
+
+  it.each([100, 204_800])('rejects a fallback or undersized Layout Mode bundle (%i bytes)', async (layoutBytes) => {
+    await expect(checkArchive({ layoutBytes })).rejects.toThrow('Layout Mode');
+  });
+
+  it.each(['dist/extension.js.map', 'dist/webviews/layoutMode/ui/index.js.map'])('rejects source maps anywhere: %s', async (map) => {
+    await expect(checkArchive({ map })).rejects.toThrow(map);
+  });
+
+  it('validates the archive after vsce creates it', () => {
+    const source = readFileSync(path.join(extensionDir, 'scripts/package-vsix.mjs'), 'utf8');
+    expect(source.indexOf('await validateVsix(')).toBeGreaterThan(source.indexOf('execFileSync('));
+  });
+});
+
+describe('designer build requirements', () => {
+  function buildFixture(designer: boolean, allowFallback = false, failure = 'dependencies'): void {
+    const dir = mkdtempSync(path.join(tmpdir(), 'designer-build-'));
+    try {
+      mkdirSync(path.join(dir, 'extension/scripts'), { recursive: true });
+      cpSync(path.join(extensionDir, 'scripts/build-designer-ui-if-available.mjs'), path.join(dir, 'extension/scripts/build.mjs'));
+      if (designer) {
+        mkdirSync(path.join(dir, 'designer-ui/dist'), { recursive: true });
+        writeFileSync(path.join(dir, 'designer-ui/package.json'), JSON.stringify({ scripts: {
+          build: `node -e "require('fs').mkdirSync('dist',{recursive:true});require('fs').writeFileSync('dist/index.js','partial');process.exit(1)"`
+        } }));
+        if (failure !== 'dependencies') {
+          for (const file of ['react/index.js', 'react-dom/client.js', '@fmweb/shared/package.json']) {
+            const target = path.join(dir, 'designer-ui/node_modules', file);
+            mkdirSync(path.dirname(target), { recursive: true });
+            writeFileSync(target, '{}');
+          }
+        }
+        if (failure === 'build') {
+          mkdirSync(path.join(dir, 'shared/dist'), { recursive: true });
+          writeFileSync(path.join(dir, 'shared/dist/index.js'), '');
+        }
+        writeFileSync(path.join(dir, 'designer-ui/dist/index.js'), 'stale build');
+      }
+      execFileSync(process.execPath, [path.join(dir, 'extension/scripts/build.mjs')], {
+        env: { ...process.env, ALLOW_DESIGNER_UI_FALLBACK: allowFallback ? '1' : '' },
+        stdio: 'pipe'
+      });
+      if (designer) expect(() => readFileSync(path.join(dir, 'designer-ui/dist/index.js'))).toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('fails when the designer workspace is missing', () => {
+    expect(() => buildFixture(false)).toThrow();
+  });
+
+  it('fails when designer dependencies are missing', () => {
+    expect(() => buildFixture(true)).toThrow();
+  });
+
+  it.each(['shared', 'build'])('fails when the %s build is unavailable', (failure) => {
+    expect(() => buildFixture(true, false, failure)).toThrow();
+  });
+
+  it.each(['shared', 'build'])('allows an explicit fallback and removes partial output after %s failure', (failure) => {
+    expect(() => buildFixture(true, true, failure)).not.toThrow();
+  });
+
+  it.each([false, true])('allows an explicit development fallback (workspace present: %s)', (designer) => {
+    expect(() => buildFixture(designer, true)).not.toThrow();
+  });
+});
+
+describe('browser script linting', () => {
+  it('lints browser globals, undefined names and unused arguments with the root lint command', async () => {
+    const { ESLint } = await import('eslint');
+    const eslint = new ESLint({ cwd: extensionDir });
+    const filePath = 'src/webviews/connectionWizard/ui/index.js';
+    const [valid] = await eslint.lintText('window.alert(document.title); acquireVsCodeApi();', { filePath });
+    expect(valid?.errorCount).toBe(0);
+    const [invalid] = await eslint.lintText('window.alert(unknownName); window.handler = (hash) => {};', { filePath });
+    expect(invalid?.messages.map((message) => message.ruleId)).toEqual(expect.arrayContaining(['no-undef', 'no-unused-vars']));
+    const results = await eslint.lintFiles('src/webviews/*/ui/*.js');
+    expect(results.flatMap((result) => result.messages)).toEqual([]);
+    const pkg = JSON.parse(readFileSync(path.join(extensionDir, 'package.json'), 'utf8'));
+    expect(pkg.scripts.lint).toContain('src/webviews/*/ui/*.js');
+  });
 });

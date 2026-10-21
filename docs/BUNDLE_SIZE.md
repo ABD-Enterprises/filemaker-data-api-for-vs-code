@@ -1,22 +1,22 @@
 # VSIX bundle size budget
 
-The CI step `Enforce VSIX size budget` (in `.github/workflows/ci.yml`) caps the packaged VSIX. Current budget: **5 MiB** (`VSIX_BUDGET_BYTES`).
+The CI step `Enforce VSIX size budget` (in `.github/workflows/ci.yml`) caps the packaged VSIX. Current budget: **3 MiB** (`VSIX_BUDGET_BYTES`).
 
 ## Why
 
 Marketplace download speed matters most on constrained networks (mobile tethers, corporate proxies, VPNs). The cap prevents accidental bloat: committing `node_modules`, leaving a large debug payload in the bundle, or adding a binary asset by mistake.
 
-The cap is generous. At v1.1.0 the VSIX was about 1.0 MB, so 5 MiB leaves room for legitimate growth (new features, webview assets) without tripping the gate before there is a real discussion to have.
+At v1.6.0 the VSIX is about 2.02 MB. A 3 MiB cap leaves room for growth while catching accidental additions sooner.
 
 ## Raising the cap
 
 If a legitimate need pushes the VSIX over the budget, raise `VSIX_BUDGET_BYTES` in its own pull request with a one-line reason in the commit message, for example:
 
 ```
-ci(budget): raise VSIX cap to 8 MiB
+ci(budget): raise VSIX cap to 4 MiB
 
-The layout designer webview adds about 3 MB of assets; trimming to fit
-under 5 MiB needs code splitting. Raise the cap for this release and
+The layout designer webview adds about 2 MB of assets; trimming to fit
+under 3 MiB needs code splitting. Raise the cap for this release and
 tighten it again after the split.
 ```
 
@@ -31,4 +31,4 @@ Before raising it, ask whether the size is avoidable:
 - Large vendored dependencies are candidates for esbuild `--external`.
 - Look for files `.vscodeignore` misses: `npx @vscode/vsce ls --tree` from `extension/`.
 
-`npm run package:check` runs the same packaging path locally, so the size effect of a change is visible before you push. The VSIX excludes some documentation (see `.vscodeignore`), but `extension/docs/` mostly ships, so keep documentation lean.
+`npm run package:check` runs the same packaging path locally and inspects the resulting VSIX: all three extension bundles and the Layout Mode bundle (over 200 KiB) must be present, and no source maps may ship. A missing designer workspace, missing dependencies or a failed designer build now fails the build. `ALLOW_DESIGNER_UI_FALLBACK=1` explicitly allows a development fallback; it does not bypass the VSIX content check. The 3 MiB size cap is enforced in CI. The VSIX excludes some documentation (see `.vscodeignore`), but `extension/docs/` mostly ships, so keep documentation lean.

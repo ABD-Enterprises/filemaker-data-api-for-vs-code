@@ -2046,7 +2046,7 @@
     "notices:check": "node ./scripts/generate-third-party-notices.mjs --check",
     "build": "npm run build:designer-ui && npm run clean && npm run bundle:extension && npm run bundle:schema-diff-worker && npm run bundle:ai-mcp-shim && npm run copy:webviews",
     "watch": "tsc -w -p .",
-    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"test/mock-server/**/*.mjs\" \"e2e-ui/**/*.mjs\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.ts\" \"src/webviews/*/ui/*.js\" \"test/**/*.ts\" \"test/mock-server/**/*.mjs\" \"e2e-ui/**/*.mjs\" --max-warnings=0",
     "format": "prettier --write \"**/*.{ts,js,json,md,css,html}\"",
     "format:check": "prettier --check \"**/*.{ts,js,json,md,css,html}\"",
     "docs:api": "typedoc --options typedoc.json",
