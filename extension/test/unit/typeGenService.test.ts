@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+// TypeScript 7 supplies the CLI; this alias keeps the compiler API for checking generated code.
 import * as ts from 'typescript6';
 import { describe, expect, it, vi } from 'vitest';
 

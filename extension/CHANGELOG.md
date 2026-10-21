@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Make command-context tests wait for completion, test process lookups without repeatedly starting PowerShell, and keep one real-process check with a longer timeout. Remove unused designer test tooling, align the zod version range, explain the TypeScript test alias, and add a complete command reference with a coverage check.
 - [SECURITY] Updated `follow-redirects` (a library inside `axios`) from 1.16.0 to 1.16.1, which fixes two advisories about credential headers surviving a redirect. The extension already refuses every redirect (`maxRedirects` is 0 in every request), so the fixed paths were not reachable here; the update keeps the production audit clean.
 - [INTERNAL] Add a support page with help channels and safe bug-report guidance. Remove the unused `shx` development dependency; build and package scripts already use Node. Align workspace `@types/node` declarations with the supported Node 22 runtime.
 - [FIX] Webviews and Layout Mode controls now follow light, dark and high-contrast editor themes, with readable fields, messages and schema differences.
