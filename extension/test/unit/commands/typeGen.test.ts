@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
@@ -12,12 +13,12 @@ function setup() {
   const profiles = profileStore();
   const client = { listLayouts: vi.fn().mockResolvedValue([layout, ' Other ']) };
   const service = {
-    generateTypesForLayout: vi.fn().mockResolvedValue({ filePath: '/tmp/generated/layout.ts' }),
-    generateTypesForAllLayouts: vi.fn().mockResolvedValue([{ filePath: '/tmp/generated/layout.ts' }]),
-    generateSnippetsForLayout: vi.fn().mockResolvedValue({ filePath: '/tmp/generated/layout.code-snippets' }),
-    generateTypeScriptClient: vi.fn().mockResolvedValue({ readmePath: '/tmp/client/README.md', layouts: [layout] })
+    generateTypesForLayout: vi.fn().mockResolvedValue({ filePath: join('/tmp', 'generated', 'layout.ts') }),
+    generateTypesForAllLayouts: vi.fn().mockResolvedValue([{ filePath: join('/tmp', 'generated', 'layout.ts') }]),
+    generateSnippetsForLayout: vi.fn().mockResolvedValue({ filePath: join('/tmp', 'generated', 'layout.code-snippets') }),
+    generateTypeScriptClient: vi.fn().mockResolvedValue({ readmePath: join('/tmp', 'client', 'README.md'), layouts: [layout] })
   };
-  const settings = { getTypegenOutputDir: vi.fn().mockReturnValue('.filemaker/types') };
+  const settings = { getTypegenOutputDir: vi.fn().mockReturnValue(join('.filemaker', 'types')) };
   const log = logger();
   registerTypeGenCommands({ profileStore: profiles as never, fmClient: client as never, typeGenService: service as never,
     settingsService: settings as never, logger: log as never });
@@ -58,11 +59,11 @@ describe('type generation commands', () => {
   it.each(['generateTypesForLayout', 'generateSnippetsForLayout'] as const)('%s passes the exact supplied layout and opens the generated file', async (name) => {
     const { service } = setup();
     await command(name)(arg);
-    const path = name === 'generateTypesForLayout' ? '/tmp/generated/layout.ts' : '/tmp/generated/layout.code-snippets';
+    const path = name === 'generateTypesForLayout' ? join('/tmp', 'generated', 'layout.ts') : join('/tmp', 'generated', 'layout.code-snippets');
     expect(service[name]).toHaveBeenCalledWith(profile, layout);
     expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ fsPath: path }));
     expect(vscode.window.showTextDocument).toHaveBeenCalledWith({}, { preview: false });
-    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: '/tmp/generated' }));
+    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp', 'generated') }));
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(name === 'generateTypesForLayout' ? `Generated types for ${layout}.` : `Generated snippets for ${layout}.`);
   });
 
@@ -92,24 +93,24 @@ describe('type generation commands', () => {
   it.each([1, 2])('generates a client for %s exact selected layouts and reports the count', async (count) => {
     const { service, client } = setup();
     const layouts = [layout, ' Other '].slice(0, count);
-    service.generateTypeScriptClient.mockResolvedValue({ readmePath: '/tmp/client/README.md', layouts });
+    service.generateTypeScriptClient.mockResolvedValue({ readmePath: join('/tmp', 'client', 'README.md'), layouts });
     vi.mocked(vscode.window.showQuickPick).mockResolvedValue(layouts.map((label) => ({ label })) as never);
-    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file('/tmp/client')]);
+    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file(join('/tmp', 'client'))]);
     await command('generateTypeScriptClient')({ profileId: profile.id });
     expect(client.listLayouts).toHaveBeenCalledWith(profile);
     expect(vscode.window.showQuickPick).toHaveBeenCalledWith([{ label: layout }, { label: ' Other ' }], expect.objectContaining({ canPickMany: true }));
-    expect(service.generateTypeScriptClient).toHaveBeenCalledWith(profile, layouts, '/tmp/client');
-    expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ fsPath: '/tmp/client/README.md' }));
+    expect(service.generateTypeScriptClient).toHaveBeenCalledWith(profile, layouts, join('/tmp', 'client'));
+    expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp', 'client', 'README.md') }));
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(`Generated TypeScript client for ${count} layout${count === 1 ? '' : 's'}.`);
   });
 
   it('generates a client for a supplied layout without a layout picker', async () => {
     const { service, client } = setup();
-    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file('/tmp/client')]);
+    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file(join('/tmp', 'client'))]);
     await command('generateTypeScriptClient')(arg);
     expect(client.listLayouts).not.toHaveBeenCalled();
     expect(vscode.window.showQuickPick).not.toHaveBeenCalled();
-    expect(service.generateTypeScriptClient).toHaveBeenCalledWith(profile, [layout], '/tmp/client');
+    expect(service.generateTypeScriptClient).toHaveBeenCalledWith(profile, [layout], join('/tmp', 'client'));
   });
 
   it.each(['cancel', 'empty', 'folder'])('does not generate a client after %s selection', async (reason) => {
@@ -124,7 +125,7 @@ describe('type generation commands', () => {
   it.each(generators)('%s reports service failures safely and does not open output', async (name) => {
     const { service, log } = setup();
     service[name].mockRejectedValue(serviceError());
-    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file('/tmp/client')]);
+    vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file(join('/tmp', 'client'))]);
     await expect(command(name)(arg)).resolves.toBeUndefined();
     expectSafeError();
     expect(log.error).toHaveBeenCalledOnce();
@@ -152,7 +153,7 @@ describe('type generation commands', () => {
   it('creates and reveals the configured generated types folder', async () => {
     setup();
     await command('openGeneratedTypesFolder')();
-    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: '/tmp/workspace/.filemaker/types' }));
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('revealFileInOS', expect.objectContaining({ fsPath: '/tmp/workspace/.filemaker/types' }));
+    expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(expect.objectContaining({ fsPath: join('/tmp', 'workspace', '.filemaker', 'types') }));
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('revealFileInOS', expect.objectContaining({ fsPath: join('/tmp', 'workspace', '.filemaker', 'types') }));
   });
 });

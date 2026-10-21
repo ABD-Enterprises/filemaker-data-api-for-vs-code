@@ -1,9 +1,12 @@
+import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
 import { registerSavedQueriesCommands } from '../../../src/commands/savedQueries';
+import { SavedQueriesStore } from '../../../src/services/savedQueriesStore';
 import type { SavedQuery } from '../../../src/types/fm';
 import { QueryBuilderPanel } from '../../../src/webviews/queryBuilder';
+import { InMemoryMemento } from '../mocks';
 import { command, expectSafeError, layout, logger, profile, profileStore, resetCommandMocks, serviceError } from '../../helpers/commandHarness';
 
 vi.mock('../../../src/webviews/queryBuilder', () => ({
@@ -197,7 +200,7 @@ describe('saved query commands', () => {
 
   it('exports one query with its exact stored name and request', async () => {
     setup();
-    const uri = vscode.Uri.file('/tmp/query.json');
+    const uri = vscode.Uri.file(join('/tmp', 'query.json'));
     vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(uri);
     await manage('export');
     const [writtenUri, bytes] = vi.mocked(vscode.workspace.fs.writeFile).mock.calls[0]!;
@@ -215,7 +218,7 @@ describe('saved query commands', () => {
 
   it('exports all saved queries as JSON', async () => {
     const { store } = setup();
-    const uri = vscode.Uri.file('/tmp/all.json');
+    const uri = vscode.Uri.file(join('/tmp', 'all.json'));
     vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(uri);
     await command('exportSavedQueries')();
     expect(store.exportSavedQueries).toHaveBeenCalledOnce();
@@ -227,7 +230,7 @@ describe('saved query commands', () => {
 
   it('imports the selected bytes and reports every count', async () => {
     const { store, refreshExplorer } = setup();
-    const uri = vscode.Uri.file('/tmp/import.json');
+    const uri = vscode.Uri.file(join('/tmp', 'import.json'));
     vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([uri]);
     vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(' exact file text '));
     await command('importSavedQueries')();
@@ -245,15 +248,22 @@ describe('saved query commands', () => {
     expect(refreshExplorer).not.toHaveBeenCalled();
   });
 
-  // These desired behaviors fail in the current handlers. Keep them visible without
-  // changing production behavior in this coverage-only task; a fix must remove .fails.
-  it.fails('known gap: preserves the exact query name when editing', async () => {
+  it('trims saved-query labels on create, save and edit through the store', async () => {
     const { store } = setup();
+    const persistedStore = new SavedQueriesStore(new InMemoryMemento() as never, new InMemoryMemento() as never);
+    expect(persistedStore.createSavedQuery(query).name).toBe(query.name.trim());
+    expect((await persistedStore.saveSavedQuery(query)).name).toBe(query.name.trim());
+    store.saveSavedQuery.mockImplementation((edited: SavedQuery) => persistedStore.saveSavedQuery(edited));
     vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(query.name).mockResolvedValueOnce('[{}]').mockResolvedValueOnce('');
     await manage('edit');
-    expect(store.saveSavedQuery).toHaveBeenCalledWith(expect.objectContaining({ name: query.name }));
+    expect(store.saveSavedQuery).toHaveBeenCalledOnce();
+    expect(await persistedStore.getSavedQuery(query.id)).toEqual(expect.objectContaining({
+      name: query.name.trim(), layout, findJson: [{}]
+    }));
   });
 
+  // These desired behaviors fail in the current handlers. Keep them visible without
+  // changing production behavior in this coverage-only task; a fix must remove .fails.
   it.fails('known gap: Manage Delete requires modal confirmation before removing a query', async () => {
     const { store } = setup();
     await manage('delete');

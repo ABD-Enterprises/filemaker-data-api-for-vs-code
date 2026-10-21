@@ -34,7 +34,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
-- Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in name handling, confirmations and error handling.
+- Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in confirmations and error handling.
 
 - Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
 - Refresh non-certificate failure-mode documentation against current code, check its file references, and clarify the upgrade guide’s AI switch behavior. Keep webview asset tests out of the build folder, and test Record Viewer failures, stale loads and its older fallback layout.

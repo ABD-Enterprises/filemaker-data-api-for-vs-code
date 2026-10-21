@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
@@ -184,7 +185,7 @@ describe('enterprise commands', () => {
 
   it.each(['json', 'md'])('exports a fresh comparison as %s', async (format) => {
     const { service } = await setup();
-    const uri = vscode.Uri.file(`/tmp/report.${format}`);
+    const uri = vscode.Uri.file(join('/tmp', `report.${format}`));
     vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ value: format } as never);
     vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(uri);
     await command('exportEnvironmentComparisonReport')(arg);
@@ -201,7 +202,7 @@ describe('enterprise commands', () => {
     await command('compareEnvironments')(arg);
     store.listEnvironmentSets.mockResolvedValue([]);
     vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ value: 'json' } as never);
-    const uri = vscode.Uri.file('/tmp/cached.json');
+    const uri = vscode.Uri.file(join('/tmp', 'cached.json'));
     vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(uri);
     await command('exportEnvironmentComparisonReport')();
     expect(service.compareEnvironmentSet).toHaveBeenCalledOnce();

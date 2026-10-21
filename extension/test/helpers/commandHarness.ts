@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { expect, vi } from 'vitest';
 import * as vscode from 'vscode';
 
@@ -38,7 +39,7 @@ export function resetCommandMocks(): void {
   vi.mocked(vscode.window.withProgress).mockImplementation(((_options: unknown, task: () => unknown) => task()) as never);
   const workspace = vscode.workspace as unknown as { isTrusted: boolean; workspaceFolders: unknown };
   workspace.isTrusted = true;
-  workspace.workspaceFolders = [{ uri: vscode.Uri.file('/tmp/workspace') }];
+  workspace.workspaceFolders = [{ uri: vscode.Uri.file(join('/tmp', 'workspace')) }];
 }
 
 export function command(name: string): (...args: unknown[]) => unknown {

@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 
@@ -28,12 +29,12 @@ function setup() {
   return { profiles, client, batchService, jobRunner, roleGuard, settings, log, tasks };
 }
 
-function exportInputs(path = '/tmp/results.csv', find = '[{" Field ":"==value"}]', sort = '[{"fieldName":" Field ","sortOrder":"ascend"}]') {
+function exportInputs(path = join('/tmp', 'results.csv'), find = '[{" Field ":"==value"}]', sort = '[{"fieldName":" Field ","sortOrder":"ascend"}]') {
   vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce(find).mockResolvedValueOnce(sort);
   vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(vscode.Uri.file(path));
 }
 
-function updateInputs(dryRun = true, path = '/tmp/input.json') {
+function updateInputs(dryRun = true, path = join('/tmp', 'input.json')) {
   vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file(path)]);
   vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(path.endsWith('.CSV') ? 'recordId, Field \n42, value ' : JSON.stringify(entries)));
   vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ value: dryRun } as never);
@@ -93,19 +94,19 @@ describe('batch commands', () => {
     await expect(tasks[0]!(context as never)).resolves.toEqual({ exportedRecords: 2, truncated: false });
     expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout,
       { query: [{ ' Field ': '==value' }], sort: [{ fieldName: ' Field ', sortOrder: 'ascend' }] },
-      { outputPath: '/tmp/results.csv', format: 'csv', maxRecords: 250 }, context);
+      { outputPath: join('/tmp', 'results.csv'), format: 'csv', maxRecords: 250 }, context);
     expect(context.log).toHaveBeenCalledWith('info', 'Finished export. Records=2, truncated=false');
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Started job 12345678 for batch export.');
   });
 
-  it.each(['/tmp/results.csv', '/tmp/results.jsonl'])('forces streaming JSONL in high-scale mode (%s)', async (path) => {
+  it.each([join('/tmp', 'results.csv'), join('/tmp', 'results.jsonl')])('forces streaming JSONL in high-scale mode (%s)', async (path) => {
     const { roleGuard, tasks, batchService } = setup();
     roleGuard.resolvePerformanceMode.mockReturnValue('high-scale');
     exportInputs(path, '[{}]', '');
     await command('batchExportFind')(arg);
     await tasks[0]!({ log: vi.fn() } as never);
     expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, { query: [{}], sort: undefined },
-      { outputPath: '/tmp/results.jsonl', format: 'jsonl', maxRecords: 250 }, expect.anything());
+      { outputPath: join('/tmp', 'results.jsonl'), format: 'jsonl', maxRecords: 250 }, expect.anything());
   });
 
   it('does not schedule an export when find input is cancelled', async () => {
@@ -124,13 +125,13 @@ describe('batch commands', () => {
 
   it.each([['broken', ''], ['[{}]', 'broken']])('rejects invalid find/sort (%s, %s) without scheduling', async (find, sort) => {
     const { jobRunner } = setup();
-    exportInputs('/tmp/results.jsonl', find, sort);
+    exportInputs(join('/tmp', 'results.jsonl'), find, sort);
     await command('batchExportFind')(arg);
     expect(vscode.window.showErrorMessage).toHaveBeenCalledOnce();
     expect(jobRunner.startJob).not.toHaveBeenCalled();
   });
 
-  it.each(['/tmp/input.json', '/tmp/input.CSV'])('schedules a dry-run with exact field names and opens a preview (%s)', async (path) => {
+  it.each([join('/tmp', 'input.json'), join('/tmp', 'input.CSV')])('schedules a dry-run with exact field names and opens a preview (%s)', async (path) => {
     const { tasks, batchService, jobRunner } = setup();
     updateInputs(true, path);
     await command('batchUpdateFromFile')(arg);
