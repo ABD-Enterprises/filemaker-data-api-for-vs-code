@@ -29,13 +29,11 @@ test('CI checks the mock contract and enforces a 3 MiB VSIX budget', () => {
   assert.equal(steps.find((step) => step.name === 'Enforce VSIX size budget').env.VSIX_BUDGET_BYTES, '3145728');
 });
 
-test('runner routing uses variables and preserves check names', () => {
+test('runner routing keeps check names; cross-platform uses hosted runners because the repository is public', () => {
   assert.equal(ci.jobs['build-test']['runs-on'], '${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}');
   assert.equal(ci.jobs['cross-platform'].name, 'cross-platform (${{ matrix.os }})');
-  assert.equal(ci.jobs['cross-platform']['runs-on'], '${{ fromJSON(matrix.labels) }}');
-  for (const entry of ci.jobs['cross-platform'].strategy.matrix.include) {
-    assert.match(entry.labels, /^\$\{\{ vars\.(WINDOWS|LINUX)_RUNNER_LABELS \}\}$/);
-  }
+  assert.equal(ci.jobs['cross-platform']['runs-on'], '${{ matrix.os }}');
+  assert.deepEqual(ci.jobs['cross-platform'].strategy.matrix.os, ['windows-latest', 'ubuntu-latest']);
 });
 
 test('both workflows use the trusted composite GitHub CLI action', () => {
