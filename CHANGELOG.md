@@ -34,6 +34,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
 
 - Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
