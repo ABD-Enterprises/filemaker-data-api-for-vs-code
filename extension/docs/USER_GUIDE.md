@@ -30,6 +30,89 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 22. [Security behavior you will notice](#security-behavior-you-will-notice)
 23. [Troubleshooting](#troubleshooting)
 24. [FAQ](#faq)
+25. [Command reference](#command-reference)
+
+---
+
+## Command reference
+
+The table lists every extension command. Titles have the **FileMaker:** prefix in VS Code. “Shown” describes palette visibility; “needs” describes additional requirements when you run the command. A profile means a saved connection profile. Server operations also need access to the server and the relevant FileMaker privileges. Feature settings, workspace trust, offline mode and enterprise policy still apply as described in the sections below.
+
+| Title | What it does | When it is available |
+| --- | --- | --- |
+| Open Getting Started Walkthrough | Opens the guided setup steps in VS Code. | Always shown. |
+| Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
+| Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
+| Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
+| About / Show Version | Shows installed extension, build and editor details. | Always shown. |
+| Add Connection Profile | Opens the connection wizard to save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
+| Edit Connection Profile | Opens a saved profile in the connection wizard. | Shown with a profile; needs an unlocked profile and write operations allowed. |
+| Remove Connection Profile | Removes a profile, its saved queries and secrets after confirmation. | Shown with a profile; needs an unlocked profile and write operations allowed. |
+| Connect | Signs in, selects the active profile and offers a layout for inspection. | Shown with a profile. |
+| Disconnect | Ends a profile's session and clears it as active if selected. | Shown with a profile. |
+| Show Connection Menu | Offers connection actions from the status bar menu. | Always shown; actions depend on connection state. |
+| List Layouts | Opens a JSON list of the profile's layouts. | Shown with a profile. |
+| Run Find (JSON) | Prompts for find, sort and paging options and opens the result as JSON. | Shown with a profile; choose a layout. |
+| Get Record by ID | Reads one record and opens it as JSON. | Shown with a profile; choose a layout and record ID. |
+| Open Record Viewer | Opens a record or browses records in a layout. | Shown with a profile; choose a layout. |
+| Open Query Builder | Opens the visual find form and results table. | Shown with a profile. |
+| Open Layout Metadata | Opens layout metadata, field count and cache status as JSON. | Shown with a profile; needs metadata support for the chosen layout. |
+| Select Layout for Inspector | Selects a layout and focuses the Layout Inspector. | Shown with a profile. |
+| Refresh Layout Inspector | Reloads the currently inspected layout. | Shown with a profile; select a layout in the inspector first. |
+| Refresh Schema Cache | Clears schema and client layout caches and refreshes Connections. | Shown with a profile. |
+| Open Script Runner | Opens a panel to select and run a script, with optional record context. | Shown with a profile; needs script running allowed by trust, offline mode and policy. |
+| Copy Request as Code… | Copies a chosen request as curl, fetch, HTTP, Postman or TypeScript. | Shown with a profile; prompts for request details and format. |
+| Save Current Query | Asks the open Query Builder to save its current query. | Shown with a profile; needs Query Builder open. |
+| Run Saved Query | Runs a saved find and opens its result as JSON. | Shown with a profile; needs a saved query whose profile still exists. |
+| Open Saved Query | Loads a saved query into Query Builder. | Shown with a profile; needs a saved query. |
+| Manage Saved Queries | Offers run, open, edit, delete and export actions for a saved query. | Always shown; needs a saved query. |
+| Export Saved Queries (JSON) | Saves the saved-query collection to a JSON file. | Shown with a profile. |
+| Import Saved Queries (JSON) | Imports saved queries from a chosen JSON file. | Always shown. |
+| Delete Saved Query | Removes a selected saved query after confirmation. | Shown with a profile; needs a saved query. |
+| Show Request History | Lists recent requests and opens a selected entry's details as JSON. | Shown in power-user mode; needs recorded requests. |
+| Refresh Connections | Refreshes the FileMaker Connections tree. | Connections toolbar action; hidden from the Command Palette. |
+| Capture Schema Snapshot | Saves the chosen layout's current metadata as a schema snapshot. | Shown with a profile; needs layout metadata support. |
+| Diff Schema Snapshots | Compares two saved snapshots for a layout. | Shown when snapshots exist; needs two snapshots for the chosen profile and layout. |
+| Diff Against Latest Snapshot | Compares current layout fields with its latest saved snapshot. | Shown when snapshots exist; needs a snapshot and current layout metadata. |
+| Open Schema Snapshot JSON | Opens a saved schema snapshot as JSON. | Shown when snapshots exist. |
+| Write AI Context | Writes selected layout schemas and script names to an AI context Markdown file. | Shown with a profile; writing inside the workspace needs trust. |
+| Generate Types for Layout | Writes and opens TypeScript types for one layout. | Shown with a profile; needs workspace trust and a layout. |
+| Generate Types for All Layouts | Writes TypeScript types for every layout in the profile. | Shown with a profile; needs workspace trust. |
+| Generate Snippets for Layout | Writes and opens editor snippets for a layout. | Shown with a profile; needs workspace trust and a layout. |
+| Generate TypeScript Client | Generates a typed client for selected layouts in a chosen folder. | Shown with a profile; needs workspace trust. |
+| Open Generated Types Folder | Creates the configured types folder if needed and reveals it in the file manager. | Always shown; needs a trusted workspace folder. |
+| Open Record Editor | Opens the editor for an existing record. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
+| Edit Record by ID | Prompts for a record ID and opens the record editor. | Shown with a profile; needs record editing enabled and allowed and a layout. |
+| Create Record | Opens the editor in create mode. | Shown with a profile; needs record editing enabled and allowed and a layout. |
+| Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
+| Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
+| Batch Export (Find) | Exports matching records to CSV or JSONL as a background job. | Shown with a profile; needs batch operations enabled and workspace trust. |
+| Batch Update from CSV/JSON | Previews or applies record updates from a chosen CSV or JSON file. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
+| Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON. | Shown in power-user mode; needs an active or recent job. |
+| Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
+| Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
+| Diff Layout Across Environments | Shows field differences for one layout across an environment set. | Shown in enterprise mode; needs a set with at least two existing profiles. |
+| Export Environment Comparison Report | Saves an environment comparison as JSON or Markdown. | Shown in enterprise mode; needs an environment set or previous comparison and environment export allowed by policy. |
+| Open Environment Set JSON | Opens a selected environment set's definition as JSON. | Shown in enterprise mode; needs an environment set. |
+| Open Diagnostics Dashboard | Opens request metrics and recent request history in a dashboard. | Shown in power-user mode. |
+| Show Circuit Breaker Status | Opens a Markdown report of connection circuit breakers. | Shown in power-user mode. |
+| Reload Plugins | Reloads configured workspace plugins. | Shown in power-user mode; loading needs trust and plugin installation allowed by policy. |
+| List Active Plugins | Lists loaded plugins and opens a selected plugin's details as JSON. | Shown in power-user mode; needs a loaded plugin. |
+| Toggle Offline Mode | Toggles your offline setting and reports the effective mode. | Always shown; workspace or policy settings can keep offline mode on. |
+| Refresh Offline Metadata Cache | Reads layouts and metadata into the offline cache. | Always shown; needs a profile and workspace trust. |
+| Initialize FM Web Project | Creates the .fmweb project structure and configuration. | Shown with a profile; needs a trusted workspace folder. |
+| Sync FM Web Project Metadata | Saves layouts, scripts and fields for the selected project profile. | Shown with an initialized FM Web project; needs a profile and trust. |
+| Select Active Profile | Selects the active profile and, in a trusted folder, saves it to the FM Web project (creating the project if needed). | Shown with a profile. |
+| Open FM Web Layout Mode | Opens the visual editor for saved FM Web layouts. | Shown with an initialized FM Web project; needs trust. |
+| Generate FM Web Next.js App | Generates or updates the local preview app template. | Shown with an initialized project and installed preview template; needs trust. |
+| Generate FM Web Layout Page | Writes the runtime layout JSON artifact for a saved layout. | Shown with an initialized project; needs trust and a saved layout definition. |
+| Start FM Web Preview Server | Starts the local bridge and launches the preview app in a terminal. | Shown with an initialized project and installed preview template; needs trust. |
+| Set AI Access for Connection | Chooses no AI access, read access or write access for a profile. | Shown with a profile; needs an unlocked profile. |
+| Switch AI Tools Off or On | Stops AI tools immediately or restores them after confirmation. | Shown while AI tools are active; also available from the AI status bar. |
+| Show AI Activity | Opens the AI audit log. | Shown while AI tools are active. |
+| Start New AI Session | Resets AI quotas, write counters and layout approvals after confirmation. | Shown while AI tools are active. |
+| Start/Stop AI Server for External Tools | Starts or stops this window's local MCP server and remembers that choice. | Shown with a profile; starting needs confirmation, a local (non-remote) window, extension storage and a verifiable process identity. AI tool permissions still govern requests. |
+| Copy MCP Config for Claude Code / Cursor | Copies MCP client configuration using the installed shim. | Shown with a profile; needs extension storage. The server must run before a client can connect. |
 
 ---
 
