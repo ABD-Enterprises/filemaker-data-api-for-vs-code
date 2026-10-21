@@ -12,6 +12,7 @@ const manifest = JSON.parse(readFileSync(path.join(extensionDir, 'package.json')
     untrustedWorkspaces: { description: string; restrictedConfigurations: string[] };
   };
   contributes: {
+    commands: Array<{ title: string }>;
     configuration: Array<{ properties: Record<string, { enum?: unknown[]; enumDescriptions?: unknown[]; scope?: string }> }>;
   };
 };
@@ -21,6 +22,19 @@ const settings = Object.assign({}, ...manifest.contributes.configuration.map((se
 >;
 
 describe('marketplace manifest', () => {
+  it('documents every contributed command in the User Guide command reference', () => {
+    const guide = readFileSync(path.join(extensionDir, 'docs/USER_GUIDE.md'), 'utf8');
+    const reference = guide.split(/^## Command reference\r?\n/m)[1]?.split(/^## /m)[0] ?? '';
+    const rows = reference.split(/\r?\n/).filter((line) => line.startsWith('| '))
+      .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()));
+    for (const { title } of manifest.contributes.commands) {
+      const row = rows.find(([command]) => command === title);
+      expect(row, `Missing command reference row: ${title}`).toBeDefined();
+      expect(row?.[1], `Missing description: ${title}`).toBeTruthy();
+      expect(row?.[2], `Missing availability: ${title}`).toBeTruthy();
+    }
+  });
+
   it('links to URLs that resolve (no ?ref= query on the home page)', () => {
     expect(manifest.homepage).toBe('https://abdenterprises.com');
     expect(manifest.author.url).toBe('https://abdenterprises.com');
