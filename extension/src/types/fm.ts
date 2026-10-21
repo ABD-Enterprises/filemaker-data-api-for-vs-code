@@ -13,8 +13,6 @@ export interface ConnectionProfile {
   id: string;
   name: string;
   serverUrl: string;
-  /** An unconfirmed address from a workspace template must never be probed in Restricted Mode. */
-  serverUrlSource?: 'workspace-template';
   database: string;
   authMode: AuthMode;
   username?: string;
@@ -57,6 +55,12 @@ export interface FileMakerRecord {
 }
 
 export interface FindRecordsRequest {
+  script?: string;
+  'script.param'?: string;
+  'script.prerequest'?: string;
+  'script.prerequest.param'?: string;
+  'script.presort'?: string;
+  'script.presort.param'?: string;
   query: Array<Record<string, unknown>>;
   sort?: Array<Record<string, unknown>>;
   limit?: number;

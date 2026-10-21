@@ -2,8 +2,7 @@ import * as vscode from 'vscode';
 
 import { registerConnectionDiagnosticCommands } from './diagnoseConnection';
 
-import { certificateTargetUrl, reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
-import { hostReplacesAgentFor } from '../services/tlsAgent';
+import { reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
 import { FMClientError } from '../services/errors';
 
 import type { RoleGuard } from '../enterprise/roleGuard';
@@ -15,7 +14,7 @@ import type { SecretStore } from '../services/secretStore';
 import type { FindRecordsRequest } from '../types/fm';
 import {
   parseFindJson,
-  parseOptionalNonNegativeInteger,
+  parseOptionalPositiveInteger,
   parseSortJson,
   validateRecordId
 } from '../utils/jsonValidate';
@@ -249,16 +248,6 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
       await profileStore.upsertProfile(withPinnedCertificate(profile, decision));
       fmClient.clearAuthPause(profile.id);
       refreshExplorer();
-      if (hostReplacesAgentFor(certificateTargetUrl(profile))) {
-        const open = await vscode.window.showWarningMessage(
-          `Certificate trusted for "${profile.name}", but it cannot take effect yet: VS Code's "http.proxySupport" setting is "override" (its default), which replaces this extension's own connection. Set it to "fallback", then connect.`,
-          'Open Settings'
-        );
-        if (open === 'Open Settings') {
-          await vscode.commands.executeCommand('workbench.action.openSettings', 'http.proxySupport');
-        }
-        return;
-      }
       const connect = await vscode.window.showInformationMessage(
         `Certificate trusted for "${profile.name}". Connect now?`,
         'Connect'
@@ -391,8 +380,8 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
         const request: FindRecordsRequest = {
           query: findValidation.value,
           sort: sortValidationValue,
-          limit: parseOptionalNonNegativeInteger(limitInput, 'Limit'),
-          offset: parseOptionalNonNegativeInteger(offsetInput, 'Offset')
+          limit: parseOptionalPositiveInteger(limitInput, 'Limit'),
+          offset: parseOptionalPositiveInteger(offsetInput, 'Offset')
         };
 
         const result = await fmClient.findRecords(profile, layout, request);
@@ -498,9 +487,9 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
 
 function validateOptionalInteger(value: string, label: string): string | undefined {
   try {
-    parseOptionalNonNegativeInteger(value, label);
+    parseOptionalPositiveInteger(value, label);
     return undefined;
   } catch (error) {
-    return error instanceof Error ? error.message : `${label} must be a non-negative integer.`;
+    return error instanceof Error ? error.message : `${label} must be a positive integer.`;
   }
 }

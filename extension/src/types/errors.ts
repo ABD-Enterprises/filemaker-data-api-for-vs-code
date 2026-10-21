@@ -47,6 +47,10 @@ export interface NormalizedError {
 }
 
 export interface NormalizeErrorOptions {
+  /** Logical operation recorded by the client, independent of the transport method. */
+  operation?: string;
+  requestData?: unknown;
+  requestParams?: unknown;
   fallbackMessage?: string;
   requestId?: string;
   endpoint?: string;

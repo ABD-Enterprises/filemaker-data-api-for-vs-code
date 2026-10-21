@@ -102,8 +102,8 @@ export function sanitizeToIdentifier(rawName: string): string {
 }
 
 export function createNameMap(rawNames: string[]): NameMapResult {
-  const rawToFriendly: Record<string, string> = {};
-  const friendlyToRaw: Record<string, string> = {};
+  const rawToFriendly: Record<string, string> = Object.create(null) as Record<string, string>;
+  const friendlyToRaw: Record<string, string> = Object.create(null) as Record<string, string>;
   const mappings: NameMapping[] = [];
   const usedFriendly = new Set<string>();
 

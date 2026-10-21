@@ -1,12 +1,13 @@
 import { X509Certificate } from 'crypto';
 import { readFileSync, statSync } from 'fs';
-import { Agent, type AgentOptions } from 'https';
+import http, { type ClientRequest, type IncomingMessage, type RequestOptions } from 'http';
+import https, { Agent, type AgentOptions } from 'https';
 import * as tls from 'tls';
 
 import shouldBypassProxy from 'axios/unsafe/helpers/shouldBypassProxy.js';
 
 import type { ConnectionProfile } from '../types/fm';
-import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE, isTrustableCertificateCode } from '../utils/networkErrors';
+import { CERT_PIN_EXPIRED_CODE, CERT_PIN_MISMATCH_CODE, PIN_THROUGH_PROXY_MESSAGE, isTrustableCertificateCode } from '../utils/networkErrors';
 import { FMClientError } from './errors';
 
 type TlsProfileOptions = Pick<
@@ -253,17 +254,7 @@ export class PinnedCertificateAgent extends Agent {
   }
 }
 
-/**
- * Whether the host replaces the agent this module builds with its own (VS Code's `http.proxySupport`
- * setting on `"override"`, its default). Under it the pinned-certificate check never runs: verified
- * in a real extension host, where a connection to the pinned server fails with
- * `UNABLE_TO_VERIFY_LEAF_SIGNATURE` whatever was trusted, while `"fallback"` and `"off"` honour the
- * agent (good pin connects, wrong pin is refused). The request still goes ahead (a server whose
- * certificate the host trusts anyway, such as one from a public authority, works with or without a
- * stale pin), but when it fails as untrusted the user sees `pinBypassedByHost`'s explanation instead
- * of a "not trusted" error that appears right after they trusted the certificate. False until the
- * extension injects the real setting, so plain Node (unit tests, tools) is unaffected.
- */
+/** Policy for the fallback explanation; production checks the actual networking patch. */
 let agentIsReplacedByHost: () => boolean = () => false;
 let agentPolicyInstalled = false;
 
@@ -280,8 +271,8 @@ export function ensureAgentReplacedPolicy(policy: () => boolean): void {
 }
 
 /**
- * Whether VS Code replaces the agent that would check a pin for requests to `url`: its setting says so
- * and the address is not loopback, where the host leaves the agent alone.
+ * Whether the host request patch could interfere at `url`; only localhost and 127.0.0.1
+ * are exempt from that patch replacing the supplied agent.
  */
 export function hostReplacesAgentFor(url: string | undefined): boolean {
   return agentIsReplacedByHost() && !isLoopbackUrl(url);
@@ -293,30 +284,24 @@ function isLoopbackUrl(url: string | undefined): boolean {
   }
   try {
     const host = new URL(url).hostname.toLowerCase();
-    return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '::1' || /^127(\.\d{1,3}){3}$/.test(host);
+    return host === 'localhost' || host === '127.0.0.1';
   } catch {
     return false;
   }
 }
 
-/**
- * The explanation for a pinned profile whose request failed with a certificate problem the pin would
- * have covered (not trusted, host name, validity dates) while the host replaces the agent that would
- * have applied the pin. Undefined when it does not apply: no pin, the host honours the agent, or the
- * failure is something else (no network, a revoked certificate, or the pin's own refusal, which means
- * the agent did run). The result keeps the failure's status, request id, endpoint and details but not
- * its network code, so no "Trust this certificate" button is offered for a decision that cannot take
- * effect.
- */
+/** A fallback for an untrusted pin/legacy request left on axios's environment-proxy route. */
 export function pinBypassedByHost(
-  profile: Pick<ConnectionProfile, 'pinnedCertSha256'> & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
+  profile: TlsProfileOptions & Partial<Pick<ConnectionProfile, 'authMode' | 'serverUrl' | 'proxyEndpoint'>>,
   failure?: FMClientError
 ): FMClientError | undefined {
-  // The host leaves the agent alone for loopback addresses (verified in a real host), so there the pin
-  // did run and its own refusals (including a not-yet-valid certificate) are the true answer.
+  const url = profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl;
+  // Only localhost and 127.0.0.1 retain the supplied agent in the host request patch.
   if (
-    normalizeSha256(profile.pinnedCertSha256) === undefined ||
-    !hostReplacesAgentFor(profile.authMode === 'proxy' ? profile.proxyEndpoint : profile.serverUrl)
+    !needsCustomTlsTransport(profile) ||
+    !url || !/^https:/i.test(url) || !environmentProxyFor(url) ||
+    !failure ||
+    !hostReplacesAgentFor(url)
   ) {
     return undefined;
   }
@@ -325,6 +310,7 @@ export function pinBypassedByHost(
     if (
       failure.kind !== 'certificate' ||
       !isTrustableCertificateCode(code) ||
+      !['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'CERT_UNTRUSTED'].includes(code ?? '') ||
       code === CERT_PIN_MISMATCH_CODE ||
       code === CERT_PIN_EXPIRED_CODE
     ) {
@@ -332,9 +318,10 @@ export function pinBypassedByHost(
     }
   }
   return new FMClientError(
-    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and the certificate you trusted for this connection could not be applied: VS Code's "http.proxySupport" setting is "override" (its default), which routes requests through VS Code's own networking and replaces the connection this extension uses to check a trusted (pinned) certificate. To fix it, set "http.proxySupport" to "fallback" in your VS Code settings (search Settings for "proxy support"), which lets the extension use its own connection when no proxy is configured, then test again. Or install a certificate from a public authority on the server and choose Forget trusted certificate. (A custom CA file does not help here, because a trusted certificate does not use the CA file.)`,
+    `This server's certificate failed VS Code's own certificate check${failure?.networkCode ? ` (${failure.networkCode})` : ''}, and this connection's certificate settings could not be applied on the environment-proxy route. VS Code's networking patch is active; try setting "http.proxySupport" to "fallback" in VS Code settings (search for "proxy support"), then test again. Or install a certificate from a public authority on the server and choose Forget trusted certificate. For a pinned connection a custom CA file does not help here, because a trusted certificate does not use the CA file.`,
     {
       code: 'PIN_BYPASSED_BY_PROXY_SUPPORT',
+      networkCode: failure.networkCode,
       kind: 'certificate',
       isRetryable: false,
       status: failure?.status,
@@ -412,28 +399,154 @@ export function environmentProxyFor(url: string): string | undefined {
   return shouldBypassProxy(url) ? undefined : proxy;
 }
 
+type PatchedHttps = typeof https & { __vscodeOriginal?: typeof https };
+type PatchedHttp = typeof http & { __vscodeOriginal?: typeof http };
+const initialRequest = https.request;
+const initialClientRequest = http.ClientRequest;
+
+/** VS Code saves the original module before patching, including when it patches before we load. */
+export function hostNetworkingPatched(): boolean {
+  const original = (https as PatchedHttps).__vscodeOriginal;
+  const originalHttp = (http as PatchedHttp).__vscodeOriginal;
+  return https.request !== (original?.request ?? initialRequest) ||
+    http.ClientRequest !== (originalHttp?.ClientRequest ?? initialClientRequest);
+}
+
+function needsCustomTlsTransport(profile: TlsProfileOptions): boolean {
+  return normalizeSha256(profile.pinnedCertSha256) !== undefined ||
+    profile.allowSelfSigned === true;
+}
+
+function pinThroughProxy(): FMClientError {
+  return new FMClientError(
+    PIN_THROUGH_PROXY_MESSAGE,
+    { code: 'PIN_THROUGH_PROXY', kind: 'certificate', isRetryable: false }
+  );
+}
+
 /**
- * The agent for a request to `url`, plus the axios options that go with it. A pinned certificate
- * is checked by the agent's own connection, which an HTTP proxy would bypass, so for a pinned
- * profile axios is told not to use a proxy, and the request is refused (before anything is sent)
- * when an environment proxy applies to the address.
+ * Ask the installed VS Code route for its proxy decision without opening a socket. Its public
+ * PacProxyAgent.resolver carries the setting, NO_PROXY and system/PAC lookup that VS Code injected.
+ * A credential-free, unended request exposes that agent. agent-base schedules connect in a
+ * microtask: replace it synchronously, then destroy the probe. Neither path can dial a server.
+ * An unknown future patched agent fails closed rather than silently bypassing a required proxy.
  */
-export function httpsTransportFor(
-  profile: TlsProfileOptions,
-  url: string
-): { httpsAgent: Agent; proxy?: false } {
+async function hostProxyRequired(url: string): Promise<boolean> {
+  if (!hostNetworkingPatched()) return false;
+  const parsed = new URL(url);
+  // A no-op agent prevents even a synchronous connect if the patch honours the supplied agent.
+  const sentinel = new Agent() as DispatchAgent;
+  sentinel.addRequest = (req) => { process.nextTick(() => rejectPendingRequest(req, new Error('Proxy decision only: no connection'))); };
+  const options: RequestOptions = {
+    protocol: 'https:', hostname: parsed.hostname, port: parsed.port || 443,
+    path: `${parsed.pathname}${parsed.search}`, method: 'HEAD', agent: sentinel
+  };
+  const probe = https.request(options);
+  probe.on('error', () => undefined);
+  const agent = (probe as RequestWithAgent).agent as Agent & {
+    connect?: (...args: unknown[]) => Promise<unknown>;
+    resolver?: (req: ClientRequest, opts: RequestOptions, url: string) => Promise<string | undefined>;
+  };
+  try {
+    if (agent === options.agent) return false; // off/on: the patch honoured our explicit agent
+    if (!agent || typeof agent.connect !== 'function' || typeof agent.resolver !== 'function') {
+      throw pinThroughProxy();
+    }
+    agent.connect = async () => { throw new Error('Proxy decision only: no connection'); };
+    probe.destroy();
+    const result = await agent.resolver(probe, options, url);
+    // The first recognised PAC entry is the route the installed agent would use.
+    for (const entry of (result ?? '').split(';')) {
+      const kind = entry.trim().split(/\s+/, 1)[0];
+      if (kind === 'DIRECT') return false;
+      if (['PROXY', 'HTTP', 'HTTPS', 'SOCKS', 'SOCKS4', 'SOCKS5'].includes(kind ?? '')) return true;
+    }
+    return false;
+  } catch {
+    throw pinThroughProxy();
+  } finally {
+    probe.destroy();
+    if (agent !== options.agent) agent?.destroy?.();
+    (options.agent as Agent).destroy();
+  }
+}
+
+/** Node agents report connection failures through onSocket, including before a socket exists. */
+function rejectPendingRequest(req: ClientRequest, error?: Error): void {
+  (req as ClientRequest & { onSocket(socket: null, error?: Error): void }).onSocket(null, error);
+}
+
+type RequestWithAgent = ClientRequest & { agent: Agent };
+type DispatchAgent = Agent & { addRequest(req: ClientRequest, options: RequestOptions): void };
+
+interface HttpsTransport {
+  httpsAgent: Agent;
+  proxy?: false;
+  transport?: { request(options: RequestOptions, callback: (response: IncomingMessage) => void): ClientRequest };
+}
+
+/** Preserve pin/legacy agents under VS Code's request patch; CA-only profiles keep axios's proxy route. */
+export function httpsTransportFor(profile: TlsProfileOptions, url: string): HttpsTransport {
   const httpsAgent = createHttpsAgentForProfile(profile);
-  if (normalizeSha256(profile.pinnedCertSha256) === undefined || !/^https:/i.test(url)) {
-    return { httpsAgent };
-  }
-  const proxy = environmentProxyFor(url);
-  if (proxy) {
-    throw new FMClientError(
-      'A proxy is configured on this computer (HTTPS_PROXY or similar), and a trusted (pinned) server certificate cannot be checked through a proxy, so the connection was not made. To fix it, add this server\'s host name to NO_PROXY so the connection goes direct, or remove the proxy setting. (A custom CA file does not help here, because a trusted certificate does not use the CA file. If you would rather keep the proxy, forget the trusted certificate and use a CA file for a certificate that lists the server\'s host names.)',
-      { code: 'PIN_THROUGH_PROXY', kind: 'certificate', isRetryable: false }
-    );
-  }
-  return { httpsAgent, proxy: false };
+  if (!/^https:/i.test(url) || !needsCustomTlsTransport(profile)) return { httpsAgent };
+  const pinned = normalizeSha256(profile.pinnedCertSha256) !== undefined;
+  if (pinned && environmentProxyFor(url)) throw pinThroughProxy();
+  // A legacy self-signed profile behind an environment proxy keeps axios's own CONNECT
+  // tunnel (and its https-proxy-agent), which a hand-built ClientRequest cannot drive: the proxy route
+  // is unchanged from before, and VS Code's networking owns it.
+  if (!pinned && environmentProxyFor(url)) return { httpsAgent };
+  return {
+    httpsAgent,
+    ...(pinned ? { proxy: false as const } : {}),
+    transport: {
+      request: (options, callback) => {
+        // Pinned requests have proxy:false and must always use the pin agent itself.
+        let pendingRoute = false;
+        let agent = pinned ? httpsAgent : (options.agent ?? httpsAgent);
+        if (pinned && (https as PatchedHttps).__vscodeOriginal && hostNetworkingPatched()) {
+          // Defer the real agent until the host proxy lookup finishes. Axios owns the native
+          // request throughout, so its connect timeout and cancellation cover this wait too.
+          pendingRoute = true;
+          const gate = new Agent() as DispatchAgent;
+          gate.addRequest = (req, opts) => {
+            void hostProxyRequired(url).then((required) => {
+              if (req.destroyed) return;
+              pendingRoute = false;
+              if (required) { rejectPendingRequest(req, pinThroughProxy()); return; }
+              (req as RequestWithAgent).agent = httpsAgent;
+              (httpsAgent as DispatchAgent).addRequest(req, opts);
+            }).catch((error: Error) => { pendingRoute = false; rejectPendingRequest(req, error); });
+          };
+          agent = gate;
+        }
+        const req = new http.ClientRequest({ ...options, agent, protocol: 'https:' }, callback);
+        // Axios recognises only the built-in http/https objects as native transports. Keep its
+        // native connect-phase deadline for this transport too (setTimeout alone waits for a socket).
+        const setTimeout = req.setTimeout.bind(req);
+        let deadline: NodeJS.Timeout | undefined;
+        const clearDeadline = (): void => { clearTimeout(deadline); deadline = undefined; };
+        req.setTimeout = (ms, listener) => {
+          clearDeadline();
+          if (ms > 0) deadline = globalThis.setTimeout(() => req.emit('timeout'), ms);
+          return setTimeout(ms, listener);
+        };
+        const destroy = req.destroy.bind(req);
+        req.destroy = (error) => {
+          clearDeadline();
+          const result = destroy(error);
+          if (pendingRoute) {
+            pendingRoute = false;
+            rejectPendingRequest(req, error);
+          }
+          return result;
+        };
+        req.once('response', clearDeadline);
+        req.once('close', clearDeadline);
+        req.once('error', clearDeadline);
+        return req;
+      }
+    }
+  };
 }
 
 export function createHttpsAgentForProfile(profile: TlsProfileOptions): Agent {

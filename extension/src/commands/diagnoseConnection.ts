@@ -50,12 +50,7 @@ export function registerConnectionDiagnosticCommands(deps: DiagnosticCommandDeps
           if (choice !== 'Diagnose active profile') profile = await chooseTarget();
         } else profile = await chooseTarget();
         if (!profile) return;
-        // Saved profiles are user-confirmed; never load a workspace template for a quick check.
-        // Refuse template-origin targets if supplied by another extension component.
-        if (!vscode.workspace.isTrusted && profile.serverUrlSource === 'workspace-template') {
-          await vscode.window.showWarningMessage('.filemaker/profile-template.json was ignored because this workspace is not trusted. Trust the workspace to use it, or enter the details manually.');
-          return;
-        }
+        // Like Connect, use user-confirmed saved profiles. A typed check never loads a workspace template.
         // Recheck after the user dialogs, since settings can change while they are open.
         if (deps.roleGuard.isOfflineModeEnabled()) return;
         const target = profile;

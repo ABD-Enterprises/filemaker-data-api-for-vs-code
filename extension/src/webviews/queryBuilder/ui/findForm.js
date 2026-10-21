@@ -195,7 +195,7 @@
     const query = [];
 
     for (const request of requests) {
-      const entry = {};
+      const entry = Object.create(null);
       for (const criterion of request.criteria || []) {
         // The field name exactly as chosen (a space can be part of a name); only a blank one is skipped.
         const field = String(criterion.field || '');

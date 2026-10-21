@@ -66,10 +66,21 @@ describe('Diagnose Connection command', () => {
     const { run, deps } = setup(); deps.roleGuard.isOfflineModeEnabled.mockReturnValueOnce(false).mockReturnValue(true); await run();
     expect(diagnostics.runConnectionDiagnostics).not.toHaveBeenCalled();
   });
-  it('refuses an untrusted template address with existing wording, but permits a user profile', async () => {
-    const { run } = setup([{ ...profile, serverUrlSource: 'workspace-template' }]); workspace.isTrusted = false; await run();
-    expect(diagnostics.runConnectionDiagnostics).not.toHaveBeenCalled();
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('.filemaker/profile-template.json was ignored because this workspace is not trusted. Trust the workspace to use it, or enter the details manually.');
+  it('never reads a workspace template in Restricted Mode, even when it names another server', async () => {
+    workspace.isTrusted = false;
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(JSON.stringify({ serverUrl: 'https://unconfirmed.test', database: 'DB' })));
+    const { run } = setup(); await run();
+    expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
+    expect(diagnostics.runConnectionDiagnostics).toHaveBeenCalledWith(profile, expect.any(Object), expect.any(Object), expect.any(AbortSignal));
+  });
+  it('allows a manually typed address in Restricted Mode without using a workspace template', async () => {
+    workspace.isTrusted = false;
+    const { run } = setup([], undefined);
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ label: 'Type a server address (without saving)' } as never);
+    vi.mocked(vscode.window.showInputBox).mockResolvedValue('https://typed.test/fm');
+    await run();
+    expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
+    expect(diagnostics.runConnectionDiagnostics).toHaveBeenCalledWith(expect.objectContaining({ serverUrl: 'https://typed.test/fm' }), expect.any(Object), expect.any(Object), expect.any(AbortSignal));
   });
   it('permits user-owned profiles in Restricted Mode', async () => {
     const { run } = setup(); workspace.isTrusted = false; await run(); expect(diagnostics.runConnectionDiagnostics).toHaveBeenCalled();

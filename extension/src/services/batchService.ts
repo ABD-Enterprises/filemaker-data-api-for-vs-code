@@ -18,6 +18,7 @@ import type {
   PerformanceMode
 } from '../types/fm';
 import { isCredentialRejection } from '../utils/fileMakerCodes';
+import { nulTextError } from '../utils/nulText';
 import { createCsvStreamWriter } from '../utils/csvStreamWriter';
 import { restoreFormulaText } from '../utils/exportCsv';
 import { createJsonlWriter } from '../utils/jsonlWriter';
@@ -154,13 +155,17 @@ export class BatchService {
     const total = entries.length;
 
     if (dryRun) {
+      const failures = entries.flatMap((entry) => {
+        const reason = nulTextError(entry.fieldData);
+        return reason ? [{ recordId: entry.recordId, reason }] : [];
+      });
       return {
         dryRun: true,
         total,
         attempted: 0,
         successCount: 0,
-        failureCount: 0,
-        failures: []
+        failureCount: failures.length,
+        failures
       };
     }
 
@@ -273,6 +278,8 @@ export class BatchService {
     adaptive: AdaptiveConcurrency,
     breaker: CircuitBreaker
   ): Promise<void> {
+    const nulError = nulTextError(entry.fieldData);
+    if (nulError) throw new Error(nulError);
     let attempt = 0;
 
     while (attempt < 3) {
@@ -417,7 +424,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
       continue;
     }
 
-    const fieldData: Record<string, unknown> = {};
+    const fieldData: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     headers.forEach((header, index) => {
       if (metaColumn(header)) {
         return;

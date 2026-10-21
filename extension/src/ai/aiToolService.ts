@@ -1,3 +1,4 @@
+import { containsNulText, NUL_TEXT_WARNING } from '../utils/nulText';
 import type { EnterpriseFeatureId, FeatureGuardResult } from '../enterprise/roleGuard';
 import type {
   ConnectionProfile,
@@ -828,8 +829,8 @@ export class AiToolService {
       if (PLACEHOLDER_MARKERS.some((marker) => value.includes(marker))) {
         throw new AiToolError(`A value may not contain ${PLACEHOLDER_MARKERS.join(', ')}; those mark text the tools hid, redacted or replaced.`);
       }
-      if (value.includes('\0')) {
-        throw new AiToolError('A value may not contain a NUL character.');
+      if (containsNulText(value)) {
+        throw new AiToolError(`NUL character (U+0000) in field ${name}. ${NUL_TEXT_WARNING} Remove the character and try again.`);
       }
       return [known, value];
     });

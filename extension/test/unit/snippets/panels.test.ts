@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../../fixtures/duplicatePhoto';
 import { HistoryStore } from '../../../src/services/historyStore';
 import { generateSnippet } from '../../../src/snippets';
 import type { SnippetOperation } from '../../../src/snippets/model';
@@ -273,13 +274,22 @@ describe('Record Editor: Copy request for this record', () => {
       context,
       profileStore,
       fmClient as never,
-      { getFields: vi.fn(async () => ({ supported: true, fields: [] })) } as never,
+      { getFields: vi.fn(async () => ({ supported: true, fields: duplicatePhotoMetadata.fieldMetaData, metadata: duplicatePhotoMetadata })) } as never,
       logger
     );
   });
   afterEach(() => panel.dispose());
 
   const base = { profileId: 'p1', layout: 'Contacts', recordId: '42' };
+
+  it('copies one exact Photo property with duplicate container metadata', async () => {
+    fmClient.getRecord.mockResolvedValueOnce({ recordId: '42', modId: '9', fieldData: { Name: 'Ada', City: 'Paris', Photo: 'old' } } as never);
+    await panel.send({ type: 'loadRecord', payload: base });
+    await panel.send({ type: 'copyRecordRequest', payload: { ...base, operation: 'edit', format: 'typescript', draftFieldData: { Name: 'Ada', City: 'Paris', Photo: 'new' } } });
+    expect(errors(panel)).toEqual([]);
+    expect(lastCopied().match(/"Photo"/g)).toHaveLength(1);
+    expect(lastCopied()).toContain('"new"');
+  });
 
   it('an edit sends what changed in the form since the record was loaded, with the modId placeholder', async () => {
     await panel.send({ type: 'loadRecord', payload: { ...base, originalFieldData: {}, draftFieldData: {} } });

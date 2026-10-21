@@ -381,7 +381,7 @@ function sanitizeValue(value: unknown): unknown {
 
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    const sanitized: Record<string, unknown> = {};
+    const sanitized: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
     for (const [key, entryValue] of Object.entries(record)) {
       if (/password|token|authorization|api[_-]?key/i.test(key)) {

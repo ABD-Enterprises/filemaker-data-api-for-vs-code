@@ -25,6 +25,11 @@ describe('diagnosis uses the real FMClient unauthenticated transport', () => {
     expect(options.headers).toEqual({ Accept: 'application/json' });
     expect(options.auth).toBeUndefined(); expect(secrets.getPassword).not.toHaveBeenCalled(); expect(secrets.getToken).not.toHaveBeenCalled(); expect(secrets.getProxyApiKey).not.toHaveBeenCalled();
   });
+  it('uses the path prefix in the real unauthenticated request', async () => {
+    const { fm, request } = client();
+    await createDiagnosticProbes(fm).product({ ...profile, serverUrl: 'https://fm.example.test/fm' }, new AbortController().signal);
+    expect(request.mock.calls[0]![0].url).toBe('https://fm.example.test/fm/fmi/data/vLatest/productInfo');
+  });
   it('retains HTTP/FileMaker errors without starting another uncancellable certificate inspection', async () => {
     const { fm, request } = client();
     request.mockResolvedValueOnce({ status: 200, data: { response: {}, messages: [{ code: '802', message: 'Unavailable' }] } });

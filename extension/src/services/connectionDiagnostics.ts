@@ -4,7 +4,9 @@ import { connect, isIP } from 'node:net';
 import * as tls from 'node:tls';
 
 import type { ConnectionProfile } from '../types/fm';
+import { describeNetworkFailure } from '../utils/networkErrors';
 import { redactString } from '../utils/redact';
+import { formatFingerprint } from './certificateInspect';
 import type { FMClient } from './fmClient';
 import { createHttpsAgentForProfile, environmentProxyFor, normalizeSha256 } from './tlsAgent';
 
@@ -20,6 +22,7 @@ export interface DiagnosticReport {
   address: string; steps: DiagnosticStep[]; certificate?: CertificateFacts;
   verified?: boolean; pin?: 'match' | 'mismatch' | 'none' | 'invalid';
   hostReplaced?: boolean; environmentProxy?: boolean; http?: number; fmCode?: string;
+  allowSelfSigned?: boolean; dataApiFailureCode?: string; dataApiCertificateFailure?: boolean;
   cancelled?: boolean;
 }
 export interface NetworkSettings { proxySupport: string; proxyConfigured: boolean; systemCertificates: boolean; proxyVariables: string[]; hostReplaced: boolean }
@@ -35,8 +38,6 @@ export function validateDiagnosticAddress(address: string): URL | undefined {
   try {
     const url = new URL(address);
     if (!/^https?:$/.test(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash || Number(url.port) > 65535 || url.port === '0') return undefined;
-    // Diagnose a server origin, never a credential-bearing path or a different endpoint.
-    if (url.pathname !== '/') return undefined;
     return url;
   } catch { return undefined; }
 }
@@ -97,43 +98,53 @@ export function rankDiagnosticCauses(report: DiagnosticReport): string[] {
   const causes: string[] = [];
   const failed = (name: string) => report.steps.some((step) => step.name === name && step.verdict === 'FAIL');
   if (report.cancelled) return ['Check cancelled. Run Diagnose Connection again when you are ready.'];
-  if (failed('Address')) return ['Fix the Server URL: enter https:// followed by the server host name and, if needed, a port. Do not include sign-in details, a path or query.'];
+  if (failed('Address')) return ['Fix the Server URL: enter https:// followed by the server host name and, if needed, a port. A path prefix is allowed; do not include sign-in details or a query.'];
   if (failed('DNS')) causes.push('The server name could not be found. Check the spelling, your network and VPN, then try again.');
   if (failed('TCP')) causes.push('The address resolves but the port cannot be reached. Check the firewall and server port, and that the Data API is enabled in Admin Console.');
   const cert = report.certificate;
   if (report.pin === 'mismatch' || report.pin === 'invalid') causes.push('The trusted fingerprint does not match. Ask the administrator whether the certificate changed; only then run Connect and choose Review and re-trust.');
   if (cert?.expired) causes.push(`The server certificate has expired on ${cert.validTo}. Ask the administrator to renew it in Admin Console.`);
   if (cert?.notYetValid) causes.push(`The server certificate is not valid until ${cert.validFrom}. Check this computer’s clock and ask the administrator to correct the certificate dates.`);
-  if (report.pin === 'match' && report.environmentProxy) causes.push('A proxy prevents checking the trusted fingerprint. Add the server host to NO_PROXY or remove the proxy, then run Connect.');
-  if (report.hostReplaced && (report.pin === 'match' || report.verified === false)) causes.push('VS Code replaces the extension’s connection. Set http.proxySupport to fallback in Settings, then run Connect; the current code cannot enforce a trusted fingerprint under override.');
-  if (cert && report.pin !== 'match' && (!cert.nameMatch || !report.verified)) {
-    if (cert.noNames) causes.push(`No host names listed, so verification by name cannot pass: trust it by fingerprint. Ask the administrator to confirm it, then run Connect and choose Trust; fingerprint ends ${cert.fingerprint.slice(-12)}.`);
+  const legacy = report.allowSelfSigned && (report.pin === 'none' || report.pin === undefined);
+  if (legacy) causes.push('This profile accepts any certificate (the older Allow self-signed setting); switch to trusting the fingerprint instead. Confirm the full fingerprint with the administrator before changing trust.');
+  if (report.dataApiFailureCode === 'PIN_THROUGH_PROXY' || (report.pin === 'match' && report.environmentProxy)) causes.push('A proxy prevents checking the trusted fingerprint (PIN_THROUGH_PROXY). For an environment proxy, add the server host to NO_PROXY; for a VS Code or system proxy, exclude the server there or remove the proxy, then run Connect.');
+  if (cert && report.pin !== 'match' && !legacy && (!cert.nameMatch || !report.verified)) {
+    if (cert.noNames) causes.push(`No host names listed, so verification by name cannot pass: trust it by fingerprint. Ask the administrator to confirm it, then run Connect and choose Trust; SHA-256: ${formatFingerprint(cert.fingerprint)}.`);
     else if (!cert.nameMatch) causes.push('The certificate is for a different server name. Use a name listed on the certificate, or ask the administrator to replace it.');
-    else causes.push(`This computer does not trust the certificate${cert.selfSigned ? ' (it is self-signed)' : ''}. Ask the administrator for the CA file or a public certificate, or confirm the fingerprint and run Connect and choose Trust; fingerprint ends ${cert.fingerprint.slice(-12)}.`);
+    else if (!cert.chainBeyondLeaf && !cert.selfSigned && report.verified === false) causes.push('The server did not send its intermediate certificate. Ask the administrator to install the full chain on the server, including the intermediate certificate; a root CA file on this computer does not repair the server chain.');
+    else causes.push(`This computer does not trust the certificate${cert.selfSigned ? ' (it is self-signed)' : ''}. Ask the administrator for the CA file or a public certificate, or confirm the fingerprint and run Connect and choose Trust; SHA-256: ${formatFingerprint(cert.fingerprint)}.`);
   }
+  // hostReplaced describes an affected route, not merely the presence of VS Code's patch.
+  if (report.hostReplaced && (report.pin === 'match' || legacy)) causes.push('This profile’s certificate settings could not use the extension’s direct connection path. If the certificate check fails on the proxy route, try setting http.proxySupport to fallback, then run Connect. Direct trusted-fingerprint and older Allow self-signed profiles work with the default setting; custom CA profiles keep their existing proxy routing.');
   if (failed('TLS') && !cert) causes.push('The server could not complete a secure connection. Check that this is the HTTPS port and ask the administrator to enable a supported TLS version.');
-  if (failed('Data API')) causes.push(`The Data API did not answer successfully${report.http ? ` (HTTP ${report.http})` : ''}${report.fmCode ? ` (FileMaker ${report.fmCode})` : ''}. Check the Data API in Admin Console and the server address; a proxy or web sign-in page may be answering instead.`);
+  if (failed('Data API') && report.dataApiCertificateFailure) causes.push('The Data API request failed its certificate check. Follow the certificate advice above before running Connect.');
+  else if (failed('Data API')) causes.push(`The Data API did not answer successfully${report.http ? ` (HTTP ${report.http})` : ''}${report.fmCode ? ` (FileMaker ${report.fmCode})` : ''}. Check the Data API in Admin Console and the server address; a proxy or web sign-in page may be answering instead.`);
   if (report.steps.some((step) => step.name === 'Address' && step.verdict === 'WARN')) causes.push('This address uses HTTP without encryption. Change it to https:// and the server’s HTTPS port.');
   if (!causes.length && report.pin === 'match' && report.verified === false) causes.push('The server presents the fingerprint you trusted. Run Connect; this profile accepts that exact fingerprint even though normal certificate verification fails.');
   if (!causes.length) causes.push('These checks passed without signing in. Run Connect next; if sign-in fails, check the account, password, database name and fmrest privilege with the administrator.');
   return causes.slice(0, 3);
 }
 
-/** Quote all server-controlled text so it cannot add Markdown links or fake report headings. */
-function quote(value: string): string {
-  return JSON.stringify(redactString(value)).replace(/[<>&`[\]*!]/g, (char) => `\\${char}`);
+/** Escape server-controlled Markdown while leaving ordinary report lines readable. */
+function plainLine(value: string): string {
+  // eslint-disable-next-line no-control-regex -- Server text must not inject control characters into the report.
+  return redactString(value).replace(/[\r\n\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\\<>&`[\]*!#{}|~]/g, (char) => `\\${char}`)
+    .replace(/^(\s*)([-+]|\d+[.)])(?=\s)/, '$1\\$2');
 }
 
 export function buildDiagnosticReport(report: DiagnosticReport, hideAddress = false): string {
   let host = '';
-  try { host = new URL(report.address).hostname; } catch { /* Invalid addresses are never printed. */ }
+  let port = '';
+  try { const url = new URL(report.address); host = url.hostname; port = url.port || (url.protocol === 'https:' ? '443' : '80'); } catch { /* Invalid addresses are never printed. */ }
   const display = (value: string): string => {
     let safe = value;
     if (hideAddress) {
       safe = safe.split(report.address).join('(hidden)');
       if (host) safe = safe.replace(new RegExp(host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '(hidden)');
+      if (port) safe = safe.replace(new RegExp(`\\b${port}\\b`, 'g'), '(hidden)');
     }
-    return quote(safe);
+    return plainLine(safe);
   };
   const lines = ['# FileMaker connection diagnosis', '', `Server: ${display(hideAddress ? '(hidden)' : report.address)}`, '',
     'No sign-in was attempted. No passwords, tokens, API keys, headers or cookies are included.',
@@ -168,7 +179,7 @@ async function bounded<T>(task: (signal: AbortSignal) => Promise<T>, signal: Abo
 
 export async function runConnectionDiagnostics(profile: ConnectionProfile, settings: NetworkSettings, probes: DiagnosticProbes, signal: AbortSignal, timeoutMs = 8000): Promise<DiagnosticReport> {
   const url = validateDiagnosticAddress(profile.serverUrl);
-  const report: DiagnosticReport = { address: url?.origin ?? '(invalid address)', steps: [] };
+  const report: DiagnosticReport = { address: url?.origin ?? '(invalid address)', steps: [], allowSelfSigned: profile.allowSelfSigned };
   const step = async <T>(name: string, task: (signal: AbortSignal) => Promise<T>, describe: (value: T) => string): Promise<T | undefined> => {
     const start = Date.now();
     try {
@@ -182,7 +193,7 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
     }
   };
   report.steps.push({ name: 'Address', verdict: !url ? 'FAIL' : url.protocol === 'http:' ? 'WARN' : 'PASS', ms: 0,
-    text: !url ? 'Enter an HTTPS server address with a valid host and port, without sign-in details, path or query.' : url.protocol === 'http:' ? 'HTTP sends information without encryption.' : `HTTPS address and port ${url.port || '443'} are valid.` });
+    text: !url ? 'Enter an HTTPS server address with a valid host and port, without sign-in details or a query. A path prefix is allowed.' : url.protocol === 'http:' ? 'HTTP sends information without encryption.' : `HTTPS address and port ${url.port || '443'} are valid.` });
   if (!url) return report;
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
@@ -193,8 +204,8 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
   if (signal.aborted) { report.cancelled = true; return report; }
   if (url.protocol === 'https:') {
     report.certificate = await step('TLS', (s) => probes.certificate(host, port, s), (cert) => [
-      `Protocol: ${cert.protocol}; cipher: ${cert.cipher}`, `Subject: ${cert.subject}`, `Issuer: ${cert.issuer}`, `Serial: ${cert.serial}`,
-      `Valid from: ${cert.validFrom}; valid to: ${cert.validTo}`, `SHA-256: ${cert.fingerprint}`, `Subject alternative names: ${cert.altNames || '(none)'}`,
+      `Protocol: ${cert.protocol}; cipher: ${cert.cipher}`, `Subject: ${cert.subject.replace(/[\r\n]+/g, ', ')}`, `Issuer: ${cert.issuer.replace(/[\r\n]+/g, ', ')}`, `Serial: ${cert.serial}`,
+      `Valid from: ${cert.validFrom}; valid to: ${cert.validTo}`, `SHA-256: ${formatFingerprint(cert.fingerprint)}`, `Subject alternative names: ${cert.altNames || '(none)'}`,
       `Chain beyond the leaf: ${cert.chainBeyondLeaf ? 'yes' : 'no'}`, `Self-signed: ${cert.selfSigned ? 'yes' : 'no'}`,
       'Certificate version: unavailable from Node X509Certificate; skipped.', `Expired: ${cert.expired}; not yet valid: ${cert.notYetValid}`,
       cert.noNames ? 'No host names listed, so verification by name cannot pass: trust it by fingerprint.' : `Host name or IP matches: ${cert.nameMatch}`
@@ -212,17 +223,24 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
     }
   } else report.steps.push({ name: 'TLS', verdict: 'WARN', ms: 0, text: 'Skipped: HTTP has no secure handshake or certificate.' });
   if (signal.aborted) { report.cancelled = true; return report; }
-  report.hostReplaced = settings.hostReplaced;
-  report.environmentProxy = Boolean(environmentProxyFor(url.origin));
-  report.steps.push({ name: 'VS Code network settings', verdict: settings.hostReplaced || report.environmentProxy || settings.proxyConfigured ? 'WARN' : 'PASS', ms: 0,
-    text: `http.proxySupport: ${settings.proxySupport}; http.proxy: ${settings.proxyConfigured ? 'set (value hidden)' : 'not set'}; http.systemCertificates: ${settings.systemCertificates}. Proxy environment variables set (values hidden): ${settings.proxyVariables.join(', ') || 'none'}. ${settings.hostReplaced ? 'VS Code would replace the extension’s connection; trusted fingerprints are not enforced. Set http.proxySupport to fallback. This version reports the problem; it does not work around it.' : 'VS Code is not configured to replace this connection under override; proxy routing can still affect requests.'} Direct probes do not test an HTTP proxy.` });
+  report.environmentProxy = Boolean(environmentProxyFor(url.href));
+  const pinned = normalizeSha256(profile.pinnedCertSha256) !== undefined;
+  const customTls = pinned || profile.allowSelfSigned === true;
+  // PR 434 preserves the agent for direct pin/legacy requests. Only legacy requests
+  // through an environment proxy stay on the route VS Code can replace.
+  report.hostReplaced = settings.hostReplaced && customTls && !pinned && report.environmentProxy;
+  const proxyHint = report.environmentProxy || settings.proxyConfigured || report.hostReplaced;
+  report.steps.push({ name: 'VS Code network settings', verdict: proxyHint ? 'WARN' : 'PASS', ms: 0,
+    text: `${proxyHint ? `http.proxySupport: ${settings.proxySupport}; ` : ''}http.proxy: ${settings.proxyConfigured ? 'set (value hidden)' : 'not set'}; http.systemCertificates: ${settings.systemCertificates}. Proxy environment variables set (values hidden): ${settings.proxyVariables.join(', ') || 'none'}. ${report.hostReplaced ? 'The older Allow self-signed profile uses the environment-proxy route; VS Code can replace its certificate settings there. If the certificate check fails, try http.proxySupport set to fallback.' : 'Direct trusted-fingerprint and older Allow self-signed profiles use a connection path VS Code does not replace; no setting change is needed. Custom CA profiles keep their existing VS Code and system proxy routing.'} Pinned profiles that need a proxy are refused with PIN_THROUGH_PROXY. Direct probes do not test an HTTP proxy.` });
   await step('Data API', async (s) => {
     try {
-      const result = await probes.product({ ...profile, serverUrl: url.origin, apiBasePath: '/fmi/data', apiVersionPath: 'vLatest' }, s);
+      const result = await probes.product({ ...profile, serverUrl: `${url.origin}${url.pathname.replace(/\/$/, '')}`, apiBasePath: '/fmi/data', apiVersionPath: 'vLatest' }, s);
       report.http = result.status; report.fmCode = result.code;
       return result;
     } catch (error) {
-      const failure = error as { status?: number; code?: string };
+      const failure = error as { status?: number; code?: string; kind?: string };
+      report.dataApiFailureCode = failureCode(error);
+      report.dataApiCertificateFailure = failure.kind === 'certificate' || describeNetworkFailure(report.dataApiFailureCode)?.kind === 'certificate';
       report.http = failure.status;
       report.fmCode = /^\d+$/.test(failure.code ?? '') ? failure.code : undefined;
       throw error;

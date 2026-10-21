@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { duplicatePhotoMetadata } from '../fixtures/duplicatePhoto';
 import { HistoryStore } from '../../src/services/historyStore';
 import { QueryBuilderPanel } from '../../src/webviews/queryBuilder';
 import { InMemoryMemento } from './mocks';
@@ -85,6 +86,12 @@ describe('QueryBuilderPanel messages', () => {
     panel = openPanel();
   });
 
+  it('loads duplicate Photo metadata without duplicate query choices', async () => {
+    panel.fmClient.getLayoutMetadata.mockResolvedValueOnce(duplicatePhotoMetadata);
+    await panel.send({ type: 'loadFieldNames', profileId: 'p1', layout: 'Contact Details' });
+    expect(panel.posted.find((message) => message.type === 'fieldNamesLoaded')).toMatchObject({ payload: { fieldNames: ['Photo'], fieldMetadata: [expect.objectContaining({ name: 'Photo', type: 'container' }), expect.objectContaining({ name: 'Photo', type: 'container' })] } });
+  });
+
   it('loads every webview script under the nonce', () => {
     const html = vi.mocked(vscode.window.createWebviewPanel).mock.results[0]?.value.webview.html as string;
     const nonces = [...html.matchAll(/<script nonce="([^"]+)" src="[^"]*(findForm|cellText|index)\.js"/g)];
@@ -95,6 +102,12 @@ describe('QueryBuilderPanel messages', () => {
   it('answers a run request that fails validation instead of leaving the webview waiting', async () => {
     await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '', runId: 3 } });
     expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 3 }));
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+  });
+
+  it.each(['limit', 'offset'])('refuses zero %s with a next step', async (field) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Name":"Ada"}]', [field]: 0, runId: 4 } });
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 4, message: expect.stringContaining('must be at least 1') }));
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
   });
 

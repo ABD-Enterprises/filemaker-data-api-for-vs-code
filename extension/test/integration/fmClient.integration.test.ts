@@ -111,10 +111,10 @@ describe('FMClient integration (mocked HTTP)', () => {
   describe('find with no matches', () => {
     const noMatch = {
       messages: [{ code: '401', message: 'No records match the request' }],
-      response: {}
+      response: { data: [], dataInfo: { foundCount: 0 } }
     };
 
-    it('returns an empty result when FileMaker reports error 401', async () => {
+    it.each([200, 404, 500])('returns an empty result for code 401 over HTTP %i', async (status) => {
       const profile = createProfile();
       const { client } = await createClient();
 
@@ -124,7 +124,7 @@ describe('FMClient integration (mocked HTTP)', () => {
       nock(server)
         .post(`${apiBase}/layouts/Contacts/_find`)
         .matchHeader('authorization', 'Bearer token-none')
-        .reply(404, noMatch);
+        .reply(status, noMatch);
 
       await expect(
         client.findRecords(profile, 'Contacts', { query: [{ Email: 'nobody@example.com' }] })

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 
 import { parseProfileId, parseLayoutArg, formatError } from '../../../src/commands/common';
+import * as certificateTrust from '../../../src/services/certificateTrust';
+import { setAgentReplacedPolicy } from '../../../src/services/tlsAgent';
 import { registerCoreCommands } from '../../../src/commands/index';
 import { registerRecordEditCommands } from '../../../src/commands/recordEdit';
 import { registerScriptRunnerCommands } from '../../../src/commands/scriptRunner';
@@ -115,6 +117,31 @@ describe('registerCoreCommands', () => {
       onProfileDisconnected: vi.fn()
     };
   }
+
+  it('offers to connect after trusting under override, without asking for a settings change', async () => {
+    const deps = createMockDeps();
+    const profile = { id: 'p1', name: 'LAN', authMode: 'direct' as const, serverUrl: 'https://192.0.2.1', database: 'Sales', username: 'tester' };
+    const upsertProfile = vi.fn();
+    Object.assign(deps.profileStore, { getProfile: vi.fn(async () => profile), upsertProfile });
+    const clearAuthPause = vi.fn();
+    Object.assign(deps.fmClient, { clearAuthPause });
+    vi.spyOn(certificateTrust, 'reviewAndTrustCertificate').mockResolvedValue({ sha256: 'a'.repeat(64), allowExpired: false });
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Connect' as never);
+    setAgentReplacedPolicy(() => true);
+    try {
+      registerCoreCommands(deps);
+      const command = vi.mocked(vscode.commands.registerCommand).mock.calls.find(([name]) => name === 'filemakerDataApiTools.trustServerCertificate')?.[1];
+      expect(command).toBeDefined();
+      await command!({ profileId: 'p1' });
+      expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({ pinnedCertSha256: 'a'.repeat(64) }));
+      expect(clearAuthPause).toHaveBeenCalledWith('p1');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Certificate trusted for "LAN". Connect now?', 'Connect');
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith('filemakerDataApiTools.connect', { profileId: 'p1' });
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+    } finally {
+      setAgentReplacedPolicy(() => false);
+    }
+  });
 
   it('registers multiple command disposables', () => {
     const deps = createMockDeps();
@@ -245,8 +272,8 @@ describe('registerCoreCommands', () => {
     expect(prompts[0]?.validateInput?.('{')).toContain('valid JSON');
     expect(prompts[1]?.validateInput?.('{}')).toContain('array');
     expect(prompts[1]?.validateInput?.('')).toBeUndefined();
-    expect(prompts[2]?.validateInput?.('-1')).toContain('non-negative integer');
-    expect(prompts[3]?.validateInput?.('1.5')).toContain('non-negative integer');
+    expect(prompts[2]?.validateInput?.('-1')).toContain('must be at least 1');
+    expect(prompts[3]?.validateInput?.('1.5')).toContain('must be at least 1');
   });
 
   it('warns when a script reported an error next to a find that worked, and stays quiet otherwise', async () => {

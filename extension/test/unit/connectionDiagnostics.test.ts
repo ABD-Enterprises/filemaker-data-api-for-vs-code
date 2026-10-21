@@ -30,9 +30,9 @@ describe('diagnostic causes (the mock TLS modes are the oracle)', () => {
     ['expired', { certificate: { ...certificate, expired: true } }, /expired on Jan 1 2040/],
     ['notyet', { certificate: { ...certificate, notYetValid: true } }, /not valid until Jan 1 2020/],
     ['proxy', { pin: 'match', environmentProxy: true }, /NO_PROXY/],
-    ['VS Code override with pin', { pin: 'match', hostReplaced: true }, /http.proxySupport to fallback/],
-    ['VS Code override with untrusted certificate', { verified: false, hostReplaced: true }, /http.proxySupport to fallback/],
-    ['claris-default-cert', { verified: false, certificate: { ...certificate, noNames: true, nameMatch: false, chainBeyondLeaf: false } }, /No host names listed.*trust it by fingerprint.*aaaaaaaaaaaa/],
+    ['VS Code override with pin transport unavailable', { pin: 'match', hostReplaced: true }, /http.proxySupport.*fallback/],
+    ['VS Code override with unpinned untrusted certificate', { verified: false, hostReplaced: true }, /CA file or a public certificate/],
+    ['claris-default-cert', { verified: false, certificate: { ...certificate, noNames: true, nameMatch: false, chainBeyondLeaf: false } }, /No host names listed.*trust it by fingerprint.*AA:AA:AA/],
     ['wronghost', { verified: false, certificate: { ...certificate, nameMatch: false } }, /different server name/],
     ['untrusted CA', { verified: false }, /CA file or a public certificate/],
     ['self-signed', { verified: false, certificate: { ...certificate, selfSigned: true } }, /self-signed/],
@@ -44,6 +44,12 @@ describe('diagnostic causes (the mock TLS modes are the oracle)', () => {
     ['matching trusted default', { pin: 'match', verified: false, certificate: { ...certificate, noNames: true, nameMatch: false } }, /presents the fingerprint you trusted/]
   ] as Array<[string, Partial<DiagnosticReport>, RegExp]>)('%s gives an actionable cause', (_name, extra, expected) => {
     expect(rankDiagnosticCauses({ ...base(), ...extra })[0]).toMatch(expected);
+  });
+  it.each(['wronghost', 'expired', 'untrusted'] as const)('keeps %s above an irrelevant VS Code override hint', (mode) => {
+    const report = { ...base(), hostReplaced: true, verified: false, certificate: { ...certificate, nameMatch: mode !== 'wronghost', expired: mode === 'expired' } };
+    const causes = rankDiagnosticCauses(report).join(' ');
+    expect(causes).not.toContain('http.proxySupport');
+    expect(rankDiagnosticCauses(report)[0]).toMatch(mode === 'wronghost' ? /different server name/ : mode === 'expired' ? /expired/ : /does not trust/);
   });
   it('ranks causes, gives at most three, and does not suggest a CA file for the Claris default', () => {
     const report = { ...base(), steps: [fail('TCP')], pin: 'mismatch' as const, hostReplaced: true, verified: false, certificate: { ...certificate, expired: true, noNames: true, nameMatch: false } };
@@ -91,15 +97,113 @@ describe('ordered, bounded, unauthenticated diagnosis', () => {
     expect(report.steps.every((step) => step.ms >= 0 && step.verdict === 'PASS')).toBe(true);
     expect(report.pin).toBe('match');
     const text = buildDiagnosticReport(report);
-    for (const value of ['TLSv1.3', 'AES', 'Example CA', 'Serial: 01', 'Jan 1 2040', certificate.fingerprint, 'Chain beyond the leaf: yes', 'Self-signed: no', 'version: unavailable', 'HTTP 200', 'FileMaker code 0', 'FileMaker Server']) expect(text).toContain(value);
+    for (const value of ['TLSv1.3', 'AES', 'Example CA', 'Serial: 01', 'Jan 1 2040', Array(32).fill('AA').join(':'), 'Chain beyond the leaf: yes', 'Self-signed: no', 'version: unavailable', 'HTTP 200', 'FileMaker code 0', 'FileMaker Server']) expect(text).toContain(value);
     expect(fake.product).toHaveBeenCalledWith(expect.objectContaining({ apiBasePath: '/fmi/data', apiVersionPath: 'vLatest' }), expect.any(AbortSignal));
+  });
+  it('prints the full dialog fingerprint in the facts and trust advice', async () => {
+    const fake = probes();
+    const fingerprint = 'abcdef0123456789'.repeat(4);
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, fingerprint, noNames: true, nameMatch: false });
+    vi.mocked(fake.verify).mockRejectedValue({ code: 'CERT_UNTRUSTED' });
+    const report = await runConnectionDiagnostics(profile, settings, fake, new AbortController().signal);
+    const formatted = Array(4).fill('AB:CD:EF:01:23:45:67:89').join(':');
+    expect(report.steps.find((s) => s.name === 'TLS')?.text).toContain(`SHA-256: ${formatted}`);
+    expect(rankDiagnosticCauses(report)[0]).toContain(formatted);
+    expect(buildDiagnosticReport(report)).not.toContain('fingerprint ends');
+  });
+  it('explains that the legacy profile already accepts any certificate when Data API passes', async () => {
+    const fake = probes();
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, noNames: true, nameMatch: false });
+    vi.mocked(fake.verify).mockRejectedValue({ code: 'CERT_UNTRUSTED' });
+    const report = await runConnectionDiagnostics({ ...profile, allowSelfSigned: true }, settings, fake, new AbortController().signal);
+    expect(report.steps.at(-1)?.verdict).toBe('PASS');
+    expect(rankDiagnosticCauses(report)[0]).toContain('This profile accepts any certificate (the older Allow self-signed setting); switch to trusting the fingerprint instead');
+    expect(rankDiagnosticCauses(report).join(' ')).not.toContain('choose Trust');
+    const pinned = await runConnectionDiagnostics({ ...profile, allowSelfSigned: true, pinnedCertSha256: certificate.fingerprint }, settings, fake, new AbortController().signal);
+    expect(rankDiagnosticCauses(pinned).join(' ')).not.toContain('accepts any certificate');
+  });
+  it.each([undefined, '/configured-root.pem'])('names a missing intermediate even with CA file %s', async (caBundlePath) => {
+    const fake = probes();
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, chainBeyondLeaf: false });
+    vi.mocked(fake.verify).mockRejectedValue({ code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' });
+    const report = await runConnectionDiagnostics({ ...profile, caBundlePath }, settings, fake, new AbortController().signal);
+    expect(rankDiagnosticCauses(report)[0]).toMatch(/The server did not send its intermediate certificate.*full chain/);
+    expect(rankDiagnosticCauses(report).join(' ')).not.toContain('ask the administrator for the CA file');
+    report.verified = true;
+    expect(rankDiagnosticCauses(report)[0]).toContain('checks passed');
+    report.verified = false; report.certificate!.selfSigned = true;
+    expect(rankDiagnosticCauses(report)[0]).toContain('self-signed');
+  });
+  it.each([{}, { pinnedCertSha256: certificate.fingerprint }, { allowSelfSigned: true }, { caBundlePath: '/ca.pem' }])('does not blame VS Code override on a direct profile %j', async (options) => {
+    const fake = probes();
+    vi.mocked(fake.verify).mockRejectedValue({ code: 'CERT_UNTRUSTED' });
+    const report = await runConnectionDiagnostics({ ...profile, ...options }, { ...settings, proxySupport: 'override', hostReplaced: true }, fake, new AbortController().signal);
+    const network = report.steps.find((s) => s.name === 'VS Code network settings');
+    expect(network?.verdict).toBe('PASS');
+    expect(network?.text).not.toContain('http.proxySupport');
+    expect(rankDiagnosticCauses(report).join(' ')).not.toContain('http.proxySupport');
+    expect(buildDiagnosticReport(report)).not.toContain('not enforced');
+  });
+  it('explains a legacy environment-proxy route and keeps the proxy value secret', async () => {
+    vi.stubEnv('HTTPS_PROXY', 'http://user:secret@proxy.test:8888');
+    const fake = probes();
+    vi.mocked(fake.verify).mockRejectedValue({ code: 'CERT_UNTRUSTED' });
+    vi.mocked(fake.product).mockRejectedValue(new FMClientError('certificate', { kind: 'certificate', networkCode: 'CERT_UNTRUSTED' }));
+    const report = await runConnectionDiagnostics({ ...profile, allowSelfSigned: true }, { ...settings, proxySupport: 'override', hostReplaced: true, proxyVariables: ['HTTPS_PROXY'] }, fake, new AbortController().signal);
+    expect(rankDiagnosticCauses(report).join(' ')).toMatch(/http.proxySupport.*fallback/);
+    expect(report.steps.find((s) => s.name === 'VS Code network settings')?.text).toContain('http.proxySupport: override');
+    expect(buildDiagnosticReport(report)).not.toContain('user:secret');
+  });
+  it('reports PIN_THROUGH_PROXY for a pinned profile behind a VS Code or system proxy', async () => {
+    const fake = probes();
+    vi.mocked(fake.product).mockRejectedValue(new FMClientError('proxy', { code: 'PIN_THROUGH_PROXY', kind: 'certificate' }));
+    const report = await runConnectionDiagnostics({ ...profile, pinnedCertSha256: certificate.fingerprint }, { ...settings, proxySupport: 'override', hostReplaced: true, proxyConfigured: true }, fake, new AbortController().signal);
+    expect(rankDiagnosticCauses(report)[0]).toMatch(/proxy.*PIN_THROUGH_PROXY/);
+    expect(rankDiagnosticCauses(report).join(' ')).not.toContain('sign-in page');
+    expect(report.steps.find((s) => s.name === 'VS Code network settings')?.text).toContain('http.proxySupport: override');
+  });
+  it('accepts and preserves a saved server path prefix for the Data API request', async () => {
+    const fake = probes();
+    const report = await runConnectionDiagnostics({ ...profile, serverUrl: 'https://fm.example.test/fm' }, settings, fake, new AbortController().signal);
+    expect(report.steps[0]?.verdict).toBe('PASS');
+    expect(fake.product).toHaveBeenCalledWith(expect.objectContaining({ serverUrl: 'https://fm.example.test/fm' }), expect.any(AbortSignal));
+    expect(rankDiagnosticCauses(report)[0]).toContain('checks passed');
+  });
+  it('flattens subject and issuer, prints plain lines, and escapes Markdown injections', async () => {
+    const fake = probes();
+    vi.mocked(fake.certificate).mockResolvedValue({ ...certificate, subject: 'CN=fm.example.test\nO=Owner\r\nOU=Team', issuer: 'CN=CA\nO=Issuer' });
+    const report = await runConnectionDiagnostics(profile, settings, fake, new AbortController().signal);
+    const text = buildDiagnosticReport(report);
+    expect(text).toContain('\nSubject: CN=fm.example.test, O=Owner, OU=Team\n');
+    expect(text).toContain('\nIssuer: CN=CA, O=Issuer\n');
+    expect(text).toContain('\nServer: https://fm.example.test\n');
+    expect(text).not.toContain('"Subject:');
+    report.steps.push({ name: 'Untrusted text', verdict: 'WARN', ms: 0, text: '# Fake heading\n[open](command:evil)\n![image](https://evil.test)\n> fake quote' });
+    const safe = buildDiagnosticReport(report);
+    expect(safe).not.toMatch(/\n# Fake|\n> fake|(?<!\\)\[open\]/);
+  });
+  it.each(['https://fm.example.test:8443', 'https://[2001:db8::1]:8443'])('hides the port as well as the address for %s', async (serverUrl) => {
+    const report = await runConnectionDiagnostics({ ...profile, serverUrl }, settings, probes(), new AbortController().signal);
+    const hidden = buildDiagnosticReport(report, true);
+    expect(hidden).not.toContain('8443');
+    expect(hidden).not.toContain(new URL(serverUrl).hostname);
+    expect(buildDiagnosticReport(report)).toContain('8443');
+  });
+  it.each(['CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'CERT_REVOKED'])('does not blame a sign-in page for Data API certificate failure %s', async (networkCode) => {
+    const fake = probes();
+    vi.mocked(fake.verify).mockRejectedValue({ code: networkCode });
+    vi.mocked(fake.product).mockRejectedValue(new FMClientError('certificate', { networkCode, kind: 'certificate' }));
+    const report = await runConnectionDiagnostics(profile, settings, fake, new AbortController().signal);
+    const causes = rankDiagnosticCauses(report);
+    expect(causes[1]).toMatch(/Data API.*certificate/);
+    expect(causes.join(' ')).not.toContain('sign-in page');
   });
   it.each(['mismatch', 'invalid', 'none'] as const)('reports %s pins', async (pin) => {
     const report = await runConnectionDiagnostics({ ...profile, pinnedCertSha256: pin === 'none' ? undefined : pin === 'invalid' ? 'bad' : 'b'.repeat(64) }, settings, probes(), new AbortController().signal);
     expect(report.pin).toBe(pin);
     expect(report.steps.find((s) => s.name === 'Trusted fingerprint')?.verdict).toBe(pin === 'none' ? 'PASS' : 'FAIL');
   });
-  it.each(['ftp://host', 'https://host:0', 'https://host:70000', 'garbage', 'https://user:secret@host', 'https://host?token=secret', 'https://host/sessions/secret'])('rejects %s before any probe', async (address) => {
+  it.each(['ftp://host', 'https://host:0', 'https://host:70000', 'garbage', 'https://user:secret@host', 'https://host?token=secret'])('rejects %s before any probe', async (address) => {
     const fake = probes();
     const report = await runConnectionDiagnostics({ ...profile, serverUrl: address }, settings, fake, new AbortController().signal);
     expect(report.steps[0]?.verdict).toBe('FAIL');
@@ -133,7 +237,7 @@ describe('ordered, bounded, unauthenticated diagnosis', () => {
     const report = await runConnectionDiagnostics(unsafe, { ...settings, proxyConfigured: true, proxyVariables: ['HTTPS_PROXY'], hostReplaced: true }, fake, new AbortController().signal);
     const text = buildDiagnosticReport(report);
     for (const secret of ['password-secret', 'token-secret', 'api-key-secret', 'user-secret', 'cookie-secret', 'raw-secret', 'proxy-user', 'proxy-password']) expect(text).not.toContain(secret);
-    expect(text).toContain('HTTPS_PROXY'); expect(text).toContain('values hidden'); expect(text).toContain('does not work around it');
+    expect(text).toContain('HTTPS_PROXY'); expect(text).toContain('values hidden'); expect(text).not.toContain('does not work around it');
   });
   it('redacts server text and safely quotes Markdown; masking also hides SAN and subject names', async () => {
     const fake = probes();

@@ -79,7 +79,7 @@ export function recordsToCsv(
   }
 
   for (const row of rows) {
-    lines.push(columns.map((column) => escapeCsvValue(row[column], options)).join(','));
+    lines.push(columns.map((column) => escapeCsvValue(Object.hasOwn(row, column) ? row[column] : undefined, options)).join(','));
   }
 
   return lines.join(lineEnding);

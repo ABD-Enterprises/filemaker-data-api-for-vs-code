@@ -27,6 +27,7 @@ const urls = [
 const environments: Array<Record<string, string>> = [
   {},
   { HTTPS_PROXY: 'http://proxy:3128' },
+  { HTTPS_PROXY: 'https://proxy:443' },
   { https_proxy: 'proxy:3128' },
   { ALL_PROXY: 'http://proxy:1080' },
   { all_proxy: 'http://proxy:1080' },
