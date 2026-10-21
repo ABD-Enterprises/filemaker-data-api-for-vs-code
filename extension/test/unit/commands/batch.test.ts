@@ -94,9 +94,40 @@ describe('batch commands', () => {
     await expect(tasks[0]!(context as never)).resolves.toEqual({ exportedRecords: 2, truncated: false });
     expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout,
       { query: [{ ' Field ': '==value' }], sort: [{ fieldName: ' Field ', sortOrder: 'ascend' }] },
-      { outputPath: join('/tmp', 'results.csv'), format: 'csv', maxRecords: 250 }, context);
+      { outputPath: join('/tmp', 'results.csv'), format: 'csv', excelCompatible: false, maxRecords: 250 }, context);
     expect(context.log).toHaveBeenCalledWith('info', 'Finished export. Records=2, truncated=false');
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Started job 12345678 for batch export.');
+  });
+
+  it('offers standard CSV first and forwards the optional Excel format', async () => {
+    const { tasks, batchService } = setup();
+    exportInputs();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue('Excel-compatible CSV (UTF-8 BOM)' as never);
+    await command('batchExportFind')(arg);
+    expect(vscode.window.showQuickPick).toHaveBeenCalledWith(['Standard CSV', 'Excel-compatible CSV (UTF-8 BOM)'], { title: 'CSV format' });
+    await tasks[0]!({ log: vi.fn() } as never);
+    expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, expect.anything(), expect.objectContaining({ excelCompatible: true }), expect.anything());
+  });
+
+  it('shows the omitted value count when the export finishes', async () => {
+    const { tasks, batchService } = setup();
+    batchService.batchExportFind.mockResolvedValue({ exportedRecords: 3, truncated: false, unknownColumnValues: 3 } as never);
+    exportInputs();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue('Standard CSV' as never);
+    await command('batchExportFind')(arg);
+    await tasks[0]!({ log: vi.fn() } as never);
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('3 values were not exported because their columns were unknown. See the export job for column names.');
+  });
+
+  it('does not log a finished export after cancellation', async () => {
+    const { tasks, batchService } = setup();
+    batchService.batchExportFind.mockResolvedValue({ exportedRecords: 0, truncated: false, cancelled: true } as never);
+    exportInputs();
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue('Standard CSV' as never);
+    await command('batchExportFind')(arg);
+    const log = vi.fn();
+    await expect(tasks[0]!({ log } as never)).resolves.toMatchObject({ cancelled: true, exportedRecords: 0 });
+    expect(log).not.toHaveBeenCalledWith('info', expect.stringContaining('Finished export'));
   });
 
   it.each([join('/tmp', 'results.csv'), join('/tmp', 'results.jsonl')])('forces streaming JSONL in high-scale mode (%s)', async (path) => {
@@ -106,7 +137,7 @@ describe('batch commands', () => {
     await command('batchExportFind')(arg);
     await tasks[0]!({ log: vi.fn() } as never);
     expect(batchService.batchExportFind).toHaveBeenCalledWith(profile, layout, { query: [{ Name: '*' }], sort: undefined },
-      { outputPath: join('/tmp', 'results.jsonl'), format: 'jsonl', maxRecords: 250 }, expect.anything());
+      { outputPath: join('/tmp', 'results.jsonl'), format: 'jsonl', excelCompatible: false, maxRecords: 250 }, expect.anything());
   });
 
   it('does not schedule an export when find input is cancelled', async () => {

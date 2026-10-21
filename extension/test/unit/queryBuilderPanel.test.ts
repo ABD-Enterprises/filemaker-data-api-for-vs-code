@@ -1,3 +1,5 @@
+import { recordsToCsv } from '../../src/utils/exportCsv';
+import { parseBatchUpdateInput } from '../../src/services/batchService';
 import * as vscode from 'vscode';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -84,6 +86,14 @@ describe('QueryBuilderPanel messages', () => {
     vi.clearAllMocks();
     panel?.close();
     panel = openPanel();
+  });
+
+  it('exports colliding and digit-only fields with unambiguous ordered metadata', () => {
+    const panelType = QueryBuilderPanel as unknown as { prototype: { toCsvRows(input: unknown): Map<string, unknown>[] } };
+    const rows = panelType.prototype.toCsvRows({ result: { data: [{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }] } });
+    const csv = recordsToCsv(rows);
+    expect(csv.split('\n')[0]).toBe('__recordId,__modId,123,recordId,modId,__portalNote (export information)');
+    expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }]);
   });
 
   it('loads duplicate Photo metadata without duplicate query choices', async () => {
