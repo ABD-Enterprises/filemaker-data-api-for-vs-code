@@ -34,7 +34,7 @@ Trusted-fingerprint and older Allow self-signed profiles now work on direct conn
 
 The direct DNS, port and TLS probes may differ from a request through a proxy; the final Data API step uses the actual extension transport. Proxy profiles diagnose the FileMaker Server, not the middleware endpoint. A server path prefix is allowed and kept for the Data API request. No sign-in is attempted and no profile or trust setting is changed. Cancel stops further checks; each probe has an eight-second limit. Offline mode prevents probing. Like Connect, diagnosis uses user-confirmed saved profiles; it also allows a typed address in Restricted Mode and never loads a workspace template.
 
-Diagnose Connection was checked on one real server on 2026-10-21: the owner's server had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted. This observation was supplied by the owner, rather than repeated in the socket-blocked sandbox.
+Diagnose Connection was checked on one real server on 2026-10-21: it had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted.
 
 Use **Copy for bug report** or **FileMaker: Copy Connection Diagnosis for Bug Report**, then answer **Hide the server address?**. The port and certificate details are omitted when hiding the address. Certificate subjects and issuers appear on one line each, and report lines have no surrounding quote marks. Reports pass through the extension's secret masking and never include credential fields, headers or cookies. Node does not expose the certificate format version here, so that check is explicitly skipped.
 
