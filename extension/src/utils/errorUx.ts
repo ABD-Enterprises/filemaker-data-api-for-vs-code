@@ -105,8 +105,6 @@ export function selectErrorActions(
   return out;
 }
 
-let lastRenderedReport: string | undefined;
-
 export async function showErrorWithDetails(
   error: unknown,
   options?: ShowErrorOptions
@@ -192,7 +190,6 @@ export async function showErrorWithDetails(
     void vscode.window.showErrorMessage('Failed to generate FileMaker error report.');
     return;
   }
-  lastRenderedReport = report;
 
   if (selection === COPY_REPORT_ACTION) {
     await vscode.env.clipboard.writeText(report);
@@ -212,10 +209,6 @@ export const showCommandError = showErrorWithDetails;
 
 export function toUserErrorMessage(error: unknown, fallbackMessage = 'Unexpected error.'): string {
   return normalizeError(error, { fallbackMessage }).message;
-}
-
-export function getLastErrorReport(): string | undefined {
-  return lastRenderedReport;
 }
 
 interface RenderErrorReportOptions {

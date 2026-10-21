@@ -39,18 +39,6 @@ export async function createJsonlWriter(path: string): Promise<JsonlWriter> {
   };
 }
 
-export async function writeJsonlFile(path: string, records: Iterable<unknown>): Promise<void> {
-  const writer = await createJsonlWriter(path);
-
-  try {
-    for (const record of records) {
-      await writer.append(record);
-    }
-  } finally {
-    await writer.close();
-  }
-}
-
 function serializeJsonLine(record: unknown): string {
   if (typeof record === 'string') {
     return `${JSON.stringify(record)}\n`;

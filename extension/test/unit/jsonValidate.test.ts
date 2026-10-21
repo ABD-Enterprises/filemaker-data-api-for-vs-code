@@ -6,6 +6,7 @@ import {
   parseFindJson,
   parseOptionalNonNegativeInteger,
   parseSortJson,
+  validateDatabaseName,
   validateObjectArray,
   validateServerUrl
 } from '../../src/utils/jsonValidate';
@@ -35,6 +36,23 @@ describe('jsonValidate', () => {
     expect(parseOptionalNonNegativeInteger('', 'Limit')).toBeUndefined();
     expect(parseOptionalNonNegativeInteger('10', 'Limit')).toBe(10);
     expect(() => parseOptionalNonNegativeInteger('-1', 'Limit')).toThrow();
+  });
+});
+
+describe('validateDatabaseName', () => {
+  it.each(['', ' ', '   ', '\t \r\n'])('rejects a blank database name %j', (name) => {
+    expect(validateDatabaseName(name)).toEqual({ ok: false, error: 'Database name is required.' });
+  });
+
+  it('trims surrounding whitespace and preserves spaces within a database name', () => {
+    expect(validateDatabaseName(' Sales Archive ')).toEqual({ ok: true, value: 'Sales Archive' });
+  });
+
+  it.each(['\u0000', '\u0001', '\t', '\n', '\r', '\u001f'])('rejects an embedded control character %j', (control) => {
+    expect(validateDatabaseName(`Sales${control}Archive`)).toEqual({
+      ok: false,
+      error: 'Database name contains invalid control characters.'
+    });
   });
 });
 
