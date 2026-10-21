@@ -13,6 +13,8 @@ export interface ConnectionProfile {
   id: string;
   name: string;
   serverUrl: string;
+  /** An unconfirmed address from a workspace template must never be probed in Restricted Mode. */
+  serverUrlSource?: 'workspace-template';
   database: string;
   authMode: AuthMode;
   username?: string;

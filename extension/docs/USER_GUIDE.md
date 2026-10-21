@@ -30,9 +30,24 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 22. [Security behavior you will notice](#security-behavior-you-will-notice)
 23. [Troubleshooting](#troubleshooting)
 24. [FAQ](#faq)
-25. [Command reference](#command-reference)
+25. [Connection won't work? Diagnose Connection](#connection-wont-work-diagnose-connection)
+26. [Command reference](#command-reference)
 
 ---
+
+## Connection won't work? Diagnose Connection
+
+Open the Command Palette and run **FileMaker: Diagnose Connection**. Choose the active connection, another saved profile, or **Type a server address (without saving)** for a quick check. Enter an address such as `https://fm.example.com` or `https://fm.example.com:8443`. Nothing is saved for a typed check.
+
+The report opens as a new Markdown document in your editor and follows your editor theme. Each check shows **PASS**, **WARN** or **FAIL** and the time it took. It checks the address, looks up the server name, tries the port, reads the secure connection's certificate, checks VS Code's network settings, and asks the Data API for its product information. It does **not** sign in, send credentials, or change your certificate trust. Each network check has an eight-second limit. Use **Cancel** on the progress notification to stop.
+
+Start with **Most likely cause** at the end of the report. For a certificate with no server names (including FileMaker Server's default certificate), ask your administrator to confirm the fingerprint, then run **Connect** and choose **Trust**. For an expired certificate, ask the administrator to renew it. A certificate from a public authority is usually the easiest long-term solution.
+
+If the report says VS Code replaces the connection, search Settings for **proxy support**, set `http.proxySupport` to `fallback`, and try Connect again. In this version, `override` can bypass a trusted fingerprint; Diagnose Connection explains this but does not change the setting. Proxy setting and environment-variable values are hidden in the report. The DNS, port and certificate checks connect directly; the Data API check uses the extension's actual connection settings. For a proxy profile, this check diagnoses the **FileMaker Server address**, not the middleware's sign-in or certificate. It always checks `/fmi/data/vLatest/productInfo`; a custom API path can still need attention afterwards.
+
+Choose **Copy for bug report** when the report is ready, or run **FileMaker: Copy Connection Diagnosis for Bug Report** later. Answer **Hide the server address?** before anything is copied. Hiding also removes certificate details that could reveal the address. The report leaves out passwords, tokens, API keys, request headers and cookies. The copy command copies the original diagnosis, even if you have edited the open document.
+
+Turn off offline mode before running a check. In Restricted Mode, you can check your own saved connection or type an address yourself; an address from the workspace's profile template is refused until you trust the workspace. This read-only check follows the same connection policy as Test Connection and does not need permission to edit records.
 
 ## Command reference
 
@@ -42,6 +57,8 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | --- | --- | --- |
 | Open Getting Started Walkthrough | Opens the guided setup steps in VS Code. | Always shown. |
 | Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
+| Diagnose Connection | Checks a saved server or a typed address, without signing in, and explains likely fixes. | Always shown; turn off offline mode. An untrusted workspace template cannot supply the address. |
+| Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |

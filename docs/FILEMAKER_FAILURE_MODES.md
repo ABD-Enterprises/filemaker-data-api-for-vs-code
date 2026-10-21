@@ -5,6 +5,16 @@ Scope: the Data API client (`extension/src/services/fmClient.ts`), its error pip
 (`normalizeError`, `errorUx`), the connection wizard, the Explorer, the record editor, the script
 runner, batch jobs, the AI tools, and proxy mode. Product code was not changed.
 
+## Diagnose a failed connection without signing in
+
+Run **FileMaker: Diagnose Connection** from the Command Palette. Choose a saved profile or type an HTTPS server address without saving it. The report checks the address, DNS, port, certificate and VS Code network settings, then uses the extension's real connection to request `/fmi/data/vLatest/productInfo` without credentials. It shows PASS, WARN or FAIL, timings, the HTTP status and any FileMaker error code. Read **Most likely cause** for the next step.
+
+A default Claris certificate can have no host names and no chain beyond the leaf. A CA file alone cannot fix the missing host name: confirm the fingerprint with the administrator, then run Connect and choose Trust. Expired certificates should be renewed; certificates for another host should be replaced or reached using the correct name. If VS Code's proxy support is `override`, this version reports that trusted fingerprints can be bypassed and tells you to change it to `fallback`; it does not contain an automatic workaround. Environment proxies can also prevent fingerprint checks; add the server to `NO_PROXY` if allowed by your administrator.
+
+The direct DNS, port and TLS probes may differ from a request through a proxy; the final Data API step uses the actual extension transport. Proxy profiles diagnose the FileMaker Server, not the middleware endpoint. No sign-in is attempted and no profile or trust setting is changed. Cancel stops further checks; each probe has an eight-second limit. Offline mode prevents probing. Restricted Mode refuses a workspace-template address, while allowing a user-confirmed saved address or one typed by the user.
+
+Use **Copy for bug report** or **FileMaker: Copy Connection Diagnosis for Bug Report**, then answer **Hide the server address?**. Certificate details are omitted when hiding the address. Reports pass through the extension's secret masking and never include credential fields, headers or cookies. Node does not expose the certificate format version here, so that check is explicitly skipped.
+
 ## How to read this
 
 Every row says how sure we are:

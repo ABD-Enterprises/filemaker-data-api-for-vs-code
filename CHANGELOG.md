@@ -24,7 +24,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
-- None.
+- Add Diagnose Connection: check the server address, network, certificate and Data API without signing in, explain likely fixes, and copy a report with the address hidden if wanted.
 
 ### [FIX]
 
