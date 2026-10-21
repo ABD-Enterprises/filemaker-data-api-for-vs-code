@@ -1097,11 +1097,13 @@ export class FMClient {
           const metadata = this.layoutMetadataCache.get(this.buildLayoutMetadataCacheKey(profile, layout))
             ?? await this.getLayoutMetadata(profile, layout, { signal: control?.signal, recordHistory: false });
           const fields = Array.isArray(metadata.fieldMetaData) ? metadata.fieldMetaData : [];
-          const textField = fields.find((field): field is { name: string; result: string } =>
+          const textFields = fields.filter((field): field is { name: string; result: string; type?: string } =>
             field !== null && typeof field === 'object' && typeof field.name === 'string'
             && typeof field.result === 'string' && field.result.toLowerCase() === 'text'
-            && typeof field.type === 'string' && field.type.toLowerCase() === 'normal'
+            && (field.type === undefined || (typeof field.type === 'string' && field.type.toLowerCase() === 'normal'))
             && field.global !== true && String(field.global).toLowerCase() !== 'true');
+          // Prefer confirmed stored fields, but tolerate metadata that omits the field type.
+          const textField = textFields.find((field) => field.type?.toLowerCase() === 'normal') ?? textFields[0];
           if (!textField) {
             // Establish whether the layout is empty even when the parameter cannot fit a GET.
             const records = await this.listRecords(profile, layout, { limit: 1 }, control);

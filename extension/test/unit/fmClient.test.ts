@@ -72,6 +72,7 @@ describe('FMClient (unit)', () => {
 
     it('chooses a normal stored text field ahead of global, summary and calculated results, preserving its name', async () => {
       const h = await harness([
+        { name: 'Type omitted', result: 'TEXT' },
         { name: 'Global', type: 'NORMAL', result: 'TEXT', global: true },
         { name: 'Summary', type: 'SUMMARY', result: 'TEXT' },
         { name: 'Calculation', type: 'CALCULATION', result: 'TEXT' },
@@ -80,6 +81,36 @@ describe('FMClient (unit)', () => {
       ]);
       await h.client.runScript(h.profile, { layout, scriptName: ' Echo ', scriptParam: 'x'.repeat(3000) });
       expect(h.http.request.mock.calls[1]?.[0].data.query).toEqual([{ [textName]: '*' }]);
+    });
+
+    it.each(['0', 0])('accepts a confirmed find with empty data (scriptError=%s) without a probe', async (scriptError) => {
+      const h = await harness([{ name: textName, result: 'text' }]);
+      h.http.request.mockResolvedValueOnce(reply({ data: [], scriptResult: 'ran', scriptError }));
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .resolves.toMatchObject({ response: { scriptResult: 'ran', scriptError } });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+      expect(h.http.request.mock.calls[1]?.[0]).toMatchObject({ method: 'POST', data: { query: [{ [textName]: '*' }] } });
+    });
+
+    it.each([[], [{ recordId: '1', fieldData: {} }]].map((data) => ({ data })))('does not confirm or probe a find without scriptError (data=$data)', async ({ data }) => {
+      const h = await harness();
+      h.http.request.mockResolvedValueOnce(reply({ data, scriptResult: 'unconfirmed' }));
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .rejects.toMatchObject({ code: 'SCRIPT_NOT_CONFIRMED', isRetryable: false });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the endpoint at the limit, then a find over it with metadata fetched only once', async () => {
+      const h = await harness([{ name: textName, result: 'text' }]);
+      h.http.request.mockReset().mockResolvedValue(reply({ scriptError: '0', scriptResult: 'done' }));
+      const prefix = `${h.profile.serverUrl}/fmi/data/vLatest/databases/TestDB/layouts/L/script/S?script.param=`.length;
+      await h.client.runScript(h.profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(MAX_SCRIPT_URL_LENGTH - prefix) });
+      h.http.request.mockResolvedValueOnce(reply({ fieldMetaData: [{ name: textName, result: 'text' }] }));
+      for (const extra of [1, 2]) {
+        await h.client.runScript(h.profile, { layout: 'L', scriptName: 'S', scriptParam: 'x'.repeat(MAX_SCRIPT_URL_LENGTH - prefix + extra) });
+      }
+      expect(h.http.request.mock.calls.map(([config]) => config.method)).toEqual(['GET', 'GET', 'POST', 'POST']);
+      expect(h.http.request.mock.calls.filter(([config]) => config.url.endsWith('/records'))).toHaveLength(0);
     });
 
     it.each([
@@ -111,6 +142,15 @@ describe('FMClient (unit)', () => {
       h.http.request.mockResolvedValueOnce(reply({}, '401', status));
       await expect(h.client.runScript(h.profile, { layout, scriptName: 'Long name'.repeat(40), scriptParam: 'x'.repeat(1500) }))
         .rejects.toMatchObject({ code: '401', message: noRecordsMessage });
+    });
+
+    it('explains an empty no-text-field layout when a bounded read returns empty data', async () => {
+      const h = await harness([]);
+      h.http.request.mockResolvedValueOnce(reply({ data: [] }));
+      await expect(h.client.runScript(h.profile, { layout, scriptName: 'Echo', scriptParam: 'x'.repeat(3000) }))
+        .rejects.toMatchObject({ code: '401', message: noRecordsMessage });
+      expect(h.http.request).toHaveBeenCalledTimes(2);
+      expect(h.http.request.mock.calls[1]?.[0]).toMatchObject({ method: 'GET', params: { _limit: 1 } });
     });
 
     it('an unsupported endpoint followed by an empty layout reports not run, not unsupported', async () => {
