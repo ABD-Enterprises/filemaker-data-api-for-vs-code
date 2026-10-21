@@ -1,3 +1,4 @@
+import { assertFindCriteria } from '../utils/findCriteria';
 import type { FMClient } from './fmClient';
 import type { ConnectionProfile, FindRecordsRequest, FindRecordsResult, SavedQuery } from '../types/fm';
 
@@ -16,6 +17,7 @@ export async function executeSavedQueryAgainstClient(
     offset: query.offset
   };
 
+  assertFindCriteria(request.query);
   const result = await fmClient.findRecords(profile, query.layout, request);
 
   return {

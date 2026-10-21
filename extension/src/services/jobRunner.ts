@@ -55,8 +55,7 @@ export class JobRunner {
       cancel: () => {
         controller.cancelled = true;
         if (state.status === 'running' || state.status === 'queued') {
-          state.status = 'cancelled';
-          state.finishedAt = new Date().toISOString();
+          state.status = 'cancelling';
           this.emit(state);
         }
       },
@@ -112,12 +111,15 @@ export class JobRunner {
     try {
       const result = await task(context);
 
+      state.result = result;
       if (controller.cancelled) {
         state.status = 'cancelled';
+        if (result && typeof result === 'object' && 'attempted' in result && 'total' in result) {
+          state.details = `Cancelled after ${result.attempted} of ${result.total}`;
+        }
       } else {
         state.status = 'completed';
         state.progress = 100;
-        state.result = result;
       }
     } catch (error) {
       if (controller.cancelled) {
@@ -143,7 +145,8 @@ export class JobRunner {
         finishedAt: state.finishedAt,
         status: state.status,
         progress: state.progress,
-        details: state.details
+        details: state.details,
+        result: state.result
       },
       ...current.filter((item) => item.id !== state.id)
     ].slice(0, normalizeRecentLimit(this.getRecentLimit()));
@@ -177,4 +180,8 @@ function normalizeRecentLimit(value: number): number {
 
 function sanitizeLogMessage(input: string): string {
   return redactString(input);
+}
+
+export function jobStatusText(job: Pick<JobSummary, 'status' | 'details'>): string {
+  return job.status === 'cancelled' && job.details ? job.details : job.status;
 }

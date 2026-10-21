@@ -141,7 +141,7 @@ it('client retains portal counts for get and find and sends exact portal paging 
   const record = await client.getRecord(profile, ' Layout ', '1', { portal: { ' Orders ': { limit: 50, offset: 51 } } });
   expect(record.portalDataInfo).toEqual(portalDataInfo);
   expect(requestWithAuth.mock.calls[0]![1].params).toEqual({ '_limit. Orders ': 50, '_offset. Orders ': 51 });
-  const result = await client.findRecords(profile, ' Layout ', { query: [{}], portal: { ' Orders ': { limit: 50, offset: 51 } } });
+  const result = await client.findRecords(profile, ' Layout ', { query: [{ Name: '*' }], portal: { ' Orders ': { limit: 50, offset: 51 } } });
   expect(result.data[0].portalDataInfo).toEqual(portalDataInfo);
   expect(requestWithAuth.mock.calls[1]![1].data).toMatchObject({ 'limit. Orders ': 50, 'offset. Orders ': 51 });
 });

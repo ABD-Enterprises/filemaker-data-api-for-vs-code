@@ -30,6 +30,9 @@ PR title prefix matches the highest-tier label added:
 ### [FIX]
 
 - Diagnose Connection now shows the full matching certificate fingerprint, explains older certificate settings and missing intermediates, and gives advice that matches the current proxy handling. Server path prefixes work, report lines are easier to read, and hiding the address also hides the port.
+
+- [FIX] Long script parameters use a wildcard find on the first text field instead of an empty find. No-match finds and responses without a script status cannot report a successful script run.
+- [FIX] Test My Server now reads a record without an empty search, and empty searches show clear next steps. Cancelled batch updates wait for pending edits and keep a list of changed, failed and untouched records. Cancelling one request no longer cancels another request's sign-in, and renewed connections close their old sessions.
 - Preserve text and record IDs when moving data through CSV and the Record Editor; show incomplete portal rows with Load more, keep existing exports safe on failure or cancellation, and offer CSV for Excel.
 
 - Generated types now use the real field type and repeating field names. Generated clients handle empty finds and explain server errors. Special names stay intact; timeouts, paging and error messages give clearer next steps.

@@ -62,6 +62,8 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Diagnose Connection | Checks a saved server or a typed address, without signing in, and explains likely fixes. | Always shown; turn off offline mode. Uses saved profiles or an address you type; never reads a workspace template. |
 | Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
 | Test My Server | Runs a safe server check and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
+
+| Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
@@ -106,9 +108,9 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Create Record | Opens the editor in create mode; warns before sending text with a NUL character. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
-| Batch Export (Find) | Saves matching records to CSV or JSONL safely, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
+| Batch Export (Find) | Saves matching records to CSV or JSONL safely as a background job, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
 | Batch Update from CSV/JSON | Previews or applies updates, using field types for CSV and leaving empty CSV cells unchanged; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
-| Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON. | Shown in power-user mode; needs an active or recent job. |
+| Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON, including changed, failed and untouched record IDs after a cancelled batch update. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
 | Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
 | Diff Layout Across Environments | Shows field differences for one layout across an environment set. | Shown in enterprise mode; needs a set with at least two existing profiles. |
@@ -336,13 +338,17 @@ In proxy mode the test opens a session through the proxy. A failed test shows it
 
 Choose your connection, then run **FileMaker: Test My Server**. The first dialog lists every check. Choose **Run read-only test** to start safely. This uses the saved account and password, in a separate temporary session, and leaves your normal connection alone.
 
-The test checks the server version, signs in, tries the database list, counts layouts and scripts, and reads the fields of the first three layouts. A database list that your account cannot see is a warning, not a failed login. Choose a layout to find at most one record and read it by its ID; the last layout you chose is remembered for that connection. Then choose a text field for a search that should find nothing. This records the server's actual answer, including whether “no records match” uses HTTP 404 or 500 with FileMaker code 401. Cancel a picker to skip that check. No record values or script results go into the report.
+The test checks the server version, signs in, tries the database list, counts layouts and scripts, and reads the fields of the first three layouts. A database list that your account cannot see is a warning, not a failed login. Choose a layout to read at most one record using Get records, without sending an empty search, and read it by its ID; the last layout you chose is remembered for that connection. Then choose a text field for a search that should find nothing. This records the server's actual answer, including whether “no records match” uses HTTP 404 or 500 with FileMaker code 401. Cancel a picker to skip that check. No record values or script results go into the report.
 
 **Optional write test.** Only choose **Also run the write test** with a disposable test file. Pick a **SCRATCH layout** and an editable text field. A second dialog names that layout and asks permission to create, read, edit and delete one record. The test also tries an old modification ID to see whether the server refuses it with code 306. Required fields, automatic fields and server triggers can affect this test. Cleanup is attempted if a step fails or you cancel. If deletion fails, the report gives the record ID and layout: ask your administrator to remove that test record. If a create request times out, the server may have created a record without returning its ID; check the scratch layout before trying again.
 
 **Optional script.** This is skipped by default: leave the script name blank or cancel. To run one, type its exact name and parameter (the parameter can be blank), then confirm the named script. Only use a script you understand: it may change data or have other effects. Layout, field and script names keep their spaces exactly as entered.
 
 Writes and scripts are unavailable in Restricted Mode, when the enterprise role or policy blocks them, or when their Record Editor or Script Runner switch is off. Offline mode prevents the test. You can cancel from the progress notification; further tests stop, with cleanup and logout still attempted. Requests use your normal timeout setting. Even reads may cause server-side triggers or automatic actions, so use a test file first. Containers and batches are never tested.
+
+Cancelling a request while signing in stops only that request; other waiting requests continue. When the extension renews a direct connection, it tries to close the previous session with a short timeout. A failed close does not fail your request; the old session then expires on the server.
+
+The Get records step needs a direct connection; the existing proxy protocol has no action to list records without a search.
 
 The test signs out and tries the old token once, without signing back in, to check that it is refused. A proxy owns its own sessions, so that last check is skipped for proxy connections. The report opens as an unsaved Markdown document. **PASS** means that step answered as expected; **WARN** means skipped or not confirmed; **FAIL** means it needs attention. It shows elapsed time, HTTP status, FileMaker code and message, observed facts and plain next steps. A TLS protocol is only shown when it was observed; plain HTTP has no TLS. Blank status or code means none was observed, never an assumed success.
 
@@ -458,6 +464,8 @@ Results:
 
 **Save…** stores the query under the profile in the sidebar (**Saved Queries**). Saved queries live in the workspace by default; set `filemaker.savedQueries.scope` to `global` to keep them in your user data. Run one from its right-click menu or **FileMaker: Run Saved Query**. **FileMaker: Export Saved Queries (JSON)** and **FileMaker: Import Saved Queries (JSON)** share them with a team. The panel keeps a short **Request history**, the last `filemaker.history.maxEntries` requests (default 10).
 
+**Empty searches.** Enter at least one field value to search. An empty form, `[]`, or `[{}]` is refused before searching; it does not mean “all records.” This also applies to saved queries, batch exports, AI searches, generated clients and copied code. To search for an empty field, choose **is empty** (the `=` search value). Get records lists records without searching; Test My Server uses it to read one record. FM Web’s **Find All** also uses Get records through the local preview bridge.
+
 For a quick check without the panel, **FileMaker: Run Find (JSON)** asks for a layout and a find body.
 
 ---
@@ -525,6 +533,8 @@ Some layouts list the same field more than once. The editor shows one value per 
 
 Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in the sidebar while they exist.
 
+After you cancel an update, its status stays **cancelling** while edits already sent finish. No further edit or retry starts. It then shows **Cancelled after N of M**; N counts records attempted, including failures. Open **FileMaker: Show Jobs** and choose the job to see `updatedIds`, `failures` (record IDs, reasons and FileMaker codes when supplied), and `notAttemptedIds`. The same details stay in recent jobs after a restart. Cancelling does not undo changes.
+
 ### Export
 
 1. Run **FileMaker: Batch Export (Find)** (or use the layout's right-click menu).
@@ -576,7 +586,9 @@ Batch update is blocked in offline mode, for the `viewer` role, and when `filema
 
 **What is sent.** The script runs with the request the Claris Data API Guide documents for it: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<parameter>`. It is one request and it reads no record. The script name, layout name and parameter are percent-encoded exactly (a space is `%20`, never `+`; accented letters, `|`, `&` and `/` arrive as typed). The answer carries the script's error number and, if the script exits with a result, that result; if a record or find was part of the request, its data is not shown.
 
-**Parameter length.** A web address should stay under about 2,000 characters (the guide's advice), and this count includes the server address, layout and script name. A longer parameter cannot go in the address, so the extension sends it in the body of a find limited to one record, which is the guide's other documented form. That request reads that one record and has your script attached to it. If you also gave a **Record ID** and the parameter is too long, the run is refused with a message; shorten the parameter (pass an id or a key and let the script read the rest).
+**Parameter length.** The extension limits the complete percent-encoded web address to 2,000 characters, including the server address, layout, script name and parameter. Without a record ID, a longer parameter goes in a find body: the extension uses the layout metadata's first field whose result type is text, keeps its name exactly, searches for `*`, and limits the response to one record. An empty search cannot carry the parameter: FileMaker rejects it. If the layout has no text field, the extension falls back to Get records limited to one record only when its complete encoded URL fits the same 2,000-character limit. Otherwise it says: "This parameter is too long to send. Shorten it or run the script from a layout with a text field". With a record ID, the script must use that record's URL; shorten a parameter that exceeds the limit, or clear the record ID and use a layout with a text field.
+
+**Verified on a real server (2026-10-21).** A `POST /layouts/{layout}/_find` with `{"query":[{"<text field>":"*"}],"limit":1,"script":"<name>","script.param":"<3000 characters>"}` ran the script: HTTP 200 and `scriptError: "0"`. A find that matches no records returns code 401 and does **not** run the attached script; its response has no `scriptError`. The runner reports: "The script did not run because this layout has no records. Add a record or use a layout that has records." A `GET /layouts/{layout}/records?_limit=1&script=<name>&script.param=<1500 characters>` also worked. Both attached forms read records; the runner shows only the script's answer. An answer without `scriptError` is never treated as confirmed execution. If an older server refuses the script endpoint, a short call uses the Get records form too.
 
 **With a record ID.** The script is attached to a request for that record (`?script=<name>&script.param=<parameter>`), because the script endpoint cannot take a record in context.
 
@@ -625,7 +637,7 @@ Any request the extension sends can be copied as text, to try it in a terminal, 
 
 **Details worth knowing.**
 
-- **Run a script** is copied in the form the Claris Data API Guide documents: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<text>`. With a record in context the script is attached to a `GET` of that record (`?script=<name>&script.param=<text>`). A parameter too long for an address (more than about 2000 characters with the server and script name) is copied as a find limited to one record, which reads that record; with a record in context a parameter that long is refused.
+- **Run a script** is copied in the form the Claris Data API Guide documents: a `GET` of `.../layouts/<layout>/script/<script>?script.param=<text>`. With a record in context the script is attached to a `GET` of that record (`?script=<name>&script.param=<text>`). A parameter too long for an address (more than about 2000 characters with the server and script name) is refused; shorten it before copying.
 - **Edit** carries `"modId": "<modId>"` (`{{modId}}` in `.http` and Postman). Put in the modId from the record you read: FileMaker refuses the edit with error 306 if the record changed since. The Record Editor copies the fields you changed in the form; without changes (and in the Record Viewer) it shows one field to fill in.
 - **Delete** really deletes when sent. The copied text says so.
 - **Container upload** is a multipart request with the file at `./file-to-upload`: change the path. Add the modId to the address for a checked upload.
@@ -1153,7 +1165,10 @@ Connection errors name the step that failed and what to do. The most common firs
 | --- | --- |
 | A find returns nothing | FileMaker reports "no records match" as error code 401: verified on a real server (FileMaker Data API Engine, 2026-10-21) as HTTP 200 with an empty data list. Older/other versions may use another status; the extension accepts code 401 on any status, and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
 | Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
-| "The script parameter is too long to send in a web address" | A script run with a record ID and a parameter longer than about 2,000 characters (the address limit, including the server and script name). Shorten the parameter, or run the script without a record ID (then it is sent in the body of a find). See [Run scripts](#run-scripts). |
+| "Find criteria are empty" / "Missing required property" (400 / 10) | Enter at least one field value to search, or use Get records to list records. An empty search cannot list records. |
+| "This parameter is too long to send" | The encoded URL exceeds 2,000 characters and a text-field find cannot carry it. Shorten it or use a layout with a text field without a record ID. See [Run scripts](#run-scripts). |
+| "The script did not run because this layout has no records" | The wildcard find returned code 401 and did not run the script. Add a record or use a layout that has records. |
+| "The server did not confirm that the script ran" | The response had no `scriptError`. Check the script before trying again; the runner cannot confirm execution. |
 | "Script runner is not supported on this server/profile." | The server refused both the script endpoint and the attach-to-another-request form (405, 501 or a FileMaker 404). Check the layout and script exist for the account and the server version supports the Data API script calls. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
 | Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |

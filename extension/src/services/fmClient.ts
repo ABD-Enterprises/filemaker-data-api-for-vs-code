@@ -27,6 +27,7 @@ import type { Logger } from './logger';
 import type { SecretStore } from './secretStore';
 import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
+import { assertFindCriteria } from '../utils/findCriteria';
 import { assertNoNulText } from '../utils/nulText';
 import { normalizeError } from '../utils/normalizeError';
 import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
@@ -522,6 +523,34 @@ export class FMClient {
     );
   }
 
+  public async listRecords(
+    profile: ConnectionProfile,
+    layout: string,
+    options: { limit?: number; offset?: number; sort?: FindRecordsRequest['sort'] } = {},
+    control?: ClientRequestControl
+  ): Promise<FindRecordsResult> {
+    return this.withHistory({ profileId: profile.id, operation: 'listRecords', layout, endpoint: `GET /layouts/${layout}/records` }, async (trace) => {
+      assertUsableUrlName(layout, 'layout');
+      if (isProxyProfile(profile)) {
+        throw new FMClientError('Get records is not supported by this proxy. Use a search with at least one field value.');
+      }
+      const params: Record<string, string | number> = {};
+      if (options.limit !== undefined) params._limit = options.limit;
+      if (options.offset !== undefined) params._offset = options.offset;
+      if (options.sort?.length) params._sort = JSON.stringify(options.sort);
+      try {
+        const envelope = await this.requestWithAuth<DataApiListRecordsResponse>(profile, {
+          method: 'GET', path: `/layouts/${encodeURIComponent(layout)}/records`, params,
+          signal: control?.signal, maxResponseBytes: control?.maxResponseBytes
+        }, true, trace);
+        return { data: envelope.response.data ?? [], dataInfo: envelope.response.dataInfo, ...scriptErrorsOf(envelope.response) };
+      } catch (error) {
+        if (isNoRecordsFound(error)) return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
+        throw error;
+      }
+    });
+  }
+
   public async findRecords(
     profile: ConnectionProfile,
     layout: string,
@@ -537,6 +566,7 @@ export class FMClient {
       },
       async (trace) => {
         assertUsableUrlName(layout, 'layout');
+        assertFindCriteria(body.query);
         if (isProxyProfile(profile)) {
           try {
             return await this.proxyClient.findRecords(profile, layout, body, control?.signal);
@@ -960,16 +990,10 @@ export class FMClient {
    * The response carries `scriptError` (and `scriptResult` when the script exits with a result).
    * Nothing else is requested: no record is read or changed.
    *
-   * Two documented alternatives exist, used only where the plain call cannot be:
-   *  - a script that must run with a record in context, or that cannot run on the script endpoint
-   *    (an older server answers 405, 501 or a FileMaker 404), is attached to another request
-   *    ("Run a script with another request", .../run-script-with-another-request.html): a GET of
-   *    that one record, or, with no record, a find limited to one record;
-   *  - a parameter too long for a URL (the guide advises keeping a URL under 2000 characters,
-   *    .../url-data-format-notes.html) goes in the body of that find, because the script endpoint
-   *    takes `script.param` only in the URL.
-   * The find is the least harmful documented carrier: it changes nothing, and `limit: 1` keeps the
-   * data it returns to one record. It still reads that record, which is why it is not the first choice.
+   * When a record is needed, or the script endpoint is unsupported, attach the script to a GET
+   * of the selected record or a GET records limited to one. Without a record ID, long parameters
+   * use a wildcard find on the first text field, limited to one record. An empty find is invalid,
+   * and a find with no matches does not run the attached script (verified 2026-10-21).
    */
   public async runScript(
     profile: ConnectionProfile,
@@ -987,7 +1011,8 @@ export class FMClient {
         assertUsableUrlName(request.scriptName, 'script');
         assertUsableUrlName(request.layout, 'layout');
         if (isProxyProfile(profile)) {
-          return this.proxyClient.runScript(profile, request, control?.signal);
+          const result = await this.proxyClient.runScript(profile, request, control?.signal);
+          return { ...result, response: scriptResponse(result.response) };
         }
 
         // Names are used exactly as given (see uploadContainer): only an empty or all-blank name is refused.
@@ -1019,21 +1044,16 @@ export class FMClient {
               true,
               trace
             );
-            return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+            return { response: scriptResponse(envelope.response), messages: envelope.messages };
           }
-          // POST: the script parameters are in the body, so a long one fits.
-          const envelope = await this.requestWithAuth<Record<string, unknown>>(
-            profile,
-            {
-              method: 'POST',
-              path: `/layouts/${encodeURIComponent(layout)}/_find`,
-              data: { query: [{}], limit: 1, ...buildScriptParams(scriptName, scriptParam) },
-              signal: control?.signal
-            },
-            true,
-            trace
-          );
-          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+          const path = `/layouts/${encodeURIComponent(layout)}/records`;
+          const params = { _limit: 1, ...buildScriptParams(scriptName, scriptParam) };
+          if (ifTooLong(path, Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(value)])))) {
+            throw tooLongScriptParameter();
+          }
+          const envelope = await this.requestWithAuth<Record<string, unknown>>(profile,
+            { method: 'GET', path, params, strictQuery: true, signal: control?.signal }, true, trace);
+          return { response: scriptResponse(envelope.response), messages: envelope.messages };
         };
 
         const failure = (error: unknown, endpoint: string): FMClientError =>
@@ -1067,13 +1087,36 @@ export class FMClient {
         const scriptPath = `/layouts/${encodeURIComponent(layout)}/script/${encodeURIComponent(scriptName)}`;
         const query: Record<string, string> = scriptParam === undefined ? {} : { 'script.param': scriptParam };
 
-        // Too long for a URL: use the documented body form from the start (no failed request first).
         if (ifTooLong(scriptPath, query)) {
+          const metadata = this.layoutMetadataCache.get(this.buildLayoutMetadataCacheKey(profile, layout))
+            ?? await this.getLayoutMetadata(profile, layout, { signal: control?.signal, recordHistory: false });
+          const fields = Array.isArray(metadata.fieldMetaData) ? metadata.fieldMetaData : [];
+          const textField = fields.find((field): field is { name: string; result: string } =>
+            field !== null && typeof field === 'object' && typeof field.name === 'string'
+            && typeof field.result === 'string' && field.result.toLowerCase() === 'text');
+          if (!textField) {
+            // With no text criterion, only the bounded GET records form is available.
+            // attach() enforces the same 2000-character encoded URL limit.
+            return attach();
+          }
           try {
-            return await attach();
+            const envelope = await this.requestWithAuth<Record<string, unknown>>(
+              profile,
+              {
+                method: 'POST', path: `/layouts/${encodeURIComponent(layout)}/_find`,
+                data: { query: [{ [textField.name]: '*' }], limit: 1, ...buildScriptParams(scriptName, scriptParam) },
+                signal: control?.signal
+              },
+              true,
+              trace
+            );
+            return { response: scriptResponse(envelope.response), messages: envelope.messages };
           } catch (error) {
-            if (isLikelyScriptUnsupportedError(error)) {
-              throw scriptUnsupported(error);
+            if (isNoRecordsFound(error)) {
+              throw new FMClientError(
+                'The script did not run because this layout has no records. Add a record or use a layout that has records.',
+                { code: '401', kind: 'validation', isRetryable: false }
+              );
             }
             throw failure(error, `POST /layouts/${request.layout}/_find`);
           }
@@ -1086,7 +1129,7 @@ export class FMClient {
             true,
             trace
           );
-          return { response: withoutRecordData(envelope.response), messages: envelope.messages };
+          return { response: scriptResponse(envelope.response), messages: envelope.messages };
         } catch (error) {
           if (!isLikelyScriptUnsupportedError(error)) {
             throw failure(error, `GET /layouts/${request.layout}/script/${request.scriptName}`);
@@ -1101,7 +1144,7 @@ export class FMClient {
           if (isLikelyScriptUnsupportedError(error)) {
             throw scriptUnsupported(error);
           }
-          throw failure(error, `POST /layouts/${request.layout}/_find`);
+          throw failure(error, `GET /layouts/${request.layout}/records`);
         }
       }
     );
@@ -1474,7 +1517,7 @@ export class FMClient {
     // token is reused — orphaning the rest until server timeout.
     const inFlight = this.inFlightRefresh.get(profile.id);
     if (inFlight) {
-      return inFlight;
+      return waitForSession(inFlight, control?.signal);
     }
 
     if (existing) {
@@ -1486,7 +1529,11 @@ export class FMClient {
     // A renewal ahead of expiry that fails (the password changed meanwhile, the server is busy) must
     // not stop work that the current token can still do: keep using it, and pause nothing. If the
     // token has really expired, the 401 on the next request starts a real renewal, which can pause.
-    const refreshPromise = this.createSession(profile, existing ? { ...control, proactive: true } : control)
+    const refreshPromise = this.createSession(profile, { proactive: Boolean(existing), userInitiated: control?.userInitiated })
+      .then(async (token) => {
+        if (existing && existing !== token) await this.retireSession(profile, existing);
+        return token;
+      })
       .catch((error) => {
         if (!existing) {
           throw error;
@@ -1504,7 +1551,22 @@ export class FMClient {
 
     this.inFlightRefresh.set(profile.id, refreshPromise);
 
-    return refreshPromise;
+    return waitForSession(refreshPromise, control?.signal);
+  }
+
+  private async retireSession(profile: ConnectionProfile, token: string): Promise<void> {
+    // Proxy sessions are managed by the proxy; its logout would delete the replacement session.
+    if (isProxyProfile(profile)) return;
+    const timeout = Math.min(this.timeoutMs, 3000);
+    const url = this.buildEndpoint(profile, `/sessions/${encodeURIComponent(token)}`);
+    try {
+      await this.httpClient.request({ method: 'DELETE', url,
+        headers: { Authorization: `Bearer ${token}` }, timeout, signal: AbortSignal.timeout(timeout),
+        maxRedirects: 0, ...httpsTransportFor(profile, url) });
+    } catch {
+      // Never log an exception here: it can contain the token in the URL or headers.
+      this.logger.warn('Could not close the previous FileMaker session; it will expire on the server.');
+    }
   }
 
   /**
@@ -1525,21 +1587,25 @@ export class FMClient {
 
     const inFlight = this.inFlightRefresh.get(profile.id);
     if (inFlight) {
-      await inFlight;
+      await waitForSession(inFlight, control?.signal);
       return;
     }
 
     // Registered synchronously (no await between the check above and the set below),
     // so concurrent callers resuming after their own awaits see it.
+    const issuedAt = this.sessionTracker.getIssuedAt(profile.id);
+    const presumedLive = issuedAt !== undefined && Math.max(0, this.now() - issuedAt) < this.getSessionMaxAgeMs();
     const renewal = (async () => {
       await this.secretStore.deleteSessionToken(profile.id);
       this.sessionTracker.clear(profile.id);
-      return this.createSession(profile, control);
+      const token = await this.createSession(profile);
+      if (presumedLive && token !== rejectedToken) await this.retireSession(profile, rejectedToken);
+      return token;
     })().finally(() => {
       this.inFlightRefresh.delete(profile.id);
     });
     this.inFlightRefresh.set(profile.id, renewal);
-    await renewal;
+    await waitForSession(renewal, control?.signal);
   }
 
   private async requestWithAuth<TResponse extends Record<string, unknown>>(
@@ -1906,9 +1972,20 @@ function withoutRecordData(response: Record<string, unknown>): Record<string, un
   return rest;
 }
 
+/** An HTTP success without the main script's status does not confirm execution. */
+function scriptResponse(response: Record<string, unknown>): Record<string, unknown> {
+  if (response.scriptError === undefined || response.scriptError === null || response.scriptError === '') {
+    throw new FMClientError(
+      'The server did not confirm that the script ran (no scriptError in the response). Check the script before trying again.',
+      { code: 'SCRIPT_NOT_CONFIRMED', kind: 'server', isRetryable: false }
+    );
+  }
+  return withoutRecordData(response);
+}
+
 function tooLongScriptParameter(): FMClientError {
   return new FMClientError(
-    `The script parameter is too long to send in a web address (the limit is about ${MAX_SCRIPT_URL_LENGTH} characters including the server and script name). Shorten it, for example by passing an id or a key and letting the script read the rest.`,
+    'This parameter is too long to send. Shorten it or run the script from a layout with a text field',
     { code: 'SCRIPT_PARAMETER_TOO_LONG', kind: 'validation', isRetryable: false }
   );
 }
@@ -2033,6 +2110,22 @@ function normalizeHeaders(headers: Record<string, unknown>): Record<string, stri
   }
 
   return normalized;
+}
+
+/** A shared sign-in belongs to the connection; each waiting request owns only its own wait. */
+function waitForSession<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', abort);
+    const abort = () => {
+      cleanup();
+      reject(new FMClientError('Request cancelled.', { kind: 'cancellation', isRetryable: false }));
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+    // Attach handlers even when already aborted: a later failed shared login must be observed.
+    promise.then((value) => { cleanup(); resolve(value); }, (error) => { cleanup(); reject(error); });
+  });
 }
 
 function portalPagingParams(portals: PortalPaging | undefined, prefix: string): Record<string, number> {

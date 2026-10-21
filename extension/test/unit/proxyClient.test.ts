@@ -179,6 +179,13 @@ describe('ProxyClient', () => {
   });
 
   describe('findRecords', () => {
+    it.each([[], [{}], [{ omit: 'true' }]].map((query) => ({ query })))('refuses empty criteria $query without contacting the proxy', async ({ query }) => {
+      const http = new FakeAxios();
+      const client = new ProxyClient(createSecretStore() as never, createLogger(), 5000, http as never);
+      await expect(client.findRecords(createProfile(), 'Contacts', { query })).rejects.toThrow('Enter at least one field value to search');
+      expect(http.post).not.toHaveBeenCalled();
+    });
+
     it('returns find results from proxy response', async () => {
       const findResult = { data: [{ recordId: '1', fieldData: { Name: 'Bob' } }] };
       const scope = nock(PROXY_URL)

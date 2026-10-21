@@ -115,6 +115,12 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
   });
 
+  it.each(['[]', '[{}]', '[{"omit":"true"}]', '[{"Name":""}]'])('refuses an empty form %s before sending a find', async (findJson) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson, runId: 4 } });
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', message: expect.stringContaining('Enter at least one field value to search'), runId: 4 }));
+  });
+
   it.each(['limit', 'offset'])('refuses zero %s with a next step', async (field) => {
     await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{"Name":"Ada"}]', [field]: 0, runId: 4 } });
     expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 4, message: expect.stringContaining('must be at least 1') }));

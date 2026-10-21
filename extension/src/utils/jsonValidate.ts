@@ -1,3 +1,4 @@
+import { EMPTY_FIND_ADVICE, hasFindCriteria } from './findCriteria';
 import { FMClientError } from '../services/errors';
 
 export type JsonObject = Record<string, unknown>;
@@ -51,7 +52,9 @@ export function parseObjectArrayJson(input: string, label: string): JsonValidati
 }
 
 export function parseFindJson(input: string): JsonValidationResult<JsonObjectArray> {
-  return parseObjectArrayJson(input, 'Find JSON');
+  const parsed = parseObjectArrayJson(input, 'Find JSON');
+  if (parsed.ok && !hasFindCriteria(parsed.value)) return { ok: false, error: `Find criteria are empty. ${EMPTY_FIND_ADVICE}` };
+  return parsed;
 }
 
 export function parseSortJson(input: string): JsonValidationResult<JsonObjectArray> {

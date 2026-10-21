@@ -1,3 +1,4 @@
+import { assertFindCriteria } from '../utils/findCriteria';
 import axios, { type AxiosInstance } from 'axios';
 
 import type { Logger } from './logger';
@@ -146,6 +147,7 @@ export class ProxyClient {
     body: FindRecordsRequest,
     signal?: AbortSignal
   ): Promise<FindRecordsResult> {
+    assertFindCriteria(body.query);
     const data = await this.invoke<ProxyFindResponse>(profile, 'findRecords', { layout, body }, signal);
 
     if (!data.result) {

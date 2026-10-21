@@ -9,7 +9,7 @@ import { testMyServer, renderSelfTestReport } from '../services/serverSelfTest';
 import { isFeatureEnabled, isOfflineModeOn } from '../utils/policySetting';
 import { redactString } from '../utils/redact';
 
-export const SELF_TEST_NOTICE = 'This will check product info and server version without login, log in with your stored credentials, try the database list, count layouts and scripts, read field details for the first 3 layouts, find at most 1 record on a layout you choose, get that record, try a no-match find on a text field you choose, log out and check that the old session is refused. It never prints passwords or tokens, record values or script results. It does not test containers or batches. It changes no data unless you choose the write test and confirm a SCRATCH layout in a second dialog. That test creates, gets, edits, tries a stale edit and deletes one test record, with cleanup if a step fails. Scripts are skipped unless you type a name and parameter and confirm; a script may change data. Cancel stops further tests; cleanup and logout are still attempted. Use a test file: server-side triggers and automatic fields can have effects even when reading.';
+export const SELF_TEST_NOTICE = 'This will check product info and server version without login, log in with your stored credentials, try the database list, count layouts and scripts, read field details for the first 3 layouts, read at most 1 record with Get records on a layout you choose, get that record, try a no-match find on a text field you choose, log out and check that the old session is refused. It never prints passwords or tokens, record values or script results. It does not test containers or batches. It changes no data unless you choose the write test and confirm a SCRATCH layout in a second dialog. That test creates, gets, edits, tries a stale edit and deletes one test record, with cleanup if a step fails. Scripts are skipped unless you type a name and parameter and confirm; a script may change data. Cancel stops further tests; cleanup and logout are still attempted. Use a test file: server-side triggers and automatic fields can have effects even when reading.';
 
 export function registerTestMyServerCommand(deps: {
   context: vscode.ExtensionContext;
@@ -58,7 +58,7 @@ export function registerTestMyServerCommand(deps: {
               const last = context.workspaceState.get<string>(lastKey);
               const items = layouts.map((label) => ({ label, description: !scratch && label === last ? 'Last choice' : undefined }));
               if (!scratch) items.sort((a, b) => Number(b.label === last) - Number(a.label === last));
-              const choice = await vscode.window.showQuickPick(items, { title: scratch ? 'Choose a SCRATCH layout (only disposable test data)' : 'Choose a layout for the read-only find', ignoreFocusOut: true });
+              const choice = await vscode.window.showQuickPick(items, { title: scratch ? 'Choose a SCRATCH layout (only disposable test data)' : 'Choose a layout to read a record', ignoreFocusOut: true });
               if (choice && !scratch) await context.workspaceState.update(lastKey, choice.label);
               return choice?.label;
             },
