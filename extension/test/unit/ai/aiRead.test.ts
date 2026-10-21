@@ -296,3 +296,22 @@ describe('results', () => {
     expect(message).not.toContain(SECRET_HOST);
   });
 });
+
+describe('QA metadata regression checks', () => {
+  it('describes repeated exact field names once, with a note, keeping distinct spaced names', async () => {
+    const h = makeHarness();
+    h.schema.getLayoutSchema.mockResolvedValue({ supported: true, fields: [{ name: 'Photo', type: 'container' }, { name: 'Photo', type: 'container' }, { name: ' Photo ', type: 'text' }] } as never);
+    const result = await h.service.invoke('fm_describe_layout', { layout: 'Contacts' }) as Result;
+    expect(result.fields?.map((field) => field.name)).toEqual(['Photo', ' Photo ']);
+    expect(result.note).toContain('Repeated fields are shown once');
+  });
+  it.each([20, 60])('reports clipping and server portal totals honestly (%i rows returned)', async (count) => {
+    const h = makeHarness();
+    h.client.getRecord.mockResolvedValue({ recordId: '1', fieldData: {}, portalData: { ' Lines ': Array.from({ length: count }, () => ({ Value: 'row' })) },
+      portalDataInfo: [{ portalObjectName: ' Lines ', foundCount: 60, returnedCount: count }] });
+    const result = await h.service.invoke('fm_get_record', { layout: 'Contacts', recordId: '1' }) as Result;
+    expect(result.truncated).toBe(true);
+    expect(result.records?.[0]?.portals[' Lines ']).toHaveLength(20);
+    expect(result.records?.[0]?.portalCounts[' Lines ']).toEqual({ returned: 20, total: 60 });
+  });
+});

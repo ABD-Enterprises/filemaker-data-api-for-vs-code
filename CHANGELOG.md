@@ -24,10 +24,19 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Add Cancel Job in the Command Palette, running job menu and jobs status menu, with Copy failures in job details.
+
 - Add Diagnose Connection: check the server address, network, certificate and Data API without signing in, explain likely fixes, and copy a report with the address hidden if wanted.
 - Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 
 ### [FIX]
+
+- Ask before replacing unrelated generated files, start the client chooser in a generated folder, and protect AI context and FM Web page output.
+- Show successful and failed batch rows separately, retain failure codes and partial results, and list each job once.
+- Clear trusted certificates when the wizard address changes, offer a visible Save anyway choice, and show when a saved password can be kept.
+- Clear old query and script results after failures and prevent repeated clicks from starting duplicate requests or dialogs.
+- Keep narrow Query Builder controls inside the panel, remove repeated server facts and AI field names, and report missing portal rows honestly.
+- Place added Layout Mode fields below existing objects and load the record automatically when Edit Record by ID supplies an ID. Correct the guide to say container URLs are shown as text.
 
 - Diagnose Connection now shows the full matching certificate fingerprint, explains older certificate settings and missing intermediates, and gives advice that matches the current proxy handling. Server path prefixes work, report lines are easier to read, and hiding the address also hides the port.
 

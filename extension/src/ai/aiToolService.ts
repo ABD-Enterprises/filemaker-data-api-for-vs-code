@@ -476,6 +476,8 @@ export class AiToolService {
     const schema = await this.layoutSchema(env, layout);
     let unusable = 0;
     const fields: Obj[] = [];
+    const seen = new Set<string>();
+    let duplicates = 0;
     for (const field of schema.fields) {
       if (env.hidden.isHidden(field.name)) {
         continue;
@@ -485,6 +487,8 @@ export class AiToolService {
         unusable += 1;
         continue;
       }
+      if (seen.has(name)) { duplicates++; continue; }
+      seen.add(name);
       const type = field.result ?? field.type;
       fields.push({
         name,
@@ -492,7 +496,7 @@ export class AiToolService {
         repetitions: typeof field.repetitions === 'number' && field.repetitions > 1 ? field.repetitions : undefined
       });
     }
-    return { layout, fields, unusableFields: unusable > 0 ? unusable : undefined };
+    return { layout, fields, ...(duplicates ? { note: 'Repeated fields are shown once. Each exact field name has one value in a record.', duplicateFields: duplicates } : {}), unusableFields: unusable > 0 ? unusable : undefined };
   }
 
   private async findRecords(env: Env, input: Obj): Promise<unknown> {
@@ -582,6 +586,7 @@ export class AiToolService {
     fields: LayoutFields,
     env: Env
   ): { records: Obj[]; truncated: boolean } {
+    let truncated = records.length > MAX_RECORDS_PER_CALL;
     const shaped = records.slice(0, MAX_RECORDS_PER_CALL).map((record) => {
       const out: Obj = {
         recordId: String(record.recordId),
@@ -590,18 +595,25 @@ export class AiToolService {
       };
       if (record.portalData && typeof record.portalData === 'object') {
         const portals = Object.create(null) as Obj;
+        const portalCounts = Object.create(null) as Obj;
         for (const [portalName, rows] of Object.entries(record.portalData)) {
           const name = exactFieldNameOrUndefined(portalName);
           if (name === undefined || env.hidden.isHidden(portalName) || !Array.isArray(rows)) {
             continue;
           }
+          const info = record.portalDataInfo?.find((item) => item.portalObjectName === portalName || (!item.portalObjectName && item.table === portalName));
+          const total = typeof info?.foundCount === 'number' ? info.foundCount : undefined;
+          const returned = Math.min(rows.length, MAX_PORTAL_ROWS);
+          if (rows.length > returned || (total !== undefined && total > returned)) truncated = true;
+          portalCounts[name] = { returned, ...(total !== undefined ? { total } : {}) };
           portals[name] = rows.slice(0, MAX_PORTAL_ROWS).map((row) => shapeValues(row, env, new Set()));
         }
         out.portals = portals;
+        out.portalCounts = portalCounts;
       }
       return out;
     });
-    return { records: shaped, truncated: records.length > MAX_RECORDS_PER_CALL };
+    return { records: shaped, truncated };
   }
 
   // ---------------------------------------------------------------------------------------

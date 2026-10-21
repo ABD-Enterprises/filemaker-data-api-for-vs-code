@@ -518,7 +518,7 @@ export class FMClient {
           });
         }
 
-        return withPortalInfo(record, envelope.response.dataInfo);
+        return withPortalInfo(record, envelope.response.dataInfo, envelope.response.portalDataInfo);
       }
     );
   }
@@ -625,7 +625,7 @@ export class FMClient {
         }
 
         return {
-          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, envelope.response.dataInfo)),
+          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, envelope.response.dataInfo, envelope.response.portalDataInfo)),
           dataInfo: envelope.response.dataInfo,
           ...scriptErrorsOf(envelope.response)
         };
@@ -2137,7 +2137,7 @@ function portalPagingParams(portals: PortalPaging | undefined, prefix: string): 
   return params;
 }
 
-function withPortalInfo(record: FileMakerRecord, dataInfo?: Record<string, unknown>): FileMakerRecord {
-  const info = record.portalDataInfo ?? dataInfo?.portalDataInfo;
+function withPortalInfo(record: FileMakerRecord, dataInfo?: Record<string, unknown>, responsePortalInfo?: unknown): FileMakerRecord {
+  const info = record.portalDataInfo ?? dataInfo?.portalDataInfo ?? responsePortalInfo;
   return Array.isArray(info) ? { ...record, portalDataInfo: info } : record;
 }

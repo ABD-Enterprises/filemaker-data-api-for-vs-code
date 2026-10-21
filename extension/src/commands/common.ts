@@ -1,3 +1,4 @@
+import { GenerationCancelledError, GenerationSkippedError } from '../services/generatedFileWriter';
 import * as vscode from 'vscode';
 
 import type { FMClient } from '../services/fmClient';
@@ -230,5 +231,9 @@ export function formatError(error: unknown): string {
 }
 
 export async function showCommandError(error: unknown, options?: ShowErrorOptions): Promise<void> {
+  if (error instanceof GenerationCancelledError || error instanceof GenerationSkippedError) {
+    await vscode.window.showInformationMessage(error.message);
+    return;
+  }
   await showErrorWithDetails(error, options);
 }

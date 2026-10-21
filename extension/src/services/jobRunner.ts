@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type * as vscode from 'vscode';
 
 import type { JobContext, JobLogEntry, JobRuntimeState, JobSummary } from '../types/fm';
-import { redactString } from '../utils/redact';
+import { redactString, redactValue } from '../utils/redact';
 
 const JOBS_RECENT_KEY = 'filemaker.jobs.recent';
 const DEFAULT_RECENT_LIMIT = 25;
@@ -52,15 +52,20 @@ export class JobRunner {
 
     return {
       id,
-      cancel: () => {
-        controller.cancelled = true;
-        if (state.status === 'running' || state.status === 'queued') {
-          state.status = 'cancelling';
-          this.emit(state);
-        }
-      },
+      cancel: () => { this.cancelJob(id); },
       getState: () => ({ ...state, logs: [...state.logs] })
     };
+  }
+
+  public cancelJob(id: string): boolean {
+    const controller = this.jobControllers.get(id);
+    const state = this.activeJobs.get(id);
+    if (!controller || !state || !['queued', 'running'].includes(state.status)) return false;
+    controller.cancelled = true;
+    state.status = 'cancelling';
+    state.details = 'Cancelling; waiting for requests already sent to finish.';
+    this.emit(state);
+    return true;
   }
 
   public listJobs(): JobRuntimeState[] {
@@ -114,24 +119,29 @@ export class JobRunner {
       state.result = result;
       if (controller.cancelled) {
         state.status = 'cancelled';
-        if (result && typeof result === 'object' && 'attempted' in result && 'total' in result) {
-          state.details = `Cancelled after ${result.attempted} of ${result.total}`;
-        }
+        state.details = cancelledDetails(result);
       } else {
         state.status = 'completed';
         state.progress = 100;
+        const counts = batchCounts(result);
+        if (counts) {
+          state.details = `${counts.successCount} succeeded, ${counts.failureCount} failed`;
+        }
       }
     } catch (error) {
       if (controller.cancelled) {
         state.status = 'cancelled';
+        state.details = cancelledDetails(undefined);
       } else {
         state.status = 'failed';
         state.details = error instanceof Error ? sanitizeLogMessage(error.message) : 'Job failed.';
       }
     } finally {
+      if (state.details?.startsWith('Cancelling')) state.details = state.status === 'cancelled' ? cancelledDetails(state.result) : state.status;
       state.finishedAt = new Date().toISOString();
       this.emit(state);
       await this.persistSummary(state);
+      this.jobControllers.delete(state.id);
     }
   }
 
@@ -146,7 +156,7 @@ export class JobRunner {
         status: state.status,
         progress: state.progress,
         details: state.details,
-        result: state.result
+        result: redactValue(state.result)
       },
       ...current.filter((item) => item.id !== state.id)
     ].slice(0, normalizeRecentLimit(this.getRecentLimit()));
@@ -182,6 +192,25 @@ function sanitizeLogMessage(input: string): string {
   return redactString(input);
 }
 
-export function jobStatusText(job: Pick<JobSummary, 'status' | 'details'>): string {
-  return job.status === 'cancelled' && job.details ? job.details : job.status;
+function batchCounts(result: unknown): { successCount: number; failureCount: number } | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const counts = result as { successCount?: unknown; failureCount?: unknown };
+  return typeof counts.successCount === 'number' && typeof counts.failureCount === 'number'
+    ? counts as { successCount: number; failureCount: number } : undefined;
+}
+
+function cancelledDetails(result: unknown): string {
+  if (result && typeof result === 'object') {
+    if ('attempted' in result && 'total' in result) return `Cancelled after ${result.attempted} of ${result.total}`;
+    if ('exportedRecords' in result) return `Cancelled after exporting ${result.exportedRecords} records`;
+  }
+  return 'Cancelled';
+}
+
+export function jobStatusText(job: Pick<JobSummary, 'status' | 'details' | 'result'>): string {
+  const counts = batchCounts(job.result);
+  if (job.status === 'completed' && counts && counts.failureCount > 0) {
+    return `completed with ${counts.failureCount} failed row${counts.failureCount === 1 ? '' : 's'}`;
+  }
+  return job.status === 'cancelled' ? cancelledDetails(job.result) : job.status;
 }

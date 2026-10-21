@@ -96,6 +96,7 @@ type IncomingMessage =
   | { type: 'refreshHistory' };
 
 export class QueryBuilderPanel {
+  private requestInFlight = false;
   private static currentPanel: QueryBuilderPanel | undefined;
 
   private lastResult: QueryExecutionResult | undefined;
@@ -185,6 +186,9 @@ export class QueryBuilderPanel {
       return;
     }
 
+    const guarded = ['runQuery', 'saveQuery'].includes(message.type);
+    if (guarded && this.requestInFlight) return;
+    if (guarded) this.requestInFlight = true;
     try {
       await this.dispatchMessage(message);
     } catch (error) {
@@ -193,6 +197,9 @@ export class QueryBuilderPanel {
         this.formatError(error),
         message.type === 'runQuery' ? message.payload.runId : undefined
       );
+    } finally {
+      if (guarded) this.requestInFlight = false;
+      if (message.type === 'saveQuery') await this.panel.webview.postMessage({ type: 'querySaveFinished' });
     }
   }
 
@@ -214,6 +221,7 @@ export class QueryBuilderPanel {
     };
     const text = type ? messages[type] : undefined;
     if (text) {
+      if (type === 'runQuery') this.lastResult = undefined;
       const payload = value ? toRecord(value.payload) : undefined;
       const runId = type === 'runQuery' && payload ? getOptionalNumberField(payload, 'runId') : undefined;
       await this.postError(text, runId);
@@ -361,6 +369,7 @@ export class QueryBuilderPanel {
   }
 
   private async handleRunQuery(payload: RunQueryPayload): Promise<void> {
+    this.lastResult = undefined;
     const profile = await this.profileStore.getProfile(payload.profileId);
     if (!profile) {
       await this.postError('The selected connection profile no longer exists.', payload.runId);

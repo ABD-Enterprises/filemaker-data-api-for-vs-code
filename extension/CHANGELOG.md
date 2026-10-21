@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- [FEATURE] Add Cancel Job in the Command Palette, running job menu and jobs status menu, with Copy failures in job details.
+- [FIX] Ask before replacing unrelated generated files, start the client chooser in a generated folder, and protect AI context and FM Web page output.
+- [FIX] Show successful and failed batch rows separately, retain failure codes and partial results, and list each job once.
+- [FIX] Clear trusted certificates when the wizard address changes, offer a visible Save anyway choice, and show when a saved password can be kept.
+- [FIX] Clear old query and script results after failures and prevent repeated clicks from starting duplicate requests or dialogs.
+- [FIX] Keep narrow Query Builder controls inside the panel, remove repeated server facts and AI field names, and report missing portal rows honestly.
+- [FIX] Place added Layout Mode fields below existing objects and load the record automatically when Edit Record by ID supplies an ID. Correct the guide to say container URLs are shown as text.
+
 - [FIX] Diagnose Connection shows the full certificate fingerprint like the Trust dialog, explains older Allow self-signed profiles and missing intermediate certificates, and gives current proxy advice. Saved server path prefixes work. Report lines have no extra quotes, certificate names stay on one line, and hiding the address also hides the port.
 
 - [FEATURE] Run Diagnose Connection to check a saved server or type an address without saving it. It checks the network, certificate and Data API without signing in, explains likely fixes, and can copy a bug report with the server address hidden.

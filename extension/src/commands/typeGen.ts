@@ -131,18 +131,15 @@ export function registerTypeGenCommands(deps: RegisterTypeGenCommandsDeps): vsco
         return;
       }
 
-      const outputDirectory = await promptForOutputDirectory();
-      if (!outputDirectory) {
-        return;
-      }
-
       try {
+        const outputDirectory = await promptForOutputDirectory();
+        if (!outputDirectory) return;
         const artifacts = await withProgressNotification('Generating TypeScript client…', () =>
           typeGenService.generateTypeScriptClient(profile, layouts, outputDirectory)
         );
-        await openGeneratedFile(artifacts.readmePath);
+        if (!artifacts.skippedPaths?.includes(artifacts.readmePath)) await openGeneratedFile(artifacts.readmePath);
         vscode.window.showInformationMessage(
-          `Generated TypeScript client for ${artifacts.layouts.length} layout${artifacts.layouts.length === 1 ? '' : 's'}.`
+          `Generated TypeScript client for ${artifacts.layouts.length} layout${artifacts.layouts.length === 1 ? '' : 's'}.${artifacts.skippedPaths?.length ? ` Skipped existing files: ${artifacts.skippedPaths.join(', ')}` : ''}`
         );
       } catch (error) {
         await showCommandError(error, {
@@ -188,11 +185,12 @@ async function promptForLayouts(profile: ConnectionProfile, fmClient: FMClient):
 
 async function promptForOutputDirectory(): Promise<string | undefined> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  const defaultUri = workspaceFolder ? vscode.Uri.joinPath(workspaceFolder.uri, '.filemaker', 'generated', 'client') : undefined;
   const uris = await vscode.window.showOpenDialog({
     canSelectFiles: false,
     canSelectFolders: true,
     canSelectMany: false,
-    defaultUri: workspaceFolder?.uri,
+    defaultUri,
     openLabel: 'Generate Client Here',
     title: 'Choose TypeScript client output folder'
   });

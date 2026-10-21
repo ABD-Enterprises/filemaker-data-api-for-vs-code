@@ -44,7 +44,7 @@ describe('TypeGenService', () => {
         expect(source).not.toContain('photo2');
       }
       const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contact Details');
-      for (const entry of Object.values(JSON.parse(snippets.content)) as Array<{ description: string }>) {
+      for (const entry of Object.values(JSON.parse(snippets.content.replace(/^\/\/[^\n]*\n/, ''))) as Array<{ description: string }>) {
         const keys = entry.description.split(' Fields: ')[1]!.split('; ').map((field) => field.split(':')[0]);
         expect(keys).toEqual(expected);
       }
@@ -124,7 +124,7 @@ describe('TypeGenService', () => {
     const snippets = await service.generateSnippetsForLayout(createProfile(), 'Contacts');
     expect(snippets.filePath).toContain(join('snippets', 'filemaker-data-api.code-snippets'));
     expect(snippets.content).toContain('Contacts Find Records');
-    const entries = Object.values(JSON.parse(snippets.content)) as Array<{ description: string }>;
+    const entries = Object.values(JSON.parse(snippets.content.replace(/^\/\/[^\n]*\n/, ''))) as Array<{ description: string }>;
     for (const entry of entries) {
       expect(entry.description).toContain(' Age : number (kind: normal)');
       expect(entry.description).toContain('Photo: container (kind: normal)');

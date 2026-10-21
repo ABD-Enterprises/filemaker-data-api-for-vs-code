@@ -449,6 +449,12 @@
         "category": "FileMaker"
       },
       {
+        "command": "filemakerDataApiTools.cancelJob",
+        "title": "Cancel Job",
+        "category": "FileMaker",
+        "icon": "$(close)"
+      },
+      {
         "command": "filemakerDataApiTools.showJobs",
         "title": "Show Jobs",
         "category": "FileMaker"
@@ -637,6 +643,11 @@
           "command": "filemakerDataApiTools.generateTypesForAllLayouts",
           "when": "view == filemakerExplorer && viewItem =~ /^fmProfile/",
           "group": "navigation@3"
+        },
+        {
+          "command": "filemakerDataApiTools.cancelJob",
+          "when": "view == filemakerExplorer && viewItem == fmJobRunning",
+          "group": "inline"
         },
         {
           "command": "filemakerDataApiTools.showJobs",
@@ -984,6 +995,10 @@
         {
           "command": "filemakerDataApiTools.openEnvironmentSetJson",
           "when": "filemaker.enterpriseMode"
+        },
+        {
+          "command": "filemakerDataApiTools.cancelJob",
+          "when": "filemaker.powerUserMode"
         },
         {
           "command": "filemakerDataApiTools.showJobs",

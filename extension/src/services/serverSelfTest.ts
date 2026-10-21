@@ -229,7 +229,7 @@ export async function testMyServer(
     const scrub = (text: string) => redactString(client.scrub(text)).replace(
       /(\b(?:password|passwd|token|secret|api[_-]?key)\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1***');
     report.server = scrub(report.server);
-    report.facts = report.facts.map(scrub);
+    report.facts = [...new Set(report.facts.map(scrub))];
     report.problems = report.problems.map(scrub);
     report.steps = report.steps.map((row) => ({ ...row, step: scrub(row.step), note: scrub(row.note),
       code: row.code === undefined ? undefined : scrub(row.code),
@@ -252,7 +252,7 @@ export function renderSelfTestReport(report: SelfTestReport, maskServer = false)
   const address = maskServer ? '[server address hidden]' : cell(report.server);
   let text = `# FileMaker: Test My Server\n\nServer: ${address}\n\n| Step | Result | ms | HTTP | FileMaker code | Message | Notes |\n| --- | --- | ---: | --- | --- | --- | --- |\n`;
   for (const row of report.steps) text += `| ${cell(row.step)} | ${row.result} | ${row.ms} | ${cell(row.status)} | ${cell(row.code)} | ${cell(row.message)} | ${cell(row.note)} |\n`;
-  text += `\n## Facts observed on this server\n\n${report.facts.map((fact) => `- ${cell(fact)}`).join('\n')}\n\n## Problems\n\n${report.problems.length ? report.problems.map((problem) => `- ${cell(problem)}`).join('\n') : 'No failed steps. WARN rows describe skipped or unverified checks.'}\n`;
+  text += `\n## Facts observed on this server\n\n${[...new Set(report.facts)].map((fact) => `- ${cell(fact)}`).join('\n')}\n\n## Problems\n\n${report.problems.length ? report.problems.map((problem) => `- ${cell(problem)}`).join('\n') : 'No failed steps. WARN rows describe skipped or unverified checks.'}\n`;
   if (maskServer) {
     text = text.split(report.server).join('[server address hidden]');
     try { text = text.split(new URL(report.server).host).join('[server address hidden]'); } catch { /* Invalid addresses are already reported by the client. */ }

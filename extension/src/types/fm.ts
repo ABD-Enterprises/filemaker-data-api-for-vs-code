@@ -222,6 +222,7 @@ export interface GeneratedSnippetsArtifacts {
 }
 
 export interface GeneratedTypeScriptClientArtifacts {
+  skippedPaths?: string[];
   directory: string;
   typesPath: string;
   clientPath: string;

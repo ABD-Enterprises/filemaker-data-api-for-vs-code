@@ -553,6 +553,21 @@ export function createStandardField(
   };
 }
 
+/** Default additions continue the standard column. Drops keep their requested slot when free. */
+export function nextStandardFieldPosition(layout: LayoutDefinition, metadata: StandardFieldMetadata, point?: Point): Point {
+  const size = standardFieldSize(metadata);
+  const x = point ? Math.max(0, snapToGrid(point.x, FIELD_LAYOUT.grid)) : FIELD_LAYOUT.pageMargin;
+  let y = point ? Math.max(0, snapToGrid(point.y, FIELD_LAYOUT.grid)) : FIELD_LAYOUT.pageMargin;
+  const obstacles = layout.objects.map((object) => ({ ...object, height: object.height + (object.type === 'field' ? FIELD_LAYOUT.labelSpace : 0) }));
+  if (!point && obstacles.length) y = Math.max(y, ...obstacles.map((object) => object.y + object.height + FIELD_LAYOUT.rowGap));
+  y = Math.ceil(y / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
+  while (true) {
+    const conflicts = obstacles.filter((object) => rectanglesIntersect({ x, y, ...size, height: size.height + FIELD_LAYOUT.labelSpace }, object));
+    if (!conflicts.length) return { x, y };
+    y = Math.ceil(Math.max(...conflicts.map((object) => object.y + object.height + FIELD_LAYOUT.rowGap)) / FIELD_LAYOUT.grid) * FIELD_LAYOUT.grid;
+  }
+}
+
 /** IDs are supplied by the caller, keeping template generation pure and repeatable. */
 export function createStarterTemplate(
   layout: LayoutDefinition,

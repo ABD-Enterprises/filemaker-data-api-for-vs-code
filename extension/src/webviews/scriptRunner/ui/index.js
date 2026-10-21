@@ -1,6 +1,7 @@
 const vscode = acquireVsCodeApi();
 
 const state = {
+  running: false,
   profiles: [],
   activeProfileId: undefined,
   defaults: undefined,
@@ -56,6 +57,7 @@ window.addEventListener('message', (event) => {
       applyLayouts(message.payload);
       break;
     case 'scriptResult':
+      setRunning(false);
       renderResult(message.payload);
       break;
     case 'unsupported':
@@ -63,6 +65,9 @@ window.addEventListener('message', (event) => {
       runButton.disabled = true;
       break;
     case 'error':
+      setRunning(false);
+      summary.textContent = '';
+      rawResult.textContent = '';
       setStatus(message.message || 'Unknown error.', true);
       break;
     default:
@@ -92,11 +97,15 @@ closeParameterBuilderButton.addEventListener('click', () => {
 });
 
 runButton.addEventListener('click', () => {
+  if (state.running) return;
   const payload = collectPayload();
   if (!payload) {
     return;
   }
 
+  setRunning(true);
+  summary.textContent = '';
+  rawResult.textContent = '';
   setStatus('Running script...');
   vscode.postMessage({
     type: 'runScript',
@@ -725,3 +734,8 @@ function setStatus(message, isError = false) {
 }
 
 vscode.postMessage({ type: 'ready' });
+
+function setRunning(running) {
+  state.running = running;
+  runButton.disabled = running || !state.scriptRunnerEnabled;
+}

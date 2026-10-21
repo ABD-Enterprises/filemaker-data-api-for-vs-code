@@ -39,6 +39,7 @@ type IncomingMessage =
   | { type: 'copyRecordRequest'; payload: RecordRequestPayload };
 
 export class RecordViewerPanel {
+  private readonly requestsInFlight = new Set<string>();
   private static currentPanel: RecordViewerPanel | undefined;
 
   private recordLoadVersion = 0;
@@ -110,29 +111,37 @@ export class RecordViewerPanel {
       return;
     }
 
-    switch (message.type) {
-      case 'ready': {
-        await this.sendInitState();
-        break;
+    const guarded = ['loadRecord'].includes(message.type);
+    const requestKey = guarded && 'payload' in message ? message.type === 'loadRecord' ? `load:${JSON.stringify(message.payload)}` : 'write' : undefined;
+    if (requestKey && this.requestsInFlight.has(requestKey)) return;
+    if (requestKey) this.requestsInFlight.add(requestKey);
+    try {
+      switch (message.type) {
+        case 'ready': {
+          await this.sendInitState();
+          break;
+        }
+        case 'loadLayouts': {
+          await this.handleLoadLayouts(message.profileId);
+          break;
+        }
+        case 'loadRecord': {
+          await this.handleLoadRecord(message.payload);
+          break;
+        }
+        case 'exportRecord': {
+          await this.exportRecord();
+          break;
+        }
+        case 'copyRecordRequest': {
+          await this.copyRecordRequest(message.payload);
+          break;
+        }
+        default:
+          break;
       }
-      case 'loadLayouts': {
-        await this.handleLoadLayouts(message.profileId);
-        break;
-      }
-      case 'loadRecord': {
-        await this.handleLoadRecord(message.payload);
-        break;
-      }
-      case 'exportRecord': {
-        await this.exportRecord();
-        break;
-      }
-      case 'copyRecordRequest': {
-        await this.copyRecordRequest(message.payload);
-        break;
-      }
-      default:
-        break;
+    } finally {
+      if (requestKey) this.requestsInFlight.delete(requestKey);
     }
   }
 

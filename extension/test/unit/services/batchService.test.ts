@@ -463,3 +463,35 @@ describe('BatchService.batchUpdate failure handling', () => {
     expect(result.failures[0]?.reason).toMatch(/\[200\]/);
   });
 });
+
+it('reports processed rows separately from successes and keeps FileMaker failure codes', async () => {
+  const client = createFmClient({ editRecord: vi.fn(async (_p, _l, id) => {
+    if (id === '2') throw new FMClientError('Invalid value', { code: '1708', status: 500 });
+    return { recordId: id, response: {}, messages: [] };
+  }) });
+  const reportProgress = vi.fn();
+  const result = await new BatchService(client).batchUpdate(profile(), ' Contacts ', ['1', '2', '3'].map((recordId) => ({ recordId, fieldData: { ' Name ': 'x' } })), { dryRun: false, concurrency: 1 },
+    { reportProgress, log: vi.fn(), isCancellationRequested: () => false });
+  expect(result).toMatchObject({ attempted: 3, successCount: 2, failureCount: 1, failures: [{ recordId: '2', code: '1708', reason: 'FileMaker 1708: Invalid value' }] });
+  expect(reportProgress).toHaveBeenLastCalledWith(100, 'Processed 3/3: 2 succeeded, 1 failed');
+});
+
+it('waits for already-sent batch rows after cancellation and retains their failures', async () => {
+  let cancelled = false;
+  const finish: Array<() => void> = [];
+  const editRecord = vi.fn(() => new Promise<never>((_resolve, reject) => { finish.push(() => reject(new FMClientError('Invalid value', { code: '1708' }))); }));
+  const service = new BatchService(createFmClient({ editRecord }));
+  const pending = service.batchUpdate(profile(), ' Contacts ', ['1', '2', '3'].map((recordId) => ({ recordId, fieldData: { Name: 'x' } })), { dryRun: false, concurrency: 2 },
+    { reportProgress: vi.fn(), log: vi.fn(), isCancellationRequested: () => cancelled });
+  await new Promise((resolve) => setImmediate(resolve));
+  cancelled = true;
+  finish[1]!();
+  let settled = false; void pending.then(() => { settled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(settled).toBe(false);
+  finish[0]!();
+  const result = await pending;
+  expect(editRecord).toHaveBeenCalledTimes(2);
+  expect(result).toMatchObject({ attempted: 2, successCount: 0, failureCount: 2 });
+  expect(result.failures.map((failure) => failure.code)).toEqual(['1708', '1708']);
+});

@@ -319,7 +319,7 @@ export function describeNetworkFailure(
         retryable: true,
         message:
           context.protocol === 'http:'
-            ? `The connection to ${target} was closed. The server may only accept https; try an https:// address.`
+            ? `The connection to http://${target} was closed before answering. The server may have restarted, or a firewall or proxy dropped the connection. Check with your administrator whether this address and port use http or https.`
             : `The server closed the connection to ${target} before answering. It may have restarted, or a firewall or proxy dropped the connection. Try again; if it keeps happening, ask your administrator.`
       };
     default:

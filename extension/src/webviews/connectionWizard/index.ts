@@ -139,6 +139,7 @@ export class ConnectionWizardPanel {
    * saved profile and changes only through the trust dialog (never from the form fields, a template
    * or a file): a pinned certificate, and the older "skip all checks" flag.
    */
+  private certificateTarget: string | undefined;
   private certState: CertificateState = { legacy: false };
 
   private constructor(
@@ -242,6 +243,13 @@ export class ConnectionWizardPanel {
         await this.handleReviewCertificate(data);
         break;
       }
+      case 'addressChanged': {
+        const data = toRecord(record.payload);
+        if (data && typeof data.serverUrl === 'string') {
+          await this.clearCertificateForChangedAddress(data as unknown as WizardFormData);
+        }
+        break;
+      }
       case 'forgetCertificate':
         this.certState = { legacy: this.certState.legacy };
         await this.sendCertificateState();
@@ -275,6 +283,7 @@ export class ConnectionWizardPanel {
 
   private async sendLoadProfile(): Promise<void> {
     this.templateOrigins.clear();
+    this.certificateTarget = this.editingProfile ? this.certificateAddress(this.editingProfile) : undefined;
     this.certState = this.editingProfile
       ? {
           pin: this.editingProfile.pinnedCertSha256
@@ -289,7 +298,8 @@ export class ConnectionWizardPanel {
     if (this.editingProfile) {
       await this.panel.webview.postMessage({
         type: 'loadProfile',
-        payload: this.editingProfile
+        payload: this.editingProfile,
+        hasPassword: Boolean(await this.secretStore.getPassword(this.editingProfile.id))
       });
       await this.sendCertificateState();
       return;
@@ -370,6 +380,7 @@ export class ConnectionWizardPanel {
         return;
       }
 
+      await this.clearCertificateForChangedAddress(data);
       const tls = await this.resolveTlsSettings(data);
       if (!tls.ok) {
         await this.panel.webview.postMessage({ type: 'saveError', message: tls.message });
@@ -627,6 +638,21 @@ export class ConnectionWizardPanel {
     return { ok: true, profileFields };
   }
 
+  private certificateAddress(data: Pick<WizardFormData, 'authMode' | 'serverUrl' | 'proxyEndpoint'>): string | undefined {
+    const server = originOf(data.serverUrl);
+    return data.authMode === 'proxy' ? `${server}|${originOf(data.proxyEndpoint)}` : server;
+  }
+
+  private async clearCertificateForChangedAddress(data: WizardFormData): Promise<void> {
+    const target = this.certificateAddress(data);
+    if (this.certState.pin && target !== this.certificateTarget) {
+      this.certState = { legacy: false };
+      this.certificateTarget = undefined;
+      await this.sendCertificateState();
+      await this.panel.webview.postMessage({ type: 'certificateNotice', message: 'The server address changed. The trusted certificate was cleared. Review the certificate for this address before trusting it.' });
+    }
+  }
+
   private async sendCertificateState(): Promise<void> {
     await this.panel.webview.postMessage({
       type: 'certificateState',
@@ -642,6 +668,7 @@ export class ConnectionWizardPanel {
    * presents, show it, and on acceptance pin it for this connection.
    */
   private async handleReviewCertificate(data: WizardFormData): Promise<void> {
+    await this.clearCertificateForChangedAddress(data);
     const serverValidation = validateServerUrl(data.serverUrl);
     const proxyValidation = data.authMode === 'proxy' ? validateServerUrl(data.proxyEndpoint ?? '', 'Proxy endpoint') : undefined;
     const target = data.authMode === 'proxy' ? proxyValidation : serverValidation;
@@ -675,6 +702,7 @@ export class ConnectionWizardPanel {
       { previousSha256: this.certState.pin?.sha256 }
     );
     if (decision) {
+      this.certificateTarget = this.certificateAddress(data);
       this.certState = { pin: { sha256: decision.sha256, allowExpired: decision.allowExpired }, legacy: false };
       await this.sendCertificateState();
     }
@@ -714,6 +742,7 @@ export class ConnectionWizardPanel {
         throw new Error('Test cancelled: you did not confirm the server address.');
       }
 
+      await this.clearCertificateForChangedAddress(data);
       const tls = await this.resolveTlsSettings(data);
       if (!tls.ok) {
         throw new Error(tls.message);
@@ -812,7 +841,8 @@ export class ConnectionWizardPanel {
           { networkCode, previousSha256: this.certState.pin?.sha256 }
         );
         if (decision) {
-          this.certState = { pin: { sha256: decision.sha256, allowExpired: decision.allowExpired }, legacy: false };
+          this.certificateTarget = this.certificateAddress(data);
+      this.certState = { pin: { sha256: decision.sha256, allowExpired: decision.allowExpired }, legacy: false };
           await this.sendCertificateState();
           await this.handleTestConnection(data, true);
           return;

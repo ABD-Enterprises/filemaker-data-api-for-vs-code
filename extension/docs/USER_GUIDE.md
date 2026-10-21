@@ -110,7 +110,8 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
 | Batch Export (Find) | Saves matching records to CSV or JSONL safely as a background job, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
 | Batch Update from CSV/JSON | Previews or applies updates, using field types for CSV and leaving empty CSV cells unchanged; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
-| Show Jobs | Lists active and recent jobs and opens a selected job's details as JSON, including changed, failed and untouched record IDs after a cancelled batch update. | Shown in power-user mode; needs an active or recent job. |
+| Cancel Job | Stops sending new work for a running job, waits for pending requests and keeps partial results. | Shown in power-user mode; also on running jobs in the Jobs view and jobs menu. |
+| Show Jobs | Lists active and recent jobs once, shows counts and details as JSON including changed, failed and untouched record IDs after a cancelled batch update, and offers cancellation or Copy failures. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
 | Compare Environments | Shows layout presence and schema comparisons across an environment set. | Shown in enterprise mode; needs an environment set and its profiles. |
 | Diff Layout Across Environments | Shows field differences for one layout across an environment set. | Shown in enterprise mode; needs a set with at least two existing profiles. |
@@ -303,6 +304,10 @@ The password, proxy API key and session token are stored in VS Code SecretStorag
 - **A changed server, proxy or user name.** When you edit a saved profile and change the server address, the proxy address or the account name, the wizard does not reuse the saved password or API key. Type it again. This stops a saved password from being sent to a different server. If you only change the profile name or the database, the saved secret is kept.
 - **Test Connection** opens a throwaway session and closes it. It never changes the saved profile's secrets. For an unchanged server and user, leave the password empty to test with the saved one.
 
+When editing a profile, **••••••• (saved)** in the password box means you can leave it empty to keep the saved password. Typing a password replaces it when you save, including any spaces you type; the saved password is never displayed. If you have not tested the current values, Save shows **Test the connection first, or choose Save anyway** with a **Save anyway** button. A workplace policy that requires a successful test still blocks saving until it passes.
+
+Changing the host or port clears the trusted certificate in the wizard and shows a notice. Review the certificate for the new address before trusting it.
+
 Server addresses with a user name or password inside them (`https://user:pass@host`) are rejected.
 
 ### Certificates
@@ -478,7 +483,7 @@ A **record ID** is FileMaker's internal record number for a row on a layout (wha
 
 ### View a record
 
-Run **FileMaker: Get Record by ID** or **FileMaker: Open Record Viewer**, choose a profile and layout, and enter the record ID (or use **View** on a row in the Query Builder). The viewer shows the fields, portal data and container fields (images are previewed). **Export Record JSON** saves the record.
+Run **FileMaker: Get Record by ID** or **FileMaker: Open Record Viewer**, choose a profile and layout, and enter the record ID (or use **View** on a row in the Query Builder). The viewer shows the fields, portal data and container fields (container URLs are shown as text; images are not previewed). **Export Record JSON** saves the record.
 
 ### Edit a record
 
@@ -525,13 +530,15 @@ A NUL character (U+0000) is invisible and can arrive in pasted text. On the File
 
 Before saving or creating a record, the editor names the affected fields and asks you to choose **Remove the character and continue** or **Cancel**. Removing it keeps all the text on both sides and leaves other characters alone. If removal leaves a field empty, the warning names it and tells you it will be sent as an empty value. You still confirm the save or creation afterwards, unless cleaned edit values match the original record; then the editor explains that nothing needs to be saved. Batch update/import refuses the whole affected row, reports its record ID and field names, and continues with the other rows. The dry-run preview document lists every flagged data row number (starting at 1, excluding a CSV header), record ID, and affected field names, including rows outside the sample. Remove the character in the source file before trying again. AI write tools and the FM Web preview bridge refuse the value and explain why. The shared client also refuses NUL values from other callers. Zero-width space and BOM alone were not tested on the real server; the extension does not remove them.
 
-Some layouts list the same field more than once. The editor shows one value per name and a note naming repeated fields. Query Builder offers one choice per field name. Generated types have one property per name, copied requests keep the exact names, and Layout Inspector shows both occurrences.
+Some layouts list the same field more than once. The editor shows one value per name and a note naming repeated fields. Query Builder offers one choice per field name. The AI layout description also lists each exact name once and includes a note about repeats. Generated types have one property per name, copied requests keep the exact names, and Layout Inspector shows both occurrences.
 
 **Known gap: creating related records.** FileMaker accepts related records when creating a record, but this extension's Create Record sends only the main record's fields. It cannot yet create portal rows. A real-server check created a related record in **Phone Numbers**, with **Phone Numbers::Number** and **Phone Numbers::Type**; that support has not been added to the extension.
 
 ## Batch export and batch update
 
-Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in the sidebar while they exist.
+Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in the sidebar. Progress shows processed rows, succeeded rows and failed rows separately. A finished job with a failed row says **completed with 1 failed row**. Open the job to view details or choose **Copy failures** to copy record IDs, reasons and FileMaker codes.
+
+Use **FileMaker: Cancel Job**, the Cancel action on a running job in the sidebar, or the jobs menu opened from the status bar. Cancellation stops new requests. Requests already sent finish, and their results and failed rows are kept. Cancelling does not undo successful updates.
 
 After you cancel an update, its status stays **cancelling** while edits already sent finish. No further edit or retry starts. It then shows **Cancelled after N of M**; N counts records attempted, including failures. Open **FileMaker: Show Jobs** and choose the job to see `updatedIds`, `failures` (record IDs, reasons and FileMaker codes when supplied), and `notAttemptedIds`. The same details stay in recent jobs after a restart. Cancelling does not undo changes.
 
@@ -576,6 +583,8 @@ Updates run with `filemaker.batch.concurrency` requests at a time (default 4, ma
 Batch update is blocked in offline mode, for the `viewer` role, and when `filemaker.features.batch.enabled` is off or the workspace is untrusted.
 
 ---
+
+While a query, script, record load, save or creation is running, its button is disabled. Repeated clicks do not start extra requests. A failed query or script clears the old results and summary so they cannot be mistaken for the latest answer.
 
 ## Run scripts
 
@@ -697,7 +706,9 @@ If a create, edit, delete or script times out, **the change may have been applie
 
 ## Generate types, a client and snippets
 
-Generation writes files into your workspace, so it needs a **trusted workspace**.
+Generation writes files, so it needs a **trusted workspace**. The client folder chooser starts at `.filemaker/generated/client`; choose another folder if needed. Types use the configured `filemaker-types` folder and snippets use `snippets`. Files never go into the workspace root unless you choose that folder.
+
+Generated files have a header saying they were generated by FileMaker Data API Tools. Before replacing an existing file without this header, the extension names the files and offers **Overwrite**, **Skip existing**, or **Cancel**. Cancel stops that generation; Skip existing leaves those files alone. Review generated files before editing them: a later generation can refresh files that still have the header. AI context keeps its marked section separate from other text and asks before adding a section to an existing file. It refuses project document names such as `README.md` and `CHANGELOG.md`. FM Web layout pages use the same overwrite choices; runtime template files that you edited continue to be skipped.
 
 | Command | What it writes |
 | --- | --- |
@@ -750,6 +761,8 @@ Layout Mode has three new actions:
 - **Apply starter template** appears for a new, empty web layout. **Blank** is the default. Choose a synced **Template FileMaker layout** and **Form**, **Two-column form**, or **Form + first portal**, then apply. The portal template uses the first portal listed in metadata; if there is none, it creates just the form. Templates use every field in the chosen layout, retain names exactly (including spaces), and can be undone in one step, including the field palette and source choice. Layout names are sent initially; full template descriptors load only for the current source and on demand for other choices. Layouts without a FileMaker source retain their cross-layout field palette: its deduplicated type descriptors are capped at 256 KiB (UTF-8 JSON), with text sizing for omitted descriptors. This preserves access to their fields without sending every layout’s full template metadata. Sync metadata first to supply types and field order; unavailable types use text sizing.
 
 When you run **Generate FM Web Next.js App** or **Start FM Web Preview Server** again, the extension refreshes the few managed runtime files (marked `fmweb-managed: runtime template v3`) in an app you generated earlier. It never overwrites a file you edited and never follows a symbolic link: such files are left as they are, and a warning names each one ("These generated preview files were edited (or are symbolic links), so they were not updated: ..."). Delete the named files and run the command again to get fresh copies; until then the preview cannot reach the bridge.
+
+New fields added from the picker or toolbox continue below existing objects on the standard grid, including room for labels. The page grows as needed. Opening **Edit Record by ID** loads the supplied record automatically.
 
 Query Builder find values, Record Editor and Record Viewer use these same widths, top labels and 16 px / 24 px gaps. Narrow panels stack fields into one column. Metadata unavailable means text sizing. These rules affect presentation only; find expressions, editing, copying and validation work as before. Generated web layout pages use the same renderer as Layout Mode: saved field sizes and label positions are retained on wide screens, and objects stack in saved order at 640 px or narrower.
 
@@ -868,7 +881,7 @@ What is in it: the connection name, database name, and the names of the layouts,
 
 Where it goes: by default, the extension's storage folder (outside any repository). You are offered **Open File**, and **Copy into Workspace** (to `.filemaker/ai-context.md`). If the file lands inside the workspace, you are asked whether to add it to `.gitignore`, because it holds database structure.
 
-To write into a file of your own, such as `AGENTS.md`, set `filemaker.ai.contextPath` in your **user** settings to a path relative to the workspace folder (or any file inside the workspace). If the file already exists without the markers, the command asks and, if you choose **Add Section**, appends a new section at the end and leaves the rest alone. To control where the section goes, add the two marker lines `<!-- filemaker-ai-context:start -->` and `<!-- filemaker-ai-context:end -->` where the section should go. The command replaces only the text between them and refuses to touch anything else. Symbolic links, `.git` and paths outside the workspace are refused, and a workspace cannot set this path.
+To write into a file of your own, such as `AGENTS.md`, set `filemaker.ai.contextPath` in your **user** settings to a path relative to the workspace folder (or any file inside the workspace). If the file already exists without the markers, the command asks and, if you choose **Overwrite**, appends a new section at the end and leaves the rest alone. To control where the section goes, add the two marker lines `<!-- filemaker-ai-context:start -->` and `<!-- filemaker-ai-context:end -->` where the section should go. The command replaces only the text between them and refuses to touch anything else. Symbolic links, `.git` and paths outside the workspace are refused, and a workspace cannot set this path.
 
 Names are cleaned: letters, digits, space and `_ - . : ( )`, up to 64 characters. Anything else becomes a placeholder and is counted in the file header. The file says its content is data. A name made only of allowed characters can still read like an instruction to a model, so treat the file as data and keep it out of public repositories.
 
@@ -893,6 +906,7 @@ These are the controls the extension applies. They are the reasons it is safe to
 - **Limits.** 50 records per call, 500 records per session, 30 calls a minute, 10 write attempts per session and 3 a minute (a declined attempt counts). Results are capped at 200 KB.
 - **Hidden fields.** `filemaker.ai.hiddenFields` lists field names AI tools never see (case-insensitive, with or without `Table::`). **Write AI Context** honours it too: hidden fields are left out of the context file, and the file and the confirmation say how many were left out. This is by name only. It does not stop disclosure through a calculation, a summary field or a script result.
 - **Offline mode** blocks AI reads as well as writes. AI tools are not registered in an untrusted workspace.
+- **Portal results:** AI record reads include at most 20 rows per portal. If rows were left out by this limit or by the server, the answer reports `truncated: true`. Returned and total counts are included when FileMaker supplies the total; there is no automatic portal paging.
 - **Left out of results:** container fields and URLs, and the server address. Text that looks like a secret is redacted, which can rewrite a field value that looks like one; writes refuse values that contain the redaction marker.
 
 ### Chat with @filemaker

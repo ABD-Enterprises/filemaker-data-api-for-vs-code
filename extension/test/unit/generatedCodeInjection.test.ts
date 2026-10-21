@@ -70,7 +70,7 @@ describe('generated code from hostile names', () => {
     });
 
     const snippets = await service.generateSnippetsForLayout(profile(), "O'Brien}$");
-    const parsed = JSON.parse(snippets.content) as Record<string, { body: string[] }>;
+    const parsed = JSON.parse(snippets.content.replace(/^\/\/[^\n]*\n/, '')) as Record<string, { body: string[] }>;
     const body = Object.values(parsed).flatMap((entry) => entry.body).join('\n');
 
     expect(body).toContain("O\\\\'Brien\\}\\$");
