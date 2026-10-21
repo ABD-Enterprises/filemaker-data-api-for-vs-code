@@ -24,9 +24,12 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- Add Diagnose Connection: check the server address, network, certificate and Data API without signing in, explain likely fixes, and copy a report with the address hidden if wanted.
 - Add FileMaker: Test My Server to check a connection safely and make a report without passwords, with separately confirmed scratch-record and script tests.
 
 ### [FIX]
+
+- Diagnose Connection now shows the full matching certificate fingerprint, explains older certificate settings and missing intermediates, and gives advice that matches the current proxy handling. Server path prefixes work, report lines are easier to read, and hiding the address also hides the port.
 
 - [FIX] Long script parameters use a wildcard find on the first text field instead of an empty find. No-match finds and responses without a script status cannot report a successful script run.
 - [FIX] Test My Server now reads a record without an empty search, and empty searches show clear next steps. Cancelled batch updates wait for pending edits and keep a list of changed, failed and untouched records. Cancelling one request no longer cancels another request's sign-in, and renewed connections close their old sessions.

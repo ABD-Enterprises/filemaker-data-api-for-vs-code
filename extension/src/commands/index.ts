@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import { registerConnectionDiagnosticCommands } from './diagnoseConnection';
+
 import { reviewAndTrustCertificate, withPinnedCertificate } from '../services/certificateTrust';
 import { FMClientError } from '../services/errors';
 
@@ -82,6 +84,7 @@ export function registerCoreCommands(deps: RegisterCoreCommandDeps): vscode.Disp
   } = deps;
 
   return [
+    ...registerConnectionDiagnosticCommands(deps),
     vscode.commands.registerCommand('filemakerDataApiTools.addConnectionProfile', async () => {
       if (!(await roleGuard.assertFeature('writeOperations', 'Add Connection Profile'))) {
         return;

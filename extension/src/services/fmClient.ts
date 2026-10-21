@@ -1172,6 +1172,25 @@ export class FMClient {
     };
   }
 
+  /** Unauthenticated connection diagnosis through the same transport as Test Connection. */
+  public async getProductInfoDiagnostics(
+    profile: ConnectionProfile,
+    control?: ClientRequestControl
+  ): Promise<{ status: number; code?: string; name?: string; version?: string }> {
+    let status = 0;
+    const envelope = await this.requestServerLevel<{ productInfo?: Record<string, unknown> }>(
+      profile, '/productInfo', control, 'Failed to reach the FileMaker Data API.',
+      (value) => { status = value; }, true
+    );
+    const info = envelope.response.productInfo ?? {};
+    return {
+      status,
+      code: envelope.messages[0]?.code,
+      name: typeof info.name === 'string' ? info.name : undefined,
+      version: typeof info.version === 'string' ? info.version : undefined
+    };
+  }
+
   /**
    * Step two: `GET /fmi/data/<version>/databases`. Without credentials FileMaker lists the hosted
    * databases unless "Filter Databases in Client Applications" is on, in which case it answers
@@ -1203,7 +1222,9 @@ export class FMClient {
     profile: ConnectionProfile,
     path: string,
     control: ClientRequestControl | undefined,
-    fallbackMessage: string
+    fallbackMessage: string,
+    onStatus?: (status: number) => void,
+    skipCertificateInspection = false
   ): Promise<DataApiEnvelope<TResponse>> {
     const base = profile.serverUrl.replace(/\/+$/, '');
     const basePath = this.normalizePath(profile.apiBasePath ?? '/fmi/data');
@@ -1218,12 +1239,14 @@ export class FMClient {
         maxRedirects: 0,
         ...httpsTransportFor(profile, `${base}${basePath}/${version}${path}`)
       });
+      onStatus?.(response.status);
       return parseDataApiEnvelope<TResponse>(response);
     } catch (error) {
-      throw await this.refineCertificateError(
-        profile,
-        toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }))
-      );
+      const failure = toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }));
+      // Diagnosis already read the peer certificate with its own cancellable deadline.
+      throw (skipCertificateInspection
+        ? this.explainPinnedFailure(profile, failure)
+        : await this.refineCertificateError(profile, failure));
     }
   }
 

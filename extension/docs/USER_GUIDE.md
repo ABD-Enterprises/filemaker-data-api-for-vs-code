@@ -30,9 +30,26 @@ Command names below are the titles you see in the Command Palette (`Cmd+Shift+P`
 22. [Security behavior you will notice](#security-behavior-you-will-notice)
 23. [Troubleshooting](#troubleshooting)
 24. [FAQ](#faq)
-25. [Command reference](#command-reference)
+25. [Connection won't work? Diagnose Connection](#connection-wont-work-diagnose-connection)
+26. [Command reference](#command-reference)
 
 ---
+
+## Connection won't work? Diagnose Connection
+
+Open the Command Palette and run **FileMaker: Diagnose Connection**. Choose the active connection, another saved profile, or **Type a server address (without saving)** for a quick check. Enter an address such as `https://fm.example.com` or `https://fm.example.com:8443`. A saved address with a path prefix, such as `https://fm.example.com/fm`, works too. Nothing is saved for a typed check.
+
+The report opens as a new Markdown document in your editor and follows your editor theme. Each check shows **PASS**, **WARN** or **FAIL** and the time it took. It checks the address, looks up the server name, tries the port, reads the secure connection's certificate, checks VS Code's network settings, and asks the Data API for its product information. It does **not** sign in, send credentials, or change your certificate trust. Each network check has an eight-second limit. Use **Cancel** on the progress notification to stop.
+
+Start with **Most likely cause** at the end of the report. For a certificate with no server names (including FileMaker Server's default certificate), ask your administrator to confirm the fingerprint, then run **Connect** and choose **Trust**. For an expired certificate, ask the administrator to renew it. The report shows the full SHA-256 fingerprint in uppercase pairs separated by colons, just like the Trust dialog. A server sending only its leaf certificate may use a private root authority or may be missing an intermediate; the leaf alone cannot distinguish them. If your organization runs its own authority, set its CA file (**Certificate authority file**) in the profile. For a public authority such as Let's Encrypt, ask the administrator to check and install the full server chain. The report puts missing-intermediate advice first only when a CA file is already configured, the server sends only the leaf, and verification still fails with an issuer error; a missing intermediate is then likely, though the CA file could also be wrong. If your profile uses the older **Allow self-signed** setting, it already accepts any certificate; switch to trusting the confirmed fingerprint instead. A certificate from a public authority is usually the easiest long-term solution.
+
+Trusted-fingerprint profiles and older **Allow self-signed** profiles work with VS Code's default `http.proxySupport` setting on direct connections. The extension uses a connection path VS Code does not replace. Custom CA profiles still go through VS Code and system proxies as before. A trusted-fingerprint profile that needs a proxy is refused with `PIN_THROUGH_PROXY`: exclude the server in the proxy settings or, for an environment proxy, add it to `NO_PROXY`. An older Allow self-signed profile behind an environment proxy keeps its previous proxy route. If that route cannot apply its certificate settings, the report may suggest trying `http.proxySupport` set to `fallback`. Proxy setting and environment-variable values are hidden in the report. The DNS, port and certificate checks connect directly; the Data API check uses the extension's actual connection settings. For a proxy profile, this check diagnoses the **FileMaker Server address**, not the middleware's sign-in or certificate. It requests `/fmi/data/vLatest/productInfo` after any server path prefix; a custom API path can still need attention afterwards.
+
+Diagnose Connection was checked on one real server on 2026-10-21: the server had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted.
+
+Choose **Copy for bug report** when the report is ready, or run **FileMaker: Copy Connection Diagnosis for Bug Report** later. Answer **Hide the server address?** before anything is copied. Hiding also removes the port and certificate details that could reveal the address. The report leaves out passwords, tokens, API keys, request headers and cookies. The copy command copies the original diagnosis, even if you have edited the open document.
+
+Turn off offline mode before running a check. In Restricted Mode, you can check your own saved connection or type an address yourself; an address from the workspace's profile template is refused until you trust the workspace. This read-only check follows the same connection policy as Test Connection and does not need permission to edit records.
 
 ## Command reference
 
@@ -42,6 +59,10 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | --- | --- | --- |
 | Open Getting Started Walkthrough | Opens the guided setup steps in VS Code. | Always shown. |
 | Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
+| Diagnose Connection | Checks a saved server or a typed address, without signing in, and explains likely fixes. | Always shown; turn off offline mode. Uses saved profiles or an address you type; never reads a workspace template. |
+| Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
+| Test My Server | Runs a safe server check and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
+
 | Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
