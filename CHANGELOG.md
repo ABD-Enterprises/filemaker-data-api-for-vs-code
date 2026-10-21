@@ -34,6 +34,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in name handling, confirmations and error handling.
+
 - Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
 
 - Make command-context tests wait for completion, test process lookups without repeatedly starting PowerShell, and keep one real-process check with a longer timeout. Remove unused designer test tooling, align the zod version range, explain the TypeScript test alias, and add a complete command reference with a coverage check.
