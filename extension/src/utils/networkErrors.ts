@@ -82,6 +82,9 @@ const CERTIFICATE_CODES = new Set([
   'ERR_SSL_CERTIFICATE_VERIFY_FAILED'
 ]);
 
+/** Shared advice for a pin refused before connecting through a proxy. */
+export const PIN_THROUGH_PROXY_MESSAGE = "A proxy is configured on this computer (HTTPS_PROXY, VS Code http.proxy, or a system/PAC proxy), and a trusted (pinned) server certificate cannot be checked through a proxy, so the connection was not made. For an environment proxy, add this server's host name to NO_PROXY so the connection goes direct. For a VS Code or system proxy, exclude the server in that proxy's settings, or remove the proxy setting. A custom CA file does not help here, because a trusted certificate does not use the CA file. To keep the proxy, forget the trusted certificate and use a CA file for a certificate that lists the server's host names.";
+
 /** Stable code for a certificate that differs from the one the user pinned. */
 export const CERT_PIN_MISMATCH_CODE = 'FM_CERT_PIN_MISMATCH';
 /** Stable code for a pinned certificate that has expired. */
@@ -154,6 +157,7 @@ export function extractNetworkMessage(error: unknown): string | undefined {
 
 function isKnownNetworkCode(code: string): boolean {
   return (
+    code === 'PIN_THROUGH_PROXY' ||
     CERTIFICATE_CODES.has(code) ||
     code === CERT_PIN_MISMATCH_CODE ||
     code === CERT_PIN_EXPIRED_CODE ||
@@ -246,6 +250,8 @@ export function describeNetworkFailure(
         retryable: false,
         message: `The certificate of ${target} has been revoked. Ask your FileMaker administrator to install a new certificate.`
       };
+    case 'PIN_THROUGH_PROXY':
+      return { code, kind: 'certificate', retryable: false, message: PIN_THROUGH_PROXY_MESSAGE };
     case CERT_PIN_MISMATCH_CODE:
       return {
         code,
