@@ -37,6 +37,7 @@ PR title prefix matches the highest-tier label added:
 ### [INTERNAL]
 
 - Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
+- Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.
 - Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
 - Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in confirmations and error handling.
 

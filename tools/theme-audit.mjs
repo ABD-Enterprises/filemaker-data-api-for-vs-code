@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { buildSync } from 'esbuild';
-import { themes, registrations, tokensFor, resolvedCss, measure, presentationFailures } from './theme-audit-colors.mjs';
+import { themes, registrations, tokensFor, resolvedCss, measure, presentationFailures, disposeAudit } from './theme-audit-colors.mjs';
 import { JSDOM } from 'jsdom';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -138,6 +138,7 @@ for (const [theme,filename] of themes) {
     }
   }
 }
+disposeAudit();
 writeFileSync(path.join(output,'disabled-controls.json'),JSON.stringify(excluded,null,2)+'\n');
 writeFileSync(path.join(output,'guard-failures.json'),JSON.stringify(guardFailures,null,2)+'\n');
 writeFileSync(path.join(output,'contrast-pairs.json'),JSON.stringify(details,null,2)+'\n');

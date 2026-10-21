@@ -95,9 +95,37 @@ export function resolveVars(value, tokens, stack = [], missing = []) {
   }
   return result;
 }
-export function resolvedCss(css, injected, missing = []) {
-  const sheet = postcss.parse(css);
-  const tokens = {...injected};
+// Each audit run owns these caches. Keys use source/token values so edits and
+// mutations cannot reuse stale results. Call disposeAudit when the run finishes.
+const parsedSheets = new Map(), resolvedSheets = new Map(), measurements = new Map();
+let documentDom, documentCss, documentBody;
+export function disposeAudit() {
+  documentDom?.window.close();
+  documentDom = documentCss = documentBody = undefined;
+  parsedSheets.clear();
+  resolvedSheets.clear();
+  measurements.clear();
+}
+function documentFor(css, body) {
+  documentDom ??= new JSDOM('<head><style></style></head><body></body>');
+  const { document } = documentDom.window;
+  if (documentCss !== css) {
+    document.querySelector('style').textContent = css;
+    documentCss = css;
+  }
+  if (documentBody !== body) {
+    document.body.innerHTML = body;
+    documentBody = body;
+  }
+  return documentDom;
+}
+function resolvedSheet(css, injected) {
+  const key = JSON.stringify([css, Object.entries(injected).sort(([a], [b]) => a.localeCompare(b))]);
+  if (resolvedSheets.has(key)) return resolvedSheets.get(key);
+  if (!parsedSheets.has(css)) parsedSheets.set(css, postcss.parse(css));
+  // Only mutate a clone: each theme must start with the original declarations.
+  const sheet = parsedSheets.get(css).clone();
+  const tokens = {...injected}, missing = [], placeholderRules = [];
   sheet.walkRules((rule) => {
     if (rule.selector === ':root') rule.walkDecls((decl) => {
       if (decl.prop.startsWith('--')) tokens[decl.prop] = decl.value;
@@ -109,7 +137,20 @@ export function resolvedCss(css, injected, missing = []) {
     const value = resolveVars(decl.value,tokens,[],missing);
     if (!decl.prop.startsWith('--')) decl.value = value;
   });
-  return sheet.toString();
+  sheet.walkRules((rule) => {
+    if (!rule.selector.includes('::placeholder')) return;
+    rule.walkDecls('color', (decl) => placeholderRules.push({
+      selector: rule.selector.replaceAll('::placeholder',''), color: decl.value
+    }));
+  });
+  const result = { css: sheet.toString(), missing, placeholderRules };
+  resolvedSheets.set(key, result);
+  return result;
+}
+export function resolvedCss(css, injected, missing = []) {
+  const result = resolvedSheet(css, injected);
+  missing.push(...result.missing);
+  return result.css;
 }
 
 function rgba(color) {
@@ -137,26 +178,33 @@ export function measure(css,body,tokens,excluded = []) {
   // jsdom cannot resolve CSS custom properties. Resolve the actual production
   // root declarations first, then let its CSS cascade compute each fixture pair.
   // This is a static check, not evidence of a Chrome render or browser layout.
-  const dom = new JSDOM(`<style>body{background:${tokens['--vscode-editor-background']};color:${tokens['--vscode-foreground']}}${resolvedCss(css,tokens)}</style>${body}`);
+  const resolved = resolvedSheet(css,tokens);
+  const fullCss = `body{background:${tokens['--vscode-editor-background']};color:${tokens['--vscode-foreground']}}${resolved.css}`;
+  const key = JSON.stringify([fullCss,body]);
+  if (measurements.has(key)) {
+    const cached = structuredClone(measurements.get(key));
+    excluded.push(...cached.excluded);
+    return cached.records;
+  }
+  const dom = documentFor(fullCss,body);
   const {window}=dom;
-  const records=[];
-  const style=(el)=>window.getComputedStyle(el);
+  const records=[], exclusions=[];
+  const styles = new WeakMap(), backgrounds = new WeakMap();
+  const style=(el)=> {
+    if (!styles.has(el)) styles.set(el,window.getComputedStyle(el));
+    return styles.get(el);
+  };
   function background(el) {
     if (!el) return rgba(tokens['--vscode-editor-background']);
-    return over(rgba(style(el).backgroundColor),background(el.parentElement));
+    if (!backgrounds.has(el)) backgrounds.set(el,over(rgba(style(el).backgroundColor),background(el.parentElement)));
+    return backgrounds.get(el);
   }
-  const placeholderRules = [];
-  postcss.parse(resolvedCss(css,tokens)).walkRules((rule) => {
-    if (!rule.selector.includes('::placeholder')) return;
-    rule.walkDecls('color', (decl) => placeholderRules.push({
-      selector: rule.selector.replaceAll('::placeholder',''), color: decl.value
-    }));
-  });
+  const {placeholderRules} = resolved;
   for (const el of window.document.body.querySelectorAll('*')) {
     if (el.closest('[data-mode="designer"]')) continue; // authored page, not editor chrome
     if (el.matches('script,style,option')) continue;
     if (el.matches(':disabled') || el.closest('[aria-disabled="true"]')) {
-      excluded.push({selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(), reason: 'disabled control'});
+      exclusions.push({selector: el.id ? `#${el.id}` : el.tagName.toLowerCase(), reason: 'disabled control'});
       continue;
     }
     const text = [...el.childNodes].filter((n)=>n.nodeType===3).map((n)=>n.textContent).join('').trim() || (el.matches('input,textarea')?el.value:'');
@@ -183,7 +231,8 @@ export function measure(css,body,tokens,excluded = []) {
       probe.remove();
     }
   }
-  dom.window.close();
+  measurements.set(key,structuredClone({records,excluded:exclusions}));
+  excluded.push(...exclusions);
   return records;
 }
 
@@ -191,7 +240,7 @@ export function measure(css,body,tokens,excluded = []) {
 // diff markers, and an interaction layer that cannot paint a grid over objects.
 export function presentationFailures(css, body, tokens) {
   const failures = [];
-  const dom = new JSDOM(`<style>${resolvedCss(css,tokens)}</style>${body}`);
+  const dom = documentFor(resolvedCss(css,tokens),body);
   const style = (el) => dom.window.getComputedStyle(el);
   for (const surface of dom.window.document.querySelectorAll('.design-surface > [data-mode="designer"]')) {
     if (['', 'none'].includes(style(surface).backgroundImage)) failures.push('missing grid below objects');
@@ -219,8 +268,9 @@ export function presentationFailures(css, body, tokens) {
       if (tokens['--vscode-contrastBorder'] && ratio(over(border,bg),bg) < 3) failures.push(`${base} ${state} marker contrast`);
     }
   }
-  dom.window.close();
-  const pairs = measure(css,body,tokens);
+  // Placeholder presence depends on the fixture, not the theme. Other fixtures
+  // need the presentation checks above, but no second text-contrast measurement.
+  const pairs = dom.window.document.querySelector('[placeholder]') ? measure(css,body,tokens) : [];
   for (const pair of pairs.filter((pair) => pair.selector.endsWith('::placeholder'))) {
     if (pair.foreground.join() === pair.typedForeground.join()) failures.push('placeholder matches typed text');
   }
