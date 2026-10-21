@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { buildSync } from 'esbuild';
 
@@ -93,6 +93,7 @@ describe('webview theme color regression guard', () => {
 // or depending on a developer's VS Code installation in unit tests.
 interface ContrastPair { selector: string; ratio: number; foreground: number[]; typedForeground?: number[] }
 interface ThemeAudit {
+  disposeAudit: () => void;
   themes: [string, string][];
   registrations: Record<string, (string | null)[]>;
   tokensFor: (theme: string, overrides?: Record<string, string | null>) => Record<string, string>;
@@ -106,19 +107,58 @@ const compiledAudit = buildSync({ entryPoints: [path.join(root, 'tools/theme-aud
 const auditModule = { exports: {} as ThemeAudit };
 new Function('module', 'exports', 'require', compiledAudit.outputFiles[0]!.text)(auditModule, auditModule.exports, createRequire(import.meta.url));
 const audit = auditModule.exports;
+afterAll(() => audit.disposeAudit());
+const themeTokens = new Map(audit.themes.map(([theme]) => [theme, audit.tokensFor(theme)]));
 const styleFiles = [path.join(root, 'designer-ui/src/styles.css'), ...filesIn(path.join(root, 'extension/src'))];
 const auditedStyles = styleFiles.flatMap((file) => {
   const source = readFileSync(file, 'utf8');
   return file.endsWith('.css') ? [{ file, css: source }] : [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => ({ file, css: match[1]! }));
 });
-const stylesheet = (page: string) => readFileSync(path.join(root, `extension/src/webviews/${page}/ui/styles.css`), 'utf8');
-const designerCss = readFileSync(path.join(root, 'designer-ui/src/styles.css'), 'utf8');
+const stylesheet = (page: string) => auditedStyles.find(({ file }) => file === path.join(root, `extension/src/webviews/${page}/ui/styles.css`))!.css;
+const designerCss = auditedStyles.find(({ file }) => file === path.join(root, 'designer-ui/src/styles.css'))!.css;
 const fieldFixture = '<section class="panel pane form-section"><input placeholder="Hint" value="Typed text"><textarea placeholder="Hint">Typed text</textarea><button id="excluded" disabled>Disabled</button></section>';
 const diffFixture = ['field-cell', 'tree-leaf'].map((base) => ['added','removed','changed','unchanged'].map((state) => `<div class="${base} ${state}"><span class="status-badge ${state}">${state}</span><div class="field-title">Customer</div>${base === 'field-cell' ? '<dl class="field-meta"><dt>Type</dt><dd>Text</dd></dl>' : '<span class="tree-field-type">Text</span><ul class="change-list"><li>Type changed</li></ul>'}</div>`).join('')).join('');
 const successFixture = '<section class="panel"><p class="status success">Success</p><span class="test-badge success">Passed</span></section>';
 const gridFixture = '<div class="design-surface"><div data-mode="designer"><input value="Authored field"></div><div class="interaction-layer"><div class="object-hitbox">Field</div></div></div>';
 
 describe('offline theme audit regression guards', () => {
+  it('reuses stylesheet parsing and a document across themes without stale colors or diagnostics', () => {
+    const require = createRequire(import.meta.url);
+    const postcss = require('postcss') as { parse: (css: string) => unknown };
+    const jsdom = require('jsdom') as { JSDOM: new (...args: unknown[]) => unknown };
+    const parse = vi.spyOn(postcss, 'parse');
+    const documents = vi.spyOn(jsdom, 'JSDOM');
+    const isolatedModule = { exports: {} as ThemeAudit };
+    new Function('module', 'exports', 'require', compiledAudit.outputFiles[0]!.text)(isolatedModule, isolatedModule.exports, require);
+    const isolated = isolatedModule.exports;
+    const css = 'p { color:var(--vscode-foreground); background:var(--vscode-editor-background); }';
+    const body = '<p>Contrast</p>';
+    try {
+      const light = isolated.tokensFor('light'), dark = isolated.tokensFor('dark');
+      const first = isolated.measure(css, body, light);
+      expect(isolated.measure(css, body, dark)[0]!.foreground).not.toEqual(first[0]!.foreground);
+      expect(isolated.measure(css, body, { ...light })).toEqual(first);
+      expect(parse).toHaveBeenCalledTimes(1);
+      expect(documents).toHaveBeenCalledTimes(1);
+
+      // Token objects and returned arrays are mutable; cached work must not hide edits.
+      light['--vscode-foreground'] = light['--vscode-editor-background']!;
+      expect(isolated.measure(css, body, light)[0]!.ratio).toBe(1);
+      first[0]!.foreground[0] = -1;
+      expect(isolated.measure(css, body, isolated.tokensFor('light'))[0]!.foreground[0]).not.toBe(-1);
+      const missingCss = 'p { color:var(--vscode-missing, #fff); }';
+      for (let run = 0; run < 2; run++) {
+        const missing: string[] = [];
+        isolated.resolvedCss(missingCss, light, missing);
+        expect(missing).toEqual(['--vscode-missing']);
+      }
+    } finally {
+      isolated.disposeAudit();
+      parse.mockRestore();
+      documents.mockRestore();
+    }
+  });
+
   it('audits both high contrast variants and never invents null registrations', () => {
     expect(audit.themes.map(([theme]) => theme)).toEqual(['light', 'dark', 'high-contrast', 'high-contrast-light']);
     for (const [index, [theme]] of audit.themes.entries()) {
@@ -143,13 +183,13 @@ describe('offline theme audit regression guards', () => {
   it.each(audit.themes)('%s resolves every production color fallback to a registered token', (theme) => {
     for (const { file, css } of auditedStyles) {
       const missing: string[] = [];
-      audit.resolvedCss(css, audit.tokensFor(theme), missing);
+      audit.resolvedCss(css, themeTokens.get(theme)!, missing);
       expect([...new Set(missing)], file).toEqual([]);
     }
   });
 
   it.each(audit.themes)('%s keeps hints distinct and secondary text readable', (theme) => {
-    const tokens = audit.tokensFor(theme);
+    const tokens = themeTokens.get(theme)!;
     for (const css of [designerCss, ...['connectionWizard','recordEditor','recordViewer','queryBuilder','schemaDiff','scriptRunner'].map(stylesheet)]) {
       for (const colors of [tokens, Object.fromEntries(Object.entries(tokens).filter(([key]) => key !== '--vscode-input-placeholderForeground'))]) {
         const excluded: unknown[] = [];
@@ -172,7 +212,7 @@ describe('offline theme audit regression guards', () => {
   });
 
   it.each(audit.themes)('%s keeps success/OK green and readable, catching a blue mutation', (theme) => {
-    const tokens = audit.tokensFor(theme);
+    const tokens = themeTokens.get(theme)!;
     const environment = auditedStyles.find(({ file }) => file.replace(/\\/g, '/').endsWith('/environmentCompare/index.ts'))!.css;
     for (const [css, body] of [[stylesheet('connectionWizard'), successFixture], [environment, '<section class="card"><span class="ok">OK</span></section>']]) {
       expect(audit.presentationFailures(css!, body!, tokens)).toEqual([]);
@@ -191,7 +231,7 @@ describe('offline theme audit regression guards', () => {
   });
 
   it.each(audit.themes.filter(([theme]) => theme.startsWith('high-contrast')))('%s distinguishes every diff cell/tree marker and catches each mutation', (theme) => {
-    const tokens = audit.tokensFor(theme), css = stylesheet('schemaDiff');
+    const tokens = themeTokens.get(theme)!, css = stylesheet('schemaDiff');
     expect(audit.presentationFailures(css, diffFixture, tokens)).toEqual([]);
     expect(audit.measure(css, diffFixture, tokens).every((pair) => pair.ratio >= 4.5)).toBe(true);
     for (const state of ['added','removed','changed']) {
