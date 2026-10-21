@@ -3,6 +3,7 @@
 ## Unreleased
 
 - [INTERNAL] Test the external AI bridge directly without changing its protocol, and make MCP tests wait for events instead of fixed delays.
+- [INTERNAL] Test saved-query, batch, schema snapshot, type generation, enterprise and activation flows without opening VS Code, and record existing gaps in confirmations and error handling.
 
 - [INTERNAL] Share name validation, HTML escaping and the copied-request auth default reader, keeping existing messages, output and setting scopes.
 - [INTERNAL] Refresh non-certificate failure-mode documentation, check its file references, and clarify the upgrade guide’s AI switch behavior. Webview asset tests now use a temporary folder; Record Viewer tests cover failures, stale loads and its older fallback layout.

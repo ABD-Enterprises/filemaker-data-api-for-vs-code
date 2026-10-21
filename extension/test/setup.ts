@@ -96,6 +96,18 @@ vi.mock('vscode', () => {
         dispose: vi.fn()
       }))
     },
+    Range: class {
+      constructor(public startLine: number, public startCharacter: number, public endLine: number, public endCharacter: number) {}
+    },
+    Diagnostic: class {
+      constructor(public range: unknown, public message: string, public severity: number) {}
+    },
+    DiagnosticSeverity: {
+      Error: 0,
+      Warning: 1,
+      Information: 2,
+      Hint: 3
+    },
     ViewColumn: {
       One: 1
     },
