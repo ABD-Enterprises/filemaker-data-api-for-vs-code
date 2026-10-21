@@ -73,7 +73,7 @@ describe('registration', () => {
     const h = makeHarness({ settings: { enabled: false } });
     let handler: any;
     const dispose = vi.fn();
-    const createChatParticipant = vi.fn((id: string, fn: unknown) => {
+    const createChatParticipant = vi.fn((_id: string, fn: unknown) => {
       handler = fn;
       return { dispose };
     });

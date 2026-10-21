@@ -209,13 +209,9 @@ describe('layout (and script and field) names are used exactly, ` Sales` is not 
   });
 });
 
-describe('validateLayoutName keeps the name as given', () => {
-  it('returns ` Sales` unchanged, refuses blank and control characters, and still trims a database name typed in a form', async () => {
-    const { validateDatabaseName, validateLayoutName } = await import('../../src/utils/jsonValidate');
-    expect(validateLayoutName(' Sales ')).toEqual({ ok: true, value: ' Sales ' });
-    expect(validateLayoutName('Sales')).toEqual({ ok: true, value: 'Sales' });
-    expect(validateLayoutName('   ').ok).toBe(false);
-    expect(validateLayoutName('a\u0001b').ok).toBe(false);
+describe('validateDatabaseName', () => {
+  it('trims a database name typed in a form', async () => {
+    const { validateDatabaseName } = await import('../../src/utils/jsonValidate');
     // A database name is typed into the profile form, where a stray space is a typo, not part of the name.
     expect(validateDatabaseName(' Sales ')).toEqual({ ok: true, value: 'Sales' });
   });

@@ -39,12 +39,6 @@ export function parseSnippetDelivery(
   };
 }
 
-/** Whether a webview message carries a delivery that is valid; used by panels that validate before reading the rest. */
-export function hasValidDelivery(rawPayload: unknown, fallbackFormat?: SnippetFormat): boolean {
-  const payload = toRecord(rawPayload);
-  return payload !== undefined && parseSnippetDelivery(payload, fallbackFormat) !== undefined;
-}
-
 /**
  * Builds the request and puts it on the clipboard, or opens it in a new unsaved editor. Nothing is
  * written to a file: a `.http` file is saved by the user (Save As), never by the extension, so a

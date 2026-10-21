@@ -70,11 +70,6 @@ export function hasProtoKey(jsonText: string): boolean {
   return /"__proto__"\s*:/.test(jsonText);
 }
 
-/** Splits text into lines and prefixes each (for comment blocks). `lines` must already be single lines. */
-export function commentBlock(prefix: string, lines: readonly string[]): string[] {
-  return lines.map((line) => `${prefix}${line}`);
-}
-
 function containsPlaceholder(value: unknown): boolean {
   if (value instanceof Placeholder) {
     return true;

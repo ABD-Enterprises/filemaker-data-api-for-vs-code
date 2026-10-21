@@ -23,11 +23,6 @@ function supportedHashAlgorithms(): Set<string> {
   return cachedHashAlgorithms;
 }
 
-/** Exported for tests so they can reset the cache after mocking getHashes. */
-export function resetSupportedHashAlgorithmCacheForTesting(): void {
-  cachedHashAlgorithms = undefined;
-}
-
 const LEGACY_SECTION = 'filemakerDataApiTools';
 
 /** Deprecated `filemakerDataApiTools.<old>` keys and their `filemaker.<new>` replacements. */
