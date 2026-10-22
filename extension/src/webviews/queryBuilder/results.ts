@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { FileMakerRecord } from '../../types/fm';
 import { recordsToCsv } from '../../utils/exportCsv';
-import { exportColumns, exportRow } from '../../utils/exportRecords';
+import { exportColumns, exportRow, portalNotes } from '../../utils/exportRecords';
 import { atomicExport } from '../../utils/atomicExport';
 import { isFormulaNeutralizationOn } from '../../utils/userScopeSetting';
 import { deliverSnippet } from '../../snippets/deliver';
@@ -82,8 +82,11 @@ export function toCsvRows(result: QueryExecutionResult): Array<Map<string, unkno
   const records = result.result.data as FileMakerRecord[];
   const names = [...new Set(records.flatMap((record) => Object.keys(record.fieldData ?? {})))];
   const meta = exportColumns(names);
-  let noteColumn = '__portalNote (export information)';
-  while (names.includes(noteColumn)) noteColumn = '_' + noteColumn;
+  let noteColumn: string | undefined;
+  if (records.some((record) => portalNotes(record))) {
+    noteColumn = '__portalNote (export information)';
+    while (names.includes(noteColumn)) noteColumn = '_' + noteColumn;
+  }
   return records.map((record) => exportRow(record, meta, noteColumn));
 }
 

@@ -131,6 +131,7 @@ function parseRunQueryPayload(rawPayload: unknown): RunQueryPayload | undefined 
     profileId,
     layout,
     findJson,
+    ...(payload.listRecords === true ? { listRecords: true } : {}),
     sortJson: getStringField(payload, 'sortJson'),
     limit: getOptionalNumberField(payload, 'limit'),
     offset: getOptionalNumberField(payload, 'offset'),

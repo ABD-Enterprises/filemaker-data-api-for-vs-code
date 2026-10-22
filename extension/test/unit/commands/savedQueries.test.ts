@@ -355,3 +355,16 @@ describe('saved query commands', () => {
   });
 
 });
+
+it.each(['{not json', '{}'])('shows an import error for %s, without a success notice or changes', async (text) => {
+  const { store, refreshExplorer } = setup();
+  const realStore = new SavedQueriesStore(new InMemoryMemento() as never, new InMemoryMemento() as never);
+  store.importSavedQueries.mockImplementation((raw) => realStore.importSavedQueries(raw));
+  vi.mocked(vscode.window.showOpenDialog).mockResolvedValue([vscode.Uri.file('/tmp/queries.json')]);
+  vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(text));
+  await command('importSavedQueries')();
+  expect(vi.mocked(vscode.window.showErrorMessage).mock.calls[0]?.[0]).toContain(text === '{}' ? 'That JSON file does not contain saved queries' : 'That file is not valid JSON');
+  expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+  expect(refreshExplorer).not.toHaveBeenCalled();
+  expect(await realStore.listSavedQueries()).toEqual([]);
+});

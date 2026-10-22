@@ -262,12 +262,12 @@ describe('batch commands', () => {
     }
   });
 
-  it.each([undefined, 'Cancel', 'Continue'])('warns before running a handmade file without versions (%s)', async (choice) => {
+  it.each([undefined, 'Continue'])('warns before running a handmade file without versions (%s)', async (choice) => {
     const { tasks, jobRunner, batchService } = setup();
     updateInputs(false);
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Execute' as never).mockResolvedValueOnce(choice as never);
     await command('batchUpdateFromFile')(arg);
-    expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith('This file has no modId column, so updates cannot detect newer changes. Continue without the check?', { modal: true }, 'Continue', 'Cancel');
+    expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith('This file has no modId column, so updates cannot detect newer changes. Continue without the check?', { modal: true }, 'Continue');
     if (choice !== 'Continue') expect(jobRunner.startJob).not.toHaveBeenCalled();
     else {
       await tasks[0]!({ log: vi.fn() } as never);

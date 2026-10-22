@@ -38,7 +38,7 @@ export interface RequestTrace {
   endpoint: string;
 }
 
-/** @internal */
+/** Optional cancellation, paging and response limits for client requests. */
 export interface ClientRequestControl {
   portal?: PortalPaging;
   signal?: AbortSignal;

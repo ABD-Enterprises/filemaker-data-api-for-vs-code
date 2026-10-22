@@ -4,6 +4,7 @@ import { FMClientError } from '../services/errors';
 import type { NormalizeErrorOptions, NormalizedError, NormalizedErrorKind } from '../types/errors';
 import { getFileMakerErrorInfo } from './fileMakerCodes';
 import { describeNetworkFailure, extractNetworkCode, extractNetworkMessage, targetOfUrl } from './networkErrors';
+import { proxyConnectionFailure } from './proxyConnectionFailure';
 import { plainTextPreview } from './plainText';
 import { redactHeaders, redactString, redactValue } from './redact';
 
@@ -81,9 +82,11 @@ function normalizeAxiosError(error: AxiosError, options?: NormalizeErrorOptions)
       nodeMessage: extractNetworkMessage(error) ?? error.message
     });
     if (failure) {
+      const proxyMessage = proxyConnectionFailure(error, failure);
       return {
+        ...(proxyMessage ? { code: 'PROXY_UNREACHABLE' } : {}),
         kind: failure.kind,
-        message: failure.message,
+        message: proxyMessage ?? failure.message,
         networkCode: failure.code,
         isRetryable: failure.retryable,
         details,

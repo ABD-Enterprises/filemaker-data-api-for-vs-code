@@ -15,8 +15,11 @@ export async function handleRunQuery(context: QueryBuilderContext, payload: RunQ
   }
 
   try {
-    const request = toFindRequest(payload);
-    const result = await context.fmClient.findRecords(profile, payload.layout, request);
+    const request = toFindRequest(payload, payload.listRecords === true);
+    const { limit, offset, sort } = request;
+    const result = payload.listRecords === true
+      ? await context.fmClient.listRecords(profile, payload.layout, { limit, offset, sort })
+      : await context.fmClient.findRecords(profile, payload.layout, request);
     if (result.scriptErrors && result.scriptErrors.length > 0) {
       void vscode.window.showWarningMessage(`The find worked, but ${describeScriptErrors(result.scriptErrors)}.`);
     }
@@ -47,8 +50,8 @@ export async function handleRunQuery(context: QueryBuilderContext, payload: RunQ
   }
 }
 
-export function toFindRequest(payload: RunQueryPayload): FindRecordsRequest {
-  const findValidation = parseFindJson(payload.findJson || '[{}]');
+export function toFindRequest(payload: RunQueryPayload, listRecords = false): FindRecordsRequest {
+  const findValidation = listRecords ? { ok: true, value: [], error: undefined } : parseFindJson(payload.findJson || '[{}]');
 
   if (!findValidation.ok || !findValidation.value) {
     throw new FMClientError(findValidation.error ?? 'Find JSON is invalid.');

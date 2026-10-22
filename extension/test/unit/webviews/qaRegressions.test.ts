@@ -74,6 +74,41 @@ describe('host request guards', () => {
 });
 
 describe.skipIf(!JSDOM)('webview regression checks', () => {
+  it.each(['form', 'json'])('offers an explicit list action for empty %s criteria and pages the list', (mode) => {
+    const view = open('queryBuilder');
+    const { document, window, send, posted } = loadPage(view.html, view.source);
+    send({ type: 'init', payload: init }); send({ type: 'layoutsLoaded', payload: layouts });
+    document.getElementById('addSortButton')!.click();
+    window.eval(`const sortField = document.querySelector('.sort-field'); sortField.value = ' Name '; sortField.dispatchEvent(new Event('input'));`);
+    if (mode === 'json') {
+      document.getElementById('jsonTab')!.click();
+      document.getElementById('findJson')!.value = '[{}]';
+    }
+    document.getElementById('limitInput')!.value = '2';
+    document.getElementById('offsetInput')!.value = '3';
+    document.getElementById('runButton')!.click();
+    expect(posted.filter((m) => m.type === 'runQuery')).toHaveLength(0);
+    const button = document.getElementById('listRecordsButton');
+    expect(button?.textContent).toBe('List records instead');
+    expect(button?.classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('status')?.textContent).toMatch(/at least one field|criteria are empty/i);
+    button!.click(); button!.click();
+    const runs = posted.filter((m) => m.type === 'runQuery');
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.payload).toMatchObject({ listRecords: true, layout: ' Contacts ', limit: 2, offset: 3 });
+    expect(JSON.parse((runs[0]!.payload as { sortJson: string }).sortJson)).toEqual([{ fieldName: ' Name ', sortOrder: 'ascend' }]);
+    send({ type: 'queryResult', payload: { query: runs[0]!.payload, result: { data: [{ recordId: '3', fieldData: {} }, { recordId: '4', fieldData: {} }], dataInfo: { foundCount: 9 } } } });
+    document.getElementById('nextButton')!.click();
+    expect(posted.filter((m) => m.type === 'runQuery').at(-1)?.payload).toMatchObject({ listRecords: true, offset: 5, limit: 2 });
+  });
+  it('offers the list action when the host rejects a form with an empty field value', () => {
+    const view = open('queryBuilder');
+    const { document, send } = loadPage(view.html, view.source);
+    send({ type: 'init', payload: init }); send({ type: 'layoutsLoaded', payload: layouts });
+    send({ type: 'error', message: 'Find criteria are empty. Enter at least one field value to search.', runId: 0 });
+    expect(document.getElementById('listRecordsButton')?.classList.contains('hidden')).toBe(false);
+  });
+
   it.each(['queryBuilder', 'scriptRunner'] as const)('%s clears previous results on failure and prevents repeated clicks', (kind) => {
     const view = open(kind);
     const { document, send, posted } = loadPage(view.html, view.source);
@@ -82,7 +117,7 @@ describe.skipIf(!JSDOM)('webview regression checks', () => {
     if (kind === 'scriptRunner') document.getElementById('scriptNameInput')!.value = ' Go ';
     if (kind === 'queryBuilder') {
       document.getElementById('jsonTab')?.click();
-      document.getElementById('findJson')!.value = '[{}]';
+      document.getElementById('findJson')!.value = '[{"Name":"*"}]';
       send({ type: 'queryResult', payload: { query: { layout: ' Contacts ' }, result: { data: [{ recordId: '1', fieldData: { Name: 'OLD RESULT' } }] } } });
     } else send({ type: 'scriptResult', payload: { result: { response: { scriptResult: 'OLD RESULT' } } } });
     const button = document.getElementById('runButton')!;
@@ -115,7 +150,7 @@ describe.skipIf(!JSDOM)('webview regression checks', () => {
     document.getElementById('copyTableButton')!.click();
     expect(document.getElementById('status')?.textContent).toContain('too large to copy');
     expect(document.getElementById('resultSummary')?.textContent).toContain('Showing');
-    document.getElementById('jsonTab')!.click(); document.getElementById('findJson')!.value = '[{}]';
+    document.getElementById('jsonTab')!.click(); document.getElementById('findJson')!.value = '[{"Name":"*"}]';
     document.getElementById('runButton')!.click();
     send({ type: 'error', message: 'Failed run', runId: 1 });
     expect(document.getElementById('resultSummary')?.textContent).not.toContain('Showing');
@@ -179,7 +214,7 @@ describe.skipIf(!JSDOM)('webview regression checks', () => {
     const view = open('queryBuilder');
     const { document, send, posted } = loadPage(view.html, view.source);
     send({ type: 'init', payload: init }); send({ type: 'layoutsLoaded', payload: layouts });
-    document.getElementById('jsonTab')!.click(); document.getElementById('findJson')!.value = '[{}]';
+    document.getElementById('jsonTab')!.click(); document.getElementById('findJson')!.value = '[{"Name":"*"}]';
     const save = document.getElementById('saveButton')!;
     for (let i = 0; i < 15; i++) save.click();
     expect(posted.filter((m) => m.type === 'saveQuery')).toHaveLength(1);

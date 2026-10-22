@@ -11,6 +11,8 @@ export interface RunQueryPayload {
   profileId: string;
   layout: string;
   findJson: string;
+  /** Set only by the explicit List records instead action; retained when paging. */
+  listRecords?: boolean;
   sortJson?: string;
   limit?: number;
   offset?: number;

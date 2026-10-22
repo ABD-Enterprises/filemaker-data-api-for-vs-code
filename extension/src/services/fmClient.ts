@@ -30,7 +30,7 @@ import { requestWithAuth, requestNoAuth, buildEndpoint, requestWithAuthRaw } fro
 import { getErrorStatus, getErrorMessage } from './fmClient/response';
 import { credentialStamp, waitForSession } from './fmClient/session';
 import type { ClientContext } from './fmClient/context';
-export type { FMClientContainerUploadOptions, SessionHealth, FMClientSessionOptions, EditRecordOptions } from './fmClient/types';
+export type { ClientRequestControl, FMClientContainerUploadOptions, SessionHealth, FMClientSessionOptions, EditRecordOptions } from './fmClient/types';
 export { MAX_SCRIPT_URL_LENGTH } from './fmClient/types';
 
 /** Longest wait between automatic sign-in attempts after FileMaker reports no free sessions (956). */

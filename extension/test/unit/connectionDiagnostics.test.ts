@@ -302,3 +302,11 @@ it('ranks a non-certificate Data API failure ahead of legacy fingerprint advice'
   expect(causes[0]).toMatch(/Data API did not answer.*503/);
   expect(causes.join(' ')).toContain('switch to trusting the fingerprint');
 });
+
+it('diagnosis ranks a confirmed proxy connection failure above generic Data API advice', async () => {
+  const fake = probes();
+  fake.product = async () => { throw new FMClientError('The proxy could not be reached. Check HTTPS_PROXY and http.proxySupport.', { code: 'PROXY_UNREACHABLE', networkCode: 'ECONNREFUSED', kind: 'network' }); };
+  const report = await runConnectionDiagnostics({ ...profile, allowSelfSigned: true }, settings, fake, new AbortController().signal);
+  expect(rankDiagnosticCauses(report)[0]).toMatch(/proxy.*could not be reached.*HTTPS_PROXY.*http.proxySupport/i);
+  expect(buildDiagnosticReport(report)).not.toContain('Check the Data API in Admin Console');
+});

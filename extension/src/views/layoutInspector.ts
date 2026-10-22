@@ -192,8 +192,8 @@ export class LayoutInspectorProvider implements vscode.TreeDataProvider<LayoutIn
         kind: 'category',
         category: 'fields',
         label: 'Fields',
-        description: `${model.fields.length}`,
-        tooltip,
+        description: `${model.fields.length}${model.repeatedFields.length ? ' (repeated fields shown once)' : ''}`,
+        tooltip: model.repeatedFields.length ? `${tooltip}\nRepeated fields are shown once. Each exact field name has one value in a record. Repeated: ${model.repeatedFields.join(', ')}` : tooltip,
         collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
         iconPath: new vscode.ThemeIcon('symbol-field'),
         contextValue: 'fmLayoutInspectorCategory'

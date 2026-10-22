@@ -209,14 +209,14 @@ describe('FileMaker: Write AI Context', () => {
     expect(prompts.some((message) => message.includes('Add it to .gitignore'))).toBe(false);
   });
 
-  it('asks before adding a section to an existing file that has none, and stops if declined', async () => {
+  it.each([undefined, 'Cancel', 'Skip existing'])('asks before adding a section to an existing file that has none, and stops on %s', async (choice) => {
     inspected = { globalValue: 'AGENTS.md' };
     await writeFile(join(workspace, 'AGENTS.md'), '# Mine\n');
 
-    warningChoices = [undefined];
+    warningChoices = [choice];
     await run();
     expect(await readFile(join(workspace, 'AGENTS.md'), 'utf8')).toBe('# Mine\n');
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('AGENTS.md'), { modal: true }, 'Add to the file', 'Skip existing', 'Cancel');
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('AGENTS.md'), { modal: true }, 'Add to the file', 'Skip existing');
 
     warningChoices = ['Add to the file'];
     await run();

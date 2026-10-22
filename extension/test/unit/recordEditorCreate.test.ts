@@ -176,7 +176,7 @@ describe('Record Editor create mode (stubbed services)', () => {
     vi.mocked(vscode.window.showWarningMessage).mockReset().mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Create' as never);
     await panel.send({ ...create, payload: { ...create.payload, fieldData: { Name: value } } });
     expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Name'), { modal: true }, 'Remove the character and continue', 'Cancel'
+      expect.stringContaining('Name'), { modal: true }, 'Remove the character and continue'
     );
     expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0]?.[0]).toContain('On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest.');
     if (choice === 'Remove the character and continue') {
