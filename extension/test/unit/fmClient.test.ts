@@ -26,6 +26,20 @@ function createProfile(): ConnectionProfile {
 }
 
 describe('FMClient (unit)', () => {
+  it.each([
+    { recordId: ' ', fileName: 'photo.png', content: Buffer.from('x'), message: 'Record ID is required' },
+    { recordId: '1', fileName: ' ', content: Buffer.from('x'), message: 'Upload file name is required' },
+    { recordId: '1', fileName: 'photo.png', content: Buffer.alloc(0), message: 'Upload file is empty' },
+    { recordId: '1', fileName: 'photo.png', content: Buffer.from('xx'), maxBytes: 1, message: 'exceeds the configured limit' }
+  ])('refuses an invalid container upload before signing in: $message', async ({ recordId, fileName, content, maxBytes, message }) => {
+    const http = new FakeAxios();
+    const secrets = new SecretStore(new InMemorySecretStorage() as never);
+    const client = new FMClient(secrets, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }, 3000, http as never);
+    await expect(client.uploadContainer(createProfile(), ' Exact layout ', recordId, ' Photo ', { fileName, content }, { maxBytes }))
+      .rejects.toThrow(message);
+    expect(http.request).not.toHaveBeenCalled();
+  });
+
   describe('verified script parameter carriers', () => {
     const layout = ' Exact/Layout ü ';
     const textName = ' Table::First text / ü ';

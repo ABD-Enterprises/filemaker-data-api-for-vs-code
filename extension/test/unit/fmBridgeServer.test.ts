@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ConnectionProfile, FindRecordsResult, RunScriptResult } from '../../src/types/fm';
+import { FMClientError } from '../../src/services/errors';
 import { FmBridgeServer } from '../../src/services/fmBridgeServer';
 
 const profile: ConnectionProfile = {
@@ -22,6 +23,37 @@ const logger = {
 };
 
 describe('FmBridgeServer', () => {
+  it.each([null, 'wrong'])('refuses a missing or wrong preview token before accessing FileMaker', async (token) => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, '/fm/getRecord', { token, payload: { layout: 'L', recordId: '1' } });
+    expect(result).toMatchObject({ status: 403, json: { error: 'Invalid or missing bridge session token.' } });
+    expect(client.getRecord).not.toHaveBeenCalled();
+  });
+
+  it('allows CORS preflight without a token but refuses non-POST operations', async () => {
+    const server = new FmBridgeServer(createProfileStoreStub(), createFmClientStub(), createFmWebProjectServiceStub(), logger);
+    const preflight = await invokeBridgeRequest(server, '/fm/getRecord', { token: null, method: 'OPTIONS', origin: 'http://localhost:3000' });
+    expect(preflight).toMatchObject({ status: 204, body: '', headers: { 'access-control-allow-origin': 'http://localhost:3000' } });
+    expect(await invokeBridgeRequest(server, '/fm/getRecord', { method: 'GET' })).toMatchObject({ status: 405, json: { error: 'Only POST requests are supported.' } });
+  });
+
+  it('keeps layout and script names intact in preview script requests', async () => {
+    const runScript = vi.fn().mockResolvedValue({ response: {}, messages: [] });
+    const server = new FmBridgeServer(createProfileStoreStub(), createFmClientStub({ runScript }), createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, '/fm/runScript', { payload: { layout: ' Exact ', scriptName: ' Script ' } });
+    expect(result.status).toBe(200);
+    expect(runScript).toHaveBeenCalledWith(profile, { layout: ' Exact ', scriptName: ' Script ', scriptParam: undefined, recordId: undefined }, { signal: expect.any(AbortSignal) });
+  });
+
+  it('preserves a FileMaker failure status and the exact record request names', async () => {
+    const getRecord = vi.fn().mockRejectedValue(new FMClientError('Record changed', { status: 409 }));
+    const server = new FmBridgeServer(createProfileStoreStub(), createFmClientStub({ getRecord }), createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, '/fm/getRecord', { payload: { layout: ' Exact ', recordId: '1' } });
+    expect(result).toMatchObject({ status: 409, json: { error: 'Record changed' } });
+    expect(getRecord).toHaveBeenCalledWith(profile, ' Exact ', '1', { signal: expect.any(AbortSignal) });
+  });
+
   it.each(['/editRecord', '/createRecord'].flatMap((route) =>
     ['A\0B', 'A\0B\0C', ['safe', 'A\0B\0C'], { nested: 'A\0B\0C' }].map((value) => ({ route, value }))
   ))('refuses NUL on $route before calling FileMaker: $value', async ({ route, value }) => {
@@ -202,13 +234,16 @@ async function invokeBridgeRequest(
     origin?: string;
     payload?: Record<string, unknown>;
     remoteAddress?: string;
+    token?: string | null;
+    method?: string;
   }
 ): Promise<{ status: number; body: string; json: unknown; headers: Record<string, string> }> {
   const request = buildRequest(route, input.origin, input.payload, input.remoteAddress);
   // These tests call the handler without starting the server, so give it a session token and
   // present it, as the preview app does. (Tests of a missing or wrong token use a real server.)
   (server as unknown as { sessionToken: string }).sessionToken = 'test-session-token';
-  request.headers['x-fm-bridge-token'] = 'test-session-token';
+  if (input.token !== null) request.headers['x-fm-bridge-token'] = input.token ?? 'test-session-token';
+  if (input.method) request.method = input.method;
   const response = buildResponse();
 
   const bridge = server as unknown as {

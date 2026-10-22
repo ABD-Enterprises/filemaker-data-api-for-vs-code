@@ -118,6 +118,22 @@ describe('registerCoreCommands', () => {
     };
   }
 
+  it.each(['Cancel', undefined, 'Remove'])('removes a profile and its secrets only after Remove: %s', async (choice) => {
+    const deps = createMockDeps();
+    const profile = { id: 'p1', name: 'Development' };
+    Object.assign(deps.profileStore, { getProfile: vi.fn().mockResolvedValue(profile) });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(choice as never);
+    registerCoreCommands(deps);
+    const remove = vi.mocked(vscode.commands.registerCommand).mock.calls.find(([id]) => id === 'filemakerDataApiTools.removeConnectionProfile')![1];
+    await remove({ profileId: 'p1' });
+    for (const [object, method] of [[deps.profileStore, 'removeProfile'], [deps.savedQueriesStore, 'removeQueriesForProfile'], [deps.secretStore, 'clearProfileSecrets'], [deps.fmClient, 'invalidateProfileCache']] as const) {
+      const fn = (object as Record<string, unknown>)[method];
+      if (choice === 'Remove') expect(fn).toHaveBeenCalledWith('p1');
+      else expect(fn).not.toHaveBeenCalled();
+    }
+    expect(deps.refreshExplorer).toHaveBeenCalledTimes(choice === 'Remove' ? 1 : 0);
+  });
+
   it('offers to connect after trusting under override, without asking for a settings change', async () => {
     const deps = createMockDeps();
     const profile = { id: 'p1', name: 'LAN', authMode: 'direct' as const, serverUrl: 'https://192.0.2.1', database: 'Sales', username: 'tester' };

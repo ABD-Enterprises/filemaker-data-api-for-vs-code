@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { spawn, type ChildProcess } from 'child_process';
 import net from 'net';
 import path from 'path';
@@ -12,7 +13,6 @@ import { SecretStore } from '../../src/services/secretStore';
 import { RecordEditorPanel } from '../../src/webviews/recordEditor';
 import { InMemorySecretStorage } from './mocks';
 import { JSDOM, loadPage } from '../helpers/jsdomPage';
-import { readFileSync } from 'fs';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const workspace = vscode.workspace as unknown as { isTrusted: boolean; getConfiguration: ReturnType<typeof vi.fn> };
@@ -91,8 +91,8 @@ describe('Record Editor create mode (stubbed services)', () => {
 
   const create = { type: 'createRecord', payload: { profileId: 'p1', layout: 'People', fieldData: { Name: 'Ada', Age: 36, Blank: '' } } };
 
-  it('reports a failed create field lookup and lets the user retry', async () => {
-    const getFields = vi.fn().mockRejectedValueOnce(new Error('Connection timed out'))
+  it.each(['Connection timed out', 'Connection timed out.'])('defensively reports a failed uncached field lookup: %s', async (reason) => {
+    const getFields = vi.fn().mockRejectedValueOnce(new Error(reason))
       .mockResolvedValue({ supported: true, fields, fromCache: false });
     panel = openPanel({
       profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
@@ -103,23 +103,71 @@ describe('Record Editor create mode (stubbed services)', () => {
     expect(panel.last('error')).toEqual({ type: 'error', message: "Could not load the layout's fields: Connection timed out. Try again." });
     expect(createRecord).not.toHaveBeenCalled();
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
-    if (JSDOM) {
-      const html = (vi.mocked(vscode.window.createWebviewPanel).mock.results.at(-1)?.value as { webview: { html: string } }).webview.html;
-      const page = loadPage(html, readFileSync(path.resolve(__dirname, '../../src/webviews/recordEditor/ui/index.js'), 'utf8'));
-      page.send({ type: 'init', payload: { profiles: [{ id: 'p1', name: 'P' }], activeProfileId: 'p1', defaults: { mode: 'create', profileId: 'p1', layout: 'People' } } });
-      page.send({ type: 'layoutsLoaded', payload: { profileId: 'p1', layouts: ['People'] } });
-      page.send({ type: 'layoutFields', payload: { profileId: 'p1', layout: 'People', fields } });
-      page.window.eval("const input = document.querySelector('#fieldEditor textarea'); input.value = 'Ada'; input.dispatchEvent(new Event('input'));");
-      page.document.getElementById('createButton')!.click();
-      expect(page.document.getElementById('createButton')!.getAttribute('disabled')).not.toBeNull();
-      page.send(panel.last('error'));
-      expect(page.document.getElementById('createButton')!.getAttribute('disabled')).toBeNull();
-    }
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
     await panel.send(create);
     expect(getFields).toHaveBeenCalledTimes(2);
     expect(createRecord).toHaveBeenCalledOnce();
     expect(panel.last('recordCreated')?.payload).toMatchObject({ recordId: '501' });
+  });
+
+  it('reports field-list failures without presenting fields and can request the list again', async () => {
+    const getFields = vi.fn().mockRejectedValueOnce(new Error('Fields unavailable'))
+      .mockResolvedValueOnce({ supported: true, fields, fromCache: false });
+    panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord }, schemaService: { getFields }
+    });
+    const request = { type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } };
+    await panel.send(request);
+    expect(panel.last('error')).toEqual({ type: 'error', message: 'Fields unavailable' });
+    expect(panel.last('layoutFields')).toBeUndefined();
+    expect(createRecord).not.toHaveBeenCalled();
+    await panel.send(request);
+    expect(panel.last('layoutFields')?.payload).toMatchObject({ fields });
+  });
+
+  it.skipIf(!JSDOM)('guards a real form submission after switching to a layout whose fields failed to load', async () => {
+    const getFields = vi.fn().mockResolvedValueOnce({ supported: true, fields, fromCache: false })
+      .mockRejectedValue(new Error('Connection timed out.'));
+    panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord }, schemaService: { getFields }
+    });
+    const html = (vi.mocked(vscode.window.createWebviewPanel).mock.results.at(-1)?.value as { webview: { html: string } }).webview.html;
+    const page = loadPage(html, readFileSync(path.resolve(__dirname, '../../src/webviews/recordEditor/ui/index.js'), 'utf8'));
+    page.send({ type: 'init', payload: { profiles: [{ id: 'p1', name: 'P' }], activeProfileId: 'p1', defaults: { mode: 'create', profileId: 'p1', layout: 'People' } } });
+    page.send({ type: 'layoutsLoaded', payload: { profileId: 'p1', layouts: ['People', 'Other'] } });
+    await panel.send(page.posted.find((message) => message.type === 'loadLayoutFields'));
+    page.send(panel.last('layoutFields'));
+    page.window.eval("const input = document.querySelector('#fieldEditor textarea'); input.value = 'Ada'; input.dispatchEvent(new Event('input')); const layout = document.getElementById('layoutSelect'); layout.value = 'Other'; layout.dispatchEvent(new Event('change'));");
+    await panel.send(page.posted.filter((message) => message.type === 'loadLayoutFields').at(-1));
+    page.send(panel.last('error'));
+    page.document.getElementById('createButton')!.click();
+    const submission = page.posted.find((message) => message.type === 'createRecord');
+    expect(submission).toMatchObject({ payload: { layout: 'Other', fieldData: { Age: 'Ada' } } });
+    await panel.send(submission);
+    expect(panel.last('error')?.message).toBe("Could not load the layout's fields: Connection timed out. Try again.");
+    page.send(panel.last('error'));
+    expect(page.document.getElementById('createButton')!.getAttribute('disabled')).toBeNull();
+    expect(getFields).toHaveBeenCalledTimes(3);
+    expect(createRecord).not.toHaveBeenCalled();
+  });
+
+  it('uses the cached fields after the create form receives them', async () => {
+    const getFields = vi.fn().mockResolvedValueOnce({ supported: true, fields, fromCache: false })
+      .mockRejectedValue(new Error('Connection timed out.'));
+    panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields }
+    });
+    await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } });
+    expect(panel.last('layoutFields')?.payload).toMatchObject({ fields });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
+    await panel.send(create);
+    expect(getFields).toHaveBeenCalledOnce();
+    expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: 'Ada', Age: 36 });
+    expect(panel.last('error')).toBeUndefined();
   });
 
   it.each(['A\0B\u200bC\ufeffD', 'A\0B\0C\u200bD\ufeffE'].flatMap((value) =>

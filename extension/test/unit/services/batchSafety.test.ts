@@ -62,10 +62,11 @@ describe('batch update safety', () => {
     }
   });
   it.each([
-    ['10.50', '10.5'], ['1e2', 100], [10.5, '10.500'],
-    ['Ada  \t', 'Ada'], ['a\r\nb\rc', 'a\nb\nc']
-  ])('confirms a lost reply after FileMaker normalizes %j to %j', async (sent, stored) => {
-    const { service, editRecord, getRecord } = setup();
+    ['number', '10.50', '10.5'], ['number', '1e2', 100], ['number', 10.5, '10.500'],
+    ['number', '1,000', '1000'], ['number', '10.5 \t', 10.5], ['text', 'a\r\nb\rc', 'a\nb\nc']
+  ])('confirms a lost reply after FileMaker normalizes a %s field from %j to %j', async (resultType, sent, stored) => {
+    const { service, editRecord, getRecord, getLayoutMetadata } = setup();
+    getLayoutMetadata.mockResolvedValue({ fieldMetaData: [{ ...fields[0], result: resultType }] });
     editRecord.mockRejectedValueOnce(new FMClientError('reply lost', { isRetryable: true }))
       .mockRejectedValueOnce(new FMClientError('stale', { code: '306' }));
     getRecord.mockResolvedValue({ fieldData: { ' Name ': stored } });
@@ -75,10 +76,16 @@ describe('batch update safety', () => {
     expect(editRecord).toHaveBeenCalledWith(profile, ' Layout ', '1', { ' Name ': sent }, undefined, { modId: '7' });
   });
   it.each([
-    [' Ada', 'Ada'], ['9007199254740993', '9007199254740992'],
-    ['', 0], [null, ''], ['a\nb', 'ab'], ['01/02/2026', '02/01/2026']
-  ])('does not confirm different or ambiguous values %j and %j', async (sent, stored) => {
-    const { service, editRecord, getRecord } = setup();
+    ['text', '007', '7'], ['text', '02134', '2134'], ['text', 'Ada  \t', 'Ada'],
+    ['text', 'Ada\n', 'Ada'], ['text', 'Ada\u00a0', 'Ada'], ['text', ' Ada', 'Ada'],
+    ['number', '9007199254740993', '9007199254740992'], ['number', '1,00', '100'],
+    ['number', '9,007,199,254,740,993', '9007199254740992'],
+    ['text', '', 0], ['text', null, ''], ['text', 'a\nb', 'ab'],
+    ['date', '01/02/2026', '02/01/2026'], ['timestamp', '007', '7'],
+    [undefined, '007', '7']
+  ])('does not confirm different or ambiguous values on a %s field: %j and %j', async (resultType, sent, stored) => {
+    const { service, editRecord, getRecord, getLayoutMetadata } = setup();
+    getLayoutMetadata.mockResolvedValue({ fieldMetaData: [{ ...fields[0], result: resultType }] });
     editRecord.mockRejectedValueOnce(new FMClientError('reply lost', { isRetryable: true }))
       .mockRejectedValueOnce(new FMClientError('stale', { code: '306' }));
     getRecord.mockResolvedValue({ fieldData: { ' Name ': stored } });

@@ -44,6 +44,26 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 5));
 describe('connection wizard in Restricted Mode', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each(['save', 'reviewCertificate', 'testConnection'])('rejects malformed %s messages with a reply', async (type) => {
+    const { posted, send } = open(true);
+    send({ type, payload: [] });
+    await flush();
+    expect(posted).toContainEqual({ type: type === 'testConnection' ? 'testError' : 'saveError', message: 'The form data was not valid.' });
+  });
+
+  it.each([
+    [{ serverUrl: 'not a URL' }, /Server URL/],
+    [{ database: '' }, /Database/],
+    [{ authMode: 'proxy', proxyEndpoint: 'bad' }, /Proxy endpoint/],
+    [{ password: '' }, /Enter a password/]
+  ])('ends a failed connection test with a useful form error', async (override, message) => {
+    const { posted, send } = open(true);
+    send({ type: 'testConnection', payload: { name: 'Test', authMode: 'direct', serverUrl: 'https://fm.example.test', database: 'Sales', username: 'user', password: 'secret', apiBasePath: '/fmi/data', apiVersionPath: 'vLatest', ...override } });
+    await vi.waitFor(() => expect(posted).toContainEqual(expect.objectContaining({ type: 'testError', message: expect.stringMatching(message) })));
+    expect(posted).toContainEqual(expect.objectContaining({ type: 'testStarted' }));
+    expect(posted.some((entry) => entry.type === 'testSuccess')).toBe(false);
+  });
+
   it('tells the page whether the workspace is restricted when it starts', async () => {
     for (const trusted of [false, true]) {
       const { posted, send } = open(trusted);

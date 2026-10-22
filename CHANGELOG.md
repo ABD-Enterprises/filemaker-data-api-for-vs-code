@@ -31,6 +31,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.
+
 - Let Create Record recover from a failed field lookup; keep later real edits after skipped-only rows, ignore spaces around JSON record IDs and versions, and recognize matching retry results despite number, space or line-ending differences. Cancelling stops further record checks.
 - Handle repeating read-only fields in imports, Record Editor saves and AI writes; check uncertain batch retries, skip duplicate record rows, and keep skipped values out of dry-run previews.
 - Protect batch updates with the exported record version, skip records changed since export, and ask before overwriting newer changes or using files without versions. Dry runs report how many rows can be checked.
@@ -68,6 +70,8 @@ PR title prefix matches the highest-tier label added:
 - Report malformed AI hidden-field settings consistently in AI tools, Write AI Context and the AI status bar, without changing which fields are hidden.
 
 ### [INTERNAL]
+
+- Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
 
 - Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.

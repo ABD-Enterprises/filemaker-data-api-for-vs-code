@@ -110,6 +110,30 @@ describe('extension lazy FM runtime loading', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps job progress visible while cancellation waits for pending work', async () => {
+    const { JobRunner } = await import('../../src/services/jobRunner');
+    const subscription = vi.spyOn(JobRunner.prototype, 'onDidChange');
+    const { activate } = await import('../../src/extension');
+    const context = createActivationContext();
+    await activate(context);
+    const runner = subscription.mock.contexts[0] as InstanceType<typeof JobRunner>;
+    let finish!: () => void;
+    const handle = runner.startJob('Import', async (job) => {
+      job.reportProgress(40);
+      await new Promise<void>((resolve) => { finish = resolve; });
+    });
+    const status = vi.mocked(vscode.window.createStatusBarItem).mock.results
+      .map((result) => result.value as { command: string; text: string })
+      .find((item) => item.command === 'filemakerDataApiTools.showJobs')!;
+    expect(status.text).toBe('$(sync~spin) FM Job: Import 40%');
+    handle.cancel();
+    expect(status.text).toBe('$(sync~spin) FM Job: Import cancelling 40%');
+    finish();
+    await vi.waitFor(() => expect(status.text).toBe('$(history) FM Jobs: idle'));
+    expect(lazyModules.fmClientConstructed).not.toHaveBeenCalled();
+    disposeSubscriptions(context);
+  });
+
   it('does not load FM client, retry, batch, or circuit-breaker modules during activation', async () => {
     const { activate } = await import('../../src/extension');
     const context = createActivationContext();
