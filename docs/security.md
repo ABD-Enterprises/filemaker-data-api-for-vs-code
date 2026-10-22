@@ -47,13 +47,14 @@ instead trust one specific certificate by its SHA-256 fingerprint
 ("pinning"): the connection then accepts exactly that certificate (host name
 and issuer checks are skipped for it only), refuses it when it has expired
 unless the user accepted that, and fails hard with a re-trust prompt when
-the server presents a different one. This depends on VS Code letting the extension make its own
-connection: with `http.proxySupport` set to `override` (VS Code's default) the pin is not enforced and
-VS Code's normal check applies instead (see the User Guide, Certificates). For a verified or pinned profile nothing
+the server presents a different one. In 1.7.0 the extension checks a trusted fingerprint on direct connections with every
+`http.proxySupport` value, including VS Code's default, `override` (see the User Guide, Certificates). For a verified or pinned profile nothing
 is sent to the server before its certificate is checked; a profile that still
-has the older allow-self-signed setting skips every check. A pinned connection is never made through an
+has the older allow-self-signed setting skips every check when its agent is used.
+Legacy profiles go direct unless an environment proxy applies; on that route VS Code
+may still replace their certificate handling. CA-only profiles retain their existing proxy routing. A pinned connection is never made through an
 HTTP proxy (the request is refused before anything is sent when an
-environment proxy applies). The pin is stored in the profile
+environment, VS Code or system/PAC proxy applies, with `PIN_THROUGH_PROXY`). The pin is stored in the profile
 (`pinnedCertSha256`), is never read from a workspace template or file, and
 is not a secret. Redirects are not followed.
 
@@ -179,7 +180,7 @@ blast radius if it is exfiltrated.
 ## Confirmations
 
 The extension asks before it: saves a record (listing the changed fields),
-deletes a record, executes a batch update, runs workspace plugins, starts the
+deletes a record, executes a batch update (and asks whether to check each record for newer changes or overwrite them, or whether to continue when the file has no modId column), warns before saving text that contains a NUL character, asks before overwriting generated files that the extension did not write, asks twice before Test My Server's write test (create, edit, delete a scratch record) and before it runs a script, runs workspace plugins, starts the
 FM Web preview (`npm install`, `npm run dev`), runs a Layout Mode `runScript`
 behavior, sends credentials to an address that came from a workspace profile
 template or to a remote `http://` address, switches AI tools back on, and for
@@ -196,7 +197,7 @@ plugin imports from outside its folder is not covered by the hash.
 
 ## Logs and redaction
 
-Logs, request history, metrics, error details and copied snippets pass through
+Logs, request history, metrics, error details and copied snippets (free-text API keys and FileMaker access-token headers in error text are masked too) pass through
 one redaction function. It hides authorization headers, session tokens
 (including in request paths such as `DELETE /sessions/<token>`), token-like
 query parameters, JSON keys whose names contain `token`, `secret`, `password`,
@@ -238,7 +239,7 @@ model or on the user. See also the [AI section of DATA_HANDLING.md](./DATA_HANDL
   the extension host's memory. This is outside the OS-level threat
   model; rely on the OS / EDR.
 - **A compromised proxy host**. See "Proxy mode" above.
-- **A man-in-the-middle at the moment a certificate is first trusted**, or a leaked private key of a trusted certificate. A pin detects a later change only, and only while VS Code lets the extension make its own connection (not with `http.proxySupport` on `override`, its default). Profiles that still use the older allow-self-signed setting have no certificate checks at all.
+- **A man-in-the-middle at the moment a certificate is first trusted**, or a leaked private key of a trusted certificate. A pin detects a later change on direct connections, including with VS Code's default `http.proxySupport`; a required proxy is refused. Profiles that still use the older allow-self-signed setting have no certificate checks at all.
 - **FileMaker server-side ACLs**. The extension talks the Data API
   and inherits whatever rights the authenticated user has on the
   server. Server admins remain the authority on what data is

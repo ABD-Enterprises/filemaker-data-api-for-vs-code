@@ -2,13 +2,73 @@
 
 What to do, and what will look different, when you move from one version to the next. Each section lists only changes you can notice. For everything else, see the [Changelog](./CHANGELOG.md).
 
-## Unreleased
+## Upgrading from 1.6.0 to 1.7.0
 
-The Record Editor now warns before saving or creating text with a NUL character (U+0000). On the FileMaker server we tested, FileMaker kept only the text before this character and dropped the rest. Choose **Remove the character and continue** to keep the text on both sides, or **Cancel**. Batch update/import refuses the whole affected row and reports why; AI writes refuse the value too. Other characters are left alone.
+Your profiles, saved queries and settings carry over; there is no data migration. No command or setting was removed or renamed, and no setting default changed. AI features remain off by default. Read these changes before importing an old export or sharing a connection report. FileMaker Cloud sign-in with a Claris ID is **not supported**; Cloud is untested.
 
-Layouts listing a field twice now generate types that compile. The editor shows one value with a note, while Layout Inspector keeps both occurrences.
+### 1. Batch updates ask how to handle newer changes
 
-A no-match find was verified on a real server (FileMaker Data API Engine, 2026-10-21): HTTP **200**, message code **401**, and an empty data list. Found and returned counts are zero. Older/other versions may use another status, so the extension keeps accepting code 401 on any HTTP status. Creating related portal records remains a known gap; this extension sends only the main record's fields.
+Keep the exported `modId` (or reserved `__modId`) column unchanged. After confirming an update, choose **Check for newer changes (recommended)** or **Overwrite even if changed**. The first sends each row's exported version to FileMaker. A record changed since export is skipped with error **306**, appears in Jobs and **Copy failures**, and is not retried; other rows continue. The summary counts these skipped rows. Overwrite deliberately leaves out the version check and can replace someone else's newer work.
+
+If no row has a version, a warning offers **Continue** or **Cancel**. Continuing cannot detect newer changes. If only some rows have versions, the prompt counts rows that cannot be checked. Export again to get versions, or review the unprotected rows yourself. A dry run sends no updates and shows version coverage, skipped columns and a sample of the values that would be sent. Duplicate record rows are skipped with a warning, and rows containing only skipped fields do not hide later changes. JSON record IDs and versions accept surrounding spaces; layout, script and field names still use every character exactly.
+
+If a reply is lost and a retry gets 306, the extension reads the record again. It counts success only if the intended values already match. Different number formats are accepted only for fields known to be numbers. Text, dates and timestamps must match exactly, including spaces and leading zeros, apart from line endings; unknown field types use that exact comparison too. If it cannot confirm the result, the row says **Could not confirm: the first attempt may have succeeded**. Check the record before trying again.
+
+### 2. Calculated, summary and container fields are read-only
+
+When field details are available, the Record Editor disables calculation, summary and container fields, including repetitions, and leaves them out of Save and Create Record. Use **Upload to Container** for containers. Batch import skips these columns with warnings, and AI writes refuse them. Remove them from a file intended for import; related columns also are not a way to create related records. Global fields remain editable and say **Session-wide**. FileMaker still decides your account's field privileges. If field details cannot be read, the editor warns that it cannot identify read-only fields; check before saving. A failed Create Record field lookup shows an error; select another layout and then the intended layout again to retry.
+
+### 3. Empty searches offer List records instead
+
+An empty Query Builder form, `[]` or `[{}]` sends no find. Choose **List records instead** to list the current layout with the current page size, starting record and sort. Nothing is listed until you choose it. This needs a direct connection; a proxy connection asks you to enter criteria. Saved queries, batch exports, AI searches, generated clients and copied code still refuse empty searches. To find an empty field, use **is empty**, which supplies `=`.
+
+### 4. CSV exports carry record versions and preserve text
+
+The first two columns are `recordId` and `modId`. If those clash with layout fields, the record columns become `__recordId` and `__modId`, with more underscores if needed. Keep them first and together; do not edit their values. An older ambiguous file is refused: export again. Fields missing from the first record are included too. Imports and the Record Editor keep number-looking text, leading zeros and spaces instead of guessing its type. Number fields receive numbers only for safe decimal values; other entries stay text with a warning, so large numbers are not rounded. Empty CSV cells still leave a field unchanged. Duplicate column names are refused, and unsupported import formats explain which file to use.
+
+**Excel-compatible CSV (UTF-8 BOM)** adds the encoding marker Excel needs. The formula-safety setting is unchanged and still defaults to on. Failed or cancelled exports leave an existing destination file alone. The final `__portalNote (export information)` column appears only when related rows are truncated; import ignores it. Keep it last or remove it. A CSV export does not contain complete related records when that note is present. The Record Viewer can **Load more** portal rows on a direct connection and retry a failed load; proxy portal paging and creating related rows remain unsupported.
+
+### 5. Trusted fingerprints work with VS Code's default proxy setting
+
+A trusted certificate fingerprint now works on a direct connection with every `http.proxySupport` value, including the default `override`. You no longer need to change that setting just to trust FileMaker Server's default certificate. The fingerprint is checked before credentials are sent; a changed certificate is refused even if a public authority trusts it. A trusted fingerprint takes priority over a CA file or the older Allow self-signed flag.
+
+A pinned connection that needs an environment, VS Code or system/PAC proxy is refused with **PIN_THROUGH_PROXY**. Exclude the server from the proxy, or add it to `NO_PROXY` for an environment proxy if your network permits a direct connection. For a certificate with proper server names, you can instead forget the fingerprint and use the company CA file. CA-only profiles keep their existing certificate handling and proxy routing.
+
+Older **Allow self-signed** profiles go direct unless an environment proxy applies. Behind that proxy their previous route remains, and VS Code may still replace their certificate handling. `http.proxySupport` does not disable an environment proxy. Failures that identify the proxy now say the proxy could not be reached and name the relevant settings. Advice to try `fallback` is limited to older certificate handling on that route, not CA-only failures. Prefer trusting a confirmed fingerprint or a public certificate to the older flag, which skips certificate checks when applied.
+
+The wizard clears the trusted fingerprint when you change the server address, explains when a saved password can be kept, and offers **Save anyway** after a failed test. Certificate advice now distinguishes date problems, missing intermediates and Data API failures.
+
+### 6. Test My Server and Diagnose Connection
+
+**FileMaker: Test My Server** uses a separate temporary sign-in to read a record and check server behavior. Start with **Run read-only test**. Scratch-record writes and running a script need separate confirmation and the usual permissions. Use a disposable scratch layout for writes; if cleanup fails the report names the record to remove. The report omits passwords and record values, but review names and server details before sharing it.
+
+**FileMaker: Diagnose Connection** checks a saved server or an address you type without saving it, signing in or changing trust. It checks the network, certificate and Data API, explains likely fixes, and shows the full fingerprint. **Copy Connection Diagnosis for Bug Report** offers to hide the server address, port and revealing certificate details. Network probes are direct; the Data API check uses the connection's settings. For proxy profiles this checks the FileMaker server, not the middleware's sign-in. Both commands need offline mode off. No new setting is needed.
+
+One real server was exercised on **2026-10-21**, but its FileMaker Server version was not recorded. Its no-match find returned HTTP 200, code 401 and empty data. Other versions may answer differently; any status with code 401 is still treated as no matches. No version has a completed recorded smoke test. See [Compatibility](./docs/COMPATIBILITY.md).
+
+### 7. Jobs and the Command Palette
+
+**Cancel Job** and **Show Jobs** are always shown, even when power-user mode is off. Cancel stops new requests but waits for sent updates to finish; it does not undo changes. Jobs show changed, failed and untouched records separately and offer **Copy failures** with error codes. During this session the lists are complete. After restart recent jobs keep all counts and at most 1,000 entries per list, marked when shortened. Copy a full list before restarting if you need it. Cancelled exports say no file was written.
+
+### 8. Safer edits, files and saved queries
+
+- A NUL character (U+0000) can make FileMaker drop the text after it. Save and Create Record now ask you to remove it or cancel, naming repeating fields that would become empty. Batch import refuses the whole affected row; AI writes refuse the value. Other characters stay unchanged.
+- Generated code asks before replacing unrelated files: **Overwrite**, **Skip existing**, or **Cancel**. The client chooser starts in the generated folder. AI context asks before adding its section to an existing file and refuses project document names such as README.md and CHANGELOG.md. Closing a confirmation cancels; duplicate Cancel buttons are gone.
+- A workspace opened through a symbolic link works for generation. Linked output folders are refused before files or folders are created, and refusals are shown clearly. Generated types use actual field types and repetitions and avoid duplicate properties. Names remain exact.
+- For source-checkout users, unedited FM Web pages from version 1.0.0 can be refreshed. Edited runtime files remain untouched. FM Web generation and preview are still absent from the Marketplace package; Layout Mode remains available.
+- Deleting a saved query from **Manage** asks for confirmation. Invalid JSON or a file without a list of saved queries shows a clear import error and leaves existing queries alone. Failed query, comparison export and snapshot operations show handled errors.
+
+### Smaller changes
+
+- Panels and Layout Mode follow light, dark and high-contrast editor themes. Narrow query controls stay inside the panel, and new Layout Mode fields go below existing objects.
+- Opening Edit Record by ID loads the record. Repeated clicks do not start duplicate requests, and failed queries or scripts clear stale results. Repeated field choices and counts are shown once, with notes in the editor and Layout Inspector.
+- Long script parameters use a stored text field for the necessary find. An empty layout, no match or missing script status cannot claim a successful script run. Generated clients explain empty searches and server errors; timeout and paging messages give clearer next steps.
+- Cancelling one request does not cancel another request's sign-in. Renewed sessions resume requests while closing the previous session in the background.
+- Errors hide more passwords, API keys and tokens. Malformed AI hidden-field settings are reported consistently; which fields are hidden has not changed. A new [support page](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SUPPORT.md) explains how to ask for help safely.
+
+### Rolling back
+
+Use **Install Specific Version...** in the Extensions view to return to 1.6.0, or install its VSIX if you kept it (only tagged versions have a GitHub release). Profiles and saved data need no migration. Keep an untouched copy of exports before editing them. Version 1.6.0 does not protect batch updates with exported versions and may need the old certificate setting workaround. Installing it does not undo record changes already sent to FileMaker.
 
 ## Upgrading from 1.5.0 to 1.6.0
 
@@ -22,11 +82,16 @@ Layout Mode adds standard field sizes and spacing, an action that arranges the s
 
 **Apps you generated before:** the next time you run **Generate FM Web Next.js App** or **Start FM Web Preview Server**, the extension refreshes the managed runtime files in an app you generated earlier (template version 2 becomes 3: `page.tsx`, `bridge-client.ts`, `runtime-data.ts`, `runtime-behavior.ts` and `runtime-layout-client.tsx`). A managed file you edited is not overwritten: a warning names it, and you delete that file and run the command again to get a fresh copy; until then the preview cannot reach the bridge.
 
-### 2. Trusted certificates work without changing a VS Code setting
+### 2. Trusting a certificate can need one VS Code setting
 
-Trusting a server's certificate now works with every value of VS Code's **http.proxySupport** setting, including its default, `override`. The extension checks the trusted fingerprint itself on every connection. A different certificate is refused before a password or request body is sent, even if it is otherwise publicly trusted. CA-file-only profiles keep their existing certificate handling, including environment, VS Code and system/PAC proxy routing; they already worked with `override`. Profiles with the older **Allow self-signed** setting now go direct too when no environment proxy applies, preserving that setting under the host patch. Behind an environment proxy they keep the previous proxy CONNECT tunnel, where VS Code may still replace the agent and reject an untrusted certificate. The older setting skips every check when its agent is used, unless a trusted fingerprint is present, and still shows warnings.
+If you trust a server's certificate by its fingerprint (for example FileMaker Server's default certificate), the extension checks that one certificate itself. VS Code's **http.proxySupport** setting at its default, `override`, replaces the extension's own connection for servers that are not on your computer, so the trust cannot take effect and the normal certificate check applies instead. Before this release that ended in a misleading "not trusted" message right after you trusted the certificate.
 
-A pinned connection must go directly to the server. If an environment proxy, VS Code proxy or system/PAC rule selects a proxy, the connection is refused with advice to exclude the server from that proxy. You do not need to change settings for a direct connection. The `PIN_THROUGH_PROXY` refusal also applies when a profile has both a pin and a CA file: the pin takes priority. A message suggesting `http.proxySupport` set to `fallback` is reserved for an untrusted pin/legacy request left on the environment-proxy route while the host patch is active; it never replaces a CA-only certificate error. Certificate errors retain their network code and trust actions.
+- The trust dialog and the wizard now say this and name the setting, and the message after trusting offers to open it. Set **http.proxySupport** to `fallback`, or install a certificate from a public authority on the server and choose **Forget trusted certificate**.
+- A server whose certificate VS Code already trusts (for example one from Let's Encrypt) keeps working, with or without an old trusted certificate on the profile.
+- While the setting is `override`, a trusted certificate is not enforced: a different certificate that VS Code trusts would be accepted too.
+- Profiles that connect to the same computer (`localhost`) are not affected.
+
+In 1.7.0 this setting change is no longer needed for direct connections; see the 1.7.0 notes above.
 
 ### Smaller changes
 

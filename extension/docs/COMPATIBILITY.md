@@ -2,13 +2,20 @@
 
 This extension talks to FileMaker through the FileMaker Data API. A server is compatible when it exposes the standard Data API under `/fmi/data`, accepts HTTPS requests from your machine or proxy, and the target database account has the `fmrest` extended privilege enabled.
 
+## Evidence for 1.7.0
+
+One real FileMaker server was exercised on **2026-10-21**, but its FileMaker Server version was **not recorded**. The recorded checks included a no-match find (HTTP 200, FileMaker code 401, empty data), text and field behavior, and Diagnose Connection with a valid Let's Encrypt certificate and TLS 1.2. These findings apply to that server only; they do not complete a smoke test for any named version. The Data API engine name and API path do not identify the installed FileMaker Server release. Ask the administrator for the version before recording a version-specific result.
+
+FileMaker Server **19, 20, 21 and 22** all still need a completed smoke test with the installed version recorded. FileMaker Cloud is untested, and **Claris ID sign-in is not supported**. The mock and automated tests do not prove compatibility with a real server version. See the [recorded findings and remaining checks](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/FILEMAKER_FAILURE_MODES.md).
+
 ## Server Matrix
 
 | Platform | Data API path | Status | Notes |
 | --- | --- | --- | --- |
 | FileMaker Server 19.x | `/fmi/data` | Expected to work, not tested | Expected to work, not tested. |
 | FileMaker Server 20.x | `/fmi/data` | Expected to work, not tested | Expected to work, not tested. |
-| FileMaker Server 21.x | `/fmi/data` | Targeted | Targeted. The Data API documentation for 21.x is the reference the extension and its mock are built from. Not yet verified against a real server; the manual smoke test has not been run on one. |
+| FileMaker Server 21.x | `/fmi/data` | Targeted | Targeted. The Data API documentation for 21.x is the reference the extension and its mock are built from. No completed smoke test with version 21.x recorded. The October 21 real-server exercise did not record a server version. |
+| FileMaker Server 22.x | `/fmi/data` | Expected to work, not tested | No completed smoke test with version 22.x recorded. Earlier certificate inspection alone does not establish Data API compatibility. |
 | FileMaker Cloud | `/fmi/data` | Untested | Unverified. The extension has no Claris ID login; whether a Cloud tenant accepts an account name and password on the Data API is not confirmed (ask Claris or your administrator). Validate authentication and network policy before relying on it. |
 | Custom proxy in front of FileMaker Server | Proxy-defined, upstream usually `/fmi/data` | Expected to work, not tested | Expected to work when the proxy keeps Data API semantics; not tested. |
 

@@ -30,6 +30,8 @@ Run **FileMaker: Open Query Builder**, or right-click a layout and choose
   them as a table that pastes into a spreadsheet
 - copy the request as `curl`, `fetch()`, a `.http` file, a Postman collection or TypeScript for sharing or bug reports (the password and session token are never copied)
 
+An empty search offers **List records instead** on a direct connection. It uses the selected layout, page size, starting record and sort only after you choose it. A proxy connection needs a search value. CSV exports can include record versions for safer batch updates; keep those columns unchanged. **CSV for Excel** is available in the export choices.
+
 Saved queries are scoped per workspace by default. Use
 **FileMaker: Export Saved Queries (JSON)** to share them with your team
 via Git or chat, or change `filemaker.savedQueries.scope` to `global` to

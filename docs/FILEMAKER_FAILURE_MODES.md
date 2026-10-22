@@ -457,7 +457,7 @@ Trust and re-trust work on direct connections with all four `http.proxySupport` 
 | `[1633]` | Connection refused; the mock uses this for its session limit (an invented mapping, not verified on a real server) | Wait, try later, then ask the administrator to check the Admin Console and error code reference | "What does error 1633 mean on this server?" |
 | `HTTP 413` | Request exceeds the server or proxy size limit | Send a smaller file or fewer records at a time | "What is the request size limit?" |
 | Generated types show every field as text, or generated find throws for no matches | Client was generated before the metadata and error handling fixes | Regenerate the types and client. Numbers use `number` with a precision warning beyond 2^53; dates and times use locale strings; containers use URL strings; repeating fields use `Name(1)` through the maximum repetition | "What date format and precision does this file require?" |
-| `[306]` | Someone else changed the record | Reload, review the other changes, then re-apply your changes | - |
+| `[306]` | The exported or loaded version differs from the server record | Batch updates with **Check for newer changes** skip this row and continue; review it in Jobs / Copy failures. If a reply was lost and the result cannot be confirmed, check the record before trying again. Use **Overwrite even if changed** only deliberately. | "Did someone change this record since the export?" |
 | `[301]` | Another user or script has the record open | Try again shortly | "Who has this record open? Does a script leave it uncommitted?" |
 | Status bar says `sign-in failed`, `certificate problem` or `unreachable` | The last request failed for that reason. `unreachable` also shows for a bare 404, a 5xx without a FileMaker code, a gateway error and a reply that is not Data API JSON | Read the tooltip; fix the cause; **Connect** | - |
 | Works in a browser but not here | A TLS-inspecting proxy or a company CA | Where VS Code's Node can read the operating system's certificate store (22.15 or newer) a CA installed there is trusted; otherwise set the company root as the *Custom CA certificate file*, or use `NODE_EXTRA_CA_CERTS` | "Does the network re-sign HTTPS? Please send the root CA." |
@@ -513,6 +513,12 @@ Node.js:
 
 Not found in Claris documentation, so marked Unverified above: the exact HTTP status and code for a missing *fmrest* privilege, a wrong or closed database, how restricted layouts, records and fields are represented, and the file-account lockout policy.
 The `802` for a missing *fmrest* privilege comes from community posts, not from Claris.
+
+### Release 1.7.0 status (2026-10-22)
+
+This is a source and documentation check, not another real-server run. The October 21 exercise used one server whose version was not recorded. Batch version checks (AD07), read-only editor/import fields (AD06), pinned proxy routes (S11/S15), and every other row still marked **Unverified** need the real-server or proxy checks listed above; no version's smoke test is complete.
+
+An empty Query Builder search offers **List records instead** only after you choose it, on a direct connection; proxy users must enter a search value. Saved queries and other find entry points still refuse empty criteria. Invalid saved-query imports show an error and preserve existing queries. **Cancel Job** and **Show Jobs** remain in the palette with power-user mode off. CSV portal notes appear only for truncated related rows. These changes do not add Cloud / Claris ID sign-in or creation of related portal rows.
 
 ### Follow-up safeguards (2026-10-21)
 
