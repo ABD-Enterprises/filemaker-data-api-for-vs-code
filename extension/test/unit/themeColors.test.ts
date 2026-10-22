@@ -226,6 +226,51 @@ describe('offline theme audit regression guards', () => {
     }
   });
 
+  // Well-known defaults from VS Code's default theme color registry, with the
+  // built-in Dark+/Light+/HC theme overrides. Offline snapshot, not live theme detection.
+  // Sources: src/vs/platform/theme/common/colors/{baseColors,inputColors,listColors}.ts
+  // and extensions/theme-defaults/themes/{dark_plus,light_plus,hc_black,hc_light}.json
+  // in https://github.com/microsoft/vscode. Columns: Dark+, Light+, Dark HC, Light HC.
+  const defaults = {
+    foreground: ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'editor.background': ['#1e1e1e', '#ffffff', '#000000', '#ffffff'],
+    'editorWidget.background': ['#252526', '#f3f3f3', '#0c141f', '#ffffff'],
+    descriptionForeground: ['#ccccccb3', '#717171', '#ffffffb3', '#292929b3'],
+    'input.background': ['#3c3c3c', '#ffffff', '#000000', '#ffffff'],
+    'input.foreground': ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'input.placeholderForeground': ['#cccccc80', '#61616180', '#ffffffb3', '#292929b3'],
+    'button.hoverBackground': ['#1177bb', '#0062a3', '#000000', '#0f4a85'],
+    'button.foreground': ['#ffffff', '#ffffff', '#ffffff', '#ffffff'],
+    'button.secondaryHoverBackground': ['#323637', '#ffffff', null, null],
+    'button.secondaryForeground': ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'list.hoverBackground': ['#2a2d2e', '#f0f0f0', '#ffffff1a', '#0f4a851a'],
+    'textLink.foreground': ['#3794ff', '#006ab1', '#21a6ff', '#0f4a85']
+  };
+  const shellButtons = '<button id="primary">Save</button><button class="secondary">Secondary</button>' +
+    ['mode-switch', 'mode-toggle', 'tool-grid', 'object-list', 'action-row', 'inspector-field', 'portal-column-actions']
+      .map((family) => `<div class="${family}"><button id="${family}">Action</button></div>`).join('') +
+    '<button class="field-chip">Field</button><button class="portal-field-chip">Portal field</button>' +
+    '<button class="link">Link</button><button class="icon">Icon</button>';
+
+  it.each(['Dark+', 'Light+', 'Dark HC', 'Light HC'])('%s default colors keep read-only values, labels, placeholders and hovered controls at AA contrast', (theme) => {
+    const index = ['Dark+', 'Light+', 'Dark HC', 'Light HC'].indexOf(theme);
+    const tokens = Object.fromEntries(Object.entries(defaults).flatMap(([key, values]) =>
+      values[index] == null ? [] : [[`--vscode-${key.replaceAll('.', '-')}`, values[index]!]]));
+    const fixture = '<section class="panel field"><label>Field label</label><input readonly value="Read only">' +
+      '<div class="fm-readonly">Read only value</div><input placeholder="Hint" value="Typed text"></section>';
+    const pairs = audit.measure(stylesheet('connectionWizard'), fixture, tokens);
+    expect(pairs).toHaveLength(5);
+    for (const pair of pairs) expect(pair.ratio, `${theme}: ${pair.selector}`).toBeGreaterThanOrEqual(4.5);
+    for (const state of ['hover', 'active', 'focus-visible']) {
+      // Activate just this pseudo-state on all fixture buttons without a browser.
+      // This checks the production cascade and alpha compositing, not layout/rendering.
+      const css = designerCss.replaceAll(`:${state}`, ':not(.audit-never)');
+      const hovered = audit.measure(css, `<section class="pane">${shellButtons}</section>`, tokens);
+      expect(hovered).toHaveLength(13);
+      for (const pair of hovered) expect(pair.ratio, `${theme} ${state}: ${pair.selector}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('keeps HC Light menu selection text paired with its pale background', () => {
     const tokens = audit.tokensFor('high-contrast-light');
     const css = stylesheet('queryBuilder').replaceAll(':hover', ':not(.audit-never)');

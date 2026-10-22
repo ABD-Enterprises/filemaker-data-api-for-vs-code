@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildSync } from 'esbuild';
+import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 import { JSDOM, loadPage } from '../../helpers/jsdomPage';
 
@@ -19,7 +20,7 @@ function sharedCss(): string {
 
 // Read individual rules so another selector mentioning focus/readonly cannot mask a regression.
 function rule(css: string, selector: string): string {
-  const matches = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const matches = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)];
   const match = matches.find(([, selectors]) => selectors!.split(',').some((item) => item.trim() === selector));
   expect(match, selector).toBeDefined();
   return match![2]!;
@@ -58,6 +59,64 @@ describe('one stylesheet for extension screens', () => {
     expect((Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)).toBeGreaterThanOrEqual(4.5);
     expect(rule(css, 'input')).toContain('color: var(--fm-input-foreground)');
     expect(rule(css, 'input:disabled')).toContain('--vscode-disabledForeground');
+  });
+
+  it('pairs every hover background with an explicit text color in shared and designer styles', () => {
+    for (const [file, css] of [['shared extension chrome', sharedCss()], ['designer-ui/src/styles.css', read('designer-ui/src/styles.css')]]) {
+      postcss.parse(css!).walkRules((entry) => {
+        if (!entry.selector.includes(':hover')) return;
+        const declarations = new Map(entry.nodes.filter((node) => node.type === 'decl').map((node) => [node.prop, node.value]));
+        if (declarations.has('background') || declarations.has('background-color')) {
+          expect(declarations.has('color'), `${file}: ${entry.selector}`).toBe(true);
+        }
+      });
+    }
+  });
+
+  it('pairs every secondary button family with hover, active and keyboard-focus paint', () => {
+    const sheet = postcss.parse(sharedCss());
+    const paint = sheet.nodes.find((node) => node.type === 'rule' && node.selector.includes('.tool-grid button'));
+    expect(paint?.type).toBe('rule');
+    if (paint?.type !== 'rule') throw new Error('Missing secondary button paint');
+    for (const selector of paint.selectors) {
+      const state = `${selector}:is(:hover, :active, :focus-visible):not(:disabled)`;
+      let found = false;
+      sheet.walkRules((entry) => {
+        if (!entry.selectors.includes(state)) return;
+        found = true;
+        expect(declaration(entry.nodes.map((node) => node.toString()).join(';'), 'background'), state).toBe('var(--secondary-hover)');
+        expect(declaration(entry.nodes.map((node) => node.toString()).join(';'), 'color'), state).toBe('var(--secondary-text)');
+      });
+      expect(found, state).toBe(true);
+    }
+  });
+
+  it('puts Effective Settings inside the shared page wrapper and reserves room for single-line settings buttons', () => {
+    const source = read('extension/src/settings/effectiveSettings.ts');
+    expect(source).toContain('<body>\n<main class="fm-page">');
+    expect(source).toContain('</main>\n<script');
+    expect(rule(sharedCss(), '.fm-page')).toContain('padding: 16px');
+    expect(rule(source, 'th:last-child')).toContain('width: 240px');
+    expect(rule(source, 'button[data-open]')).toContain('white-space: nowrap');
+    expect(rule(source, 'button[data-open]')).toContain('word-break: normal');
+    expect(rule(source, 'button[data-open]')).toContain('overflow-wrap: normal');
+    expect(rule(sharedCss(), 'button')).toContain('min-height: 32px');
+    expect(source).toContain('table, thead, tbody, tr, td { display: block; width: 100%; }');
+  });
+
+  it('sizes standalone disclosures and compact tabs like shared controls, keeping joined tab strips', () => {
+    const css = sharedCss();
+    expect(rule(css, 'summary')).toContain('min-height: 32px');
+    expect(rule(css, 'summary')).toContain('border-radius: var(--fm-control-radius)');
+    expect(rule(css, 'summary')).toContain('font: inherit');
+    const wizard = read('extension/src/webviews/connectionWizard/ui/styles.css');
+    expect(rule(wizard, '.advanced-toggle > summary')).not.toMatch(/font-size:|padding:/);
+    const query = read('extension/src/webviews/queryBuilder/ui/styles.css');
+    expect(rule(query, '.history-panel > summary')).not.toContain('min-height: 24px');
+    expect(rule(query, ".tabs [role='tab']")).toContain('padding: 5px 12px');
+    expect(rule(query, ".tabs [role='tab']")).toContain('border-radius: 0');
+    expect(rule(query, ".tabs.compact [role='tab']")).toContain('border-radius: var(--fm-control-radius)');
+    expect(rule(read('extension/src/webviews/recordViewer/ui/styles.css'), '.related-block summary')).not.toMatch(/min-height:|padding:/);
   });
 
   it('uses system colors and lets forced colors adjust read-only fields', () => {

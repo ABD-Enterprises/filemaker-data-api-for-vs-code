@@ -278,10 +278,12 @@ export function renderEffectiveSettingsHtml(
 <style nonce="${nonce}">${standardFieldsCss(true)}</style>
 <style nonce="${nonce}">
   table { table-layout: fixed; }
+  th:last-child { width: 240px; }
   th, td { overflow-wrap: anywhere; word-break: break-word; }
   code { white-space: pre-wrap; overflow-wrap: anywhere; }
   .ignored { color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)); background: var(--vscode-inputValidation-warningBackground, #fff4ce); margin-bottom: 4px; }
   button { margin: 2px 4px 2px 0; }
+  button[data-open] { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
   .muted { color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333)); margin-bottom: 4px; }
   @media (max-width: 640px) {
     table, thead, tbody, tr, td { display: block; width: 100%; }
@@ -291,7 +293,8 @@ export function renderEffectiveSettingsHtml(
     td::before { content: attr(data-label) ": "; font-weight: 600; }
   }
 </style></head>
-<body class="fm-page">
+<body>
+<main class="fm-page">
 <h1>Effective settings</h1>
 <div class="fm-panel">
 <p class="muted">What is in effect, where it comes from, and why a workspace value is ignored. Read-only snapshot taken at ${escapeHtml(asOf)}; it refreshes when settings change. <button id="refresh">Refresh</button></p>
@@ -301,6 +304,7 @@ export function renderEffectiveSettingsHtml(
 ${body}
 </tbody></table>
 </div>
+</main>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.addEventListener('click', (event) => {

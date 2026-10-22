@@ -57,7 +57,7 @@ Turn off offline mode before running a check. In Restricted Mode, you can check 
 
 ## Command reference
 
-FileMaker screens use the same fonts, buttons and boxed messages, and follow your VS Code theme. Read-only fields keep normal text contrast and have a dashed border and no resize handle. Unavailable controls use dimmer text. Page titles sit above the content panels, and input and button sizes match across screens. Empty status messages stay ready for screen readers to announce the first update. JSON boxes use the editor font. Layout Mode uses these styles around the page you are designing; the page itself keeps its own appearance.
+FileMaker screens use the same fonts, buttons and boxed messages, and follow your VS Code theme. Read-only fields keep normal text contrast and have a dashed border and no resize handle. Unavailable controls use dimmer text. Page titles sit above the content panels, and input and button sizes match across screens. Empty status messages stay ready for screen readers to announce the first update. Layout Mode button labels stay readable when you point at them or select them with the keyboard. Expandable headings and separate tabs have the same height and rounded corners as other controls; joined tab strips stay joined. Effective Settings lines up with the other screens, and its Open User Settings and Open Workspace Settings buttons stay on one line. JSON boxes use the editor font. Layout Mode uses these styles around the page you are designing; the page itself keeps its own appearance.
 
 The table lists every extension command. Titles have the **FileMaker:** prefix in VS Code. “Shown” describes palette visibility; “needs” describes additional requirements when you run the command. A profile means a saved connection profile. Server operations also need access to the server and the relevant FileMaker privileges. Feature settings, workspace trust, offline mode and enterprise policy still apply as described in the sections below.
 
@@ -69,7 +69,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
 | Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
-| Show Effective Settings | Shows the settings in effect and where their values come from, with a page title and styled action buttons. | Always shown. |
+| Show Effective Settings | Shows the settings in effect and where their values come from, aligned with other screens, with single-line buttons to open User or Workspace Settings. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
 | Add Connection Profile | Opens the connection wizard to test a connection and save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
 | Edit Connection Profile | Opens a saved profile in the connection wizard, where you can trust or forget a certificate without changing a VS Code setting. | Shown with a profile; needs an unlocked profile and write operations allowed. |

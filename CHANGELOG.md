@@ -28,6 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Layout Mode buttons keep their text readable when pointed at or selected with the keyboard. Effective Settings lines up with other screens and keeps its settings buttons on one line. Disclosure controls and separate tabs use the same size and rounded corners as other controls.
 - The generated FM Web page opens again, no longer stretches sideways, and can edit and save records.
 - All screens now share the same fonts, buttons, messages and read-only look.
 - Read-only values stay easy to read, empty messages remain available to screen readers, and headings, panels and control sizes match across screens. Schema Diff opens with **Show only changes** ticked; clear it to see unchanged fields.

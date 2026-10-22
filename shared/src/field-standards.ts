@@ -120,15 +120,27 @@ input:disabled, select:disabled, textarea:disabled { background: var(--fm-input-
   [readonly], .fm-readonly { background: Canvas; color: CanvasText; border-color: CanvasText; forced-color-adjust: auto; }
 }
 button, summary.secondary, details.menu > summary { font: inherit; font-weight: 500; border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: var(--fm-control-radius); background: var(--accent); color: var(--accent-text); padding: 5px 12px; min-height: 32px; align-self: center; cursor: pointer; }
-button:hover:not(:disabled) { background: var(--accent-strong); }
+button:hover:not(:disabled), button:active:not(:disabled), button:focus-visible:not(:disabled) { background: var(--accent-strong); color: var(--accent-text); }
 button.secondary, summary.secondary, details.menu > summary, .mode-switch button, .mode-toggle button, .tool-grid button, .object-list button, .action-row button, .field-chip, .inspector-field button, .portal-column-actions button, .portal-field-chip { background: var(--secondary); color: var(--secondary-text); }
-button.secondary:hover:not(:disabled), summary.secondary:hover, details.menu > summary:hover, .mode-switch button:hover, .mode-toggle button:hover { background: var(--secondary-hover); }
+button.secondary:is(:hover, :active, :focus-visible):not(:disabled),
+summary.secondary:is(:hover, :active, :focus-visible):not(:disabled),
+details.menu > summary:is(:hover, :active, :focus-visible):not(:disabled),
+.mode-switch button:is(:hover, :active, :focus-visible):not(:disabled),
+.mode-toggle button:is(:hover, :active, :focus-visible):not(:disabled),
+.tool-grid button:is(:hover, :active, :focus-visible):not(:disabled),
+.object-list button:is(:hover, :active, :focus-visible):not(:disabled),
+.action-row button:is(:hover, :active, :focus-visible):not(:disabled),
+.field-chip:is(:hover, :active, :focus-visible):not(:disabled),
+.inspector-field button:is(:hover, :active, :focus-visible):not(:disabled),
+.portal-column-actions button:is(:hover, :active, :focus-visible):not(:disabled),
+.portal-field-chip:is(:hover, :active, :focus-visible):not(:disabled) { background: var(--secondary-hover); color: var(--secondary-text); }
 .mode-switch button.active, .mode-toggle button.active { border-color: var(--vscode-focusBorder, #007acc); font-weight: 600; }
 button.small { padding: 2px 8px; min-height: 0; }
 button.link, button.icon { background: none; color: var(--vscode-textLink-foreground, #005fb8); padding: 0 4px; min-height: 0; }
-button.link:hover:not(:disabled), button.icon:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, var(--panel)); }
-button.link.danger { color: var(--error); }
+button.link:is(:hover, :active, :focus-visible):not(:disabled), button.icon:is(:hover, :active, :focus-visible):not(:disabled) { background: var(--vscode-list-hoverBackground, var(--panel)); color: var(--vscode-textLink-foreground, #005fb8); }
+button.link.danger, button.link.danger:is(:hover, :active, :focus-visible):not(:disabled) { color: var(--error); }
 button:disabled { opacity: 0.5; cursor: default; }
+summary { font: inherit; min-height: 32px; border-radius: var(--fm-control-radius); padding: 5px 12px; cursor: pointer; }
 button, summary { outline: 1px solid var(--vscode-contrastBorder, transparent); }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
 input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--text)) 75%, var(--vscode-input-background, var(--bg)))) 20%, var(--vscode-input-foreground, var(--text))); opacity: 1; }

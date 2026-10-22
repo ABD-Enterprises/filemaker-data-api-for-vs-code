@@ -38,11 +38,9 @@
 
 .advanced-toggle > summary {
   cursor: pointer;
-  font-size: 0.85rem;
   color: var(--muted);
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 4px 0;
   user-select: none;
 }
 
