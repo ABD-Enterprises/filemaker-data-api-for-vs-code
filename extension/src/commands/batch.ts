@@ -11,7 +11,6 @@ import type { SettingsService } from '../services/settingsService';
 import { nulTextFields } from '../utils/nulText';
 import { parseFindJson, parseSortJson } from '../utils/jsonValidate';
 import {
-  openJsonDocument,
   parseLayoutArg,
   promptForLayout,
   resolveProfileFromArg,
@@ -259,6 +258,9 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
             );
 
             if (dryRunSelection.value) {
+              const previewEntries = entries.map((entry) => ({ ...entry, fieldData: Object.fromEntries(
+                Object.entries(entry.fieldData).filter(([name]) => !result.skippedColumns?.includes(name))
+              ) }));
               const preview = {
                 dryRun: true,
                 totalEntries: entries.length,
@@ -267,14 +269,19 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
                 rowsChecked: result.rowsChecked ?? rowsWithModId,
                 skippedColumns: result.skippedColumns ?? [],
                 warnings: result.warnings ?? [],
-                sample: entries.slice(0, 5),
+                sample: previewEntries.slice(0, 5),
                 // Rows are numbered from 1 in the parsed data, excluding a CSV header.
-                flaggedRows: entries.flatMap((entry, index) => {
+                flaggedRows: previewEntries.flatMap((entry, index) => {
                   const fields = nulTextFields(entry.fieldData);
                   return fields.length ? [{ row: index + 1, recordId: entry.recordId, fields }] : [];
                 })
               };
-              await openJsonDocument(preview);
+              try {
+                const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(preview, null, 2) });
+                await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true });
+              } catch {
+                jobContext.log('warn', 'The dry-run preview could not be opened. The result and warnings are still available in Jobs.');
+              }
             }
 
             return result;

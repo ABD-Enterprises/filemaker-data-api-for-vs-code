@@ -207,6 +207,29 @@ describe('batch commands', () => {
     });
   });
 
+  it('shows and flags only editable dry-run values without taking focus', async () => {
+    const { tasks, batchService } = setup();
+    updateInputs();
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(JSON.stringify([{ recordId: '42', fieldData: { ' Field ': 'safe', 'Calc(1)': 'secret\0value' } }])));
+    batchService.batchUpdate.mockResolvedValue({ attempted: 0, successCount: 0, failureCount: 0, skippedColumns: ['Calc(1)'] } as never);
+    await command('batchUpdateFromFile')(arg);
+    await tasks[0]!({ log: vi.fn() } as never);
+    const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
+    expect(JSON.parse(doc.content)).toMatchObject({ sample: [{ recordId: '42', fieldData: { ' Field ': 'safe' } }], flaggedRows: [] });
+    expect(doc.content).not.toContain('secret');
+    expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ preserveFocus: true }));
+  });
+
+  it('keeps the computed dry-run result when opening the preview fails', async () => {
+    const { tasks } = setup();
+    updateInputs();
+    vi.mocked(vscode.workspace.openTextDocument).mockRejectedValueOnce(new Error('cannot open preview'));
+    await command('batchUpdateFromFile')(arg);
+    const context = { log: vi.fn() };
+    await expect(tasks[0]!(context as never)).resolves.toMatchObject({ successCount: 1, failureCount: 0 });
+    expect(context.log).toHaveBeenCalledWith('warn', expect.stringMatching(/preview.*could not be opened/i));
+  });
+
   it.each([undefined, 'Cancel', 'Execute'])('requires a destructive modal before executing updates (%s)', async (choice) => {
     const { tasks, jobRunner, batchService } = setup();
     updateInputs(false);

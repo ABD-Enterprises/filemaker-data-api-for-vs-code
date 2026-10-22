@@ -55,7 +55,7 @@ function openEditor(editRecord: ReturnType<typeof vi.fn>, currentRecord = loaded
     getProfile: vi.fn(async () => profile),
     getActiveProfileId: vi.fn(() => profile.id)
   };
-  const getFields = vi.fn(async () => ({ supported: false, fields: [] }));
+  const getFields = vi.fn<() => Promise<{ supported: boolean; fields: Array<{ name: string; type?: string; result?: string }> }>>(async () => ({ supported: false, fields: [] }));
   const schemaService = { getFields };
   const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
 
@@ -130,6 +130,46 @@ describe('Record Editor save conflicts', () => {
     await editor.send({ type: 'saveRecord', payload: { ...draft, draftFieldData: { ...loadedRecord.fieldData, Status: 'O\0p\0en', Region: 'East' } } });
     expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith(expect.stringContaining('Save 1 field changes to record 7? (Region)'), { modal: true }, 'Save');
     expect(editRecord).toHaveBeenCalledWith(profile, 'Contacts', '7', { Region: 'East' }, undefined, { modId: '3' });
+  });
+
+  it('filters read-only fields in the host save handler, including repetition keys', async () => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
+    const editor = openEditor(editRecord);
+    editor.getFields.mockResolvedValue({ supported: true, fields: [
+      { name: 'Calc', type: ' Calculation ', result: 'number' },
+      { name: 'Summary', type: ' SUMMARY ' },
+      { name: 'Photo', result: ' Container ' }
+    ] });
+    await editor.send({ type: 'loadRecord', payload: target });
+    await editor.send({ type: 'saveRecord', payload: { ...draft,
+      originalFieldData: { ...draft.originalFieldData, 'Calc(1)': 1, 'Photo(2)': 'old' },
+      draftFieldData: { ...draft.draftFieldData, 'Calc(1)': 9, 'Summary(2)': 8, 'Photo(2)': 'new' }
+    } });
+    expect(editRecord).toHaveBeenCalledWith(profile, 'Contacts', '7', { Status: 'Closed' }, undefined, { modId: '3' });
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('(Status)'), { modal: true }, 'Save');
+  });
+
+  it('compares only editable server fields when describing a conflict', async () => {
+    const editRecord = vi.fn().mockRejectedValue(new FMClientError('stale', { code: '306' }));
+    const editor = openEditor(editRecord, { ...loadedRecord, fieldData: { ...loadedRecord.fieldData, Status: 'Pending', 'Calc(1)': 9, Summary: 10, Photo: 'url' } } as typeof loadedRecord);
+    editor.getFields.mockResolvedValue({ supported: true, fields: [
+      { name: 'Calc', type: 'calculation' }, { name: 'Summary', type: 'summary' }, { name: 'Photo', result: 'container' }
+    ] });
+    await editor.send({ type: 'loadRecord', payload: target });
+    await editor.send({ type: 'saveRecord', payload: draft });
+    expect(editor.posted.find((message) => message.type === 'saveConflict')).toMatchObject({ payload: {
+      changedByOthers: ['Status'], yourFields: ['Status'], overlap: ['Status']
+    } });
+  });
+
+  it('drops stale host field metadata when a later load has no field list', async () => {
+    const editRecord = vi.fn().mockResolvedValue({ recordId: '7', modId: '4' });
+    const editor = openEditor(editRecord);
+    editor.getFields.mockResolvedValueOnce({ supported: true, fields: [{ name: 'Status', type: 'calculation' }] });
+    await editor.send({ type: 'loadRecord', payload: target });
+    await editor.send({ type: 'loadRecord', payload: target });
+    await editor.send({ type: 'saveRecord', payload: draft });
+    expect(editRecord).toHaveBeenCalledWith(profile, 'Contacts', '7', { Status: 'Closed' }, undefined, { modId: '3' });
   });
 
   it('sends the modId the record was loaded with', async () => {

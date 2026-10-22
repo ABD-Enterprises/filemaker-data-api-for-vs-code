@@ -31,6 +31,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Handle repeating read-only fields in imports, Record Editor saves and AI writes; check uncertain batch retries, skip duplicate record rows, and keep skipped values out of dry-run previews.
+
 - Protect batch updates with the exported record version, skip records changed since export, and ask before overwriting newer changes or using files without versions. Dry runs report how many rows can be checked.
 - Keep calculation, summary and container fields read-only in the Record Editor, explain global fields, and skip calculation and summary import columns with clear warnings.
 - Clarify in the package description and getting-started pages that FileMaker Server is supported and FileMaker Cloud sign-in with a Claris ID is not supported yet.

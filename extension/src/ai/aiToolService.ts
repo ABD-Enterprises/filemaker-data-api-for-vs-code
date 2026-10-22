@@ -1,3 +1,4 @@
+import { fieldType, readOnlyFieldKind } from '../utils/fieldAccess';
 import { EMPTY_FIND_ADVICE, hasFindCriteria } from '../utils/findCriteria';
 import { containsNulText, NUL_TEXT_WARNING } from '../utils/nulText';
 import type { EnterpriseFeatureId, FeatureGuardResult } from '../enterprise/roleGuard';
@@ -148,6 +149,7 @@ type Obj = Record<string, unknown>;
 interface LayoutFields {
   names: Set<string>;
   containers: Set<string>;
+  readOnly: Map<string, string>;
   types: Map<string, string>;
 }
 
@@ -838,8 +840,9 @@ export class AiToolService {
         throw new AiToolError('Related-record fields (Table::Field) cannot be written.');
       }
       const known = this.knownField(fields, name);
-      if (fields.containers.has(known)) {
-        throw new AiToolError('Container fields cannot be written by AI tools.');
+      const readOnly = fields.readOnly.get(known);
+      if (readOnly) {
+        throw new AiToolError(`${readOnly[0]!.toUpperCase()}${readOnly.slice(1)} fields cannot be written by AI tools.`);
       }
       if (Array.from(value).length > MAX_WRITE_VALUE_CHARS) {
         throw new AiToolError(`A value may have at most ${MAX_WRITE_VALUE_CHARS} characters: the approval dialog shows each value in full.`);
@@ -979,6 +982,7 @@ export class AiToolService {
     const schema = await this.layoutSchema(env, layout);
     const names = new Set<string>();
     const containers = new Set<string>();
+    const readOnly = new Map<string, string>();
     const types = new Map<string, string>();
     for (const field of schema.fields) {
       const name = usableFieldName(field.name);
@@ -986,13 +990,15 @@ export class AiToolService {
         continue;
       }
       names.add(name);
-      const type = String(field.result ?? field.type ?? '').toLowerCase();
+      const type = fieldType(field.result ?? field.type);
+      const kind = readOnlyFieldKind(field);
+      if (kind) readOnly.set(name, kind);
       types.set(name, type);
       if (type === 'container') {
         containers.add(name);
       }
     }
-    return { names, containers, types };
+    return { names, containers, readOnly, types };
   }
 
   /** A field the layout has and policy shows. Unknown and hidden give the same answer. */

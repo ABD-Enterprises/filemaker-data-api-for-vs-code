@@ -387,7 +387,7 @@ function applyRecord(payload) {
   patchPreview.textContent = '';
   renderFieldEditor();
   showHiddenFieldNote(payload);
-  setStatus(`Loaded record ${payload.record.recordId}.`);
+  setStatus(`Loaded record ${payload.record.recordId}.${payload.metadataSupported === false || !state.fields.length ? ' Read-only fields cannot be identified because the field list is unavailable. Check the field types before saving.' : ''}`);
 }
 
 /**
@@ -656,7 +656,7 @@ function buildFieldEditor(keys) {
     });
     fieldInputs.set(key, input);
     inputCell.appendChild(input);
-    const noteText = note || (state.fields.find((field) => field.name === key)?.global ? 'Session-wide: changes apply throughout this session.' : '');
+    const noteText = note || (isGlobalField(metadataForField(state.fields, key)) ? 'Session-wide: changes apply throughout this session.' : '');
     if (noteText) {
       const help = document.createElement('p');
       help.id = `${input.id}-note`;
@@ -673,11 +673,23 @@ function buildFieldEditor(keys) {
   fieldEditor.replaceChildren(wrapper);
 }
 
+function metadataForField(fields, name) {
+  return fields.find((field) => field.name === name) || fields.find((field) => field.name === name.replace(/\(\d+\)$/, '')) || {};
+}
+
+function normalizedType(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isGlobalField(metadata) {
+  return metadata.global === true || normalizedType(metadata.global) === 'true' || normalizedType(metadata.type) === 'global';
+}
+
 function readOnlyNote(name) {
-  const metadata = state.fields.find((field) => field.name === name) || {};
-  if (metadata.type === 'calculation') return 'Calculated by FileMaker; cannot be edited';
-  if (metadata.type === 'summary') return 'Summary field; cannot be edited';
-  if ((metadata.result || metadata.type || '').toLowerCase() === 'container') return 'Use Upload to container';
+  const metadata = metadataForField(state.fields, name);
+  if (normalizedType(metadata.type) === 'calculation') return 'Calculated by FileMaker; cannot be edited';
+  if (normalizedType(metadata.type) === 'summary') return 'Summary field; cannot be edited';
+  if (normalizedType(metadata.result) === 'container' || normalizedType(metadata.type) === 'container') return 'Use Upload to container';
   return '';
 }
 
@@ -686,7 +698,7 @@ function editableFields(values) {
 }
 
 function fieldPresentation(name) {
-  const metadata = state.presentationFields.find((field) => field.name === name) || {};
+  const metadata = metadataForField(state.presentationFields, name);
   return { ...metadata, type: metadata.result || metadata.type };
 }
 
@@ -745,8 +757,8 @@ function toEditableValue(value) {
 }
 
 function parseEditableValue(value, name) {
-  const metadata = state.presentationFields.find((field) => field.name === name) || {};
-  if ((metadata.result || metadata.type || '').toLowerCase() !== 'number') return value;
+  const metadata = metadataForField(state.presentationFields, name);
+  if (normalizedType(metadata.result || metadata.type) !== 'number') return value;
   // Keep this decimal check in step with utils/numericText.ts (covered by parity tests).
   const match = /^[-+]?(\d+\.?\d*|\.\d+)(?:[eE]([-+]?\d+))?$/.exec(value);
   if (!match) return value;

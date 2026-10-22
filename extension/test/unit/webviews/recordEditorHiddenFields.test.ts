@@ -135,9 +135,9 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
   const { document, window, posted, send } = loadPage(pageHtml(), uiSource);
   const fields = [
     { name: ' Name ', type: 'normal', result: 'text' },
-    { name: 'Calc', type: 'calculation', result: 'number' },
-    { name: 'Summary', type: 'summary', result: 'number' },
-    { name: 'Photo', type: 'normal', result: 'container' },
+    { name: 'Calc', type: ' Calculation ', result: 'number' },
+    { name: 'Summary', type: ' SUMMARY ', result: 'number' },
+    { name: 'Photo', type: 'normal', result: ' Container ' },
     { name: 'Global', type: 'normal', result: 'text', global: true }
   ];
   send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'Profile' }], activeProfileId: 'p', defaults: { mode, profileId: 'p', layout: ' Layout ' } } });
@@ -166,4 +166,41 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
     send({ type: 'recordLoaded', payload: { ...payload, fields: fields.map((field) => ({ ...field, type: 'normal', result: 'text' })) } });
     expect(document.querySelectorAll('#fieldEditor textarea[disabled]')).toHaveLength(0);
   }
+});
+
+it.skipIf(!JSDOM)('uses base metadata for repeated editor keys without changing exact names', () => {
+  const { document, window, posted, send } = loadPage(pageHtml(), uiSource);
+  send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'P' }], activeProfileId: 'p' } });
+  send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: [' Layout '] } });
+  document.getElementById('recordIdInput')!.value = '1';
+  const fields = [
+    { name: ' Calc ', type: ' Calculation ', result: 'number', maxRepeat: 2 },
+    { name: 'Summary', type: ' SUMMARY ', maxRepeat: 2 },
+    { name: 'Photo', result: ' Container ', maxRepeat: 2 },
+    { name: 'Qty', result: ' Number ', maxRepeat: 2 },
+    { name: 'Global', global: ' TRUE ', maxRepeat: 2 },
+    { name: 'Local', global: ' false ' }
+  ];
+  send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', fields, metadataSupported: true,
+    record: { recordId: '1', fieldData: { ' Calc (1)': 1, ' Calc (2)': 2, 'Summary(2)': 3, 'Photo(1)': 'url', 'Qty(2)': 4, 'Global(2)': 'before', Local: 'before' } } } });
+  const inputs = Array.from(document.querySelectorAll('#fieldEditor textarea'));
+  expect(inputs.filter((input) => input.getAttribute('disabled') !== null).map((input) => input.getAttribute('aria-label')).sort()).toEqual([' Calc (1)', ' Calc (2)', 'Photo(1)', 'Summary(2)']);
+  const globalInput = inputs.find((input) => input.getAttribute('aria-label') === 'Global(2)')!;
+  expect(document.getElementById(globalInput.getAttribute('aria-describedby')!)?.textContent).toContain('Session-wide');
+  expect(inputs.find((input) => input.getAttribute('aria-label') === 'Local')!.getAttribute('aria-describedby')).toBeNull();
+  window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = '12'; input.dispatchEvent(new Event('input')); }`);
+  document.getElementById('saveButton')!.click();
+  expect(posted.at(-1)).toMatchObject({ type: 'saveRecord', payload: {
+    originalFieldData: { 'Qty(2)': 4, 'Global(2)': 'before', Local: 'before' },
+    draftFieldData: { 'Qty(2)': 12, 'Global(2)': '12', Local: '12' }
+  } });
+});
+
+it.skipIf(!JSDOM)('warns when record metadata cannot identify read-only fields, and clears the warning after a good load', () => {
+  const { document, send } = loadPage(pageHtml(), uiSource);
+  const payload = { record: { recordId: '1', fieldData: { Name: 'Ada' } }, fields: [], metadataSupported: false };
+  send({ type: 'recordLoaded', payload });
+  expect(document.body.textContent).toContain('Read-only fields cannot be identified');
+  send({ type: 'recordLoaded', payload: { ...payload, fields: [{ name: 'Name' }], metadataSupported: true } });
+  expect(document.body.textContent).not.toContain('Read-only fields cannot be identified');
 });

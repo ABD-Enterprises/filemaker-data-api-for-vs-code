@@ -45,7 +45,8 @@ it('batch uses metadata once, keeps text exact and warns per unsafe numeric row'
 it('Record Editor uses field result type rather than JSON guesses', async () => {
   const source = await readFile(join(__dirname, '../../src/webviews/recordEditor/ui/index.js'), 'utf8');
   const fn = source.slice(source.indexOf('function parseEditableValue('), source.indexOf('\nfunction clone('));
-  const parse = runInNewContext(`${fn}; parseEditableValue`, { state: { presentationFields: [{ name: 'Text', type: 'text' }, { name: 'Number', type: 'number' }] } });
+  const helpers = source.slice(source.indexOf('function metadataForField('), source.indexOf('function readOnlyNote('));
+  const parse = runInNewContext(`${helpers}\n${fn}; parseEditableValue`, { state: { presentationFields: [{ name: 'Text', type: 'text' }, { name: 'Number', type: 'number' }] } });
   for (const value of values) expect(parse(value, 'Text')).toBe(value);
   expect(parse('10.50', 'Number')).toBe(10.5);
   expect(parse('9007199254740993', 'Number')).toBe('9007199254740993');

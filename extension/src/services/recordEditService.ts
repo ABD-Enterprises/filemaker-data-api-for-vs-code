@@ -7,6 +7,7 @@ import type {
   RecordPatchPreview
 } from '../types/fm';
 import { stableStringify } from '../utils/hash';
+import { readOnlyFieldKind } from '../utils/fieldAccess';
 
 export class RecordEditService {
   public constructor(private readonly fmClient: FMClient) {}
@@ -29,7 +30,7 @@ export class RecordEditService {
 
     if (fields) {
       for (const field of fields) {
-        if (field.type === 'calculation' || field.type === 'summary' || (field.result || field.type || '').toLowerCase() === 'container') continue;
+        if (readOnlyFieldKind(field)) continue;
         const required = isRequiredField(field);
         if (!required) {
           continue;
