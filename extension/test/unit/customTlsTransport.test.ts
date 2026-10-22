@@ -1,5 +1,9 @@
 import http from 'http';
 import https from 'https';
+import net from 'net';
+import { EventEmitter } from 'events';
+import { Duplex, PassThrough } from 'stream';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import nock from 'nock';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -12,6 +16,32 @@ import { DAY, makeCertificate, newKeyPair } from '../helpers/x509';
 afterEach(() => { vi.restoreAllMocks(); if (!nock.isActive()) nock.activate(); });
 
 describe('custom TLS uses ClientRequest instead of the replaceable request function', () => {
+  it('reproduces sock.setTimeout only when a harness supplies a stream without the socket contract', () => {
+    nock.restore();
+    const config = httpsTransportFor({ allowSelfSigned: true }, 'https://fm.example.test');
+    vi.spyOn(config.httpsAgent as https.Agent & { addRequest(req: http.ClientRequest): void }, 'addRequest').mockImplementation(() => undefined);
+    const req = config.transport!.request({ hostname: 'fm.example.test' }, () => undefined);
+    const stream = new PassThrough();
+    try {
+      req.setTimeout(1000);
+      expect(() => req.emit('socket', stream)).toThrow('sock.setTimeout is not a function');
+    } finally { req.destroy(); stream.destroy(); }
+  });
+
+  it('the installed proxy agent returns a real timeout-capable socket even for a refused CONNECT', async () => {
+    // No network: the upstream is an in-memory response. The returned socket is made by the agent.
+    const upstream = new Duplex({ read() {}, write(_chunk, _encoding, callback) { callback(); } });
+    upstream.push(Buffer.from('HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n'));
+    vi.spyOn(net, 'connect').mockReturnValue(upstream as net.Socket);
+    const agent = new HttpsProxyAgent('http://proxy.example.test:3128');
+    const socket = await agent.connect(new EventEmitter() as http.ClientRequest, { host: 'fm.example.test', port: 443, secureEndpoint: true });
+    try {
+      expect(socket).toBeInstanceOf(net.Socket);
+      expect(() => socket.setTimeout(0)).not.toThrow();
+      expect(upstream.destroyed).toBe(true);
+    } finally { socket.destroy(); agent.destroy(); }
+  });
+
   it.each([{ pinnedCertSha256: 'a'.repeat(64) }, { allowSelfSigned: true }])('keeps its own agent for %j, also on repeat requests', async (profile) => {
     nock.restore();
     const first = await httpsTransportFor(profile, 'https://fm.example.test');

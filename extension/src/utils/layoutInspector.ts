@@ -30,6 +30,7 @@ export interface LayoutInspectorValidationRule {
 
 export interface LayoutInspectorModel {
   fields: LayoutInspectorField[];
+  repeatedFields: string[];
   portals: LayoutInspectorPortal[];
   valueLists: ValueList[];
   validations: LayoutInspectorValidationRule[];
@@ -50,6 +51,7 @@ export function buildLayoutInspectorModel(schema: SchemaMetadataResult): LayoutI
 
   return {
     fields,
+    repeatedFields: [...new Set(schema.fields.filter((field, index) => schema.fields.findIndex((other) => other.name === field.name) !== index).map((field) => field.name))],
     portals,
     valueLists,
     validations

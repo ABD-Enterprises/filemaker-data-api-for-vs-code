@@ -109,3 +109,21 @@ describe('SavedQueriesStore', () => {
     expect(all.map((item) => item.id).sort()).toEqual(['dup-1', 'new-1']);
   });
 });
+
+it.each([
+  ['{not json', 'That file is not valid JSON'],
+  ['null', 'That JSON file does not contain saved queries'],
+  ['{}', 'That JSON file does not contain saved queries'],
+  ['{"queries":{}}', 'That JSON file does not contain saved queries'],
+  ['[null]', 'That JSON file does not contain saved queries'],
+  ['[{}]', 'That JSON file does not contain saved queries'],
+  [JSON.stringify([{ ...createQuery('new'), findJson: [null] }]), 'That JSON file does not contain saved queries'],
+  [JSON.stringify([{ ...createQuery('new'), sortJson: {} }]), 'That JSON file does not contain saved queries'],
+  [JSON.stringify([createQuery('new'), { unrelated: true }]), 'That JSON file does not contain saved queries']
+])('rejects invalid import %s without changing saved queries', async (text, message) => {
+  const store = new SavedQueriesStore(new InMemoryMemento() as never, new InMemoryMemento() as never);
+  await store.saveSavedQuery(createQuery('keep'));
+  const before = await store.listSavedQueries();
+  await expect(store.importSavedQueries(text)).rejects.toThrow(message);
+  expect(await store.listSavedQueries()).toEqual(before);
+});

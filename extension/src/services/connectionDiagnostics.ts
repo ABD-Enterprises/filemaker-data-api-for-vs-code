@@ -24,6 +24,7 @@ export interface DiagnosticReport {
   hostReplaced?: boolean; environmentProxy?: boolean; http?: number; fmCode?: string;
   allowSelfSigned?: boolean; dataApiFailureCode?: string; dataApiCertificateFailure?: boolean;
   caFileConfigured?: boolean; verificationFailureCode?: string;
+  proxyUnreachable?: boolean;
   cancelled?: boolean;
 }
 export interface NetworkSettings { proxySupport: string; proxyConfigured: boolean; systemCertificates: boolean; proxyVariables: string[]; hostReplaced: boolean }
@@ -102,6 +103,7 @@ export function rankDiagnosticCauses(report: DiagnosticReport): string[] {
   if (failed('Address')) return ['Fix the Server URL: enter https:// followed by the server host name and, if needed, a port. A path prefix is allowed; do not include sign-in details or a query.'];
   if (failed('DNS')) causes.push('The server name could not be found. Check the spelling, your network and VPN, then try again.');
   if (failed('TCP')) causes.push('The address resolves but the port cannot be reached. Check the firewall and server port, and that the Data API is enabled in Admin Console.');
+  if (report.proxyUnreachable) causes.push('The proxy could not be reached. Check HTTPS_PROXY / HTTP_PROXY / ALL_PROXY, NO_PROXY, VS Code http.proxy and http.proxySupport, or ask your network administrator to check the proxy.');
   const cert = report.certificate;
   if (report.pin === 'mismatch' || report.pin === 'invalid') causes.push('The trusted fingerprint does not match. Ask the administrator whether the certificate changed; only then run Connect and choose Review and re-trust.');
   if (cert?.expired || report.verificationFailureCode === 'CERT_HAS_EXPIRED') causes.push(`The server certificate has expired on ${cert?.validTo ?? 'the date reported by the server'}. Ask the administrator to renew it in Admin Console.`);
@@ -120,7 +122,7 @@ export function rankDiagnosticCauses(report: DiagnosticReport): string[] {
   if (report.hostReplaced && (report.pin === 'match' || legacy)) causes.push('This profile’s certificate settings could not use the extension’s direct connection path. If the certificate check fails on the proxy route, try setting http.proxySupport to fallback, then run Connect. Direct trusted-fingerprint and older Allow self-signed profiles work with the default setting; custom CA profiles keep their existing proxy routing.');
   if (failed('TLS') && !cert) causes.push('The server could not complete a secure connection. Check that this is the HTTPS port and ask the administrator to enable a supported TLS version.');
   if (failed('Data API') && report.dataApiCertificateFailure) causes.push('The Data API request failed its certificate check. Follow the certificate advice above before running Connect.');
-  else if (failed('Data API')) causes.push(`The Data API did not answer successfully${report.http ? ` (HTTP ${report.http})` : ''}${report.fmCode ? ` (FileMaker ${report.fmCode})` : ''}. Check the Data API in Admin Console and the server address; a proxy or web sign-in page may be answering instead.`);
+  else if (failed('Data API') && !report.proxyUnreachable) causes.push(`The Data API did not answer successfully${report.http ? ` (HTTP ${report.http})` : ''}${report.fmCode ? ` (FileMaker ${report.fmCode})` : ''}. Check the Data API in Admin Console and the server address; a proxy or web sign-in page may be answering instead.`);
   if (legacy) causes.push('This profile accepts any certificate (the older Allow self-signed setting); switch to trusting the fingerprint instead. Confirm the full fingerprint with the administrator before changing trust.');
   if (report.steps.some((step) => step.name === 'Address' && step.verdict === 'WARN')) causes.push('This address uses HTTP without encryption. Change it to https:// and the server’s HTTPS port.');
   if (!causes.length && report.pin === 'match' && report.verified === false) causes.push('The server presents the fingerprint you trusted. Run Connect; this profile accepts that exact fingerprint even though normal certificate verification fails.');
@@ -237,7 +239,7 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
   report.hostReplaced = settings.hostReplaced && customTls && !pinned && report.environmentProxy;
   const proxyHint = report.environmentProxy || settings.proxyConfigured || report.hostReplaced;
   report.steps.push({ name: 'VS Code network settings', verdict: proxyHint ? 'WARN' : 'PASS', ms: 0,
-    text: `${proxyHint ? `http.proxySupport: ${settings.proxySupport}; ` : ''}http.proxy: ${settings.proxyConfigured ? 'set (value hidden)' : 'not set'}; http.systemCertificates: ${settings.systemCertificates}. Proxy environment variables set (values hidden): ${settings.proxyVariables.join(', ') || 'none'}. ${report.hostReplaced ? 'The older Allow self-signed profile uses the environment-proxy route; VS Code can replace its certificate settings there. If the certificate check fails, try http.proxySupport set to fallback.' : 'Direct trusted-fingerprint and older Allow self-signed profiles use a connection path VS Code does not replace; no setting change is needed. Custom CA profiles keep their existing VS Code and system proxy routing.'} Pinned profiles that need a proxy are refused with PIN_THROUGH_PROXY. Direct probes do not test an HTTP proxy.` });
+    text: `${proxyHint ? `http.proxySupport: ${settings.proxySupport}; ` : ''}http.proxy: ${settings.proxyConfigured ? 'set (value hidden)' : 'not set'}; http.systemCertificates: ${settings.systemCertificates}. Proxy environment variables set (values hidden): ${settings.proxyVariables.join(', ') || 'none'}. ${report.hostReplaced ? 'The older Allow self-signed profile uses the environment-proxy route; VS Code can replace its certificate settings there. If the certificate check fails, try http.proxySupport set to fallback.' : 'Trusted-fingerprint and older Allow self-signed profiles go directly only when no proxy applies. Older Allow self-signed profiles still use an applicable environment proxy with any proxy-support setting. VS Code does not replace their direct connection path; no setting change is needed there. Custom CA profiles keep their existing VS Code and system proxy routing.'} Pinned profiles that need a proxy are refused with PIN_THROUGH_PROXY. Direct probes do not test an HTTP proxy.` });
   await step('Data API', async (s) => {
     try {
       const result = await probes.product({ ...profile, serverUrl: `${url.origin}${url.pathname.replace(/\/$/, '')}`, apiBasePath: '/fmi/data', apiVersionPath: 'vLatest' }, s);
@@ -245,6 +247,7 @@ export async function runConnectionDiagnostics(profile: ConnectionProfile, setti
       return result;
     } catch (error) {
       const failure = error as { status?: number; code?: string; kind?: string };
+      report.proxyUnreachable = failure.code === 'PROXY_UNREACHABLE';
       report.dataApiFailureCode = failureCode(error);
       report.dataApiCertificateFailure = failure.kind === 'certificate' || describeNetworkFailure(report.dataApiFailureCode)?.kind === 'certificate';
       report.http = failure.status;

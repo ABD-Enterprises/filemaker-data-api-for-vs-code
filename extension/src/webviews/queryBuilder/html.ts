@@ -122,6 +122,7 @@ export function getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.
         <button id="uploadContainerButton" type="button" class="secondary">Upload to container…</button>
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
+      <button id="listRecordsButton" type="button" class="secondary hidden">List records instead</button>
     </section>
 
     <section class="panel" aria-labelledby="resultsHeading">

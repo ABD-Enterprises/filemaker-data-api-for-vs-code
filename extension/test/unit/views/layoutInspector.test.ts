@@ -50,6 +50,9 @@ describe('LayoutInspectorProvider', () => {
     const fields = await provider.getChildren(categories[0]);
     expect(fields.map((field) => field.label)).toEqual(['Photo']);
     expect(fields.map((field) => field.description)).toEqual(['container']);
+    expect(categories[0]?.description).toBe('1 (repeated fields shown once)');
+    expect(categories[0]?.tooltip).toContain('Repeated fields are shown once');
+    expect(categories[0]?.tooltip).toContain('Photo');
   });
 
   it('renders the four layout inspector categories for the selected layout', async () => {

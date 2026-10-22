@@ -81,7 +81,7 @@ it('expands repeating metadata and appends unexpected first-page keys in encount
   } as never);
   const result = await service.batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100 });
   const csv = await readFile(path, 'utf8');
-  expect(csv.split('\n')[0]).toBe('__recordId,__modId,Phones(1),Phones(2),Phones(3),Related::Odd key,recordId,__portalNote (export information)');
+  expect(csv.split('\n')[0]).toBe('__recordId,__modId,Phones(1),Phones(2),Phones(3),Related::Odd key,recordId');
   expect(parseBatchUpdateInput(csv, 'csv')).toEqual(rows);
   expect(result.unknownColumnValues).toBeUndefined();
 });
@@ -98,7 +98,7 @@ it('counts every omitted late value, and keeps the exact unknown column names in
   const result = await service.batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', pageSize: 1, maxRecords: 100 }, { log, reportProgress: vi.fn(), isCancellationRequested: () => false });
   expect(result).toMatchObject({ exportedRecords: 3, unknownColumnValues: 3, warnings: ['3 values were not exported because their columns were unknown: "Related::Odd key", "Other".'] });
   expect(log).toHaveBeenCalledWith('warn', result.warnings![0]);
-  expect(await readFile(path, 'utf8')).toBe('recordId,modId,Name,__portalNote (export information)\n1,,A,\n2,,B,\n3,,C,\n');
+  expect(await readFile(path, 'utf8')).toBe('recordId,modId,Name\n1,,A\n2,,B\n3,,C\n');
 });
 
 it.each(['csv', 'jsonl'] as const)('failed %s export preserves destination and removes temporary files', async (format) => {
@@ -119,7 +119,7 @@ it('CSV metadata columns precede digit fields, collisions round-trip, missing fi
   ] }) } as never);
   await service.batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100 });
   const csv = await readFile(path, 'utf8');
-  expect(csv.split('\n')[0]).toBe('__recordId,__modId,recordId,modId,123,Later,Unseen,__portalNote (export information)');
+  expect(csv.split('\n')[0]).toBe('__recordId,__modId,recordId,modId,123,Later,Unseen');
   expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
     { recordId: 'real1', modId: '7', fieldData: { recordId: 'field1', modId: 'fieldmod', '123': 'digits' } },
     { recordId: 'real2', modId: '8', fieldData: { Later: 'later' } }
@@ -131,7 +131,7 @@ it('empty CSV writes metadata header, and Excel option adds BOM', async () => {
   const dir = await folder(); const path = join(dir, 'out.csv');
   const service = new BatchService({ getLayoutMetadata: vi.fn().mockResolvedValue({ fieldMetaData: [{ name: 'Café', result: 'text' }] }), findRecords: vi.fn().mockResolvedValue({ data: [] }) } as never);
   await service.batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100, excelCompatible: true } as never);
-  expect(await readFile(path, 'utf8')).toBe('\uFEFFrecordId,modId,Café,__portalNote (export information)\n');
+  expect(await readFile(path, 'utf8')).toBe('\uFEFFrecordId,modId,Café\n');
 });
 
 it('client retains portal counts for get and find and sends exact portal paging keys', async () => {
@@ -180,7 +180,7 @@ it('metadata-free CSV sampling spans pages and preserves later collision fields'
     .mockResolvedValueOnce({ data: [] });
   await new BatchService({ findRecords } as never).batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100, pageSize: 1 });
   const csv = await readFile(path, 'utf8');
-  expect(csv.split('\n')[0]).toBe('__recordId,__modId,Name,recordId,Later,__portalNote (export information)');
+  expect(csv.split('\n')[0]).toBe('__recordId,__modId,Name,recordId,Later');
   expect(parseBatchUpdateInput(csv, 'csv')[1]).toEqual({ recordId: '2', fieldData: { recordId: 'field', Later: 'B' } });
 });
 
@@ -226,4 +226,15 @@ it('refuses an old ambiguous CSV when the layout has a recordId field, before ed
   const service = new BatchService({ editRecord, getLayoutMetadata: vi.fn().mockResolvedValue({ fieldMetaData: [{ name: 'recordId', result: 'text' }, { name: 'Name', result: 'text' }] }) } as never);
   await expect(service.batchUpdate(profile, 'Layout', parseBatchUpdateInput('recordId,modId,Name\n99,fieldmod,A', 'csv'), { dryRun: false })).rejects.toThrow(/ambiguous.*reserved/i);
   expect(editRecord).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('batch CSV adds a portal note only for actual truncation, including on later pages: %s', async (truncated) => {
+  const path = join(await folder(), 'optional-note.csv');
+  const findRecords = vi.fn().mockResolvedValueOnce({ data: [{ recordId: '1', fieldData: { Name: 'first' } }] })
+    .mockResolvedValueOnce({ data: [{ recordId: '2', fieldData: { Name: 'second' }, portalDataInfo: [{ portalObjectName: 'Lines', foundCount: truncated ? 3 : 1, returnedCount: 1 }] }] })
+    .mockResolvedValue({ data: [] });
+  await new BatchService({ findRecords, getLayoutMetadata: async () => ({ fieldMetaData: [{ name: 'Name', result: 'text' }] }) } as never)
+    .batchExportFind(profile, 'Layout', { query: [{ Name: '*' }] }, { outputPath: path, format: 'csv', pageSize: 1, maxRecords: 10 });
+  const csv = await readFile(path, 'utf8');
+  expect(csv).toBe(truncated ? 'recordId,modId,Name,__portalNote (export information)\n1,,first,\n2,,second,Lines: showing 1 of 3\n' : 'recordId,modId,Name\n1,,first\n2,,second\n');
 });

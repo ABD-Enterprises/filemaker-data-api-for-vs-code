@@ -293,7 +293,7 @@ async function deliver(
     const choice = await vscode.window.showWarningMessage(
       `${target.relativePath} already exists and has no FileMaker AI context section. Choose Add to the file to keep the current text and append the generated section, Skip existing to leave the file alone, or Cancel to stop.`,
       { modal: true },
-      'Add to the file', 'Skip existing', 'Cancel'
+      'Add to the file', 'Skip existing'
     );
     if (choice !== 'Add to the file') {
       return undefined;

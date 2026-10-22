@@ -48,6 +48,7 @@ const limitInput = document.getElementById('limitInput');
 const offsetInput = document.getElementById('offsetInput');
 const includeAuthCheckbox = document.getElementById('includeAuthCheckbox');
 const runButton = document.getElementById('runButton');
+const listRecordsButton = document.getElementById('listRecordsButton');
 const saveButton = document.getElementById('saveButton');
 const exportEditorButton = document.getElementById('exportEditorButton');
 const exportJsonButton = document.getElementById('exportJsonButton');
@@ -139,7 +140,7 @@ window.addEventListener('message', (event) => {
         setRunning(false);
       }
       setQuerySaving(false);
-      setStatus(message.message || 'Unknown error.', true);
+      setStatus(message.message || 'Unknown error.', true, /Find criteria are empty\./i.test(message.message || ''));
       break;
     default:
       break;
@@ -536,11 +537,13 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-function runQuery() {
+listRecordsButton.addEventListener('click', () => runQuery(true));
+
+function runQuery(listRecords = false) {
   if (state.running || state.savingQuery) {
     return;
   }
-  const payload = collectPayload();
+  const payload = collectPayload(listRecords);
   if (!payload) {
     return;
   }
@@ -721,7 +724,7 @@ function updatePager(returned, foundCount) {
 // Payload helpers
 // ---------------------------------------------------------------------------
 
-function collectPayload() {
+function collectPayload(listRecords = false) {
   const base = collectProfileLayoutPayload();
   if (!base) {
     return undefined;
@@ -729,8 +732,8 @@ function collectPayload() {
 
   if (state.editorMode === 'form') {
     const query = FindForm.modelToFindQuery(state.model);
-    if (query.length === 1 && Object.keys(query[0]).length === 0) {
-      setStatus('Add at least one field to search on.', true);
+    if (!listRecords && query.length === 1 && Object.keys(query[0]).length === 0) {
+      setStatus('Add at least one field to search on, or choose List records instead.', true, true);
       focusLast(requestList, '.criterion-field');
       return undefined;
     }
@@ -743,15 +746,27 @@ function collectPayload() {
       return undefined;
     }
     writeModelToJson();
-  } else if (!findJson.value.trim()) {
+  } else if (!listRecords && !findJson.value.trim()) {
     setStatus('Enter a find request, for example [{"Status": "Open"}].', true);
     findJson.focus();
     return undefined;
   }
 
+  if (!listRecords && state.editorMode === 'json') {
+    try {
+      const query = JSON.parse(findJson.value);
+      if (Array.isArray(query) && query.every((request) => request && typeof request === 'object' && !Array.isArray(request)) &&
+          !query.some((request) => Object.entries(request).some(([name, value]) => name !== 'omit' && value !== '' && value !== null && value !== undefined))) {
+        setStatus('Find criteria are empty. Enter at least one field value to search, or choose List records instead.', true, true);
+        return undefined;
+      }
+    } catch { /* The host reports invalid JSON. */ }
+  }
+
   return {
     ...base,
-    findJson: findJson.value,
+    ...(listRecords ? { listRecords: true } : {}),
+    findJson: findJson.value || '[{}]',
     sortJson: sortJson.value,
     limit: parseNumber(limitInput.value),
     offset: parseNumber(offsetInput.value),
@@ -1505,11 +1520,13 @@ function isCurrentRun(payload) {
 function setRunning(isRunning) {
   state.running = isRunning;
   runButton.disabled = isRunning || state.savingQuery;
+  listRecordsButton.disabled = isRunning || state.savingQuery;
   saveButton.disabled = isRunning || state.savingQuery;
   runButton.textContent = isRunning ? 'Running…' : 'Run';
 }
 
-function setStatus(message, isError = false) {
+function setStatus(message, isError = false, offerList = false) {
+  listRecordsButton.classList.toggle('hidden', !offerList);
   status.textContent = message;
   status.classList.toggle('error', isError);
 }
@@ -1519,5 +1536,6 @@ vscode.postMessage({ type: 'ready' });
 function setQuerySaving(saving) {
   state.savingQuery = saving;
   runButton.disabled = saving || state.running;
+  listRecordsButton.disabled = saving || state.running;
   saveButton.disabled = saving || state.running;
 }

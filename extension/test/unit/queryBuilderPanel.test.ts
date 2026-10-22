@@ -47,6 +47,7 @@ function openPanel(overrides?: { findRecords?: ReturnType<typeof vi.fn> }) {
   const fmClient = {
     listLayouts: vi.fn(async () => ['Contacts']),
     getLayoutMetadata: vi.fn(async () => ({})),
+    listRecords: vi.fn(async () => ({ data: [{ recordId: '1', fieldData: { Name: 'Ada' } }], dataInfo: { foundCount: 9 } })),
     findRecords: overrides?.findRecords ?? vi.fn(async () => ({ data: [], dataInfo: { foundCount: 0 } }))
   };
   const savedQueriesStore = {
@@ -94,6 +95,22 @@ describe('QueryBuilderPanel messages', () => {
     expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 12, message: expect.stringMatching(/sort|JSON/i) }));
   });
 
+  it('lists only after an explicit action and keeps exact names, sort and paging', async () => {
+    const payload = { profileId: 'p1', layout: ' Contacts ', findJson: '[{}]', sortJson: '[{"fieldName":" Name ","sortOrder":"descend"}]', limit: 2, offset: 3, runId: 20 };
+    await panel.send({ type: 'runQuery', payload });
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+    expect(panel.fmClient.listRecords).not.toHaveBeenCalled();
+    await panel.send({ type: 'runQuery', payload: { ...payload, listRecords: true } });
+    expect(panel.fmClient.listRecords).toHaveBeenCalledWith(profile, ' Contacts ', { limit: 2, offset: 3, sort: [{ fieldName: ' Name ', sortOrder: 'descend' }] });
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'queryResult', payload: expect.objectContaining({ query: expect.objectContaining({ listRecords: true, runId: 20 }), result: expect.objectContaining({ dataInfo: { foundCount: 9 } }) }) }));
+  });
+
+  it.each([{ sortJson: '[null]' }, { limit: 0 }, { offset: 0 }])('validates list options before any request: %j', async (options) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: 'Contacts', findJson: '[{}]', listRecords: true, ...options } });
+    expect(panel.fmClient.listRecords).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error' }));
+  });
+
   it('exports the latest successful result as JSON and reports write failures', async () => {
     const data = [{ recordId: '42', fieldData: { ' Name ': '007' } }];
     panel.fmClient.findRecords.mockResolvedValueOnce({ data, dataInfo: { foundCount: 1 } });
@@ -113,7 +130,7 @@ describe('QueryBuilderPanel messages', () => {
     const panelType = QueryBuilderPanel as unknown as { prototype: { toCsvRows(input: unknown): Map<string, unknown>[] } };
     const rows = panelType.prototype.toCsvRows({ result: { data: [{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }] } });
     const csv = recordsToCsv(rows);
-    expect(csv.split('\n')[0]).toBe('__recordId,__modId,123,recordId,modId,__portalNote (export information)');
+    expect(csv.split('\n')[0]).toBe('__recordId,__modId,123,recordId,modId');
     expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }]);
   });
 
@@ -121,6 +138,15 @@ describe('QueryBuilderPanel messages', () => {
     panel.fmClient.getLayoutMetadata.mockResolvedValueOnce(duplicatePhotoMetadata);
     await panel.send({ type: 'loadFieldNames', profileId: 'p1', layout: 'Contact Details' });
     expect(panel.posted.find((message) => message.type === 'fieldNamesLoaded')).toMatchObject({ payload: { fieldNames: ['Photo'], fieldMetadata: [expect.objectContaining({ name: 'Photo', type: 'container' }), expect.objectContaining({ name: 'Photo', type: 'container' })] } });
+  });
+
+  it.each([1, 3])('exports a portal note only when related rows are missing: %s', (foundCount) => {
+    const panelType = QueryBuilderPanel as unknown as { prototype: { toCsvRows(input: unknown): Map<string, unknown>[] } };
+    const records = [{ recordId: '1', fieldData: { '__portalNote (export information)': 'real field' }, portalDataInfo: [{ portalObjectName: ' Lines ', returnedCount: 1, foundCount }] }];
+    const rows = panelType.prototype.toCsvRows({ result: { data: records } });
+    expect(rows[0]?.get('__portalNote (export information)')).toBe('real field');
+    expect(rows[0]?.has('___portalNote (export information)')).toBe(foundCount > 1);
+    if (foundCount > 1) expect(rows[0]?.get('___portalNote (export information)')).toBe(' Lines : showing 1 of 3');
   });
 
   it('loads every webview script under the nonce', () => {

@@ -31,6 +31,10 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Offer **List records instead** for an empty Query Builder search, using the selected layout, page size, starting record and sort only after you choose it.
+- Show a clear error when a saved queries file is not valid JSON or does not contain a list of saved queries; leave existing queries alone.
+- Keep **Cancel Job** and **Show Jobs** available in the Command Palette with power-user mode switched off.
+
 - Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.
 
 - Let Create Record recover from a failed field lookup; keep later real edits after skipped-only rows, ignore spaces around JSON record IDs and versions, and recognize matching retry results despite number, space or line-ending differences. Cancelling stops further record checks.
@@ -70,6 +74,11 @@ PR title prefix matches the highest-tier label added:
 - Report malformed AI hidden-field settings consistently in AI tools, Write AI Context and the AI status bar, without changing which fields are hidden.
 
 ### [INTERNAL]
+
+- Maintenance: remove duplicate Cancel buttons from generated-file, NUL-character and AI-context dialogs; closing a dialog leaves files and records alone.
+- Maintenance: identify an unreachable proxy in connection errors and clarify how older self-signed connections use environment proxies.
+- Maintenance: include the CSV portal note column only when related rows are missing, count repeated fields once in Test My Server, and name repeated fields in Layout Inspector.
+- Maintenance: show the request options used by public client methods in the API reference.
 
 - Maintenance: split the Query Builder host code into smaller parts, check that rejected sessions stop after one retry and uploads keep the record version, and keep connection helpers out of the API pages.
 

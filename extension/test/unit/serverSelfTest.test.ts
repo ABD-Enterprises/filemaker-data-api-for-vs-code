@@ -273,3 +273,10 @@ it('lists each observed fact once even when more than one check observes it', as
   const markdown = renderSelfTestReport(repeated);
   expect(markdown.split('- No records: HTTP 500, FileMaker 401.')).toHaveLength(2);
 });
+
+it('Test My Server counts duplicate fields once, preserving distinct exact names', async () => {
+  const { run, client } = harness();
+  client.getLayoutMetadata.mockResolvedValue({ fieldMetaData: [{ name: 'Photo', result: 'container' }, { name: 'Photo', result: 'container' }, { name: ' Photo', result: 'container' }] });
+  const report = await run();
+  expect(report?.facts).toContain(`Layout ${layout}: 2 fields.`);
+});

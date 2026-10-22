@@ -996,14 +996,6 @@
           "when": "filemaker.enterpriseMode"
         },
         {
-          "command": "filemakerDataApiTools.cancelJob",
-          "when": "filemaker.powerUserMode"
-        },
-        {
-          "command": "filemakerDataApiTools.showJobs",
-          "when": "filemaker.powerUserMode"
-        },
-        {
           "command": "filemakerDataApiTools.showRequestHistory",
           "when": "filemaker.powerUserMode"
         },

@@ -18,13 +18,13 @@ async function fixture() {
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); vi.clearAllMocks(); });
 
 describe('safe generated files', () => {
-  it('never silently replaces unrelated client files, names every conflict, and cancels the whole write', async () => {
+  it.each([undefined, 'Cancel'])('never replaces unrelated files and cancels the whole write on %s', async (choice) => {
     const { root, service } = await fixture();
     for (const name of ['README.md', 'client.ts']) await writeFile(join(root, name), `user ${name}`);
-    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Cancel' as never);
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(choice as never);
     await expect(service.generateTypeScriptClient(profile, [' Contacts '], root)).rejects.toThrow(/cancelled/i);
     for (const name of ['README.md', 'client.ts']) expect(await readFile(join(root, name), 'utf8')).toBe(`user ${name}`);
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringMatching(/README.md[\s\S]*client.ts|client.ts[\s\S]*README.md/), { modal: true }, 'Overwrite', 'Skip existing', 'Cancel');
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringMatching(/README.md[\s\S]*client.ts|client.ts[\s\S]*README.md/), { modal: true }, 'Overwrite', 'Skip existing');
     await expect(readFile(join(root, 'types.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('Skip existing preserves unrelated files while creating the other marked outputs', async () => {

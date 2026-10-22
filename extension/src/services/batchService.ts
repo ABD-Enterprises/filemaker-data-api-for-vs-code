@@ -100,11 +100,12 @@ export class BatchService {
         ...(fields ? records : records.slice(0, 100)).flatMap((record) => Object.keys(record.fieldData))
       ])];
       meta = exportColumns(names);
-      // Reserve a note column even if only a later page has truncated portals.
+      // The writer keeps this column only if any page actually has truncated portals.
       noteColumn = '__portalNote (export information)';
       while (names.includes(noteColumn)) noteColumn = '_' + noteColumn;
       csvWriter = await createCsvStreamWriter(options.outputPath, {
         columns: [...meta, ...names, noteColumn],
+        optionalColumn: noteColumn,
         excelCompatible: options.excelCompatible,
         neutralizeFormulas: this.getNeutralizeFormulas(),
         onUnknownField: (field) => {
@@ -577,6 +578,9 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
   const recordIdIndex = headers.indexOf(recordColumn);
   if (recordIdIndex < 0) throw new Error('CSV must include a "recordId" column (or reserved __recordId and __modId columns).');
 
+  const lastColumn = headers.length - 1;
+  const exportNoteColumn = /^_+portalNote \(export information\)$/.test(headers[lastColumn] ?? '') && rows.slice(1).every((row) =>
+    !row[lastColumn] || /^.+: showing \d+ of \d+(?:; .+: showing \d+ of \d+)*$/.test(row[lastColumn]!));
   const entries: BatchUpdateEntry[] = [];
 
   for (const row of rows.slice(1)) {
@@ -587,7 +591,7 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
 
     const fieldData: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     headers.forEach((header, index) => {
-      if (header === recordColumn || header === modColumn || (index === headers.length - 1 && /^_+portalNote \(export information\)$/.test(header))) {
+      if (header === recordColumn || header === modColumn || (index === lastColumn && exportNoteColumn)) {
         return;
       }
 

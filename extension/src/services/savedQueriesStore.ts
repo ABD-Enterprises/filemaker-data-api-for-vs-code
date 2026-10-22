@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import type * as vscode from 'vscode';
 
 import type { SavedQueriesDocument, SavedQuery, SavedQueryScope } from '../types/fm';
-import { assertObjectArray } from '../utils/jsonValidate';
+import { assertObjectArray, validateObjectArray } from '../utils/jsonValidate';
 
 const DATA_KEY = 'filemaker.savedQueries.items';
 const VERSION_KEY = 'filemaker.savedQueries.schemaVersion';
@@ -167,21 +167,16 @@ export class SavedQueriesStore {
     rawJson: string,
     scope?: SavedQueryScope
   ): Promise<ImportSavedQueriesResult> {
-    await this.ensureInitialized();
-
     let parsed: unknown;
 
     try {
       parsed = JSON.parse(rawJson);
     } catch {
-      return {
-        imported: 0,
-        updated: 0,
-        skipped: 0
-      };
+      throw new Error('That file is not valid JSON. Choose a saved queries JSON file and try again.');
     }
 
     const queries = this.parseImportPayload(parsed);
+    await this.ensureInitialized();
 
     const targetScope = scope ?? this.getConfiguredScope();
     const state = this.getState(targetScope);
@@ -343,18 +338,19 @@ export class SavedQueriesStore {
   }
 
   private parseImportPayload(value: unknown): SavedQuery[] {
-    if (Array.isArray(value)) {
-      return value as SavedQuery[];
+    const queries: unknown = Array.isArray(value) ? value
+      : value && typeof value === 'object' ? (value as Record<string, unknown>).queries : undefined;
+    if (Array.isArray(queries) && queries.every((query: unknown) => {
+      if (!query || typeof query !== 'object' || Array.isArray(query)) return false;
+      const entry = query as Record<string, unknown>;
+      return typeof entry.name === 'string' && typeof entry.profileId === 'string' &&
+        typeof entry.layout === 'string' && validateObjectArray(entry.findJson, 'Find JSON').ok &&
+        (entry.sortJson === undefined || validateObjectArray(entry.sortJson, 'Sort JSON').ok);
+    })) {
+      return queries as SavedQuery[];
     }
 
-    if (value && typeof value === 'object') {
-      const record = value as Record<string, unknown>;
-      if (Array.isArray(record.queries)) {
-        return record.queries as SavedQuery[];
-      }
-    }
-
-    return [];
+    throw new Error('That JSON file does not contain saved queries. Choose an exported saved queries file or a JSON list of saved queries.');
   }
 }
 

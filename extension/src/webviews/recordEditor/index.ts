@@ -619,8 +619,7 @@ export class RecordEditorPanel {
     const choice = await vscode.window.showWarningMessage(
       `NUL character (U+0000) in field(s): ${names.join(', ')}. ${NUL_TEXT_WARNING}${emptyWarning}`,
       { modal: true },
-      'Remove the character and continue',
-      'Cancel'
+      'Remove the character and continue'
     );
     if (choice !== 'Remove the character and continue') {
       await this.panel.webview.postMessage({ type: 'saveCancelled' });

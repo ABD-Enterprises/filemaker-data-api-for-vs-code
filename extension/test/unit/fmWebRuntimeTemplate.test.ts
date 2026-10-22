@@ -93,7 +93,7 @@ describe('FM Web runtime template', () => {
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValue('Skip existing' as never);
     await expect(gen.generateLayoutPage(layout.id)).rejects.toThrow(/Skipped existing/);
     expect(await readFile(first.outputPath, 'utf8')).toBe('user page');
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining(first.outputPath), { modal: true }, 'Overwrite', 'Skip existing', 'Cancel');
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining(first.outputPath), { modal: true }, 'Overwrite', 'Skip existing');
   });
 
   const bridgeClientPath = () => path.join(dir, 'runtime-next', 'lib', 'bridge-client.ts');

@@ -49,7 +49,7 @@ describe('extension manifest UX contract', () => {
   });
 
   it('keeps primary workflows in the palette once profiles exist', () => {
-    const alwaysVisible = ['addConnectionProfile', 'openWelcomeWalkthrough', 'openUserGuide', 'showDiagnostics'];
+    const alwaysVisible = ['addConnectionProfile', 'openWelcomeWalkthrough', 'openUserGuide', 'showDiagnostics', 'cancelJob', 'showJobs'];
     for (const name of alwaysVisible) {
       expect(palette.has(id(name)), name).toBe(false);
     }
@@ -62,7 +62,6 @@ describe('extension manifest UX contract', () => {
 
   it('hides advanced diagnostics, plugin, and import-export commands behind power-user mode', () => {
     const advanced = [
-      'showJobs',
       'showRequestHistory',
       'openDiagnosticsDashboard',
       'showCircuitBreakerStatus',

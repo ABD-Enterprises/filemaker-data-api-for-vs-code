@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { extractFieldsFromMetadata } from './schemaService';
+import { fieldsForGeneration } from '../utils/generatedFields';
 
 import type { FMClient } from './fmClient';
 import { FMClientError } from './errors';
@@ -94,7 +96,7 @@ export async function testMyServer(
   const metadata = async (layout: string) => step(`Layout metadata: ${layout}`, async () => {
     const data = await client.getLayoutMetadata(profile, layout, control);
     const fields = textFields(data);
-    const count = Array.isArray(data.fieldMetaData) ? data.fieldMetaData.length : 0;
+    const count = fieldsForGeneration(extractFieldsFromMetadata(data)).length;
     report.facts.push(`Layout ${layout}: ${count} fields.`);
     return fields;
   });
