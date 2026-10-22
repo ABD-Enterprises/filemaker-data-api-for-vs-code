@@ -111,7 +111,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
 | Upload to Container | Uploads a chosen file to a record's container field. | Shown with a profile; needs record editing enabled and allowed, trust, a record and a container field. |
 | Batch Export (Find) | Saves matching records to CSV or JSONL safely as a background job, with missing related row notes and an optional CSV format for Excel. | Shown with a profile; needs batch operations enabled and workspace trust. |
-| Batch Update from CSV/JSON | Previews or applies updates, using field types for CSV and leaving empty CSV cells unchanged; refuses rows containing a NUL character with a reason for each row. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
+| Batch Update from CSV/JSON | Previews or applies updates, checks exported record versions unless you choose to overwrite, skips calculation and summary columns, and leaves empty CSV cells unchanged; refuses rows containing a NUL character. | Shown with a profile; needs batch operations enabled, trust and batch updates allowed by policy and offline mode. |
 | Cancel Job | Stops sending new work for a running job, waits for pending requests and keeps partial results. | Shown in power-user mode; also on running jobs in the Jobs view and jobs menu. |
 | Show Jobs | Lists active and recent jobs once, shows counts and record details, and offers cancellation or Copy failures. After a restart, each saved list keeps at most 1,000 entries and marks any shortened list. | Shown in power-user mode; needs an active or recent job. |
 | Create Environment Set | Groups at least two profiles for comparison. | Shown in enterprise mode; needs two profiles and write operations allowed. |
@@ -502,7 +502,7 @@ If **Load more** in the Record Viewer fails, the error is shown and the button b
 
 Only changed fields are sent. **Discard Changes** reverts the form.
 
-**If someone else changed the record:** the editor sends the version of the record you loaded. If the record changed on the server since then, FileMaker refuses the edit (error 306) and nothing is written. The editor then shows which fields changed since you loaded the record, which of them you also edited, and keeps your edits in the form. Select **Reload record (discard my edits)** to load the current version, then make your change again. Batch update does not have this check.
+**If someone else changed the record:** the editor sends the version of the record you loaded. If the record changed on the server since then, FileMaker refuses the edit (error 306) and nothing is written. The editor then shows which fields changed since you loaded the record, which of them you also edited, and keeps your edits in the form. Select **Reload record (discard my edits)** to load the current version, then make your change again. Batch updates also use the modification ID kept in your export, unless you explicitly choose to overwrite newer changes.
 
 If the layout runs a script on save and that script reports an error, the error is shown next to the success message (the record was saved). The same applies to create and delete. A find (**Run Find (JSON)** and the Query Builder) and a container upload also show a script error as a warning ("The find worked, but ...", "The upload worked, but ..."); getting a single record does not display script errors.
 
@@ -540,6 +540,8 @@ Some layouts list the same field more than once. The editor shows one value per 
 
 **Known gap: creating related records.** FileMaker accepts related records when creating a record, but this extension's Create Record sends only the main record's fields. It cannot yet create portal rows. A real-server check created a related record in **Phone Numbers**, with **Phone Numbers::Number** and **Phone Numbers::Type**; that support has not been added to the extension.
 
+Calculation and summary fields are disabled in the Record Editor with a note explaining why. Container fields are disabled with **Use Upload to container**; use the separate upload action. These fields are left out of Save and Create Record. Global fields remain editable and show **Session-wide** because they apply throughout the connection session. Read-only fields keep the same standard field presentation.
+
 ## Batch export and batch update
 
 Batch work runs as a **job** with a progress bar. Jobs appear under **Jobs** in the sidebar. Progress shows processed rows, succeeded rows and failed rows separately. A finished job with a failed row says **completed with 1 failed row**. Open the job to view details or choose **Copy failures** to copy record IDs, reasons and FileMaker codes.
@@ -568,7 +570,7 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
 
 Text fields keep exactly what you typed, including `10.50`, `null`, `true`, brackets and spaces. Number fields receive numbers only for valid decimal numbers within the safe range (up to 9,007,199,254,740,991 in either direction). Other number entries are kept as text, with a warning for each affected row in the job log, so large numbers are not rounded. Dates and times stay as written. Field types are checked once when the update job starts; if they cannot be read, values stay as text and the job log warns you. Empty CSV cells are still skipped: they leave the field unchanged, so a CSV cannot clear a field. A space in a text cell is kept as a space. The Record Editor also uses the field's type, keeping number-looking text as text.
 
-Before importing, remove columns for related (`Table::Field`), calculation, summary and container fields, keeping only fields you want to change. JSONL files cannot be imported; batch update accepts comma-separated CSV or a JSON array of updates. A semicolon-separated file or JSONL file gets a message asking for comma-separated CSV instead.
+Calculation and summary columns are skipped when the layout field list can be read. The dry run and job log name each skipped column before updates; a row with no editable values is skipped without a write. Remove related (`Table::Field`) and container columns before importing, keeping only fields you want to change. JSONL files cannot be imported; batch update accepts comma-separated CSV or a JSON array of updates. A semicolon-separated file or JSONL file gets a message asking for comma-separated CSV instead.
 
 **Turning the apostrophe off.** If you need the raw text (for example a program that does not understand the apostrophe), set `filemaker.export.neutralizeFormulas` to `false` in your **user** settings. It applies to CSV exports and **Copy results as table**; a workspace cannot change it. JSON Lines exports never had the apostrophe.
 
@@ -579,12 +581,16 @@ Rows containing a NUL character are refused before sending any fields from that 
 1. Run **FileMaker: Batch Update from CSV/JSON** (or the layout's right-click menu).
 2. Choose a `.csv` or `.json` file.
    - **CSV**: a header row with a `recordId` column and one column per field. Empty cells are skipped (a CSV cannot clear a field).
-   - **JSON**: an array of `{ "recordId": "123", "fieldData": { "Field": "value" } }` entries (`recordId` is a string).
-3. Choose **Dry-run only (recommended)** or **Execute updates now**. A dry run shows a sample of what would be sent and sends nothing. Executing asks for a final confirmation first.
+   - **JSON**: an array of `{ "recordId": "123", "modId": "7", "fieldData": { "Field": "value" } }` entries (`recordId` and `modId` are strings). Keep `modId` from the export when available.
+3. Choose **Dry-run only (recommended)** or **Execute updates now**. A dry run shows a sample, how many rows have `modId`, how many will be checked for newer changes, and calculation/summary columns that will be skipped. It sends no updates. Executing asks for confirmation first.
+
+**Protect newer changes.** Keep the exported `modId` column (or reserved `__modId`) unchanged. Choose **Check for newer changes (recommended)** before running. FileMaker checks each row's version; if someone edited that record after the export, the row fails with code **306** and “Changed since the export (someone edited this record). Not updated.” It is not retried, and other rows continue. Jobs and **Copy failures** include these rows and their code. The final job summary says how many rows were skipped because the records changed after the export. To replace newer values deliberately, choose **Overwrite even if changed**; this sends no modification ID.
+
+If the file has no modification IDs, a warning asks **Continue** or **Cancel** before any update. Continuing cannot detect newer changes. In a file with some missing IDs, the choice lists how many rows cannot be checked. A dry run reports these counts without asking to write anything.
 
 A record your account cannot change because of a record-level access rule (error 200) fails that record only, with its reason in the failure list, and the job carries on. The job stops once, with FileMaker's reason and the number of records not attempted, only for errors that mean the account cannot do updates at all (9 insufficient privileges, 205 no privilege to create records, 207 no privilege to change the schema, or rejected credentials). Batch update does not retry FileMaker's own errors; it retries only connection and gateway problems, a locked record (301) and 429 or 503 answers, waiting for the server's `Retry-After`.
 
-Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. Keep an export from before the update. It can restore old values only for layouts without related, calculation, summary or container fields, and only after you delete those columns (see above).
+Updates run with `filemaker.batch.concurrency` requests at a time (default 4, maximum 10). There is no undo. The modification ID check protects newer edits when their exported IDs are kept. Keep an export from before the update for reference; restoring old values is another update, with the same checks and field limits.
 
 Batch update is blocked in offline mode, for the `viewer` role, and when `filemaker.features.batch.enabled` is off or the workspace is untrusted.
 

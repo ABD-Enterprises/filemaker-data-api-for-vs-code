@@ -31,6 +31,10 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Protect batch updates with the exported record version, skip records changed since export, and ask before overwriting newer changes or using files without versions. Dry runs report how many rows can be checked.
+- Keep calculation, summary and container fields read-only in the Record Editor, explain global fields, and skip calculation and summary import columns with clear warnings.
+- Clarify in the package description and getting-started pages that FileMaker Server is supported and FileMaker Cloud sign-in with a Claris ID is not supported yet.
+
 - Allow generated files in a workspace opened through a symbolic link, refuse linked output folders before creating files, and show generation refusals clearly.
 - Let requests continue as soon as a renewed session is ready, while closing the previous session in the background.
 - Use stored text fields for long script parameters and distinguish empty text from an empty layout, with clearer messages when a script did not run.

@@ -29,6 +29,7 @@ export class RecordEditService {
 
     if (fields) {
       for (const field of fields) {
+        if (field.type === 'calculation' || field.type === 'summary' || (field.result || field.type || '').toLowerCase() === 'container') continue;
         const required = isRequiredField(field);
         if (!required) {
           continue;

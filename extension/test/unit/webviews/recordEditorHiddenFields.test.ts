@@ -130,3 +130,40 @@ it.skipIf(!JSDOM)('keeps prototype-like fields in new-record forms and create pa
   document.getElementById('createButton')!.click();
   expect(JSON.parse(JSON.stringify(posted.at(-1)))).toMatchObject({ type: 'createRecord', payload: { fieldData: Object.fromEntries(names.map((name) => [name, 'value'])) } });
 });
+
+it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and container fields read-only in %s mode and excludes them from payloads', (mode) => {
+  const { document, window, posted, send } = loadPage(pageHtml(), uiSource);
+  const fields = [
+    { name: ' Name ', type: 'normal', result: 'text' },
+    { name: 'Calc', type: 'calculation', result: 'number' },
+    { name: 'Summary', type: 'summary', result: 'number' },
+    { name: 'Photo', type: 'normal', result: 'container' },
+    { name: 'Global', type: 'normal', result: 'text', global: true }
+  ];
+  send({ type: 'init', payload: { profiles: [{ id: 'p', name: 'Profile' }], activeProfileId: 'p', defaults: { mode, profileId: 'p', layout: ' Layout ' } } });
+  send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: [' Layout '] } });
+  document.getElementById('recordIdInput')!.value = '1';
+  const payload = { profileId: 'p', layout: ' Layout ', fields, presentationFields: fields.map((field) => ({ name: field.name, type: field.result })), metadataSupported: true,
+    record: { recordId: '1', modId: '7', fieldData: { ' Name ': 'before', Calc: 1, Summary: 2, Photo: 'url', Global: 'before' } } };
+  send({ type: mode === 'create' ? 'layoutFields' : 'recordLoaded', payload });
+  const notes: Record<string, string> = { Calc: 'Calculated by FileMaker; cannot be edited', Summary: 'Summary field; cannot be edited', Photo: 'Use Upload to container', Global: 'Session-wide' };
+  for (const input of document.querySelectorAll('#fieldEditor textarea')) {
+    const name = input.getAttribute('aria-label')!;
+    expect(input.getAttribute('disabled') !== null).toBe(['Calc', 'Summary', 'Photo'].includes(name));
+    expect(document.querySelectorAll('#fieldEditor .fm-field-control')).toHaveLength(5);
+    expect(document.querySelectorAll('#fieldEditor tr[data-fm-width]')).toHaveLength(5);
+    if (notes[name]) expect(document.body.textContent).toContain(notes[name]);
+  }
+  // Dispatch even on disabled controls: their event handlers must not change a draft.
+  window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = 'after'; input.dispatchEvent(new Event('input')); }`);
+  document.getElementById(mode === 'create' ? 'createButton' : 'saveButton')!.click();
+  const message = posted.at(-1)!;
+  const body = message.payload as Record<string, unknown>;
+  expect(body[mode === 'create' ? 'fieldData' : 'draftFieldData']).toEqual({ ' Name ': 'after', Global: 'after' });
+  if (mode === 'edit') expect(body.originalFieldData).toEqual({ ' Name ': 'before', Global: 'before' });
+  // Reuse the same field names on another load: metadata changes must rebuild disabled controls.
+  if (mode === 'edit') {
+    send({ type: 'recordLoaded', payload: { ...payload, fields: fields.map((field) => ({ ...field, type: 'normal', result: 'text' })) } });
+    expect(document.querySelectorAll('#fieldEditor textarea[disabled]')).toHaveLength(0);
+  }
+});

@@ -6,6 +6,8 @@ A **connection profile** stores how to reach your FileMaker server and which
 database to talk to. Passwords are stored in your OS keychain via VS Code's
 SecretStorage — they never sit on disk in plain text.
 
+Use Claris FileMaker Server with the Data API enabled. FileMaker Cloud sign-in with a Claris ID is not supported yet; Cloud is untested.
+
 Click the **Add Profile** button or run **FileMaker: Add Connection Profile**
 from the Command Palette (`Ctrl/Cmd+Shift+P`). The connection wizard opens
 in an editor tab. You'll need:

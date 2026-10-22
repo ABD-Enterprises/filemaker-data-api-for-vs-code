@@ -120,8 +120,8 @@ it('CSV metadata columns precede digit fields, collisions round-trip, missing fi
   const csv = await readFile(path, 'utf8');
   expect(csv.split('\n')[0]).toBe('__recordId,__modId,recordId,modId,123,Later,Unseen,__portalNote (export information)');
   expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
-    { recordId: 'real1', fieldData: { recordId: 'field1', modId: 'fieldmod', '123': 'digits' } },
-    { recordId: 'real2', fieldData: { Later: 'later' } }
+    { recordId: 'real1', modId: '7', fieldData: { recordId: 'field1', modId: 'fieldmod', '123': 'digits' } },
+    { recordId: 'real2', modId: '8', fieldData: { Later: 'later' } }
   ]);
   if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600);
 });
@@ -204,7 +204,7 @@ it('uses extra underscores when reserved names are real fields too', async () =>
     .batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100 });
   const csv = await readFile(path, 'utf8');
   expect(csv).toMatch(/^___recordId,___modId,/);
-  expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', fieldData: fields }]);
+  expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', modId: '7', fieldData: fields }]);
 });
 
 it('recognizes semicolon CSV with quoted commas, and JSONL selected through the JSON path', () => {

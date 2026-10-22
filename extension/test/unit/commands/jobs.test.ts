@@ -7,9 +7,9 @@ import { InMemoryMemento } from '../mocks';
 import { command } from '../../helpers/commandHarness';
 
 beforeEach(() => vi.clearAllMocks());
-it('shows a completed job once and copies failed rows including the FileMaker code', async () => {
+it.each(['1708', '306'])('shows a completed job once and copies failed rows including FileMaker code %s', async (code) => {
   const runner = new JobRunner(new InMemoryMemento() as never);
-  const failures = [{ recordId: '2', code: '1708', reason: 'FileMaker 1708: bad value' }];
+  const failures = [{ recordId: '2', code, reason: code === '306' ? 'Changed since the export (someone edited this record). Not updated.' : 'FileMaker 1708: bad value' }];
   runner.startJob('Update', async () => ({ successCount: 2, failureCount: 1, failures }));
   await new Promise((resolve) => setImmediate(resolve));
   registerJobsCommands({ jobRunner: runner });

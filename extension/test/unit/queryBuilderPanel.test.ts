@@ -93,7 +93,7 @@ describe('QueryBuilderPanel messages', () => {
     const rows = panelType.prototype.toCsvRows({ result: { data: [{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }] } });
     const csv = recordsToCsv(rows);
     expect(csv.split('\n')[0]).toBe('__recordId,__modId,123,recordId,modId,__portalNote (export information)');
-    expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }]);
+    expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }]);
   });
 
   it('loads duplicate Photo metadata without duplicate query choices', async () => {

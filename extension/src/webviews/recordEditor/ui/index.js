@@ -26,6 +26,7 @@ const state = {
   loaded: undefined,
   originalFieldData: Object.create(null),
   draftFieldData: Object.create(null),
+  fields: [],
   presentationFields: []
 };
 
@@ -194,7 +195,7 @@ createButton.addEventListener('click', () => {
 
   const fieldData = Object.create(null);
   for (const [name, value] of Object.entries(state.draftFieldData)) {
-    if (value !== '' && value !== undefined && value !== null) {
+    if (!readOnlyNote(name) && value !== '' && value !== undefined && value !== null) {
       fieldData[name] = value;
     }
   }
@@ -295,6 +296,8 @@ function applyLayoutFields(payload) {
   }
 
   showDuplicateFieldNote(payload.fields);
+  state.fields = payload.fields || [];
+  fieldInputs.clear();
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = Object.create(null);
   state.draftFieldData = Object.create(null);
@@ -374,6 +377,8 @@ function applyRecord(payload) {
   hideConflict();
   state.loaded = payload;
   showDuplicateFieldNote(payload.fields);
+  state.fields = payload.fields || [];
+  fieldInputs.clear();
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);
@@ -642,12 +647,23 @@ function buildFieldEditor(keys) {
     input.setAttribute('aria-labelledby', labelCell.id);
     input.rows = 2;
     input.value = toEditableValue(state.draftFieldData[key]);
+    const note = readOnlyNote(key);
+    input.disabled = Boolean(note);
     input.addEventListener('input', () => {
+      if (readOnlyNote(key)) return;
       state.draftFieldData[key] = parseEditableValue(input.value, key);
       debouncedMarkDirtyState();
     });
     fieldInputs.set(key, input);
     inputCell.appendChild(input);
+    const noteText = note || (state.fields.find((field) => field.name === key)?.global ? 'Session-wide: changes apply throughout this session.' : '');
+    if (noteText) {
+      const help = document.createElement('p');
+      help.id = `${input.id}-note`;
+      help.textContent = noteText;
+      input.setAttribute('aria-describedby', help.id);
+      inputCell.appendChild(help);
+    }
     tr.appendChild(inputCell);
     tbody.appendChild(tr);
   }
@@ -655,6 +671,18 @@ function buildFieldEditor(keys) {
   table.appendChild(tbody);
   wrapper.appendChild(table);
   fieldEditor.replaceChildren(wrapper);
+}
+
+function readOnlyNote(name) {
+  const metadata = state.fields.find((field) => field.name === name) || {};
+  if (metadata.type === 'calculation') return 'Calculated by FileMaker; cannot be edited';
+  if (metadata.type === 'summary') return 'Summary field; cannot be edited';
+  if ((metadata.result || metadata.type || '').toLowerCase() === 'container') return 'Use Upload to container';
+  return '';
+}
+
+function editableFields(values) {
+  return Object.fromEntries(Object.entries(values).filter(([name]) => !readOnlyNote(name)));
 }
 
 function fieldPresentation(name) {
@@ -703,8 +731,8 @@ function collectDraftPayload() {
 
   return {
     ...base,
-    originalFieldData: state.originalFieldData,
-    draftFieldData: state.draftFieldData
+    originalFieldData: editableFields(state.originalFieldData),
+    draftFieldData: editableFields(state.draftFieldData)
   };
 }
 

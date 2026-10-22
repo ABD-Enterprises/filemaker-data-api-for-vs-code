@@ -207,6 +207,7 @@ describe('BatchService.batchUpdate', () => {
     const result = await service.batchUpdate(profile(), 'Contacts', entries);
 
     expect(result).toEqual({
+      rowsWithModId: 0, rowsChecked: 0, skippedColumns: [], warnings: [],
       dryRun: true,
       total: 2,
       attempted: 0,
@@ -374,7 +375,7 @@ describe('batch export then import round trip', () => {
   it('keeps number-looking and JSON-looking cells as text; empty cells are skipped', async () => {
     const csv = await exportRecords([record('1', { code: '12', flag: 'true', blank: '', text: 'plain' })]);
     expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
-      { recordId: '1', fieldData: { code: '12', flag: 'true', text: 'plain' } }
+      { recordId: '1', modId: '1', fieldData: { code: '12', flag: 'true', text: 'plain' } }
     ]);
   });
 });

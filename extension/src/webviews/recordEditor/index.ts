@@ -509,7 +509,7 @@ export class RecordEditorPanel {
           profileId: payload.profileId,
           layout: payload.layout,
           presentationFields: designerLayoutMetadata(payload.layout, schema.metadata ?? { fields: schema.fields }).fields,
-          fields: schema.fields.map((field) => ({ name: field.name, type: field.type, result: field.result })),
+          fields: schema.fields.map((field) => ({ name: field.name, type: field.type, global: field.global, result: field.result })),
           metadataSupported: schema.supported,
           message: schema.message
         }
