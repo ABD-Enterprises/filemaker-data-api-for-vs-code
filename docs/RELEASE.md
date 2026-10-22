@@ -19,7 +19,7 @@ Tags matching `v*` are protected by a repository ruleset (creation, update and d
 
 The Entra identity is not set up yet (the `marketplace` environment has no `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` variables), so the **publish** job stops at "Require the Azure identity settings" and **release** is skipped. Until the one-time setup in [JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md) is done, publish by hand: see [Manual publish](#manual-publish-fallback). Do the setup before 2026-12-01, when Microsoft stops accepting the personal access tokens that `vsce` used.
 
-Versions 1.2.0 and 1.3.0 were published by manual upload and were never tagged. Tags `v1.0.0` and `v1.1.0` exist. Version 1.4.0 was also published by hand, and so were 1.5.0 and 1.6.0 (1.4.0 and 1.5.0 have no tag or GitHub release yet; see [JOB_AID_MANUAL_RELEASE.md](./JOB_AID_MANUAL_RELEASE.md)).
+Versions 1.2.0 and 1.3.0 were published by manual upload and were never tagged. Tags `v1.0.0`, `v1.1.0` and `v1.6.0` exist. Version 1.4.0 was also published by hand, and so were 1.5.0 and 1.6.0 (1.4.0 and 1.5.0 have no tag or GitHub release; see [JOB_AID_MANUAL_RELEASE.md](./JOB_AID_MANUAL_RELEASE.md)).
 
 ## Versioning
 

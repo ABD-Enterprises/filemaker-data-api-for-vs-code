@@ -180,7 +180,7 @@ blast radius if it is exfiltrated.
 ## Confirmations
 
 The extension asks before it: saves a record (listing the changed fields),
-deletes a record, executes a batch update, runs workspace plugins, starts the
+deletes a record, executes a batch update (and asks whether to check each record for newer changes or overwrite them, or whether to continue when the file has no modId column), warns before saving text that contains a NUL character, asks before overwriting generated files that the extension did not write, asks twice before Test My Server's write test (create, edit, delete a scratch record) and before it runs a script, runs workspace plugins, starts the
 FM Web preview (`npm install`, `npm run dev`), runs a Layout Mode `runScript`
 behavior, sends credentials to an address that came from a workspace profile
 template or to a remote `http://` address, switches AI tools back on, and for
@@ -197,7 +197,7 @@ plugin imports from outside its folder is not covered by the hash.
 
 ## Logs and redaction
 
-Logs, request history, metrics, error details and copied snippets pass through
+Logs, request history, metrics, error details and copied snippets (free-text API keys and FileMaker access-token headers in error text are masked too) pass through
 one redaction function. It hides authorization headers, session tokens
 (including in request paths such as `DELETE /sessions/<token>`), token-like
 query parameters, JSON keys whose names contain `token`, `secret`, `password`,
