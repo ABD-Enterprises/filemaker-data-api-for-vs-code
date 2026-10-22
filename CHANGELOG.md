@@ -71,6 +71,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Split AI tool code into smaller parts, keeping the same approvals, safety checks and results; test spaces around preview record IDs and exact layout and script names.
 - Maintenance: split the Query Builder host code into smaller parts, check that rejected sessions stop after one retry and uploads keep the record version, and keep connection helpers out of the API pages.
 
 - Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.

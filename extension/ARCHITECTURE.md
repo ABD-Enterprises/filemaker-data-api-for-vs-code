@@ -86,8 +86,16 @@ Generated API documentation for `src/services` and `src/types` is published at [
 ### AI Tools
 
 - `src/ai/aiToolService.ts`
-  - the one tool core: policy, layout consent, caps, hidden-field filter, host-built write dialogs, script allowlist, redaction, audit
+  - the one tool core and public entry point: live policy, session state, layout consent, caps, post-dialog checks and audit
   - transports are thin and add no policy
+- `src/ai/tools/reads.ts`, `src/ai/tools/writes.ts`
+  - read and write execution; delegate consent, quota reservations, write caps and policy re-checks to the session-owned service
+- `src/ai/tools/fields.ts`, `src/ai/tools/results.ts`
+  - exact field validation and write refusals; result caps, hidden-field filtering and value redaction
+- `src/ai/tools/errors.ts`, `src/ai/tools/types.ts`
+  - safe model errors and shared contracts; the entry point re-exports its original public surface
+- `src/ai/aiConfirmations.ts`, `src/ai/aiScrub.ts`
+  - host-built approval text and server-address scrubbing, shared without importing the service
 - `src/ai/aiRegistration.ts`
   - registers VS Code language-model tools for what the core currently offers; status model
 - `src/ai/aiToolDefinitions.ts`, `aiSchema.ts`, `aiSettings.ts`, `aiAudit.ts`, `fileMakerErrors.ts`
