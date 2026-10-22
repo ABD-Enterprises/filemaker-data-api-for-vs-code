@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [INTERNAL] Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
+
 - [FIX] Let Create Record recover from a failed field lookup; keep later real edits after skipped-only rows, ignore spaces around JSON record IDs and versions, and recognize matching retry results despite number, space or line-ending differences. Cancelling stops further record checks.
 - [FIX] Handle repeating read-only fields in imports, Record Editor saves and AI writes; check uncertain batch retries, skip duplicate record rows, and keep skipped values out of dry-run previews.
 - [FIX] Protect batch updates with the exported record version, skip records changed since export, and ask before overwriting newer changes or using files without versions. Dry runs report how many rows can be checked.

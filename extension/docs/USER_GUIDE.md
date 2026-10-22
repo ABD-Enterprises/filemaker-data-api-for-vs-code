@@ -4,6 +4,8 @@ This is the manual for operators and developers who use the extension to work wi
 
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
+The next maintenance update reorganizes the connection code. Keep using the same connection settings and commands described here.
+
 ## Contents
 
 1. [First run in 10 minutes](#first-run-in-10-minutes)
