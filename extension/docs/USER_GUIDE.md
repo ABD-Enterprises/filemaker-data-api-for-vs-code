@@ -2,6 +2,8 @@
 
 This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.7, including what changed since 1.6 (listed under [New in 1.7](#new-in-17)). Earlier changes remain under [New in 1.6](#new-in-16) and [New in 1.5](#new-in-15). The screenshots show a mock FileMaker Data API with made-up data. They are from an older version; version labels and some field styling differ, and panels now follow your editor theme. You can open it from VS Code with **FileMaker: Open User Guide**.
 
+You can also read the [User Guide on the website](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/), the [upgrade notes](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/upgrade/) and the [changelog by version](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/). The website follows the guide in this repository and is rebuilt when changes reach the main branch.
+
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
 ## Contents
@@ -1183,7 +1185,7 @@ Connection errors name the step that failed and what to do. The most common firs
 | "only offers old TLS versions" / "no TLS version or cipher is shared" | The server or proxy needs TLS 1.2 or newer. Ask the administrator. The extension will not lower its minimum. |
 | "<host> does not speak https on that port" | Wrong port, or a plain-http service. Check the Server URL and port. |
 | "The connection to <host> was closed. The server may only accept https" | You used `http://` against an HTTPS-only server. Use `https://`. |
-| "Nothing is listening on <host:port>" | Wrong port, or FileMaker Server or the Data API is not running. |
+| "Nothing is listening on `<host:port>`" | Wrong port, or FileMaker Server or the Data API is not running. |
 | "The name <host> could not be found" / "could not be looked up right now" | Misspelt host name, or the VPN is not connected / DNS is not answering. |
 | "Connecting to <host> timed out" / "no network route" | A firewall is dropping the traffic, the server is unreachable, or your VPN is down. Raise `filemaker.requestTimeoutMs` only for a slow (not unreachable) server. |
 | "The server closed the connection ... before answering" | The server restarted, or a firewall or proxy dropped the connection. Try again; if it keeps happening, ask the administrator. |

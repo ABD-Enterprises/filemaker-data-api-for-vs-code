@@ -91,6 +91,8 @@ Do this against the release branch (the content that will be tagged), not after 
 
 ### 5. Verify after publishing
 
+- [ ] The docs site rebuilds on every push to main; open the [changelog page](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/) and confirm the new version appears.
+
 - [ ] The Marketplace page shows the new version and the new changelog (it can take up to about 10 minutes): `npx @vscode/vsce show SureForgeTech.filemaker-data-api-tools`, or the [listing](https://marketplace.visualstudio.com/items?itemName=SureForgeTech.filemaker-data-api-tools).
 - [ ] The README on the listing renders, images load, and links work (click them; they are rewritten to GitHub URLs when the VSIX is built).
 - [ ] **FileMaker: About / Show Version** in the published build shows the version you released.

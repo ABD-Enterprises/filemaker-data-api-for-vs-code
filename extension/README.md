@@ -151,7 +151,13 @@ Details: [Using AI with FileMaker](https://github.com/SureForgeTech/filemaker-da
 
 Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/security.md), the [data handling notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/docs/DATA_HANDLING.md), and the [security policy](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/SECURITY.md) for how to report a vulnerability.
 
-## More
+## Documentation
+
+| I want to... | Read |
+| --- | --- |
+| Browse the website | [Documentation home](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/) |
+| Use the extension | [User Guide](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/) |
+| See version changes | [Changelog by version](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/) and [upgrade notes](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/upgrade/) |
 
 - [User Guide](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/USER_GUIDE.md)
 - [Changelog](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CHANGELOG.md) and [upgrade notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/UPGRADE.md)

@@ -1,5 +1,7 @@
 # FileMaker failure modes: what goes wrong, what the extension does, what to change
 
+For connection help, start with [Troubleshooting in the User Guide](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/#troubleshooting). The website also has upgrade notes and a changelog by version.
+
 Maintainer-facing catalogue. First written 2026-10-18 against `main` at `10359e9`, then re-baselined at `e2d4b28`. Non-certificate behaviour re-checked in source on 2026-10-20 at `6c73839` (1.6.0 plus subsequent fixes). **Code** below means this source review, not a new real-server run. Certificate rows (1.1–1.10, 1.12 and 1.27) and certificate-specific backlog entries retain their earlier evidence and are awaiting a separate review. Historical **Run** observations describe the original reproduction, not necessarily today's behaviour.
 Scope: the Data API client (`extension/src/services/fmClient.ts` and its helpers in `extension/src/services/fmClient/`), its error pipeline
 (`normalizeError`, `errorUx`), the connection wizard, the Explorer, the record editor, the script

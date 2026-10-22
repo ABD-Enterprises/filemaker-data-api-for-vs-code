@@ -103,6 +103,8 @@ There is no supported way to avoid that red run with the current workflow (the r
 
 ## 4. After publishing
 
+- The docs site rebuilds on every push to main; open the [changelog page](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/) and confirm the new version appears.
+
 - <https://marketplace.visualstudio.com/items?itemName=SureForgeTech.filemaker-data-api-tools> shows **1.7.0** (it can take several minutes) and its **Changelog** tab shows the 1.7.0 section. Or run `npx @vscode/vsce show SureForgeTech.filemaker-data-api-tools` (checked: `vsce show <extensionid>` exists in vsce 4.0.0).
 - In a clean VS Code profile, install it from the Marketplace and run **FileMaker: About / Show Version**: it must say 1.7.0 and a build. (`code --user-data-dir /tmp/fm-user --extensions-dir /tmp/fm-ext --install-extension SureForgeTech.filemaker-data-api-tools`.)
 - Run the [smoke test](../extension/docs/QA/SMOKE_TEST.md) checks 1 to 12 against a real FileMaker Server.

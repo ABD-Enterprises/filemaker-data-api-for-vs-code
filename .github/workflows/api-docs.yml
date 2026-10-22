@@ -1,4 +1,4 @@
-name: API Docs
+name: Documentation
 
 on:
   push:
@@ -46,10 +46,10 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 
-      - name: Stage API Docs
+      - name: Stage Documentation
         run: |
+          node tools/build-docs-site.mjs --out pages
           mkdir -p pages/api
-          touch pages/.nojekyll
           cp -R docs/api/. pages/api/
 
       - name: Upload GitHub Pages Artifact
