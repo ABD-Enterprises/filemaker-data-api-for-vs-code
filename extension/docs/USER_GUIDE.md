@@ -182,6 +182,8 @@ You need:
 
 See [Compatibility](./COMPATIBILITY.md) for server versions and caveats.
 
+The maintenance review keeps support for VS Code 1.96 or newer. Your saved connections, certificate choices and proxy settings carry over; there are no new commands or setup steps.
+
 Use a dedicated account for this work, with only the access you need. A FileMaker privilege set is the one limit that holds no matter what the extension, an AI tool or you do.
 
 ### Trusted workspace and Restricted Mode

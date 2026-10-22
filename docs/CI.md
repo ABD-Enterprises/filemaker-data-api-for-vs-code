@@ -70,6 +70,23 @@ On Windows, run them in PowerShell or cmd.exe with Node 22 and Git on the PATH (
 
 ## Dependencies
 
+### Maintenance review, 2026-10-21
+
+The supplied lockfile and installed packages already contain Axios 1.20.0, zod 4.6.5, typescript-eslint parser/plugin 8.72.0, esbuild 0.28.2, ESLint 10.13.0, globals 17.13.0, Prettier 3.9.10, TypeDoc 0.28.20 and nock 14.0.17. Only the extension's parser declaration needed alignment from `^8.33.1` to `^8.72.0`; no resolved package version changed. No formatter was run. Offline `npm outdated` could not find cached registry metadata, so this is a review of the supplied versions, not a claim that they are the latest releases. Offline production and full audits print zero findings because npm skips advisory retrieval in offline mode; neither result verifies a clean audit. Both audits still need a network-enabled run.
+
+Version limits for this maintenance task (the first three major versions are already in the supplied checkout and were left unchanged):
+
+- **TypeScript:** keep the existing 7.0.2 compiler and `typescript6` test alias; consider another major only after compiler, test and documentation-tool compatibility passes. TypeDoc 0.28.20 declares support through TypeScript 6.0.x, so its compatibility with the existing compiler still needs a separate review.
+- **Vitest and coverage:** keep the existing 5.0.5 versions together; consider another major only after the test configuration, coverage provider and coverage floors pass together.
+- **@vscode/vsce:** keep the existing 4.0.0; consider another major only after its Node requirements and the actual VSIX contents and size pass the release checks.
+- **@types/vscode:** keep `~1.96.0` with engine `^1.96.0`; move beyond the 1.96 line only when the minimum supported editor is deliberately raised and packaging passes.
+- **@types/node:** keep the 22 line; move beyond it only when the supported runtime and CI move together and extension compatibility is checked.
+- **nock:** keep major 14; consider major 15 only after its changed interceptors pass the TLS, proxy and MCP tests that use real sockets.
+
+Axios stays at the supplied 1.20.0. Its local `node_modules/axios/CHANGELOG.md` stops at 1.19.0, so it does not supply release notes for 1.20.0. Before any further Axios update, read the matching release notes and pass the custom transport, TLS, pinning and proxy tests outside the socket-restricted sandbox; keep the previous version if those behaviors change. The installed HTTP adapter still accepts `transport`, preserves an installed proxy tunnel agent and uses the supplied HTTPS agent when no tunnel agent is set. The extension uses `maxRedirects: 0`; pinning, proxy refusal and connection deadlines must keep working.
+
+### Automated updates
+
 Dependabot checks npm weekly (Monday 09:00 UTC) and GitHub Actions weekly. Root npm updates are grouped (`dev-dependencies`, `production-dependencies`, `security-patches`). Some packages (`axios`, `next`, `react`, `react-dom`, `zod`) have a 30-day cooldown. `@types/vscode` is ignored on purpose: it must stay compatible with the minimum `engines.vscode`, because `vsce package` fails when it is newer. Major updates to `nock` are ignored because version 15 changes interceptors and breaks the real-socket TLS and MCP tests; major updates to `@types/node` are ignored to keep types aligned with Node 22. The reasons are in `.github/dependabot.yml` next to each rule. The separate `/tools/publish` npm entry groups publish-tool updates with a seven-day cooldown. GitHub Actions minor and patch updates are grouped with a seven-day cooldown; major updates are ignored.
 
 | Update | Handling |

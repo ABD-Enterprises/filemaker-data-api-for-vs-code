@@ -358,6 +358,7 @@ This is the adoption backlog. “Verified” means the current source was inspec
 
 ### Review notes
 
+- Dependency maintenance keeps the supplied Axios 1.20.0 and the existing certificate and proxy behavior. The local release notes stop at 1.19.0; real-socket TLS, pinning and proxy tests must pass outside the restricted sandbox before another Axios update. See the [dependency review and version limits](CI.md#maintenance-review-2026-10-21).
 - Review claim 1 is partly out of date: PR 434 already made trusted-fingerprint and older allow-self-signed profiles work with VS Code's default proxySupport. Pinned connections through a proxy remain refused.
 - Review claim 3's Active Directory part is unverified and likely wrong: external-server accounts are expected to use the ordinary Basic login. Verify the Claris docs and a real AD account; OAuth is a separate missing sign-in flow.
 - Review claim 4 is partly fixed: exports now note truncated portals, and the Record Viewer can Load more directly. Creating related rows, AI paging and proxy portal paging remain adoption debt.

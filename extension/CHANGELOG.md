@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Maintenance: align the code-checking tool versions and record dependency limits while keeping VS Code 1.96 support.
 - [FIX] Handle repeating read-only fields in imports, Record Editor saves and AI writes; check uncertain batch retries, skip duplicate record rows, and keep skipped values out of dry-run previews.
 
 - [FIX] Protect batch updates with the exported record version, skip records changed since export, and ask before overwriting newer changes or using files without versions. Dry runs report how many rows can be checked.
