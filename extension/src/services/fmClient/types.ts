@@ -1,10 +1,12 @@
 import type { PortalPaging } from '../../types/fm';
 
+/** @internal */
 export interface LayoutCacheEntry {
   expiresAt: number;
   layouts: string[];
 }
 
+/** @internal */
 export interface RequestOptions {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
@@ -18,6 +20,7 @@ export interface RequestOptions {
   maxResponseBytes?: number;
 }
 
+/** @internal */
 export interface HistoryContext {
   recordHistory?: boolean;
   profileId: string;
@@ -26,6 +29,7 @@ export interface HistoryContext {
   endpoint: string;
 }
 
+/** @internal */
 export interface RequestTrace {
   operation: string;
   requestId: string;
@@ -34,6 +38,7 @@ export interface RequestTrace {
   endpoint: string;
 }
 
+/** @internal */
 export interface ClientRequestControl {
   portal?: PortalPaging;
   signal?: AbortSignal;
@@ -59,6 +64,7 @@ export interface FMClientContainerUploadOptions {
   maxBytes?: number;
 }
 
+/** @internal */
 export interface AuthPause {
   code: string;
   /** Hash of the account, password and server the rejection was for; a change ends the pause. */
@@ -88,6 +94,7 @@ export interface EditRecordOptions {
   modId?: string;
 }
 
+/** @internal */
 export const DEFAULT_LAYOUT_TTL_MS = 60_000;
 
 /** The Claris guide advises keeping a Data API URL under 2000 characters (URL and data format notes). */
