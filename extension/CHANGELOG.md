@@ -10,6 +10,8 @@
 - [INTERNAL] Maintenance: include the CSV portal note column only when related rows are missing, count repeated fields once in Test My Server, and name repeated fields in Layout Inspector.
 - [INTERNAL] Maintenance: show the request options used by public client methods in the API reference.
 
+- [INTERNAL] Split the connection wizard into smaller host-side parts for easier maintenance, keeping its screens, checks and messages the same.
+- [INTERNAL] Split AI tool code into smaller parts, keeping the same approvals, safety checks and results; test spaces around preview record IDs and exact layout and script names.
 - [INTERNAL] Maintenance: split the Query Builder host code into smaller parts, check that rejected sessions stop after one retry and uploads keep the record version, and keep connection helpers out of the API pages.
 
 - [FIX] Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.

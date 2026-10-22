@@ -80,6 +80,8 @@ PR title prefix matches the highest-tier label added:
 - Maintenance: include the CSV portal note column only when related rows are missing, count repeated fields once in Test My Server, and name repeated fields in Layout Inspector.
 - Maintenance: show the request options used by public client methods in the API reference.
 
+- Split the connection wizard into smaller host-side parts for easier maintenance, keeping its screens, checks and messages the same.
+- Split AI tool code into smaller parts, keeping the same approvals, safety checks and results; test spaces around preview record IDs and exact layout and script names.
 - Maintenance: split the Query Builder host code into smaller parts, check that rejected sessions stop after one retry and uploads keep the record version, and keep connection helpers out of the API pages.
 
 - Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.

@@ -1,54 +1,24 @@
 import { fieldType, readOnlyFieldKind } from '../utils/fieldAccess';
-import { EMPTY_FIND_ADVICE, hasFindCriteria } from '../utils/findCriteria';
-import { containsNulText, NUL_TEXT_WARNING } from '../utils/nulText';
-import type { EnterpriseFeatureId, FeatureGuardResult } from '../enterprise/roleGuard';
-import type {
-  ConnectionProfile,
-  EditRecordResult,
-  FileMakerRecord,
-  FindRecordsRequest,
-  FindRecordsResult,
-  RunScriptRequest,
-  RunScriptResult,
-  SchemaMetadataResult
-} from '../types/fm';
-
-import { FMClientError, isRecordModifiedConflict } from '../services/errors';
-import { redactString } from '../utils/redact';
+import { EMPTY_FIND_ADVICE } from '../utils/findCriteria';
+import type { EnterpriseFeatureId } from '../enterprise/roleGuard';
+import type { ConnectionProfile, SchemaMetadataResult } from '../types/fm';
 import type { AuditEntry } from './aiAudit';
 import { explainFileMakerError } from './fileMakerErrors';
 import { AiInputError, validateInput } from './aiSchema';
 import type { AiSettings } from './aiSettings';
-import {
-  AI_TOOL_DEFINITIONS,
-  MAX_FIELDS_PER_WRITE,
-  MAX_RECORDS_PER_CALL,
-  MAX_WRITE_VALUE_CHARS,
-  findToolDefinition,
-  type AiToolDefinition
-} from './aiToolDefinitions';
-import {
-  CONTAINER_MARKER,
-  HiddenFields,
-  PLACEHOLDER_MARKERS,
-  URL_OMITTED_MARKER,
-  baseFieldName,
-  scrubGenericText,
-  displayText,
-  exactFieldNameOrUndefined,
-  safeNameOrUndefined
-} from './aiText';
-import { assertUsableUrlName } from '../utils/urlSegment';
-import {
-  accountName,
-  buildCreateConfirmation,
-  buildDeleteConfirmation,
-  buildEditConfirmation,
-  buildScriptConfirmation,
-  valueText
-} from './aiConfirmations';
+import { AI_TOOL_DEFINITIONS, findToolDefinition, type AiToolDefinition } from './aiToolDefinitions';
+import { HiddenFields, displayText, safeNameOrUndefined } from './aiText';
+import { accountName } from './aiConfirmations';
 import { scrub } from './aiScrub';
+import { AiToolError, errorNote, toModelError } from './tools/errors';
+import { usableFieldName } from './tools/fields';
+import { describeLayout, findRecords, getRecord, listLayouts, listScripts } from './tools/reads';
+import { createRecord, deleteRecord, editRecord, runScript, type WriteToolRuntime } from './tools/writes';
+import type { AiCallContext, AiStatus, AiToolDeps, ConfirmSpec, Control, Env, LayoutFields, Obj, Trace } from './tools/types';
 
+export { AiToolError, toModelError } from './tools/errors';
+export { MAX_RESULT_CHARS } from './tools/results';
+export type { AiCallContext, AiStatus, AiToolDeps, ConfirmSpec } from './tools/types';
 export { buildCreateConfirmation, buildDeleteConfirmation, buildEditConfirmation, buildScriptConfirmation } from './aiConfirmations';
 export { scrub } from './aiScrub';
 
@@ -56,102 +26,11 @@ export const SESSION_RECORD_QUOTA = 500;
 export const CALLS_PER_MINUTE = 30;
 export const WRITES_PER_SESSION = 10;
 export const WRITES_PER_MINUTE = 3;
-export const MAX_RESULT_CHARS = 200_000;
-const MAX_VALUE_CHARS = 2000;
-const MAX_PORTAL_ROWS = 20;
-const MAX_LAYOUTS_LISTED = 200;
-const MAX_SCRIPT_RESULT_CHARS = 10_000;
 const MINUTE_MS = 60_000;
 /** A response body larger than this is refused by the client (not applied in proxy mode). */
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_CONSENT_PROMPTS = 20;
 const MAX_REFUSAL_AUDIT_PER_MINUTE = 10;
-
-/** An error whose message is written for the model: it never carries a secret or the server address. */
-export class AiToolError extends Error {
-  public constructor(
-    message: string,
-    public readonly outcome: 'refused' | 'error' = 'refused'
-  ) {
-    super(message);
-    this.name = 'AiToolError';
-  }
-}
-
-export interface ConfirmSpec {
-  title: string;
-  message: string;
-  detail: string;
-  confirmLabel: string;
-}
-
-/** What the tools pass to the client with each request. */
-interface Control {
-  signal?: AbortSignal;
-  maxResponseBytes?: number;
-}
-
-export interface AiToolDeps {
-  /** Read fresh for every call, so a settings change applies at once. */
-  settings(): AiSettings;
-  /** `filemaker.features.ai.enabled` (restrict-only). */
-  featureSwitchOn(): boolean;
-  featureGuard(feature: EnterpriseFeatureId): FeatureGuardResult;
-  isTrusted(): boolean;
-  isOffline(): boolean;
-  getProfile(id: string): Promise<ConnectionProfile | undefined>;
-  client: {
-    listLayouts(profile: ConnectionProfile, control?: Control): Promise<string[]>;
-    listScripts(profile: ConnectionProfile, control?: Control): Promise<string[]>;
-    getRecord(profile: ConnectionProfile, layout: string, recordId: string, control?: Control): Promise<FileMakerRecord>;
-    findRecords(profile: ConnectionProfile, layout: string, body: FindRecordsRequest, control?: Control): Promise<FindRecordsResult>;
-    editRecord(
-      profile: ConnectionProfile,
-      layout: string,
-      recordId: string,
-      fieldData: Record<string, unknown>,
-      control?: Control,
-      options?: { modId?: string }
-    ): Promise<EditRecordResult>;
-    createRecord(profile: ConnectionProfile, layout: string, fieldData: Record<string, unknown>, control?: Control): Promise<EditRecordResult>;
-    deleteRecord(profile: ConnectionProfile, layout: string, recordId: string, control?: Control): Promise<EditRecordResult>;
-    runScript(profile: ConnectionProfile, request: RunScriptRequest, control?: Control): Promise<RunScriptResult>;
-  };
-  schema: { getLayoutSchema(profile: ConnectionProfile, layout: string): Promise<SchemaMetadataResult> };
-  ui: {
-    /** A modal the user must answer; true only for an explicit confirm. */
-    confirm(spec: ConfirmSpec): Promise<boolean>;
-    /** Tells the user that a request was cancelled while a dialog of theirs is still open. */
-    notifyCancelled?(): void;
-    /** A text prompt; undefined when dismissed. */
-    input(spec: { title: string; prompt: string }): Promise<string | undefined>;
-  };
-  audit: { record(entry: AuditEntry): Promise<void> };
-  now(): number;
-}
-
-export interface AiCallContext {
-  signal?: AbortSignal;
-  /** What the caller says it is (for example an MCP client name). Audit only; never shown as fact. */
-  client?: string;
-}
-
-export interface AiStatus {
-  killed: boolean;
-  recordsUsed: number;
-  recordQuota: number;
-  writesUsed: number;
-  writeCap: number;
-}
-
-type Obj = Record<string, unknown>;
-
-interface LayoutFields {
-  names: Set<string>;
-  containers: Set<string>;
-  readOnly: Map<string, string>;
-  types: Map<string, string>;
-}
 
 /**
  * The tool core (ADR-0004). It owns policy, consent, caps, redaction and audit. A transport
@@ -436,426 +315,51 @@ export class AiToolService {
     const hidden = new HiddenFields(this.deps.settings().hiddenFields);
     const env: Env = { profile, control, hidden, trace, definition: definitionRef };
 
+    const runtime: WriteToolRuntime = {
+      deps: this.deps,
+      useLayout: (env, layout) => this.useLayout(env, layout),
+      layoutSchema: (env, layout) => this.layoutSchema(env, layout),
+      layoutFields: (env, layout) => this.layoutFields(env, layout),
+      withRecords: (wanted, request) => this.withRecords(wanted, request),
+      quota: () => this.quota(),
+      takeWriteSlot: () => this.takeWriteSlot(),
+      dialog: (env, spec) => this.dialog(env, spec),
+      recheck: (env) => this.recheck(env)
+    };
+
     switch (definition.name) {
       case 'fm_list_layouts':
-        return this.listLayouts(env);
+        return listLayouts(runtime, env);
       case 'fm_list_scripts':
-        return this.listScripts(env);
+        return listScripts(runtime, env);
       case 'fm_describe_layout':
-        return this.describeLayout(env, input.layout as string);
+        return describeLayout(runtime, env, input.layout as string);
       case 'fm_find_records':
-        return this.findRecords(env, input);
+        return findRecords(runtime, env, input);
       case 'fm_get_record':
-        return this.getRecord(env, input.layout as string, input.recordId as string);
+        return getRecord(runtime, env, input.layout as string, input.recordId as string);
       case 'fm_edit_record':
-        return this.editRecord(env, input);
+        return editRecord(runtime, env, input);
       case 'fm_create_record':
-        return this.createRecord(env, input);
+        return createRecord(runtime, env, input);
       case 'fm_delete_record':
-        return this.deleteRecord(env, input);
+        return deleteRecord(runtime, env, input);
       case 'fm_run_script':
-        return this.runScript(env, input);
+        return runScript(runtime, env, input);
       default:
         throw new AiToolError('Unknown tool.');
     }
   }
 
   // ---------------------------------------------------------------------------------------
-  // Reads
-
-  private async listLayouts(env: Env): Promise<unknown> {
-    const layouts = await this.deps.client.listLayouts(env.profile, env.control);
-    return listNames('layouts', layouts);
-  }
-
-  private async listScripts(env: Env): Promise<unknown> {
-    const scripts = await this.deps.client.listScripts(env.profile, env.control);
-    return listNames('scripts', scripts);
-  }
-
-  private async describeLayout(env: Env, layout: string): Promise<unknown> {
-    await this.useLayout(env, layout);
-    const schema = await this.layoutSchema(env, layout);
-    let unusable = 0;
-    const fields: Obj[] = [];
-    const seen = new Set<string>();
-    let duplicates = 0;
-    for (const field of schema.fields) {
-      if (env.hidden.isHidden(field.name)) {
-        continue;
-      }
-      const name = usableFieldName(field.name);
-      if (name === undefined) {
-        unusable += 1;
-        continue;
-      }
-      if (seen.has(name)) { duplicates++; continue; }
-      seen.add(name);
-      const type = field.result ?? field.type;
-      fields.push({
-        name,
-        type: typeof type === 'string' ? type.slice(0, 30) : undefined,
-        repetitions: typeof field.repetitions === 'number' && field.repetitions > 1 ? field.repetitions : undefined
-      });
-    }
-    return { layout, fields, ...(duplicates ? { note: 'Repeated fields are shown once. Each exact field name has one value in a record.', duplicateFields: duplicates } : {}), unusableFields: unusable > 0 ? unusable : undefined };
-  }
-
-  private async findRecords(env: Env, input: Obj): Promise<unknown> {
-    const layout = input.layout as string;
-    await this.useLayout(env, layout);
-    const fields = await this.layoutFields(env, layout);
-
-    const requests = input.requests as Array<{ fields: Record<string, string>; omit?: boolean }>;
-    const query = requests.map((request) => {
-      const entries = Object.entries(request.fields);
-      if (entries.length === 0) {
-        throw new AiToolError(EMPTY_FIND_ADVICE);
-      }
-      // No prototype, so a field called "__proto__" or "constructor" is only a key.
-      const criteria = Object.create(null) as Obj;
-      for (const [fieldName, value] of entries) {
-        criteria[this.knownField(fields, fieldName)] = value;
-      }
-      if (request.omit === true) {
-        criteria.omit = 'true';
-      }
-      return criteria;
-    });
-    if (!hasFindCriteria(query)) throw new AiToolError(EMPTY_FIND_ADVICE);
-    if (query.every((criteria) => criteria.omit === 'true')) {
-      throw new AiToolError('At least one find request must not be an omit request.');
-    }
-
-    const sort = ((input.sort as Array<{ field: string; order?: 'asc' | 'desc' }> | undefined) ?? []).map((item) => ({
-      fieldName: this.knownField(fields, item.field),
-      sortOrder: item.order === 'desc' ? 'descend' : 'ascend'
-    }));
-
-    const outcome = await this.withRecords((input.limit as number | undefined) ?? 20, async (limit) => {
-      const body: FindRecordsRequest = {
-        query,
-        ...(sort.length > 0 ? { sort } : {}),
-        limit,
-        ...(input.offset !== undefined ? { offset: input.offset as number } : {})
-      };
-      const result = await this.deps.client.findRecords(env.profile, layout, body, env.control);
-      const shaped = this.shapeRecords(result.data.slice(0, limit), fields, env);
-      return { value: { result, shaped, limit }, returned: shaped.records.length };
-    });
-
-    env.trace.recordIds = outcome.shaped.records.map((record) => String(record.recordId));
-    const foundCount = outcome.result.dataInfo?.foundCount;
-    return this.finish({
-      layout,
-      foundCount: typeof foundCount === 'number' ? foundCount : undefined,
-      records: outcome.shaped.records,
-      truncated: outcome.shaped.truncated || outcome.result.data.length > outcome.limit,
-      quota: this.quota()
-    });
-  }
-
-  private async getRecord(env: Env, layout: string, recordId: string): Promise<unknown> {
-    await this.useLayout(env, layout);
-    const fields = await this.layoutFields(env, layout);
-    const shaped = await this.withRecords(1, async () => {
-      const record = await this.deps.client.getRecord(env.profile, layout, recordId, env.control);
-      return { value: this.shapeRecords([record], fields, env), returned: 1 };
-    });
-    env.trace.recordIds = [recordId];
-    return this.finish({ layout, records: shaped.records, truncated: shaped.truncated, quota: this.quota() });
-  }
+  // Read quota
 
   private quota(): { used: number; limit: number } {
     return { used: this.recordsUsed, limit: SESSION_RECORD_QUOTA };
   }
 
-  /** Enforces the result size cap on the way out. Each record is serialized once. */
-  private finish(result: { records: unknown[]; truncated: boolean } & Obj): Obj {
-    const records = result.records;
-    const sizes = records.map((record) => JSON.stringify(record).length + 1);
-    let total = JSON.stringify({ ...result, records: [], truncated: true }).length + sizes.reduce((sum, size) => sum + size, 0);
-    while (total > MAX_RESULT_CHARS && records.length > 0) {
-      total -= sizes.pop() as number;
-      records.pop();
-      result.truncated = true;
-    }
-    return result;
-  }
-
-  private shapeRecords(
-    records: FileMakerRecord[],
-    fields: LayoutFields,
-    env: Env
-  ): { records: Obj[]; truncated: boolean } {
-    let truncated = records.length > MAX_RECORDS_PER_CALL;
-    const shaped = records.slice(0, MAX_RECORDS_PER_CALL).map((record) => {
-      const out: Obj = {
-        recordId: String(record.recordId),
-        modId: record.modId === undefined ? undefined : String(record.modId),
-        fields: shapeValues(record.fieldData ?? {}, env, fields.containers)
-      };
-      if (record.portalData && typeof record.portalData === 'object') {
-        const portals = Object.create(null) as Obj;
-        const portalCounts = Object.create(null) as Obj;
-        for (const [portalName, rows] of Object.entries(record.portalData)) {
-          const name = exactFieldNameOrUndefined(portalName);
-          if (name === undefined || env.hidden.isHidden(portalName) || !Array.isArray(rows)) {
-            continue;
-          }
-          const info = record.portalDataInfo?.find((item) => item.portalObjectName === portalName || (!item.portalObjectName && item.table === portalName));
-          const total = typeof info?.foundCount === 'number' ? info.foundCount : undefined;
-          const returned = Math.min(rows.length, MAX_PORTAL_ROWS);
-          if (rows.length > returned || (total !== undefined && total > returned)) truncated = true;
-          portalCounts[name] = { returned, ...(total !== undefined ? { total } : {}) };
-          portals[name] = rows.slice(0, MAX_PORTAL_ROWS).map((row) => shapeValues(row, env, new Set()));
-        }
-        out.portals = portals;
-        out.portalCounts = portalCounts;
-      }
-      return out;
-    });
-    return { records: shaped, truncated };
-  }
-
   // ---------------------------------------------------------------------------------------
-  // Writes
-
-  private async editRecord(env: Env, input: Obj): Promise<unknown> {
-    const layout = input.layout as string;
-    const recordId = input.recordId as string;
-    await this.useLayout(env, layout);
-    const fields = await this.layoutFields(env, layout);
-    const requested = this.validateWriteFields(fields, input.fields as Record<string, string>);
-
-    const record = await this.withRecords(1, async () => ({
-      value: await this.deps.client.getRecord(env.profile, layout, recordId, env.control),
-      returned: 1
-    }));
-    env.trace.recordIds = [recordId];
-
-    const changes = requested
-      .map(([name, value]) => ({ name, oldValue: valueText(record.fieldData?.[name]), newValue: value }))
-      .filter((change) => change.oldValue !== change.newValue);
-    if (changes.length === 0) {
-      // Reads one record (quota) but asks nothing, writes nothing and uses no write attempt.
-      return { recordId, changed: false, message: 'Every given value already matches the record. Nothing was written.' };
-    }
-
-    if (input.dryRun === true) {
-      return {
-        dryRun: true,
-        recordId,
-        changes: changes.map((change) => ({
-          field: change.name,
-          old: valueForModel(change.oldValue, env.profile),
-          new: change.newValue
-        }))
-      };
-    }
-
-    // Built before a write attempt is counted: it refuses anything the dialog could not show.
-    const confirmation = buildEditConfirmation({
-      profile: env.profile,
-      layout,
-      recordId,
-      changes,
-      description: input.description as string | undefined
-    });
-    this.takeWriteSlot();
-    const confirmed = await this.dialog(env, confirmation);
-    env.control.signal?.throwIfAborted();
-    env.trace.confirmed = confirmed;
-    if (!confirmed) {
-      env.trace.declined = true;
-      return { recordId, written: false, message: 'The user declined the change.' };
-    }
-    await this.recheck(env);
-
-    const fieldData = Object.fromEntries(changes.map((change) => [change.name, change.newValue]));
-    try {
-      const result = await this.deps.client.editRecord(env.profile, layout, recordId, fieldData, env.control, {
-        modId: record.modId === undefined ? undefined : String(record.modId)
-      });
-      return { recordId, written: true, modId: result.modId, fieldsChanged: changes.map((change) => change.name) };
-    } catch (error) {
-      if (isRecordModifiedConflict(error)) {
-        throw new AiToolError('The record was changed by someone else after it was read, so nothing was written. Read it again and retry.', 'error');
-      }
-      throw error;
-    }
-  }
-
-  private async createRecord(env: Env, input: Obj): Promise<unknown> {
-    const layout = input.layout as string;
-    await this.useLayout(env, layout);
-    const fields = await this.layoutFields(env, layout);
-    const requested = this.validateWriteFields(fields, input.fields as Record<string, string>);
-    if (input.dryRun === true) {
-      return { dryRun: true, wouldCreate: requested.map(([name, value]) => ({ field: name, new: value })) };
-    }
-
-    const confirmation = buildCreateConfirmation({
-      profile: env.profile,
-      layout,
-      values: requested,
-      description: input.description as string | undefined
-    });
-    this.takeWriteSlot();
-    const confirmed = await this.dialog(env, confirmation);
-    env.control.signal?.throwIfAborted();
-    env.trace.confirmed = confirmed;
-    if (!confirmed) {
-      env.trace.declined = true;
-      return { written: false, message: 'The user declined creating the record.' };
-    }
-    await this.recheck(env);
-
-    const result = await this.deps.client.createRecord(
-      env.profile,
-      layout,
-      Object.fromEntries(requested),
-      env.control
-    );
-    env.trace.recordIds = [result.recordId];
-    return { written: true, recordId: result.recordId, modId: result.modId };
-  }
-
-  private async deleteRecord(env: Env, input: Obj): Promise<unknown> {
-    const layout = input.layout as string;
-    const recordId = input.recordId as string;
-    await this.useLayout(env, layout);
-    const fields = await this.layoutFields(env, layout);
-    const record = await this.withRecords(1, async () => ({
-      value: await this.deps.client.getRecord(env.profile, layout, recordId, env.control),
-      returned: 1
-    }));
-    env.trace.recordIds = [recordId];
-
-    const snapshot = shapeValues(record.fieldData ?? {}, env, fields.containers);
-    if (input.dryRun === true) {
-      return { dryRun: true, recordId, wouldDelete: snapshot };
-    }
-
-    const confirmation = buildDeleteConfirmation({
-      profile: env.profile,
-      layout,
-      recordId,
-      snapshot,
-      description: input.description as string | undefined
-    });
-    this.takeWriteSlot();
-    const confirmed = await this.dialog(env, confirmation);
-    env.control.signal?.throwIfAborted();
-    if (!confirmed) {
-      env.trace.confirmed = false;
-      env.trace.declined = true;
-      return { recordId, deleted: false, message: 'The user declined the deletion.' };
-    }
-    await this.recheck(env);
-
-    const typed = await this.deps.ui.input({
-      title: 'Delete record',
-      prompt: `Type the record id ${recordId} to delete it. This cannot be undone. Dismiss to cancel.`
-    });
-    env.control.signal?.throwIfAborted();
-    if (typed === undefined || typed.trim() !== recordId) {
-      env.trace.confirmed = false;
-      env.trace.declined = true;
-      return { recordId, deleted: false, message: 'The deletion was not confirmed.' };
-    }
-    env.trace.confirmed = true;
-    await this.recheck(env);
-
-    // The record may have changed while the user decided; delete only what they saw.
-    const fresh = await this.deps.client.getRecord(env.profile, layout, recordId, env.control);
-    if (String(fresh.modId) !== String(record.modId)) {
-      throw new AiToolError('The record changed while the deletion was being confirmed, so nothing was deleted. Read it again and retry.', 'error');
-    }
-
-    await this.deps.client.deleteRecord(env.profile, layout, recordId, env.control);
-    return { recordId, deleted: true };
-  }
-
-  private async runScript(env: Env, input: Obj): Promise<unknown> {
-    const layout = input.layout as string;
-    const script = input.script as string;
-    env.trace.script = script;
-    assertUsableUrlName(script, 'script', (message) => new AiToolError(message));
-    assertUsableUrlName(layout, 'layout', (message) => new AiToolError(message));
-    const allowlist = this.deps.settings().scriptAllowlist[env.profile.id] ?? [];
-    if (!allowlist.includes(script)) {
-      throw new AiToolError('That script is not on the user\'s allowlist for this connection (filemaker.ai.scriptAllowlist), so it cannot be run.');
-    }
-    await this.useLayout(env, layout);
-    const scripts = await this.deps.client.listScripts(env.profile, env.control);
-    if (!scripts.includes(script)) {
-      throw new AiToolError('That script does not exist in the database.');
-    }
-
-    const parameter = input.parameter as string | undefined;
-    const confirmation = buildScriptConfirmation({
-      profile: env.profile,
-      layout,
-      script,
-      parameter,
-      description: input.description as string | undefined
-    });
-    this.takeWriteSlot();
-    const confirmed = await this.dialog(env, confirmation);
-    env.control.signal?.throwIfAborted();
-    env.trace.confirmed = confirmed;
-    if (!confirmed) {
-      env.trace.declined = true;
-      return { ran: false, message: 'The user declined running the script.' };
-    }
-    await this.recheck(env);
-
-    const result = await this.deps.client.runScript(
-      env.profile,
-      { layout, scriptName: script, ...(parameter !== undefined ? { scriptParam: parameter } : {}) },
-      env.control
-    );
-    const response = result.response ?? {};
-    return {
-      ran: true,
-      scriptResult:
-        typeof response.scriptResult === 'string'
-          ? scrub(redactString(response.scriptResult), env.profile).slice(0, MAX_SCRIPT_RESULT_CHARS)
-          : undefined,
-      scriptError: typeof response.scriptError === 'string' ? response.scriptError : undefined
-    };
-  }
-
-  private validateWriteFields(fields: LayoutFields, given: Record<string, string>): Array<[string, string]> {
-    const entries = Object.entries(given);
-    if (entries.length === 0) {
-      throw new AiToolError('At least one field is required.');
-    }
-    if (entries.length > MAX_FIELDS_PER_WRITE) {
-      throw new AiToolError(`At most ${MAX_FIELDS_PER_WRITE} fields per write: the approval dialog shows every field.`);
-    }
-    return entries.map(([name, value]) => {
-      if (name.includes('::')) {
-        throw new AiToolError('Related-record fields (Table::Field) cannot be written.');
-      }
-      const known = this.knownField(fields, name);
-      const readOnly = fields.readOnly.get(known);
-      if (readOnly) {
-        throw new AiToolError(`${readOnly[0]!.toUpperCase()}${readOnly.slice(1)} fields cannot be written by AI tools.`);
-      }
-      if (Array.from(value).length > MAX_WRITE_VALUE_CHARS) {
-        throw new AiToolError(`A value may have at most ${MAX_WRITE_VALUE_CHARS} characters: the approval dialog shows each value in full.`);
-      }
-      if (PLACEHOLDER_MARKERS.some((marker) => value.includes(marker))) {
-        throw new AiToolError(`A value may not contain ${PLACEHOLDER_MARKERS.join(', ')}; those mark text the tools hid, redacted or replaced.`);
-      }
-      if (containsNulText(value)) {
-        throw new AiToolError(`NUL character (U+0000) in field ${name}. ${NUL_TEXT_WARNING} Remove the character and try again.`);
-      }
-      return [known, value];
-    });
-  }
+  // Write approval and policy re-check
 
   /**
    * After a dialog and before anything is sent: run every policy check again. The kill
@@ -1001,14 +505,6 @@ export class AiToolService {
     return { names, containers, readOnly, types };
   }
 
-  /** A field the layout has and policy shows. Unknown and hidden give the same answer. */
-  private knownField(fields: LayoutFields, name: string): string {
-    if (!fields.names.has(name)) {
-      throw new AiToolError(`Unknown or unavailable field ${displayText(name, 64)} on this layout. Use names from fm_describe_layout.`);
-    }
-    return name;
-  }
-
   private async audit(
     definition: AiToolDefinition,
     profile: ConnectionProfile | undefined,
@@ -1047,24 +543,6 @@ export class AiToolService {
   }
 }
 
-interface Trace {
-  client?: string;
-  layout?: string;
-  script?: string;
-  recordIds?: string[];
-  confirmed: boolean | null;
-  declined?: boolean;
-  note?: string;
-}
-
-interface Env {
-  profile: ConnectionProfile;
-  control: Control;
-  hidden: HiddenFields;
-  trace: Trace;
-  definition: AiToolDefinition;
-}
-
 /** What identifies the target of a write: a profile edited during a dialog is not the one approved. */
 function profileFingerprint(profile: ConnectionProfile): string {
   return JSON.stringify([
@@ -1082,93 +560,4 @@ function prune(times: number[], now: number): void {
   while (times.length > 0 && now - (times[0] as number) >= MINUTE_MS) {
     times.shift();
   }
-}
-
-function cut(value: string): string {
-  return value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS)}…[truncated]` : value;
-}
-
-/** Names `omit` and `__proto__` collide with the find body and with object keys: not usable. */
-function usableFieldName(name: unknown): string | undefined {
-  const exact = exactFieldNameOrUndefined(name);
-  if (exact === undefined) {
-    return undefined;
-  }
-  const base = baseFieldName(exact).toLowerCase();
-  return base === 'omit' || base === '__proto__' ? undefined : exact;
-}
-
-function listNames(key: 'layouts' | 'scripts', names: string[]): Obj {
-  const listed = names.slice(0, MAX_LAYOUTS_LISTED).map((name) => {
-    const safe = safeNameOrUndefined(name);
-    return safe === undefined ? { name: '[name omitted]', usable: false } : { name: safe, usable: true };
-  });
-  return { [key]: listed, count: names.length, truncated: names.length > MAX_LAYOUTS_LISTED };
-}
-
-/** A container streaming URL or a data API path: it names the server and carries a session. */
-const SERVER_URL_PATTERN = /\/Streaming(?:_SSL)?\/|[?&]RCType=|\/fmi\/data\//i;
-
-/**
- * One value for the model: a container or server URL is dropped, the server's own address is
- * removed from other text, secrets are redacted, long text is cut. Names are never changed.
- */
-function valueForModel(value: string, profile: ConnectionProfile): string {
-  if (SERVER_URL_PATTERN.test(value)) {
-    return URL_OMITTED_MARKER;
-  }
-  return cut(scrub(redactString(value), profile));
-}
-
-/** Record values for the model: hidden fields removed, containers dropped, URLs and secrets handled. */
-function shapeValues(data: Record<string, unknown>, env: Pick<Env, 'hidden' | 'profile'>, containers: Set<string>): Obj {
-  // No prototype, so a field named "__proto__" is only a key.
-  const out = Object.create(null) as Obj;
-  for (const [key, value] of Object.entries(data)) {
-    const name = exactFieldNameOrUndefined(key);
-    if (name === undefined || env.hidden.isHidden(key)) {
-      continue;
-    }
-    if (containers.has(baseFieldName(key))) {
-      out[name] = CONTAINER_MARKER;
-    } else if (typeof value === 'string') {
-      out[name] = valueForModel(value, env.profile);
-    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
-      out[name] = value;
-    } else {
-      out[name] = valueForModel(JSON.stringify(value) ?? '', env.profile);
-    }
-  }
-  return out;
-}
-
-// -----------------------------------------------------------------------------------------
-// Errors
-
-function errorNote(error: unknown): string | undefined {
-  return error instanceof Error ? error.message.slice(0, 200) : undefined;
-}
-
-/** Turns anything thrown into a message safe to show the model: no server address, user name, IP, path or secret. */
-export function toModelError(error: unknown, profile: ConnectionProfile | undefined): Error {
-  if (error instanceof AiToolError) {
-    return error;
-  }
-  if (error instanceof AiInputError) {
-    return new AiToolError(`Invalid input: ${error.message}`);
-  }
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return new AiToolError('The request was cancelled.', 'error');
-  }
-
-  let text: string;
-  if (error instanceof FMClientError) {
-    const code = error.code ? ` (FileMaker error ${error.code})` : error.status ? ` (HTTP ${error.status})` : '';
-    text = `The FileMaker request failed${code}: ${error.message}`;
-  } else if (error instanceof Error) {
-    text = `The request failed: ${error.message}`;
-  } else {
-    text = 'The request failed.';
-  }
-  return new AiToolError(scrubGenericText(scrub(redactString(text), profile)).slice(0, 500), 'error');
 }

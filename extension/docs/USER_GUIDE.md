@@ -69,7 +69,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
-| Add Connection Profile | Opens the connection wizard to save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
+| Add Connection Profile | Opens the connection wizard to test a connection and save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
 | Edit Connection Profile | Opens a saved profile in the connection wizard, where you can trust or forget a certificate without changing a VS Code setting. | Shown with a profile; needs an unlocked profile and write operations allowed. |
 | Remove Connection Profile | Removes a profile, its saved queries and secrets after confirmation. | Shown with a profile; needs an unlocked profile and write operations allowed. |
 | Connect | Signs in, selects the active profile and offers a layout for inspection. | Shown with a profile. |
@@ -134,7 +134,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Start FM Web Preview Server | Starts the local bridge and launches the preview app in a terminal. | Shown with an initialized project and installed preview template; needs trust. |
 | Set AI Access for Connection | Chooses no AI access, read access or write access for a profile. | Shown with a profile; needs an unlocked profile. |
 | Switch AI Tools Off or On | Stops AI tools immediately or restores them after confirmation. | Shown while AI tools are active; also available from the AI status bar. |
-| Show AI Activity | Opens the AI audit log. | Shown while AI tools are active. |
+| Show AI Activity | Opens the shared activity log for AI tools in VS Code, chat and external tools. Field values are not recorded. | Shown while AI tools are active. |
 | Start New AI Session | Resets AI quotas, write counters and layout approvals after confirmation. | Shown while AI tools are active. |
 | Start/Stop AI Server for External Tools | Starts or stops this window's local MCP server and remembers that choice. | Shown with a profile; starting needs confirmation, a local (non-remote) window, extension storage and a verifiable process identity. AI tool permissions still govern requests. |
 | Copy MCP Config for Claude Code / Cursor | Copies MCP client configuration using the installed shim. | Shown with a profile; needs extension storage. The server must run before a client can connect. |
@@ -956,6 +956,8 @@ What you will see:
 What is sent to the model: only for plain-language `/find`, the model you chose in the chat gets the layout name, that layout's field names (hidden fields removed) and the words you typed. It does not get record values, connection names, the server address or credentials, and it can only ask for one read-only search. Record values are shown in the chat and stay in the chat history of VS Code, which later chat messages (yours or another participant's) can send to a model. Field names are text from your database, so a hostile field name can still reach the model; use a read-only FileMaker account.
 
 ### Kill switch, sessions and activity
+
+AI tools in VS Code, `@filemaker` chat and external tools share the same session limits, layout approvals and hidden-field rules. Every AI write still asks for confirmation.
 
 Three commands exist for this. They appear in the Command Palette only while AI tools are active (switched on and offered); the status bar item always works.
 
