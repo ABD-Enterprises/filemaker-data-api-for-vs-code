@@ -69,7 +69,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
-| Add Connection Profile | Opens the connection wizard to save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
+| Add Connection Profile | Opens the connection wizard to test a connection and save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
 | Edit Connection Profile | Opens a saved profile in the connection wizard, where you can trust or forget a certificate without changing a VS Code setting. | Shown with a profile; needs an unlocked profile and write operations allowed. |
 | Remove Connection Profile | Removes a profile, its saved queries and secrets after confirmation. | Shown with a profile; needs an unlocked profile and write operations allowed. |
 | Connect | Signs in, selects the active profile and offers a layout for inspection. | Shown with a profile. |
