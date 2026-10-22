@@ -88,6 +88,27 @@ describe('QueryBuilderPanel messages', () => {
     panel = openPanel();
   });
 
+  it.each(['not json', '[null]'])('refuses invalid sorting before running a find: %s', async (sortJson) => {
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: ' Contacts ', findJson: '[{" Name ":"Ada"}]', sortJson, runId: 12 } });
+    expect(panel.fmClient.findRecords).not.toHaveBeenCalled();
+    expect(panel.posted).toContainEqual(expect.objectContaining({ type: 'error', runId: 12, message: expect.stringMatching(/sort|JSON/i) }));
+  });
+
+  it('exports the latest successful result as JSON and reports write failures', async () => {
+    const data = [{ recordId: '42', fieldData: { ' Name ': '007' } }];
+    panel.fmClient.findRecords.mockResolvedValueOnce({ data, dataInfo: { foundCount: 1 } });
+    await panel.send({ type: 'runQuery', payload: { profileId: 'p1', layout: ' Contacts ', findJson: '[{" Name ":"Ada"}]' } });
+    const uri = vscode.Uri.file('/tmp/results.json');
+    vi.mocked(vscode.window.showSaveDialog).mockResolvedValue(uri);
+    await panel.send({ type: 'exportResultsJsonFile' });
+    const write = vi.mocked(vscode.workspace.fs.writeFile).mock.calls.at(-1)!;
+    expect(write[0]).toBe(uri);
+    expect(JSON.parse(Buffer.from(write[1]).toString('utf8'))).toMatchObject({ result: { data } });
+    vi.mocked(vscode.workspace.fs.writeFile).mockRejectedValueOnce(new Error('Disk full'));
+    await panel.send({ type: 'exportResultsJsonFile' });
+    expect(panel.posted).toContainEqual({ type: 'error', message: 'Disk full' });
+  });
+
   it('exports colliding and digit-only fields with unambiguous ordered metadata', () => {
     const panelType = QueryBuilderPanel as unknown as { prototype: { toCsvRows(input: unknown): Map<string, unknown>[] } };
     const rows = panelType.prototype.toCsvRows({ result: { data: [{ recordId: '42', modId: '7', fieldData: { recordId: 'field', modId: 'fieldmod', '123': 'digit' } }] } });

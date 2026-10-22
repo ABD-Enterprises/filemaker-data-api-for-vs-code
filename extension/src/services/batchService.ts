@@ -319,7 +319,7 @@ export class BatchService {
 
         const updatePromise = (duplicates.has(next)
           ? Promise.reject(new Error(duplicateReason))
-          : this.updateOneWithRetry(profile, layout, next, adaptive, breaker, job))
+          : this.updateOneWithRetry(profile, layout, next, adaptive, breaker, csvFields, job))
           .then(() => {
             if (Object.keys(next.fieldData).length > 0) {
               successCount += 1;
@@ -403,6 +403,7 @@ export class BatchService {
     entry: BatchUpdateEntry,
     adaptive: AdaptiveConcurrency,
     breaker: CircuitBreaker,
+    fields: ReturnType<typeof extractFieldsFromMetadata>,
     job?: JobContext
   ): Promise<void> {
     const nulError = nulTextError(entry.fieldData);
@@ -429,7 +430,7 @@ export class BatchService {
           if (job?.isCancellationRequested()) throw new UnconfirmedUpdateError();
           try {
             const current = await this.fmClient.getRecord(profile, layout, entry.recordId);
-            if (Object.entries(entry.fieldData).every(([name, value]) => sameWrittenValue(current.fieldData[name], value))) {
+            if (Object.entries(entry.fieldData).every(([name, value]) => sameWrittenValue(current.fieldData[name], value, fieldType(metadataForField(fields, name)?.result) === 'number'))) {
               adaptive.recordSuccess(Date.now() - startedAt);
               breaker.recordSuccess();
               return;
@@ -462,10 +463,16 @@ export class BatchService {
 }
 
 /** Compare reread values without changing the fields or values sent to FileMaker. */
-function sameWrittenValue(left: unknown, right: unknown): boolean {
-  const normalize = (value: unknown): unknown => typeof value === 'string'
-    ? numericText(value.replace(/\r\n?/g, '\n').trimEnd())
-    : value;
+function sameWrittenValue(left: unknown, right: unknown, numeric: boolean): boolean {
+  const normalize = (value: unknown): unknown => {
+    if (typeof value !== 'string') return value;
+    const text = value.replace(/\r\n?/g, '\n');
+    if (!numeric) return text;
+    const numberText = text.trimEnd();
+    // Accept FileMaker's grouped numbers, but keep malformed or unsafe numbers exact.
+    return numericText(/^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(numberText)
+      ? numberText.replace(/,/g, '') : numberText);
+  };
   return stableStringify(normalize(left)) === stableStringify(normalize(right));
 }
 
