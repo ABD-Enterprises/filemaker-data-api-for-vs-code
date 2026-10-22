@@ -22,7 +22,7 @@ const stylesheet = `
 header,main,footer{max-width:72rem;margin:auto;padding:1.25rem clamp(1rem,4vw,3rem)}header,footer{border-block-end:1px solid var(--border)}footer{border-block-start:1px solid var(--border);border-block-end:0;color:var(--muted)}
 a{color:var(--link);text-underline-offset:.15em}a:hover{text-decoration-thickness:.15em}:focus-visible{outline:3px solid var(--link);outline-offset:3px}.brand{font-weight:700;font-size:1.2rem}nav ul{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;list-style:none;padding:0}nav[aria-label="On this page"] ul{display:block;columns:2;column-gap:2rem}nav[aria-label="On this page"] li{break-inside:avoid;margin-block:.3rem}
 h1,h2,h3,h4{line-height:1.25;scroll-margin-top:1rem}h1{font-size:clamp(1.7rem,5vw,2.5rem)}h2{margin-top:2.5rem}h3{margin-top:2rem}p,li{max-width:85ch}img{max-width:100%;height:auto}pre{max-width:100%;overflow-x:auto;padding:1rem;background:var(--panel);border:1px solid var(--border);border-radius:.4rem;overflow-wrap:normal}code{font-size:.9em}blockquote{margin-inline:0;padding-inline:1rem;border-inline-start:4px solid var(--border);color:var(--muted)}
-.table-scroll{max-width:100%;overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.95rem}th,td{text-align:start;vertical-align:top;border:1px solid var(--border);padding:.6rem}th{background:var(--panel)}.toc{padding:1rem;background:var(--panel);border-radius:.4rem}.toc h2{margin-top:0;font-size:1.2rem}.skip-link{position:absolute;left:1rem;top:-5rem;padding:.6rem;background:var(--bg);z-index:1}.skip-link:focus{top:1rem}
+.table-scroll{max-width:100%;overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.95rem}th,td{min-width:8rem;text-align:start;vertical-align:top;border:1px solid var(--border);padding:.6rem}td code,th code{white-space:nowrap;overflow-wrap:normal;word-break:normal}th{background:var(--panel)}.toc{padding:1rem;background:var(--panel);border-radius:.4rem}.toc h2{margin-top:0;font-size:1.2rem}.skip-link{position:absolute;left:1rem;top:-5rem;padding:.6rem;background:var(--bg);z-index:1}.skip-link:focus{top:1rem}
 @media(max-width:600px){nav[aria-label="On this page"] ul{columns:1}header,main,footer{padding:1rem}ul,ol{padding-inline-start:1.4rem}}
 `;
 markdown.renderer.rules.table_open = () => '<div class="table-scroll" tabindex="0" role="region" aria-label="Table"><table>\n';
@@ -103,6 +103,14 @@ export function buildDocsSite({ root = fileURLToPath(new URL('../', import.meta.
   function rewrite(url, page, image = false) {
     if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(url)) {
       if (image) throw new Error(`Images must be local: ${page.file}: ${url}`);
+      const prefix = `${repository}/blob/main/`;
+      if (url.startsWith(prefix)) {
+        const local = /^([^?#]*)(.*)$/.exec(url.slice(prefix.length));
+        const file = decodeURIComponent(local[1]);
+        if (pages.has(file)) {
+          return rewrite(relative(page.file, file) + local[2], page);
+        }
+      }
       if (url === repository || url.startsWith(`${repository}/`) || url === marketplace || url.startsWith(website)) return url;
       throw new Error(`Unsupported external link: ${page.file}: ${url}`);
     }

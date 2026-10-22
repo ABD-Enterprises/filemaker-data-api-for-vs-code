@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { fieldKindNote } from './record-edit';
+import { fieldKindNote, runtimeFieldKind } from './record-edit';
 import { FIELD_LAYOUT } from './field-standards';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
@@ -51,18 +51,18 @@ export function LayoutContainer({
       .forEach((object) => {
         positions.set(object.id, { ...object, x: FIELD_LAYOUT.pageMargin, y: flowY,
           width: Math.min(object.width, Math.max(1, containerWidth - FIELD_LAYOUT.pageMargin * 2)) });
-        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(positions.get(object.id) ?? object) + FIELD_LAYOUT.rowGap;
+        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(positions.get(object.id) ?? object, runtimeData?.editing) + FIELD_LAYOUT.rowGap;
       });
   }
   const noteRows = mode === 'runtime' && !narrow ? layout.objects.reduce((rows, object) => {
-    rows.set(object.y, Math.max(rows.get(object.y) ?? 0, runtimeFieldNoteSpace(object)));
+    rows.set(object.y, Math.max(rows.get(object.y) ?? 0, runtimeFieldNoteSpace(object, runtimeData?.editing)));
     return rows;
   }, new Map<number, number>()) : new Map<number, number>();
   const visibleObjects = renderedObjects.map((object) => positions.get(object.id) ?? (noteRows.size
     ? { ...object, y: object.y + [...noteRows].reduce((shift, [row, space]) => shift + (row < object.y ? space : 0), 0) }
     : object));
   const contentHeight = Math.max(containerHeight, ...visibleObjects.map((object) => object.y + object.height +
-    (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(object) + FIELD_LAYOUT.pageMargin));
+    (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(object, runtimeData?.editing) + FIELD_LAYOUT.pageMargin));
 
   return (
     <div
@@ -93,13 +93,13 @@ export function LayoutContainer({
   );
 }
 
-function runtimeFieldNote(object: LayoutObject): string | undefined {
+function runtimeFieldNote(object: LayoutObject, editing = false): string | undefined {
   if (object.type !== 'field') return undefined;
-  return [fieldKindNote(object.kind), object.format === 'date' ? "Use the server's date format, keeping the same order and separators." : undefined].filter(Boolean).join(' ') || undefined;
+  return [fieldKindNote(runtimeFieldKind(object)), editing && object.format === 'date' ? "Use the server's date format, keeping the same order and separators." : undefined].filter(Boolean).join(' ') || undefined;
 }
 
-function runtimeFieldNoteSpace(object: LayoutObject): number {
-  const note = runtimeFieldNote(object);
+function runtimeFieldNoteSpace(object: LayoutObject, editing = false): number {
+  const note = runtimeFieldNote(object, editing);
   return note ? Math.ceil(note.length / Math.max(1, Math.floor(object.width / 7))) * 16 + 4 : 0;
 }
 
@@ -192,8 +192,8 @@ function FieldControl(props: {
   const runtimeValue = props.runtimeData?.fieldValues?.[object.fmFieldName];
   const previewOptions = getPreviewOptions(object, runtimeValue, props.mode);
   const value = runtimeValue === undefined || runtimeValue === null ? '' : String(runtimeValue);
-  const note = props.mode === 'runtime' ? runtimeFieldNote(object) : undefined;
-  const readOnly = props.mode !== 'runtime' || !props.runtimeData?.editing || ['calculation', 'summary', 'container'].includes(object.kind ?? 'normal');
+  const note = props.mode === 'runtime' ? runtimeFieldNote(object, props.runtimeData?.editing) : undefined;
+  const readOnly = props.mode !== 'runtime' || !props.runtimeData?.editing || ['calculation', 'summary', 'container'].includes(runtimeFieldKind(object));
   const showLabel = object.labelPosition !== 'none';
   const horizontalLabel = object.labelPosition === 'left' || object.labelPosition === 'right';
   const inputId = `field-input-${object.id}`;
@@ -259,7 +259,7 @@ function FieldControl(props: {
       data-fm-field-id={object.id}
       data-fm-field-control={object.displayType}
       data-fm-field-format={object.format}
-      data-fm-field-kind={object.kind ?? 'normal'}
+      data-fm-field-kind={runtimeFieldKind(object)}
       data-fm-label-position={object.labelPosition}
     >
       {note ? <span id={`${inputId}-note`} role="note">{note}</span> : null}
@@ -300,11 +300,11 @@ function renderFieldDisplayControl(props: {
     color: '#20364f'
   };
 
-  const description = props.mode === 'runtime' && runtimeFieldNote(props.object) ? `${props.inputId}-note` : undefined;
+  const description = props.mode === 'runtime' && runtimeFieldNote(props.object, !props.readOnly) ? `${props.inputId}-note` : undefined;
   const common = { id: props.inputId, 'aria-label': props.object.fmFieldName,
     'aria-describedby': description, style: baseControlStyle };
 
-  if (props.object.kind === 'container') {
+  if (runtimeFieldKind(props.object) === 'container') {
     if (!props.value) return <span />;
     // Container links are server URLs, never executable schemes from field text.
     if (!/^https?:\/\//i.test(props.value)) return <span>{props.value}</span>;

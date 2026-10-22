@@ -173,3 +173,53 @@ describe('FM Web record editor', () => {
     expect(canvas.style.height).toBe(height);
   });
 });
+
+
+it('clears the saved message on next and previous', async () => {
+  records = [{ recordId: '19', modId, fieldData: fields }, { recordId: '20', modId, fieldData: fields }];
+  await mount();
+  await click('Edit');
+  change(' Text ', 'saved'); await click('Save');
+  expect(host.textContent).toContain('Saved record 19.');
+  await click('Next');
+  expect(host.textContent).not.toContain('Saved record 19.');
+  await click('Edit'); change(' Text ', 'second'); await click('Save');
+  expect(host.textContent).toContain('Saved record 20.');
+  await click('Prev');
+  expect(host.textContent).not.toContain('Saved record 20.');
+});
+
+
+it.each(['type', 'result'])('uses metadata %s for read-only fields when kind is missing', async (key) => {
+  const previous = layout.objects;
+  layout.objects = previous.map((object) => object.type === 'field' && ['Calc', 'Summary'].includes(object.fmFieldName)
+    ? { ...object, kind: undefined, metadata: { [key]: object.fmFieldName === 'Calc' ? 'calculation' : 'summary' } } as typeof object : object);
+  try {
+    await mount(); await click('Edit');
+    for (const name of ['Calc', 'Summary']) expect(host.querySelector<HTMLInputElement>(`[aria-label="${name}"]`)?.readOnly).toBe(true);
+    change(' Text ', 'keep editable'); await click('Save');
+    expect(calls.find((call) => call.route === 'editRecord')?.body.fieldData).toEqual({ ' Text ': 'keep editable' });
+  } finally { layout.objects = previous; }
+});
+
+it('keeps fields with no metadata editable and reports a refusal without losing the draft', async () => {
+  const previous = layout.objects;
+  layout.objects = previous.map((object) => ({ ...object, kind: undefined }));
+  try {
+    await mount(); await click('Edit'); change('Calc', '123');
+    fail = 'FileMaker cannot edit this calculated field.';
+    await click('Save');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(fail);
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Calc"]')?.value).toBe('123');
+    expect(calls.find((call) => call.route === 'editRecord')?.body.fieldData).toEqual({ Calc: 123 });
+  } finally { layout.objects = previous; }
+});
+
+it('shows date guidance only while editing', async () => {
+  await mount();
+  expect(host.textContent).not.toContain("Use the server's date format");
+  await click('Edit');
+  expect(host.textContent).toContain("Use the server's date format");
+  await click('Cancel');
+  expect(host.textContent).not.toContain("Use the server's date format");
+});

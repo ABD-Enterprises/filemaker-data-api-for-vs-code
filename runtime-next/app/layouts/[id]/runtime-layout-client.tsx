@@ -1,10 +1,10 @@
-// fmweb-managed: runtime template v4. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v5. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 'use client';
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 
-import { LayoutContainer, computeRecordPatch, validateRecordDraft, numericText, nulTextFields, removeNulText, NUL_TEXT_WARNING, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
+import { LayoutContainer, runtimeFieldKind, computeRecordPatch, validateRecordDraft, numericText, nulTextFields, removeNulText, NUL_TEXT_WARNING, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
 
 import { executeRuntimeBehaviorAction, type RuntimeBehaviorResult } from '../../../lib/runtime-behavior';
 import { useRuntimeDataController } from '../../../lib/runtime-data';
@@ -75,7 +75,7 @@ export function RuntimeLayoutClient({
   }, [layout.canvas.height]);
 
   const editableFields = layout.objects.filter((object) => object.type === 'field' &&
-    !['calculation', 'summary', 'container'].includes(object.kind ?? 'normal'));
+    !['calculation', 'summary', 'container'].includes(runtimeFieldKind(object)));
   const beginEdit = (creating: boolean): void => {
     const original = creating ? {} : { ...runtime.currentRecord?.fieldData };
     setEdit({ creating, original, draft: { ...original }, modId: creating ? undefined : runtime.currentRecord?.modId });

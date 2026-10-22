@@ -1,4 +1,4 @@
-// fmweb-managed: runtime template v4. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v5. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 import * as React from 'react';
 
 import type { LayoutDefinition, LayoutObject, RuntimeLayoutData } from '@fmweb/shared';
@@ -232,10 +232,12 @@ export function useRuntimeDataController(
 
   const nextRecord = React.useCallback(() => {
     setCurrentIndex((value) => Math.max(0, Math.min(foundSet.length - 1, value + 1)));
+    setStatusMessage('');
   }, [foundSet.length]);
 
   const prevRecord = React.useCallback(() => {
     setCurrentIndex((value) => Math.max(0, value - 1));
+    setStatusMessage('');
   }, []);
 
   const createRecord = React.useCallback(
