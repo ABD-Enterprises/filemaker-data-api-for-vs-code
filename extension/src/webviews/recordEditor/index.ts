@@ -541,8 +541,15 @@ export class RecordEditorPanel {
       return;
     }
 
-    const known = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout))
-      ?? (await this.schemaService.getFields(profile, payload.layout)).fields;
+    let known = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout));
+    if (!known) {
+      try {
+        known = (await this.schemaService.getFields(profile, payload.layout)).fields;
+      } catch (error) {
+        await this.postError(`Could not load the layout's fields: ${formatError(error)}. Try again.`);
+        return;
+      }
+    }
     let nonEmptyFields = Object.fromEntries(
       Object.entries(editableFieldData(payload.fieldData, known)).filter(([, v]) => v !== '' && v !== undefined && v !== null)
     );
