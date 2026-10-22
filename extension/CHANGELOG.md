@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [INTERNAL] Split AI tool code into smaller parts, keeping the same approvals, safety checks and results; test spaces around preview record IDs and exact layout and script names.
+
 - [FIX] Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.
 - [INTERNAL] Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
 

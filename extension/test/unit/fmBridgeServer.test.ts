@@ -38,6 +38,28 @@ describe('FmBridgeServer', () => {
     expect(await invokeBridgeRequest(server, '/fm/getRecord', { method: 'GET' })).toMatchObject({ status: 405, json: { error: 'Only POST requests are supported.' } });
   });
 
+  it.each(['getRecord', 'editRecord', 'deleteRecord'] as const)('trims spaces around record IDs in preview %s requests', async (route) => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, `/fm/${route}`, {
+      payload: { layout: 'Contacts', recordId: ' \t00123\r\n ', fieldData: { Name: 'Ada' } }
+    });
+    expect(result.status).toBe(200);
+    expect(vi.mocked(client[route]).mock.calls[0]?.slice(0, 3)).toEqual([profile, 'Contacts', '00123']);
+  });
+
+  it('keeps spaces in layout and script names while trimming an optional script record ID', async () => {
+    const client = createFmClientStub();
+    const server = new FmBridgeServer(createProfileStoreStub(), client, createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, '/fm/runScript', {
+      payload: { layout: ' . ', scriptName: ' .. ', recordId: ' 00123 ' }
+    });
+    expect(result.status).toBe(200);
+    expect(client.runScript).toHaveBeenCalledWith(profile, {
+      layout: ' . ', scriptName: ' .. ', scriptParam: undefined, recordId: '00123'
+    }, { signal: expect.any(AbortSignal) });
+  });
+
   it('keeps layout and script names intact in preview script requests', async () => {
     const runScript = vi.fn().mockResolvedValue({ response: {}, messages: [] });
     const server = new FmBridgeServer(createProfileStoreStub(), createFmClientStub({ runScript }), createFmWebProjectServiceStub(), logger);
