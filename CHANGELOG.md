@@ -28,6 +28,8 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
+- Website tables scroll on small screens, documentation links stay on the website, and repeated documentation links are removed.
+- Generated FM Web apps can run their own tests and refresh untouched older shared files. Missing field details, stopped previews and save errors have clearer messages; date hints appear while editing and saved messages clear when browsing.
 - The generated FM Web page opens again, no longer stretches sideways, and can edit and save records.
 
 ### [INTERNAL]

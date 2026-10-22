@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import { mkdtemp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -8,6 +9,7 @@ import { registerTypeGenCommands } from '../../src/commands/typeGen';
 import { command, profile, profileStore, resetCommandMocks } from '../helpers/commandHarness';
 import { TypeGenService } from '../../src/services/typeGenService';
 import { FmWebProjectService } from '../../src/services/fmWebProjectService';
+import { createBlankLayout, validateLayoutDefinition } from '../../src/fmweb/layoutSchema';
 import { FmWebRuntimeGenerator } from '../../src/services/fmWebRuntimeGenerator';
 
 let root: string;
@@ -100,4 +102,57 @@ it('still skips unavailable metadata and files the user chose to skip in all-lay
   const files = await service.generateTypesForAllLayouts(profile);
   expect(files.map((file) => file.layout)).toEqual(['New']);
   expect(await readFile(path.join(root, 'filemaker-types/layouts/Keep.ts'), 'utf8')).toBe('my types');
+});
+
+
+it('generates a self-contained test setup with jsdom and a shared alias that exists', async () => {
+  const gen = runtime(); await gen.generateRuntimeAppTemplate();
+  const output = gen.getGeneratedRuntimeRoot();
+  const pkg = JSON.parse(await readFile(path.join(output, 'package.json'), 'utf8'));
+  expect(pkg.scripts.test).toBe('vitest run');
+  expect(pkg.devDependencies.jsdom).toBeDefined();
+  const config = await readFile(path.join(output, 'vitest.config.ts'), 'utf8');
+  const alias = /path.resolve\(__dirname, '([^']+)'\)/.exec(config)![1]!;
+  expect(await readFile(path.resolve(output, alias), 'utf8')).toContain('LayoutContainer');
+  expect(pkg.dependencies['@fmweb/shared']).toBe('file:./shared');
+  // Use the installed dependencies; this runs the generated project's own test command offline.
+  await symlink(path.resolve(__dirname, '../../../node_modules'), path.join(output, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  const result = spawnSync('npm', ['test'], { cwd: output, encoding: 'utf8', timeout: 30_000, shell: process.platform === 'win32' });
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+}, 30_000);
+
+it('refreshes untouched older shared files and test config, but names and preserves edits', async () => {
+  const gen = runtime(); await gen.generateRuntimeAppTemplate();
+  const output = gen.getGeneratedRuntimeRoot();
+  const file = path.join(output, 'shared/src/record-edit.ts');
+  const legacy = await readFile(path.resolve(__dirname, '../fixtures/legacy-shared-record-edit.ts.txt'), 'utf8');
+  await writeFile(file, legacy.replace(/\n/g, '\r\n'));
+  const oldConfig = await readFile(path.resolve(__dirname, '../../../runtime-next/vitest.config.ts'), 'utf8');
+  await writeFile(path.join(output, 'vitest.config.ts'), oldConfig);
+  const oldPkg = JSON.parse(await readFile(path.resolve(__dirname, '../../../runtime-next/package.json'), 'utf8'));
+  delete oldPkg.devDependencies.jsdom;
+  oldPkg.dependencies['@fmweb/shared'] = 'file:./shared';
+  await writeFile(path.join(output, 'package.json'), `${JSON.stringify(oldPkg, null, 2)}\n`);
+  const result = await gen.generateRuntimeAppTemplate();
+  expect(result.updated).toContain(path.join('shared', 'src/record-edit.ts'));
+  expect(result.updated).toContain('vitest.config.ts');
+  expect(result.updated).toContain('package.json');
+  expect(await readFile(file, 'utf8')).toBe(await readFile(path.resolve(__dirname, '../../../shared/src/record-edit.ts'), 'utf8'));
+  const edited = `${legacy}\n// my local change\n`;
+  await writeFile(file, edited);
+  const editedConfig = `${oldConfig}\n// my test settings\n`;
+  await writeFile(path.join(output, 'vitest.config.ts'), editedConfig);
+  const again = await gen.generateRuntimeAppTemplate();
+  expect(again.needsManualUpdate).toContain(path.join('shared', 'src/record-edit.ts'));
+  expect(again.needsManualUpdate).toContain('vitest.config.ts');
+  expect(await readFile(file, 'utf8')).toBe(edited);
+  expect(await readFile(path.join(output, 'vitest.config.ts'), 'utf8')).toBe(editedConfig);
+});
+
+
+it('accepts future field kinds in the extension while retaining metadata and exact names', () => {
+  const layout = createBlankLayout(' Exact layout ');
+  layout.objects = [{ id: '11111111-1111-4111-8111-111111111111', type: 'field', name: ' Field ', fmFieldName: ' Field ',
+    x: 0, y: 0, width: 240, height: 34, kind: 'future-kind', metadata: { type: 'summary', result: 'number' } } as unknown as typeof layout.objects[number]];
+  expect(validateLayoutDefinition(layout).objects[0]).toMatchObject({ kind: 'normal', fmFieldName: ' Field ', metadata: { type: 'summary', result: 'number' } });
 });

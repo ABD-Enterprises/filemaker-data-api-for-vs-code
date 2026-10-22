@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRecordPatch, numericText, validateRecordDraft, validateLayoutDefinition, createBlankLayout, type LayoutDefinition } from '@fmweb/shared';
+import { readOnlyFieldKind, computeRecordPatch, numericText, validateRecordDraft, validateLayoutDefinition, createBlankLayout, type LayoutDefinition } from '@fmweb/shared';
 
 describe('shared Editor rules', () => {
   it('validates required hints and JSON values while leaving server date and number validation to FileMaker', () => {
@@ -27,4 +27,17 @@ describe('shared Editor rules', () => {
     delete (layout.objects[0] as { kind?: string }).kind;
     expect(validateLayoutDefinition(layout).objects[0]).toMatchObject({ kind: 'normal' });
   });
+});
+
+
+it.each(['calculation', 'summary'])('recognizes %s from metadata type or result without a kind', (kind) => {
+  expect(readOnlyFieldKind({ name: ' Exact ', result: kind })).toBe(kind);
+  expect(readOnlyFieldKind({ name: ' Exact ', type: kind, result: 'number' })).toBe(kind);
+});
+
+it('accepts unknown kinds without losing a layout or metadata', () => {
+  const layout = createBlankLayout(' Exact ');
+  layout.objects = [{ id: '11111111-1111-4111-8111-111111111111', type: 'field', name: ' Field ', fmFieldName: ' Field ',
+    x: 0, y: 0, width: 240, height: 34, kind: 'future-kind', metadata: { type: 'calculation', result: 'number' } } as unknown as LayoutDefinition['objects'][number]];
+  expect(validateLayoutDefinition(layout).objects[0]).toMatchObject({ kind: 'normal', metadata: { type: 'calculation', result: 'number' } });
 });

@@ -1,4 +1,4 @@
-// fmweb-managed: runtime template v4. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v5. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 export interface RuntimeRecord {
   recordId: string;
   modId?: string;
@@ -98,21 +98,29 @@ export class RuntimeBridgeClient {
       throw new Error('Bridge URL is not configured.');
     }
 
-    const response = await this.fetchFn(`${normalizedBaseUrl}/${route}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(this.bridgeToken ? { [BRIDGE_TOKEN_HEADER]: this.bridgeToken } : {})
-      },
-      body: JSON.stringify(payload)
-    });
+    let response: Response;
+    try {
+      response = await this.fetchFn(`${normalizedBaseUrl}/${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.bridgeToken ? { [BRIDGE_TOKEN_HEADER]: this.bridgeToken } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      throw new RuntimeBridgeError('Cannot reach the extension. Is the preview server running in VS Code?');
+    }
 
     const body = await parseResponse(response);
     if (!response.ok) {
       const message = body && typeof body === 'object' ? String((body as { error?: string }).error ?? '') : '';
       const code = body && typeof body === 'object' ? (body as { code?: string }).code : undefined;
-      if (code === '306' || /\b306\b/.test(message)) {
+      if (code === '306') {
         throw new RuntimeBridgeError('This record changed since you opened it (306). Your changes have not been saved. Cancel, reload the record, and try again.', '306');
+      }
+      if (code === '201') {
+        throw new RuntimeBridgeError('FileMaker will not let you edit this field. It may be calculated, summarized, or read-only for your account. Your changes have not been saved.', code);
       }
       throw new RuntimeBridgeError(message || `Bridge request failed with status ${response.status}.`, code);
     }

@@ -158,12 +158,9 @@ Read the [security overview](https://github.com/SureForgeTech/filemaker-data-api
 | Browse the website | [Documentation home](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/) |
 | Use the extension | [User Guide](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/) |
 | See version changes | [Changelog by version](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/) and [upgrade notes](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/upgrade/) |
-
-- [User Guide](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/USER_GUIDE.md)
-- [Changelog](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CHANGELOG.md) and [upgrade notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/UPGRADE.md)
-- [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md)
-- [Report a bug or request a feature](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues)
-- [Contributing](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CONTRIBUTING.md) and [architecture](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/ARCHITECTURE.md)
+| Check supported versions | [Compatibility](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/compatibility/) |
+| Report a problem | [Report a bug or request a feature](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/issues) |
+| Help with the project | [Contributing](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/CONTRIBUTING.md) and [architecture](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/ARCHITECTURE.md) |
 
 ## Need help with FileMaker integration?
 

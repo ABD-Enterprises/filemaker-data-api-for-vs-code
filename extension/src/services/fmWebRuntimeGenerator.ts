@@ -31,7 +31,7 @@ interface GeneratedLayoutSummary {
 const SAFE_ENV_VALUE = /^[A-Za-z0-9:/._~%+=@-]+$/;
 
 /** Bump together with the `fmweb-managed: runtime template vN` line in the managed files. */
-export const RUNTIME_TEMPLATE_VERSION = 4;
+export const RUNTIME_TEMPLATE_VERSION = 5;
 const MANAGED_MARKER = /^(?:\/\/|\/\*) fmweb-managed: runtime template v(\d+)/;
 
 /**
@@ -41,6 +41,8 @@ const MANAGED_MARKER = /^(?:\/\/|\/\*) fmweb-managed: runtime template v(\d+)/;
  * version marker, so an unmodified old copy can be recognised and refreshed safely.
  */
 const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
+  'package.json': ['01f94b699e9d6c9939b2bb1a49028f028c7ba29e2f9f53bd2160318edbecb991', '6d184961fb6759b90115ff94d15dac9455b401917d2d1527b7d3b98531b67ee8'],
+  'vitest.config.ts': ['c2bd4b81a42becfbb5fa2fc55aee8c57943590ed9ec79c17082731f78a59b949'],
   'app/styles.css': ['ed5fdbfd2e42b6e952332bc74a1ddbeefe9d831493d72b567e8832bf98c4c6f8'],
   'app/layouts/[id]/page.tsx': [
     '0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266',
@@ -64,12 +66,22 @@ const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
  * one; the runtime-template test fails until you do.
  */
 export const SHIPPED_MARKED_HASHES: Record<string, string[]> = {
-  'app/styles.css': ['15d2d57725d731126dc25aa9b303089e38539ff8deb472cbbafb2818c3c5e668'],
-  'app/layouts/[id]/page.tsx': ['4a7882e3638ccadf65d48b1fa7a16a14b98df4009671453ea82f4ce18159e895', '167da245a60540ea0f64900f31445424f4dbe6c025a525e7314088f4d0b8f3de'],
-  'lib/bridge-client.ts': ['e0253ec75ce1dd79cef212a05f12cc4db4570ffb5cc8f36fb3775f9ac72f323e', '4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07', '7823748b4050231a7a8bfbc781181bab1aea425a5c5c6855b06a5d7f0918d1a9'],
-  'lib/runtime-data.ts': ['22cad0412d5a831000a671fc210edde6e7eb6285ea49356981b4e80d9ab0d729', '17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b', 'da5854ee29102d44e966881ccdc2679afd1691d12eee0a1365803b86f0d6ff82'],
-  'lib/runtime-behavior.ts': ['8d74f0dc280c8a42e4e64e1b47a0df0d11f09beba8605808c5263a81a6f3b94d', '84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609', 'bac62b9460c693e064c4f0e516d6e2f382c7a22ed21548ae1a3a59e633dca2d1'],
-  'app/layouts/[id]/runtime-layout-client.tsx': ['6becf8abb393e1e501f75390540b0fbefec17c9ca77803fc4f9352157a67249e', '12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5', '40c2f2e4b688c23049ecd70ae2d707766a079953e09134c3ddfd13e7fea09a5b']
+  'app/styles.css': ['15d2d57725d731126dc25aa9b303089e38539ff8deb472cbbafb2818c3c5e668', 'bf07315f6023a7a419f8e926ed9f7d7c5351527705bd7acdb6a79cc306575e0c'],
+  'app/layouts/[id]/page.tsx': ['4a7882e3638ccadf65d48b1fa7a16a14b98df4009671453ea82f4ce18159e895', '167da245a60540ea0f64900f31445424f4dbe6c025a525e7314088f4d0b8f3de', 'b1511cd97b2a9578d29c979e1f3cd4d824558af6b6a998019e1f119f607cdec5'],
+  'lib/bridge-client.ts': ['e0253ec75ce1dd79cef212a05f12cc4db4570ffb5cc8f36fb3775f9ac72f323e', '4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07', '7823748b4050231a7a8bfbc781181bab1aea425a5c5c6855b06a5d7f0918d1a9', 'e43af510f1160deb036a789425475d92f757c46caacc43cae613aeae898b2113'],
+  'lib/runtime-data.ts': ['22cad0412d5a831000a671fc210edde6e7eb6285ea49356981b4e80d9ab0d729', '17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b', 'da5854ee29102d44e966881ccdc2679afd1691d12eee0a1365803b86f0d6ff82', 'd0c19e1992bf77583343490fd7e163e582dcfec03f2deb4d9680cdb6b627e9b8'],
+  'lib/runtime-behavior.ts': ['8d74f0dc280c8a42e4e64e1b47a0df0d11f09beba8605808c5263a81a6f3b94d', '84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609', 'bac62b9460c693e064c4f0e516d6e2f382c7a22ed21548ae1a3a59e633dca2d1', '74a2c6f22d6d68e83e590c3f9e5d3c3772d0877db9d8d73f308598057ec5bbff'],
+  'app/layouts/[id]/runtime-layout-client.tsx': ['6becf8abb393e1e501f75390540b0fbefec17c9ca77803fc4f9352157a67249e', '12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5', '40c2f2e4b688c23049ecd70ae2d707766a079953e09134c3ddfd13e7fea09a5b', 'a0cb143cc37ecc41db012951881277e7bd5cfb413ae257ce5ce7909b40466d42']
+};
+
+/** Known shipped shared sources (including generated package.json). Keep old hashes when updating. */
+export const SHIPPED_SHARED_HASHES: Record<string, string[]> = {
+  'src/layout-schema.ts': ['e7f4b45780facf95f8250a74b4e60afd27c5af455ee015e879fa062e69f0d63b', '5f19d99380319c6c1e1352730784559dbb23ba03da792bcdf9fc7118be024129'],
+  'src/ui-renderer.tsx': ['485d4b2022d64ac21ebcd36c58f57792e36b448a7fec9b9a6a2eeb1373a522ab', 'dea92786b52f47ddbd02a1f0b4f34c73155303a9725e06cbcf2a3ade8301e0c7'],
+  'src/field-standards.ts': ['dbd9dcbac9791a895962a977c37a3f3602729f0903c8ccbda05f40fc873421cf'],
+  'src/record-edit.ts': ['6f3b044bb3fbbbc00f80ce85761d2c8f02daa874ad62e310c7ba6e5c7b12132c', '8ec99479832ae7f19bd3d34027a014e02db6ebeb2b05d20f29685ab6a04639d3'],
+  'src/index.ts': ['a78e69d0c2565173c08ca580ebd1f640e9c6fcecee7cecf58a36ce2a82ad96c2'],
+  'package.json': ['304d3c7084ac8c0d59f83461fbdf4cb97feb64f9a19062ed8345e520b637247c']
 };
 
 export function normalizedHash(content: Buffer): string {
@@ -188,7 +200,9 @@ export class FmWebRuntimeGenerator {
         ? Buffer.from(`${JSON.stringify({ ...JSON.parse(sourceContent.toString('utf8')), dependencies: {
             ...JSON.parse(sourceContent.toString('utf8')).dependencies, '@fmweb/shared': 'file:./shared'
           } }, null, 2)}\n`)
-        : sourceContent;
+        : relativePath === 'vitest.config.ts'
+          ? Buffer.from(sourceContent.toString('utf8').replace("'../shared/src/index.ts'", "'./shared/src/index.ts'"))
+          : sourceContent;
 
       // lstat, not access: a link (even a dangling one) is something the user or the repository put
       // there, and a write would follow it to wherever it points. Leave it alone; for a managed
@@ -196,7 +210,9 @@ export class FmWebRuntimeGenerator {
       await this.assertSafeFolder(path.dirname(outputPath));
       const present = await lstat(outputPath).catch(() => undefined);
       if (present) {
-        const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey] ?? (relativePath === 'package.json' ? [normalizedHash(sourceContent)] : undefined);
+        const legacyHashes = ['package.json', 'vitest.config.ts'].includes(relativePath)
+          ? [...(MANAGED_TEMPLATE_FILES[managedKey] ?? []), normalizedHash(sourceContent)]
+          : MANAGED_TEMPLATE_FILES[managedKey];
         if (present.isDirectory()) {
           throw new Error(`${relativePath} in the generated runtime is a folder, not a file; remove it and try again.`);
         }
@@ -208,7 +224,7 @@ export class FmWebRuntimeGenerator {
           }
           continue;
         }
-        const decision = relativePath === 'package.json' && content.equals(await readFile(outputPath)) ? 'current' : legacyHashes
+        const decision = normalizedHash(content) === normalizedHash(await readFile(outputPath)) ? 'current' : legacyHashes
           ? decideManagedRefresh(await readFile(outputPath), legacyHashes, SHIPPED_MARKED_HASHES[managedKey] ?? [])
           : 'skip';
         if (decision === 'refresh') {
@@ -247,8 +263,15 @@ export class FmWebRuntimeGenerator {
       await this.assertSafeFolder(path.dirname(target));
       const present = await lstat(target).catch(() => undefined);
       if (present) {
+        const existingHash = present.isFile() ? normalizedHash(await readFile(target)) : undefined;
+        const current = existingHash === normalizedHash(content);
+        if (!current && existingHash && SHIPPED_SHARED_HASHES[file.split(path.sep).join('/')]?.includes(existingHash)) {
+          await writeManagedFile(target, content);
+          updated.push(reported);
+          continue;
+        }
         skipped.push(reported);
-        if (!present.isFile() || !content.equals(await readFile(target))) {
+        if (!current) {
           needsManualUpdate.push(reported);
           this.logger.warn('A generated shared file was edited and was not refreshed.', { file: reported });
         }
