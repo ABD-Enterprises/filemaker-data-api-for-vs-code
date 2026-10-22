@@ -134,6 +134,8 @@ it('escapes hostile markdown, gives duplicate headings unique IDs, rewrites link
 it.each([
   ['missing page', '[broken](./absent.md)', /broken internal link.*absent\.md/i],
   ['missing anchor', '[broken](#absent)', /broken internal link.*#absent/i],
+  ['external link outside the allowlist', '[outside](https://example.com/guide)', /unsupported external link.*example\.com/i],
+  ['repository lookalike', '[outside](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code.evil/guide)', /unsupported external link/i],
   ['missing image', '![broken](./absent.png)', /missing image.*absent\.png/i]
 ])('fails clearly on a %s', (_name, markdown, error) => {
   const source = fixture(`# Guide\n\n${markdown}`);
@@ -151,4 +153,57 @@ it('stages the website alongside TypeDoc without changing the workflow security 
   expect(workflow).toContain('pages: read');
   expect(workflow).toContain('id-token: write');
   expect(workflow).toContain('      - main');
+});
+
+
+it('keeps table cells and code readable inside horizontal scrolling regions', () => {
+  const dom = new JSDOM!(html('guide/index.html'), { runScripts: 'outside-only', url: 'https://docs.invalid/' });
+  const window = dom.window as typeof dom.window & {
+    getComputedStyle(element: unknown): { minWidth: string; overflowX: string; whiteSpace: string; overflowWrap: string; wordBreak: string };
+  };
+  const page = window.document;
+  const cells = page.querySelectorAll('table th, table td');
+  expect(cells.length).toBeGreaterThan(20);
+  expect(page.querySelectorAll('.table-scroll > table')).toHaveLength(page.querySelectorAll('table').length);
+  for (const wrapper of page.querySelectorAll('.table-scroll')) expect(window.getComputedStyle(wrapper).overflowX).toBe('auto');
+  for (const cell of cells) {
+    const minimum = window.getComputedStyle(cell).minWidth;
+    expect(minimum).toMatch(/px$/);
+    expect(parseFloat(minimum)).toBeGreaterThanOrEqual(96);
+  }
+  const defaults = Array.from(page.querySelectorAll('td code')).filter((code) => code.textContent === 'false');
+  expect(defaults.length).toBeGreaterThan(0);
+  for (const code of defaults) {
+    const style = window.getComputedStyle(code);
+    expect(style.whiteSpace).toBe('nowrap');
+    expect(style.overflowWrap).toBe('normal');
+    expect(style.wordBreak).toBe('normal');
+  }
+});
+
+it('maps absolute repository links to generated pages from the guide, changelog and home', () => {
+  const source = fixture(`# Guide\n\n[upgrade](${repo}/blob/main/extension/UPGRADE.md?from=guide#upgrade) [compatibility](${repo}/blob/main/extension/docs/COMPATIBILITY.md) [other](${repo}/blob/main/SUPPORT.md)`);
+  writeFileSync(path.join(source, 'extension/CHANGELOG.md'), `# Changelog\n\n## 1.7.0\n\nRead [UPGRADE.md](${repo}/blob/main/extension/UPGRADE.md#upgrade) and [USER_GUIDE.md](${repo}/blob/main/extension/docs/USER_GUIDE.md).\n`);
+  const out = path.join(source, 'site');
+  const result = build(source, out);
+  expect(result.status, result.stderr).toBe(0);
+  const guide = readFileSync(path.join(out, 'guide/index.html'), 'utf8');
+  expect(guide).toContain('href="../upgrade/index.html?from=guide#upgrade"');
+  expect(guide).toContain('href="compatibility/index.html"');
+  expect(guide).toContain(`href="${repo}/blob/main/SUPPORT.md"`);
+  expect(readFileSync(path.join(out, 'changelog/index.html'), 'utf8')).toContain('href="../upgrade/index.html#upgrade"');
+  const home = document(readFileSync(path.join(out, 'index.html'), 'utf8'));
+  expect(home.querySelectorAll('main > p a')[0]?.getAttribute('href')).toBe('upgrade/index.html#upgrade');
+  expect(home.querySelectorAll('main > p a:last-child')[0]?.getAttribute('href')).toBe('guide/index.html');
+});
+
+it('has one documentation list in the README and describes both Pages builds', () => {
+  const readme = readFileSync(path.join(root, 'extension/README.md'), 'utf8');
+  const section = readme.split('## Documentation')[1]!.split('## Need help')[0]!;
+  expect(section).not.toMatch(/^- \[User Guide\]/m);
+  for (const label of ['Compatibility', 'Report a bug', 'Contributing']) expect(section).toContain(label);
+});
+
+it('describes both Pages builds', () => {
+  expect(readFileSync(path.join(root, 'docs/CI.md'), 'utf8')).toContain('Builds the documentation website and the TypeDoc API reference');
 });

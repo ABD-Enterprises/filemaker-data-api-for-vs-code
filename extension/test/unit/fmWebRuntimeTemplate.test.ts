@@ -17,6 +17,7 @@ import {
   RUNTIME_TEMPLATE_VERSION,
   RuntimeTemplateUnavailableError,
   SHIPPED_MARKED_HASHES,
+  SHIPPED_SHARED_HASHES,
   decideManagedRefresh,
   normalizedHash,
   writeManagedFile
@@ -258,6 +259,17 @@ describe('FM Web runtime template', () => {
     for (const [file, hashes] of Object.entries(SHIPPED_MARKED_HASHES)) {
       const current = normalizedHash(await readFile(path.resolve(extensionDir, '..', 'runtime-next', file)));
       expect(hashes, `${file}: bump RUNTIME_TEMPLATE_VERSION and ADD this hash (keep the older ones): ${current}`).toContain(current);
+    }
+  });
+
+  it('records every current shared source hash so future refreshes recognize this release', async () => {
+    for (const [file, hashes] of Object.entries(SHIPPED_SHARED_HASHES)) {
+      let content = await readFile(path.resolve(extensionDir, '..', 'shared', file));
+      if (file === 'package.json') {
+        const pkg = JSON.parse(content.toString());
+        content = Buffer.from(`${JSON.stringify({ ...pkg, main: 'src/index.ts', types: 'src/index.ts', scripts: {} }, null, 2)}\n`);
+      }
+      expect(hashes, file).toContain(normalizedHash(content));
     }
   });
 

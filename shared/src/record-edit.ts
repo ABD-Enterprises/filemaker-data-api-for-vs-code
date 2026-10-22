@@ -24,8 +24,18 @@ export function fieldType(value: unknown): string {
 export function readOnlyFieldKind(field?: RecordFieldMetadata): 'calculation' | 'summary' | 'container' | undefined {
   const type = fieldType(field?.type);
   if (type === 'calculation' || type === 'summary') return type;
-  if (fieldType(field?.result) === 'container' || type === 'container') return 'container';
+  const result = fieldType(field?.result);
+  if (result === 'calculation' || result === 'summary') return result;
+  if (result === 'container' || type === 'container') return 'container';
   return undefined;
+}
+
+/** Resolve access hints even for layouts saved before kind was recorded. */
+export function runtimeFieldKind(field: { fmFieldName: string; kind?: string; result?: string; metadata?: { type?: string; result?: string } }): FieldKind {
+  const readOnly = readOnlyFieldKind({ name: field.fmFieldName, type: field.kind, result: field.result })
+    ?? readOnlyFieldKind({ name: field.fmFieldName, ...field.metadata });
+  if (readOnly) return readOnly;
+  return field.kind === 'global' ? 'global' : 'normal';
 }
 
 export function fieldKindNote(kind?: FieldKind): string | undefined {

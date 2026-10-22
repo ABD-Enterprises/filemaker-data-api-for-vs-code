@@ -39,3 +39,20 @@ describe('FileMaker record version and empty data', () => {
     expect(await client.find({ layout: 'Empty', query: [{}] })).toEqual({ data: [] });
   });
 });
+
+
+it('explains a stopped bridge in plain words', async () => {
+  const client = new RuntimeBridgeClient('http://bridge.test/fm', async () => { throw new TypeError('Failed to fetch'); });
+  await expect(client.find({ layout: ' Exact ', query: [{}] })).rejects.toThrow('Cannot reach the extension. Is the preview server running in VS Code?');
+});
+
+it.each([undefined, '500'])('does not mistake message text 306 for a conflict with code %s', async (code) => {
+  const client = new RuntimeBridgeClient('http://bridge.test/fm', async () => Response.json({ error: 'Field 306 could not be saved.', code }, { status: 500 }));
+  await expect(client.editRecord(' Exact ', '1', { ' Field ': 'value' }, '2')).rejects.toThrow('Field 306 could not be saved.');
+});
+
+
+it('explains a FileMaker field refusal even when the layout has no metadata', async () => {
+  const client = new RuntimeBridgeClient('http://bridge.test/fm', async () => Response.json({ error: 'Field cannot be modified', code: '201' }, { status: 500 }));
+  await expect(client.editRecord(' Exact ', '19', { ' Computed ': 'draft' }, '7')).rejects.toThrow('FileMaker will not let you edit this field. It may be calculated, summarized, or read-only for your account. Your changes have not been saved.');
+});
