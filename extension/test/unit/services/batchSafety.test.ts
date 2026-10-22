@@ -32,6 +32,76 @@ describe('batch update safety', () => {
     expect(parseBatchUpdateInput('[{"recordId":"1","fieldData":{}}]', 'json')[0]).not.toHaveProperty('modId');
     expect(() => parseBatchUpdateInput('[{"recordId":"1","modId":{},"fieldData":{}}]', 'json')).toThrow(/modId/);
   });
+  it('trims JSON record and modification IDs while preserving field names and values', async () => {
+    const { service, editRecord } = setup();
+    const entries = parseBatchUpdateInput(JSON.stringify([
+      { recordId: ' 1\t', modId: ' 7\n', fieldData: { ' Name ': ' Ada ' } },
+      { recordId: ' 2 ', modId: ' \t ', fieldData: { ' Name ': ' Grace ' } }
+    ]), 'json');
+    expect(entries).toEqual([
+      { recordId: '1', modId: '7', fieldData: { ' Name ': ' Ada ' } },
+      { recordId: '2', fieldData: { ' Name ': ' Grace ' } }
+    ]);
+    await service.batchUpdate(profile, ' Layout ', entries, { dryRun: false, concurrency: 1 });
+    expect(editRecord).toHaveBeenNthCalledWith(1, profile, ' Layout ', '1', { ' Name ': ' Ada ' }, undefined, { modId: '7' });
+    expect(editRecord).toHaveBeenNthCalledWith(2, profile, ' Layout ', '2', { ' Name ': ' Grace ' });
+  });
+  it.each([true, false])('ignores skipped-only rows when checking duplicates (dryRun=%s)', async (dryRun) => {
+    const { service, editRecord } = setup();
+    const result = await service.batchUpdate(profile, 'L', [
+      { recordId: '1', fieldData: { ' Calc ': 9, Summary: 10 } },
+      { recordId: '1', fieldData: { ' Name ': 'Ada' } },
+      { recordId: '1', fieldData: { Summary: 11 } }
+    ], { dryRun });
+    expect(result.failureCount).toBe(0);
+    expect(result.warnings?.some((warning) => /duplicate/i.test(warning))).toBe(false);
+    expect(editRecord).toHaveBeenCalledTimes(dryRun ? 0 : 1);
+    if (!dryRun) {
+      expect(result).toMatchObject({ successCount: 1, skippedReadOnlyRows: 2 });
+      expect(editRecord).toHaveBeenCalledWith(profile, 'L', '1', { ' Name ': 'Ada' });
+    }
+  });
+  it.each([
+    ['10.50', '10.5'], ['1e2', 100], [10.5, '10.500'],
+    ['Ada  \t', 'Ada'], ['a\r\nb\rc', 'a\nb\nc']
+  ])('confirms a lost reply after FileMaker normalizes %j to %j', async (sent, stored) => {
+    const { service, editRecord, getRecord } = setup();
+    editRecord.mockRejectedValueOnce(new FMClientError('reply lost', { isRetryable: true }))
+      .mockRejectedValueOnce(new FMClientError('stale', { code: '306' }));
+    getRecord.mockResolvedValue({ fieldData: { ' Name ': stored } });
+    const result = await service.batchUpdate(profile, ' Layout ', [{ recordId: '1', modId: '7', fieldData: { ' Name ': sent } }], { dryRun: false });
+    expect(result).toMatchObject({ successCount: 1, failureCount: 0, skippedChanged: 0 });
+    expect(getRecord).toHaveBeenCalledOnce();
+    expect(editRecord).toHaveBeenCalledWith(profile, ' Layout ', '1', { ' Name ': sent }, undefined, { modId: '7' });
+  });
+  it.each([
+    [' Ada', 'Ada'], ['9007199254740993', '9007199254740992'],
+    ['', 0], [null, ''], ['a\nb', 'ab'], ['01/02/2026', '02/01/2026']
+  ])('does not confirm different or ambiguous values %j and %j', async (sent, stored) => {
+    const { service, editRecord, getRecord } = setup();
+    editRecord.mockRejectedValueOnce(new FMClientError('reply lost', { isRetryable: true }))
+      .mockRejectedValueOnce(new FMClientError('stale', { code: '306' }));
+    getRecord.mockResolvedValue({ fieldData: { ' Name ': stored } });
+    const result = await service.batchUpdate(profile, 'L', [{ recordId: '1', modId: '7', fieldData: { ' Name ': sent } }], { dryRun: false });
+    expect(result).toMatchObject({ successCount: 0, failureCount: 1, skippedChanged: 0 });
+    expect(result.failures[0]?.reason).toMatch(/Could not confirm/);
+  });
+  it('does not reread an uncertain update after cancellation', async () => {
+    const { service, editRecord, getRecord } = setup();
+    let cancelled = false;
+    editRecord.mockRejectedValueOnce(new FMClientError('reply lost', { isRetryable: true }))
+      .mockImplementationOnce(async () => {
+        cancelled = true;
+        throw new FMClientError('stale', { code: '306' });
+      });
+    getRecord.mockResolvedValue({ fieldData: { ' Name ': 'Ada' } });
+    const result = await service.batchUpdate(profile, 'L', [{ recordId: '1', modId: '7', fieldData: { ' Name ': 'Ada' } }], { dryRun: false },
+      { log: vi.fn(), reportProgress: vi.fn(), isCancellationRequested: () => cancelled });
+    expect(getRecord).not.toHaveBeenCalled();
+    expect(editRecord).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ successCount: 0, failureCount: 1, skippedChanged: 0 });
+    expect(result.failures[0]?.reason).toMatch(/Could not confirm/);
+  });
   it('sends versions and fails stale rows once without stopping later rows, even if marked retryable', async () => {
     const { service, editRecord } = setup();
     editRecord.mockRejectedValueOnce(new FMClientError('stale', { code: '306', isRetryable: true })).mockResolvedValue({});

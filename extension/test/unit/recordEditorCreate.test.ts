@@ -11,6 +11,8 @@ import { SchemaService } from '../../src/services/schemaService';
 import { SecretStore } from '../../src/services/secretStore';
 import { RecordEditorPanel } from '../../src/webviews/recordEditor';
 import { InMemorySecretStorage } from './mocks';
+import { JSDOM, loadPage } from '../helpers/jsdomPage';
+import { readFileSync } from 'fs';
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 const workspace = vscode.workspace as unknown as { isTrusted: boolean; getConfiguration: ReturnType<typeof vi.fn> };
@@ -88,6 +90,37 @@ describe('Record Editor create mode (stubbed services)', () => {
   });
 
   const create = { type: 'createRecord', payload: { profileId: 'p1', layout: 'People', fieldData: { Name: 'Ada', Age: 36, Blank: '' } } };
+
+  it('reports a failed create field lookup and lets the user retry', async () => {
+    const getFields = vi.fn().mockRejectedValueOnce(new Error('Connection timed out'))
+      .mockResolvedValue({ supported: true, fields, fromCache: false });
+    panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields }
+    });
+    await panel.send(create);
+    expect(panel.last('error')).toEqual({ type: 'error', message: "Could not load the layout's fields: Connection timed out. Try again." });
+    expect(createRecord).not.toHaveBeenCalled();
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+    if (JSDOM) {
+      const html = (vi.mocked(vscode.window.createWebviewPanel).mock.results.at(-1)?.value as { webview: { html: string } }).webview.html;
+      const page = loadPage(html, readFileSync(path.resolve(__dirname, '../../src/webviews/recordEditor/ui/index.js'), 'utf8'));
+      page.send({ type: 'init', payload: { profiles: [{ id: 'p1', name: 'P' }], activeProfileId: 'p1', defaults: { mode: 'create', profileId: 'p1', layout: 'People' } } });
+      page.send({ type: 'layoutsLoaded', payload: { profileId: 'p1', layouts: ['People'] } });
+      page.send({ type: 'layoutFields', payload: { profileId: 'p1', layout: 'People', fields } });
+      page.window.eval("const input = document.querySelector('#fieldEditor textarea'); input.value = 'Ada'; input.dispatchEvent(new Event('input'));");
+      page.document.getElementById('createButton')!.click();
+      expect(page.document.getElementById('createButton')!.getAttribute('disabled')).not.toBeNull();
+      page.send(panel.last('error'));
+      expect(page.document.getElementById('createButton')!.getAttribute('disabled')).toBeNull();
+    }
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
+    await panel.send(create);
+    expect(getFields).toHaveBeenCalledTimes(2);
+    expect(createRecord).toHaveBeenCalledOnce();
+    expect(panel.last('recordCreated')?.payload).toMatchObject({ recordId: '501' });
+  });
 
   it.each(['A\0B\u200bC\ufeffD', 'A\0B\0C\u200bD\ufeffE'].flatMap((value) =>
     [undefined, 'Cancel', 'Remove the character and continue'].map((choice) => ({ value, choice }))
