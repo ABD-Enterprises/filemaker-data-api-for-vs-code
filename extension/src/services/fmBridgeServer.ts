@@ -389,7 +389,7 @@ function requireString(value: unknown, fieldName: string): string {
     throw new Error(`${fieldName} is required.`);
   }
 
-  return value.trim();
+  return fieldName === 'recordId' ? value.trim() : value;
 }
 
 function readString(value: unknown): string | undefined {

@@ -546,7 +546,7 @@ export class RecordEditorPanel {
       try {
         known = (await this.schemaService.getFields(profile, payload.layout)).fields;
       } catch (error) {
-        await this.postError(`Could not load the layout's fields: ${formatError(error)}. Try again.`);
+        await this.postError(`Could not load the layout's fields: ${formatError(error).replace(/\.$/, '')}. Try again.`);
         return;
       }
     }

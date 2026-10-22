@@ -30,6 +30,39 @@ describe('FmWebProjectService', () => {
     await rm(path.join(WORKSPACE_ROOT, '.fmweb'), { recursive: true, force: true });
   });
 
+  it('parses a damaged project without accepting malformed environments or flags', async () => {
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub(), createSchemaServiceStub(), logger);
+    await service.initializeProject();
+    await writeFile(service.getProjectConfigPath(), JSON.stringify({ name: ' Project ', schemaVersion: 1.5,
+      environments: [null, [], 'bad', {}, { id: ' ', name: 'N', profileId: 'p' },
+        { id: ' env ', name: ' Dev ', profileId: ' p1 ', database: ' Exact DB ' },
+        { id: 'e2', name: 'No DB', profileId: 'p2', database: ' ' }],
+      featureFlags: { runtimeGenerationEnabled: false, bridgeServerEnabled: 'false', commercialModeEnabled: true },
+      license: { tier: ' pro ', keyId: ' key ' }
+    }));
+    expect(await service.readProjectConfig()).toMatchObject({ name: 'Project', schemaVersion: 1,
+      environments: [{ id: 'env', name: 'Dev', profileId: 'p1', database: ' Exact DB ' }, { id: 'e2', name: 'No DB', profileId: 'p2', database: undefined }],
+      featureFlags: { runtimeGenerationEnabled: false, bridgeServerEnabled: true, commercialModeEnabled: true },
+      license: { tier: 'pro', keyId: 'key' }
+    });
+    await writeFile(service.getProjectConfigPath(), '{bad');
+    expect(await service.readProjectConfig()).toBeUndefined();
+  });
+
+  it('falls back to schema fields and keeps sync usable when scripts are unavailable', async () => {
+    const schema = { getLayoutSchema: vi.fn().mockResolvedValue({ fields: [{ name: ' Exact field ' }, { name: '' }] }) };
+    const service = new FmWebProjectService(createProfileStoreStub(), createFmClientStub({
+      listLayouts: vi.fn().mockResolvedValue([' Layout ']), getLayoutMetadata: vi.fn().mockResolvedValue({}),
+      listScripts: vi.fn().mockRejectedValue(new Error('Not supported'))
+    }), schema as never, logger);
+    await service.initializeProject();
+    const summary = await service.syncMetadata(profile);
+    expect(summary).toMatchObject({ fieldCount: 1, scriptCount: 0 });
+    expect(await service.getAvailableFields(' Layout ')).toEqual([' Exact field ']);
+    expect(schema.getLayoutSchema).toHaveBeenCalledWith(profile, ' Layout ');
+    expect(logger.warn).toHaveBeenCalledWith('Script list endpoint not available for metadata sync.', expect.objectContaining({ profileId: profile.id }));
+  });
+
   it('initializes project folders and config', async () => {
     const service = new FmWebProjectService(
       createProfileStoreStub(),

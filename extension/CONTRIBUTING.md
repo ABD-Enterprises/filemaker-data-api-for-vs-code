@@ -93,6 +93,8 @@ npm run build           # needed first on a clean checkout (the package check re
 npm run package:check   # validate the VSIX
 ```
 
+Coverage floors are 82% lines, 81.5% statements, 80.5% functions and 76.5% branches, about two points below the measured result; raise them as tests improve.
+
 CI (`build-test`) runs the same steps plus a dependency audit and a VSIX size check. See [docs/CI.md](../docs/CI.md).
 
 ## Code review checklist

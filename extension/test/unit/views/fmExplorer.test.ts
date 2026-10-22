@@ -56,6 +56,39 @@ function createProvider(deps = createMockDeps()) {
 }
 
 describe('FMExplorerProvider', () => {
+  describe('field and value-list branches', () => {
+    function setup(schema: unknown) {
+      const deps = createMockDeps();
+      deps.profileStore.getProfile.mockResolvedValue({ id: 'p1' });
+      const getFields = vi.fn().mockResolvedValue(schema);
+      Object.assign(deps.schemaService, { getFields });
+      return { deps, getFields, provider: createProvider(deps) };
+    }
+    it('keeps exact field names and explains repetitions and validation', async () => {
+      const { provider, getFields } = setup({ supported: true, fields: [{ name: ' Name ', result: 'text', repetitions: 3, validation: { required: true } }] });
+      const children = await provider.getChildren(new FMExplorerItem({ kind: 'fieldsRoot', label: 'Fields', profileId: 'p1', layoutName: ' Layout ' }));
+      expect(getFields).toHaveBeenCalledWith({ id: 'p1' }, ' Layout ');
+      expect(children).toHaveLength(1);
+      expect(children[0]).toMatchObject({ label: ' Name ', fieldName: ' Name ', description: 'text • x3', tooltip: expect.stringContaining('Validation: {"required":true}') });
+    });
+    it.each([
+      [{ supported: false, fields: [] }, 'Metadata not supported on this server/profile.'],
+      [{ supported: true, fields: [], message: 'No fields on layout' }, 'No field metadata found']
+    ])('distinguishes unavailable metadata from an empty field list', async (schema, label) => {
+      const { provider } = setup(schema);
+      const children = await provider.getChildren(new FMExplorerItem({ kind: 'fieldsRoot', label: 'Fields', profileId: 'p1', layoutName: 'L' }));
+      expect(children.map((child) => child.label)).toEqual([label]);
+    });
+    it('shows different recovery messages for field and value-list failures', async () => {
+      const { provider, getFields } = setup(undefined);
+      getFields.mockRejectedValue(new Error('offline'));
+      for (const [kind, label] of [['fieldsRoot', 'Failed to load fields'], ['valueListsRoot', 'Failed to load value lists']] as const) {
+        const children = await provider.getChildren(new FMExplorerItem({ kind, label: 'Group', profileId: 'p1', layoutName: 'L' }));
+        expect(children.map((child) => child.label)).toEqual([label]);
+      }
+    });
+  });
+
   describe('getChildren (root)', () => {
     it('returns an empty array when nothing exists (lets viewsWelcome render)', async () => {
       const provider = createProvider();
