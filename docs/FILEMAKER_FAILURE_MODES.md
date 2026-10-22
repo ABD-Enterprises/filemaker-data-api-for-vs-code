@@ -539,3 +539,7 @@ Import Saved Queries rejects malformed JSON with **That file is not valid JSON**
 
 CSV exports add the portal information column only if a record actually has fewer related rows than FileMaker reports, including when that record appears on a later page. Exports without missing related rows have only their record columns and field columns.
 - FM Web preview record requests ignore spaces around record IDs. They keep leading zeros: ` 00123 ` is sent as `00123`. Layout and script names keep every space exactly as supplied. Socket-free bridge tests check both rules.
+
+## Reading messages and fields on extension screens
+
+Connection, query, record, script, settings and diagnostic screens share the same fonts, buttons and boxed messages in light, dark and high-contrast themes. Error and warning messages keep their text as well as their colour. A field with dimmed text and no resize handle is read-only or unavailable; changing the theme does not make it writable. The Record Editor leaves an empty Patch Preview out of view until there is something to show. Schema Diff starts with changes only; clear **Show only changes** to include unchanged fields.

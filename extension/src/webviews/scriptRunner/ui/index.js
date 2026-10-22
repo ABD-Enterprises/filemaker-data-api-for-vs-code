@@ -433,7 +433,7 @@ function renderBuilderValueControl(field, rowId, type, value) {
 
   control.id = `${rowId}Value`;
   control.dataset.field = 'value';
-  control.className = normalizedType === 'json' ? 'builder-json-value' : '';
+  control.className = normalizedType === 'json' ? 'builder-json-value fm-code' : '';
   field.replaceChildren(label, control);
 }
 

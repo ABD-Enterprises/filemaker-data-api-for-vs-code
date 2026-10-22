@@ -1,3 +1,4 @@
+import { standardFieldsCss } from '@fmweb/shared/dist/field-standards';
 import * as vscode from 'vscode';
 
 import { escapeHtml } from '../../utils/escapeHtml';
@@ -32,12 +33,9 @@ export function renderReopenPage(title: string, reopenWith: string): string {
 <html lang="en"><head><meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';" />
 <title>${escapeHtml(title, false)}</title>
-<style nonce="${nonce}">
-  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background, #ffffff); padding: 24px; line-height: 1.5; }
-  code { font-family: var(--vscode-editor-font-family); }
-</style></head>
-<body>
-<h2>${escapeHtml(title, false)}</h2>
+<style nonce="${nonce}">${standardFieldsCss(true)}</style></head>
+<body class="fm-page">
+<h1>${escapeHtml(title, false)}</h1>
 <p>This panel was closed when VS Code reloaded, so it has nothing to show. Close this tab and open it again: run <strong>${escapeHtml(reopenWith, false)}</strong> from the Command Palette.</p>
 </body></html>`;
 }

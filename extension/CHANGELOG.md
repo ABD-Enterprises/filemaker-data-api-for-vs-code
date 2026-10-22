@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- All screens now share the same fonts, buttons, messages and read-only look.
 - The user guide, upgrade notes and a changelog by version are now on the project's website.
 
 ## 1.7.0

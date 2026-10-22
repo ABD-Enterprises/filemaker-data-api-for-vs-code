@@ -1,71 +1,20 @@
 /* Colors come from the active VS Code theme so the builder matches light, dark and high-contrast themes. */
 :root {
-  --bg: var(--vscode-editor-background, #f4f6f8);
-  --panel: var(--vscode-sideBar-background, var(--vscode-editor-background, #ffffff));
-  --text: var(--vscode-foreground, #1f2933);
-  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
-  --accent: var(--vscode-button-background, #0f766e);
-  --accent-text: var(--vscode-button-foreground, #ffffff);
-  --accent-strong: var(--vscode-button-hoverBackground, #115e59);
-  --secondary: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
-  --secondary-text: var(--vscode-button-secondaryForeground, #1f2933);
-  --secondary-hover: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground, var(--vscode-editor-background, #ffffff)));
-  --border: var(--vscode-contrastBorder, var(--vscode-panel-border, var(--vscode-widget-border, #d0d7de)));
-  --input-bg: var(--vscode-input-background, #ffffff);
-  --input-text: var(--vscode-input-foreground, #1f2933);
-  --input-border: var(--vscode-input-border, var(--border));
   --focus: var(--vscode-focusBorder, #0f766e);
-  --link: var(--vscode-textLink-foreground, #0f766e);
-  --error: var(--vscode-errorForeground, #b42318);
   --row-hover: var(--vscode-list-hoverBackground, rgba(15, 118, 110, 0.06));
   --header-bg: var(--vscode-editorWidget-background, #f8fafc);
-  --mono: var(--vscode-editor-font-family, 'SF Mono', Menlo, monospace);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
-  font-size: var(--vscode-font-size, 13px);
-  background: var(--bg);
-  color: var(--text);
 }
 
 .container {
-  max-width: min(1200px, 96vw);
-  margin: 0 auto;
-  padding: clamp(12px, 2vw, 20px);
   display: grid;
   /* minmax(0, …) lets wide result tables scroll inside their panel instead of widening the page. */
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 1.35em;
-  font-weight: 600;
-}
-
 .header p {
   margin: 4px 0 0;
   color: var(--muted);
-}
-
-h2 {
-  margin: 0;
-  font-size: 1.05em;
-  font-weight: 600;
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: clamp(12px, 2vw, 18px);
 }
 
 .visually-hidden {
@@ -93,27 +42,11 @@ legend {
 select,
 textarea,
 input {
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  padding: 5px 8px;
-  font: inherit;
-  background: var(--input-bg);
-  color: var(--input-text);
   min-width: 0;
 }
 
 textarea {
-  font-family: var(--mono);
   resize: vertical;
-}
-
-select:focus,
-textarea:focus,
-input:focus,
-button:focus-visible,
-summary:focus-visible {
-  outline: 1px solid var(--focus);
-  outline-offset: 1px;
 }
 
 .grid > div {
@@ -140,69 +73,12 @@ summary:focus-visible {
   flex: 1;
 }
 
-/* Buttons */
-button,
-summary.secondary {
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: var(--accent);
-  color: var(--accent-text);
-  padding: 5px 12px;
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-button:hover:not(:disabled) {
-  background: var(--accent-strong);
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-button.secondary,
-summary.secondary {
-  background: var(--secondary);
-  color: var(--secondary-text);
-}
-
-button.secondary:hover:not(:disabled),
-summary.secondary:hover {
-  background: var(--secondary-hover);
-}
-
-button.small {
-  padding: 2px 8px;
-}
-
-button.link {
-  background: none;
-  color: var(--link);
-  padding: 0 4px;
-}
-
 button.link:hover:not(:disabled) {
-  background: none;
   text-decoration: underline;
 }
 
-button.link.danger {
-  color: var(--error);
-}
-
 button.icon {
-  background: none;
-  color: var(--muted);
-  padding: 0 8px;
-  font-size: 1.2em;
   line-height: 1;
-}
-
-button.icon:hover:not(:disabled) {
-  background: var(--row-hover);
-  color: var(--text);
 }
 
 .actions {
@@ -244,7 +120,7 @@ details.menu > summary::after {
   background: var(--vscode-menu-background, var(--panel));
   color: var(--vscode-menu-foreground, var(--text));
   border: 1px solid var(--vscode-menu-border, var(--border));
-  border-radius: 6px;
+  border-radius: var(--fm-control-radius);
   box-shadow: 0 4px 16px var(--vscode-widget-shadow, color-mix(in srgb, var(--vscode-foreground, #333333) 20%, transparent));
 }
 
@@ -320,7 +196,7 @@ details.menu > summary::after {
 .sort-editor {
   min-inline-size: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--fm-panel-radius);
   padding: 8px 10px 10px;
   margin: 0;
 }
@@ -375,11 +251,6 @@ details.menu > summary::after {
   min-height: 1.4em;
 }
 
-.status.error {
-  color: var(--error);
-  font-weight: 600;
-}
-
 /* Results */
 .results-header,
 .results-toolbar {
@@ -416,13 +287,8 @@ details.menu > summary::after {
 .virtual-wrap {
   height: 420px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--fm-panel-radius);
   overflow: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
 }
 
 th,
@@ -476,11 +342,10 @@ td.actions-col {
 }
 
 .raw {
-  font-family: var(--mono);
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background, #ffffff));
   color: var(--text);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: var(--fm-panel-radius);
   overflow: auto;
   max-height: 420px;
 }
@@ -492,7 +357,7 @@ td.actions-col {
   min-height: 24px; /* a comfortable target at every zoom level */
 }
 
-.history-panel > summary h2 {
+.history-panel > summary h2  {
   display: inline;
 }
 
@@ -509,13 +374,13 @@ td.actions-col {
   padding: 20px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--fm-panel-radius);
 }
 
 .loading-skeleton .skeleton-line {
   height: 16px;
   background: var(--vscode-editor-inactiveSelectionBackground, rgba(208, 215, 222, 0.9));
-  border-radius: 4px;
+  border-radius: var(--fm-control-radius);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
@@ -551,12 +416,6 @@ td.actions-col {
 .loading-skeleton.hidden,
 .hidden {
   display: none;
-}
-
-@media (max-width: 700px) {
-  .container {
-    padding: 10px;
-  }
 }
 
 .fm-version {
@@ -657,28 +516,7 @@ button {
   .criterion-row.fm-fields > .fm-field { flex: none; }
 }
 
-/* Theme colors are paired; HC outlines do not change control geometry. */
-input, select, textarea {
-  background: var(--vscode-input-background, #ffffff);
-  color: var(--vscode-input-foreground, #333333);
-  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
-  accent-color: var(--vscode-focusBorder, #007acc);
-}
-button, summary {
-  outline: 1px solid var(--vscode-contrastBorder, transparent);
-}
-button:hover, summary:hover {
-  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible,
-button:focus-visible, summary:focus-visible, a:focus-visible {
-  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
-  outline-offset: 1px;
-}
-a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
-
-/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
-input::placeholder, textarea::placeholder {
-  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
-  opacity: 1;
-}
+/* Action labels stay whole even in a narrow result column. */
+.actions-col a { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+th.actions-col, td.actions-col { min-width: 64px; }
+.sort-header { min-height: 0; white-space: nowrap; overflow-wrap: normal; line-height: 1.4; }

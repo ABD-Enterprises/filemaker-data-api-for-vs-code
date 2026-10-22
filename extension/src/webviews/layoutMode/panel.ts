@@ -398,6 +398,9 @@ export class LayoutModePanel {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui', 'index.js')
     );
+    const standardsStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui', 'fieldStandards.css')
+    );
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'layoutMode', 'ui', 'index.css')
     );
@@ -412,6 +415,7 @@ export class LayoutModePanel {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
+    <link rel="stylesheet" href="${standardsStyleUri}" />
     <link rel="stylesheet" href="${styleUri}" />
     <title>FileMaker Layout Mode</title>
   </head>

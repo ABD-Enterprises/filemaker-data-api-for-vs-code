@@ -63,13 +63,13 @@ function setup(editing = profile) {
 describe('connection wizard extraction characterization', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('renders exactly the original HTML, including CSP, resource paths and footer', () => {
+  it('renders the HTML with the shared stylesheet, CSP, resource paths and footer', () => {
     const nonce = vi.spyOn(csp, 'createNonce').mockReturnValue('characterization-nonce');
     setRuntimeVersion('1.6.0');
     try {
       const { webview } = setup();
-      // Captured from the unsplit host with a fixed nonce, version and resource root.
-      expect(createHash('sha256').update(webview.html).digest('hex')).toBe('e14a8ad476f4d72ab6e5f556bb62d8f29eed30117d526d9dbee5ba5d9e775da5');
+      // Includes the shared stylesheet link with a fixed nonce, version and resource root.
+      expect(createHash('sha256').update(webview.html).digest('hex')).toBe('da59c44a151b9ccea001427d0d8bb12563764c0541fc1ff226e4d7ebbbbda928');
     } finally {
       nonce.mockRestore();
     }

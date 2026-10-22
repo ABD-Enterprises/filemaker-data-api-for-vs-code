@@ -57,6 +57,8 @@ Turn off offline mode before running a check. In Restricted Mode, you can check 
 
 ## Command reference
 
+FileMaker screens use the same fonts, buttons and boxed messages, and follow your VS Code theme. Fields you cannot edit have dimmed text and no resize handle. JSON boxes use the editor font. Layout Mode uses these styles around the page you are designing; the page itself keeps its own appearance.
+
 The table lists every extension command. Titles have the **FileMaker:** prefix in VS Code. “Shown” describes palette visibility; “needs” describes additional requirements when you run the command. A profile means a saved connection profile. Server operations also need access to the server and the relevant FileMaker privileges. Feature settings, workspace trust, offline mode and enterprise policy still apply as described in the sections below.
 
 | Title | What it does | When it is available |
@@ -67,7 +69,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
 | Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
-| Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
+| Show Effective Settings | Shows the settings in effect and where their values come from, with a page title and styled action buttons. | Always shown. |
 | About / Show Version | Shows installed extension, build and editor details. | Always shown. |
 | Add Connection Profile | Opens the connection wizard to test a connection and save a new profile. | Always shown; needs write operations allowed by offline mode and policy. |
 | Edit Connection Profile | Opens a saved profile in the connection wizard, where you can trust or forget a certificate without changing a VS Code setting. | Shown with a profile; needs an unlocked profile and write operations allowed. |
@@ -96,7 +98,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Show Request History | Lists recent requests and opens a selected entry's details as JSON. | Shown in power-user mode; needs recorded requests. |
 | Refresh Connections | Refreshes the FileMaker Connections tree. | Connections toolbar action; hidden from the Command Palette. |
 | Capture Schema Snapshot | Saves the chosen layout's current metadata as a schema snapshot. | Shown with a profile; needs layout metadata support. |
-| Diff Schema Snapshots | Compares two saved snapshots for a layout. | Shown when snapshots exist; needs two snapshots for the chosen profile and layout. |
+| Diff Schema Snapshots | Compares two saved snapshots for a layout. Changes are shown first; clear **Show only changes** to see all fields. | Shown when snapshots exist; needs two snapshots for the chosen profile and layout. |
 | Diff Against Latest Snapshot | Compares current layout fields with its latest saved snapshot. | Shown when snapshots exist; needs a snapshot and current layout metadata. |
 | Open Schema Snapshot JSON | Opens a saved schema snapshot as JSON. | Shown when snapshots exist. |
 | Write AI Context | Writes selected layout schemas and script names to an AI context Markdown file. | Shown with a profile; writing inside the workspace needs trust. |

@@ -1,45 +1,6 @@
-:root {
-  --bg: var(--vscode-editor-background, #ffffff);
-  --panel: var(--vscode-editorWidget-background, #f3f3f3);
-  --text: var(--vscode-foreground, #333333);
-  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
-  --border: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc));
-  --accent: var(--vscode-button-background, #007acc);
-  --accent-strong: var(--vscode-button-hoverBackground, #0062a3);
-  --error: var(--vscode-errorForeground, #a1260d);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: 'Avenir Next', 'Segoe UI', sans-serif;
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
-  color: var(--text);
-  background: var(--bg);
-}
-
 .container {
-  max-width: min(1200px, 95vw);
-  margin: 0 auto;
-  padding: clamp(12px, 2vw, 24px);
   display: grid;
   gap: 16px;
-}
-
-.panel,
-.header {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: clamp(12px, 2vw, 24px);
-}
-
-.header h1 {
-  margin: 0;
-  font-size: clamp(1.1rem, 1.2rem + 0.15vw, 1.5rem);
 }
 
 .header p {
@@ -56,17 +17,6 @@ body {
 
 label {
   color: var(--muted);
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
-}
-
-input,
-select,
-textarea {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-family: 'SF Mono', Menlo, monospace;
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
 }
 
 textarea {
@@ -80,28 +30,9 @@ textarea {
   gap: 8px;
 }
 
-button {
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--vscode-button-foreground, #ffffff);
-  font-weight: 600;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: var(--accent-strong);
-}
-
 .status {
   margin: 8px 0 0;
   color: var(--muted);
-}
-
-.status.error {
-  color: var(--error);
-  font-weight: 600;
 }
 
 .loading-skeleton {
@@ -111,14 +42,14 @@ button:hover {
   padding: 20px;
   background: color-mix(in srgb, var(--panel) 92%, var(--bg) 8%);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--fm-panel-radius);
   margin-top: 12px;
 }
 
 .loading-skeleton .skeleton-line {
   height: 16px;
   background: var(--vscode-editor-inactiveSelectionBackground, rgba(208, 215, 222, 0.9));
-  border-radius: 4px;
+  border-radius: var(--fm-control-radius);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
@@ -149,11 +80,6 @@ button:hover {
   display: none;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
 .table-scroll-wrapper {
   width: 100%;
   overflow-x: auto;
@@ -162,10 +88,6 @@ table {
 th,
 td {
   border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-  padding: 8px;
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
 }
 
 th {
@@ -175,7 +97,7 @@ th {
 .raw {
   background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background, #ffffff));
   color: var(--vscode-editor-foreground, #333333);
-  border-radius: 8px;
+  border-radius: var(--fm-panel-radius);
   padding: 10px;
   overflow: auto;
   max-height: 320px;
@@ -193,15 +115,10 @@ th {
 
 .conflict {
   margin: 10px 0 0;
-  padding: 10px 12px;
-  border: 1px solid var(--error);
-  border-radius: 8px;
-  background: var(--vscode-editor-background, #ffffff);
 }
 
 .conflict p {
   margin: 0 0 8px;
-  color: var(--error);
 }
 
 .conflict.hidden {
@@ -227,12 +144,6 @@ details.menu > summary {
   list-style: none;
   user-select: none;
   display: inline-block;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-weight: 600;
-  background: var(--vscode-button-secondaryBackground, var(--vscode-editor-background, #ffffff));
-  color: var(--vscode-button-secondaryForeground, #333333);
 }
 
 details.menu > summary::-webkit-details-marker {
@@ -257,7 +168,7 @@ details.menu > summary::after {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--fm-control-radius);
   box-shadow: 0 4px 16px var(--vscode-widget-shadow, color-mix(in srgb, var(--vscode-foreground, #333333) 20%, transparent));
 }
 
@@ -341,28 +252,7 @@ button {
   white-space: normal;
 }
 
-/* Theme colors are paired; HC outlines do not change control geometry. */
-input, select, textarea {
-  background: var(--vscode-input-background, #ffffff);
-  color: var(--vscode-input-foreground, #333333);
-  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
-  accent-color: var(--vscode-focusBorder, #007acc);
-}
-button, summary {
-  outline: 1px solid var(--vscode-contrastBorder, transparent);
-}
-button:hover, summary:hover {
-  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible,
-button:focus-visible, summary:focus-visible, a:focus-visible {
-  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
-  outline-offset: 1px;
-}
-a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
-
-/* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
-input::placeholder, textarea::placeholder {
-  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
-  opacity: 1;
-}
+/* Notes belong above the form; an empty preview should not look like a black bar. */
+#hiddenNote { margin-bottom: 16px; }
+#patchPreview:empty { display: none; }
+.actions { align-items: center; }

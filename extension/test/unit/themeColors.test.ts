@@ -6,6 +6,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildSync } from 'esbuild';
 
 const root = path.resolve(import.meta.dirname, '../../..');
+const standardModule = { exports: {} as { standardFieldsCss: (webview?: boolean) => string } };
+new Function('module', buildSync({ entryPoints: [path.join(root, 'shared/src/field-standards.ts')], bundle: true, write: false, format: 'cjs' }).outputFiles[0]!.text)(standardModule);
+const standardCss = standardModule.exports.standardFieldsCss(true);
 // All CSS named colors, not just the common white/black/red spellings.
 const names = new Set(('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' '));
 
@@ -70,9 +73,9 @@ describe('webview theme color regression guard', () => {
     // and Editor. Its geometry is shared with runtime-next and must stay unchanged.
     const compiled = buildSync({ entryPoints: [path.join(root, 'shared/src/field-standards.ts')],
       bundle: true, write: false, platform: 'node', format: 'cjs' });
-    const module = { exports: {} as { standardFieldsCss: () => string } };
+    const module = { exports: {} as { standardFieldsCss: (webview?: boolean) => string } };
     new Function('module', compiled.outputFiles[0]!.text)(module);
-    styles.push({ file: 'shared/src/field-standards.ts (generated CSS)', css: module.exports.standardFieldsCss() });
+    styles.push({ file: 'shared/src/field-standards.ts (generated CSS)', css: module.exports.standardFieldsCss(true) });
     expect(styles.length).toBeGreaterThanOrEqual(12);
     expect(styles.flatMap(({ file, css }) => violations(css).map((value) => `${file}: ${value}`))).toEqual([]);
   });
@@ -112,7 +115,9 @@ const themeTokens = new Map(audit.themes.map(([theme]) => [theme, audit.tokensFo
 const styleFiles = [path.join(root, 'designer-ui/src/styles.css'), ...filesIn(path.join(root, 'extension/src'))];
 const auditedStyles = styleFiles.flatMap((file) => {
   const source = readFileSync(file, 'utf8');
-  return file.endsWith('.css') ? [{ file, css: source }] : [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => ({ file, css: match[1]! }));
+  if (file.endsWith('.css')) return [{ file, css: standardCss + source }];
+  const blocks = [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]!);
+  return blocks.length ? [{ file, css: blocks.join('\n').replaceAll('${standardFieldsCss(true)}', standardCss) }] : [];
 });
 const stylesheet = (page: string) => auditedStyles.find(({ file }) => file === path.join(root, `extension/src/webviews/${page}/ui/styles.css`))!.css;
 const designerCss = auditedStyles.find(({ file }) => file === path.join(root, 'designer-ui/src/styles.css'))!.css;

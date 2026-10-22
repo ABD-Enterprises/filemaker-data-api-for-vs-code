@@ -26,12 +26,12 @@ export function getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Query Builder</title>
-  <link rel="stylesheet" href="${styleUri}" />
   <link rel="stylesheet" href="${standardsStyleUri}" />
+  <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
-    <header class="header">
+    <header class="header fm-panel">
       <h1>FileMaker Query Builder</h1>
       <p>Build a find request, run it, and open any record from the results.</p>
     </header>
@@ -76,11 +76,11 @@ export function getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.
       <div id="jsonEditor" role="tabpanel" aria-labelledby="jsonTab" class="hidden">
         <div class="row">
           <label for="findJson">Find JSON (array of requests)</label>
-          <textarea id="findJson" rows="6" spellcheck="false">[{}]</textarea>
+          <textarea class="fm-code" id="findJson" rows="6" spellcheck="false">[{}]</textarea>
         </div>
         <div class="row">
           <label for="sortJson">Sort JSON (optional array)</label>
-          <textarea id="sortJson" rows="3" spellcheck="false"></textarea>
+          <textarea class="fm-code" id="sortJson" rows="3" spellcheck="false"></textarea>
         </div>
       </div>
 

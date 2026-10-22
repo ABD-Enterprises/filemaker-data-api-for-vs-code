@@ -382,12 +382,12 @@ export class RecordViewerPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Record Viewer</title>
-  <link rel="stylesheet" href="${styleUri}" />
   <link rel="stylesheet" href="${standardsStyleUri}" />
+  <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
-    <header class="header">
+    <header class="header fm-panel">
       <h1>FileMaker Record Viewer</h1>
       <p>Inspect one record and related portal data.</p>
     </header>
@@ -407,7 +407,7 @@ export class RecordViewerPanel {
       </div>
       <div class="actions">
         <button id="loadButton">Load Record</button>
-        <button id="exportButton">Export Record JSON</button>
+        <button class="secondary" id="exportButton">Export Record JSON</button>
         ${copyRecordRequestMenuHtml()}
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>

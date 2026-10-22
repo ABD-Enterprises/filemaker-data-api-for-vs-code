@@ -1,76 +1,17 @@
-/*
- * Map the wizard's local design tokens onto VS Code's theme tokens. This is
- * what makes the wizard track the user's editor theme — light, dark, high
- * contrast, custom — instead of imposing our own palette. Optional colors fall
- * back to defined theme tokens before standalone neutral values so missing
- * registrations cannot put light panels behind high contrast light text.
- *
- * The @media (prefers-color-scheme) override is gone on purpose: VS Code's
- * tokens already adapt to the user's chosen theme, so a parallel rule would
- * fight the theme service in some configurations (high contrast in particular).
- */
-:root {
-  --bg: var(--vscode-editor-background, #f8fafb);
-  --panel: var(--vscode-editorWidget-background, var(--vscode-editor-background, #ffffff));
-  --border: var(--vscode-contrastBorder, var(--vscode-input-border, var(--vscode-textBlockQuote-border, #e2e6ea)));
-  --accent: var(--vscode-button-background, #007acc);
-  --accent-hover: var(--vscode-button-hoverBackground, #0284c7);
-  --text: var(--vscode-foreground, #1e293b);
-  --muted: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333));
-  --error: var(--vscode-errorForeground, #ef4444);
-  --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-foreground, #333333))));
-  --warning: var(--vscode-editorWarning-foreground, #d97706);
-}
-
-body {
-  margin: 0;
-  font-family: var(--vscode-font-family, 'Avenir Next', 'Segoe UI', sans-serif);
-  font-size: var(--vscode-font-size, clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem));
-  background: var(--bg);
-  color: var(--text);
-}
-
-.container {
-  max-width: min(640px, 95vw);
-  margin: 0 auto;
-  padding: clamp(16px, 3vw, 32px);
-}
-
-h1 {
-  font-size: clamp(1.1rem, 1.2rem + 0.15vw, 1.5rem);
-  margin: 0 0 4px 0;
-}
-
 .subtitle {
   color: var(--muted);
   margin: 0 0 24px 0;
 }
 
 .template-banner {
-  border: 1px solid var(--vscode-inputValidation-infoBorder, var(--accent));
-  background: var(--vscode-inputValidation-infoBackground, rgba(14, 165, 233, 0.08));
-  color: var(--vscode-inputValidation-infoForeground, var(--text));
-  border-radius: 8px;
-  padding: 8px 10px;
   margin: 0 0 16px 0;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 
 .form-section {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: clamp(16px, 2vw, 24px);
   margin-bottom: 16px;
 }
 
-.form-section h2 {
-  font-size: 0.95rem;
-  margin: 0 0 12px 0;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.form-section h2  {
   /* "AUTHENTICATION" in capitals is wider than a very narrow panel: break it rather than run out of the panel. */
   overflow-wrap: anywhere;
 }
@@ -130,7 +71,6 @@ h1 {
 
 .field label {
   display: block;
-  font-size: 0.85rem;
   color: var(--muted);
   margin-bottom: 4px;
 }
@@ -148,25 +88,6 @@ h1 {
 .field select {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--vscode-input-border, var(--border));
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-family: var(--vscode-editor-font-family, 'SF Mono', Menlo, monospace);
-  font-size: clamp(0.8rem, 0.85rem + 0.1vw, 0.95rem);
-  background: var(--vscode-input-background, var(--panel));
-  color: var(--vscode-input-foreground, var(--text));
-}
-
-.field input:focus,
-.field select:focus {
-  outline: 1px solid var(--vscode-focusBorder, var(--accent));
-  outline-offset: -1px;
-  border-color: var(--vscode-focusBorder, var(--accent));
-}
-
-.field input.template-locked-input {
-  color: var(--vscode-disabledForeground, var(--muted));
-  background: var(--vscode-inputOption-activeBackground, rgba(14, 165, 233, 0.08));
 }
 
 .field .hint {
@@ -189,25 +110,7 @@ h1 {
 
 .mode-toggle button {
   flex: 1;
-  padding: 10px;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
   transition: border-color 0.15s, background 0.15s;
-}
-
-.mode-toggle button.active {
-  border-color: var(--vscode-focusBorder, var(--accent));
-  background: var(--vscode-list-activeSelectionBackground, var(--vscode-editor-background, #ffffff));
-  color: var(--vscode-list-activeSelectionForeground, var(--text));
-}
-
-.mode-toggle button:hover {
-  border-color: var(--vscode-focusBorder, var(--accent));
 }
 
 .proxy-fields {
@@ -233,66 +136,19 @@ h1 {
 }
 
 .actions button {
-  padding: 10px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
   transition: background 0.15s;
 }
 
-.actions .primary {
-  background: var(--vscode-button-background, var(--accent));
-  color: var(--vscode-button-foreground, #fff);
-}
-
-.actions .primary:hover {
-  background: var(--vscode-button-hoverBackground, var(--accent-hover));
-}
-
-.actions .primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.actions .secondary {
-  background: var(--vscode-button-secondaryBackground, transparent);
-  color: var(--vscode-button-secondaryForeground, var(--muted));
-  border: 1px solid var(--vscode-input-border, var(--border));
-}
-
-.actions .secondary:hover {
-  background: var(--vscode-button-secondaryHoverBackground, var(--panel));
-}
-
-.status {
-  margin-top: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  display: none;
-}
+.status { display: none; }
 
 .status.error {
   display: block;
-  background: var(--vscode-inputValidation-errorBackground, rgba(239, 68, 68, 0.1));
-  color: var(--vscode-inputValidation-errorForeground, var(--text));
-  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--error));
 }
 
-.status.success {
-  display: block;
-  background: color-mix(in srgb, var(--success) 12%, var(--vscode-editor-background, #ffffff));
-  color: var(--text);
-  border: 1px solid var(--success);
-}
+.status.success { display: block; }
 
 .status.warning {
   display: block;
-  background: var(--vscode-inputValidation-warningBackground, rgba(217, 119, 6, 0.1));
-  color: var(--vscode-inputValidation-warningForeground, var(--text));
-  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--warning));
 }
 
 .loading-skeleton {
@@ -305,7 +161,7 @@ h1 {
 .loading-skeleton .skeleton-line {
   height: 16px;
   background: var(--vscode-editor-inactiveSelectionBackground, #e0e0e0);
-  border-radius: 4px;
+  border-radius: var(--fm-control-radius);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
@@ -324,9 +180,8 @@ h1 {
   display: inline-block;
   padding: 4px 10px;
   margin: 0 8px 0 0;
-  border-radius: 4px;
+  border-radius: var(--fm-control-radius);
   font-size: 0.85em;
-  font-family: var(--vscode-font-family);
   background: var(--vscode-input-background, #2d2d2d);
   color: var(--vscode-foreground, #d4d4d4);
   border: 1px solid var(--vscode-input-border, transparent);
@@ -355,7 +210,7 @@ h1 {
   gap: 8px;
   margin: 0 8px 0 0;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--fm-panel-radius);
   font-size: 0.85em;
   background: var(--vscode-input-background, #2d2d2d);
   color: var(--vscode-foreground, #d4d4d4);
@@ -381,7 +236,6 @@ h1 {
   to   { transform: rotate(360deg); }
 }
 
-
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -403,9 +257,6 @@ h1 {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
-  border-radius: 6px;
-  padding: 8px 10px;
   margin-bottom: 12px;
   overflow-wrap: anywhere;
 }
@@ -415,12 +266,6 @@ h1 {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 6px;
-}
-
-.legacy-tls-warning {
-  border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
-  border-radius: 6px;
-  padding: 8px 10px;
 }
 
 .hidden {
@@ -484,26 +329,7 @@ button {
 
 /* Theme colors are paired; HC outlines do not change control geometry. */
 input, select, textarea {
-  background: var(--vscode-input-background, #ffffff);
-  color: var(--vscode-input-foreground, #333333);
-  border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border)));
   accent-color: var(--vscode-focusBorder, #007acc);
 }
-button, summary {
-  outline: 1px solid var(--vscode-contrastBorder, transparent);
-}
-button:hover, summary:hover {
-  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder, transparent));
-}
-input:focus-visible, select:focus-visible, textarea:focus-visible,
-button:focus-visible, summary:focus-visible, a:focus-visible {
-  outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc));
-  outline-offset: 1px;
-}
-a:any-link { color: var(--vscode-textLink-foreground, #005fb8); }
 
 /* Strengthen translucent theme hints for contrast while retaining their hierarchy. */
-input::placeholder, textarea::placeholder {
-  color: color-mix(in srgb, var(--vscode-input-placeholderForeground, color-mix(in srgb, var(--vscode-input-foreground, var(--vscode-foreground, #333333)) 75%, var(--vscode-input-background, var(--vscode-editor-background, #ffffff)))) 20%, var(--vscode-input-foreground, var(--vscode-foreground, #333333)));
-  opacity: 1;
-}

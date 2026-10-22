@@ -21,8 +21,8 @@ for (const page of pages) {
   cpSync(path.join(extensionDir, 'src', 'webviews', page, 'ui'), target, { recursive: true });
   if (['queryBuilder', 'recordEditor', 'recordViewer'].includes(page)) {
     writeFileSync(path.join(target, 'fieldStandards.js'), browserStandards.code);
-    writeFileSync(path.join(target, 'fieldStandards.css'), standardFieldsCss());
   }
+  writeFileSync(path.join(target, 'fieldStandards.css'), standardFieldsCss(true));
 }
 
 // The designer UI build (when present) is laid over the Layout Mode page.

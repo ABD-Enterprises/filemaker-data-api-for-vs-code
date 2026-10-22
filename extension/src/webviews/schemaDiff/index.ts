@@ -98,6 +98,9 @@ export class SchemaDiffPanel {
   }
 
   private renderHtml(webview: vscode.Webview): string {
+    const standardsStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'schemaDiff', 'ui', 'fieldStandards.css')
+    );
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'schemaDiff', 'ui', 'styles.css')
     );
@@ -117,11 +120,12 @@ export class SchemaDiffPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>Schema Diff</title>
+  <link rel="stylesheet" href="${standardsStyleUri}" />
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <main class="container">
-    <header>
+    <header class="fm-panel">
       <h1>FileMaker Schema Diff</h1>
       <p id="meta"></p>
       <div class="summary" id="summary" role="status" aria-live="polite"></div>
@@ -131,19 +135,19 @@ export class SchemaDiffPanel {
           <button id="treeMode" type="button" role="tab" aria-selected="false">Tree</button>
         </div>
         <label class="filter-toggle">
-          <input id="changesOnly" type="checkbox" />
+          <input id="changesOnly" type="checkbox" checked />
           <span>Show only changes</span>
         </label>
         <button id="exportButton">Export Diff JSON</button>
       </div>
     </header>
 
-    <section id="sideBySidePanel">
+    <section class="fm-panel" id="sideBySidePanel">
       <h2>Side by Side</h2>
       <div id="sideBySide"></div>
     </section>
 
-    <section id="treePanel" hidden>
+    <section class="fm-panel" id="treePanel" hidden>
       <h2>Tree</h2>
       <div id="tree"></div>
     </section>

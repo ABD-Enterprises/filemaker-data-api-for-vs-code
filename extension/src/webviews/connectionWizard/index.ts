@@ -124,6 +124,7 @@ export class ConnectionWizardPanel {
       'ui'
     );
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(uiBase, 'styles.css'));
+    const standardsStyleUri = webview.asWebviewUri(vscode.Uri.joinPath(uiBase, 'fieldStandards.css'));
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(uiBase, 'index.js'));
     const csp = buildWebviewCsp(webview, { nonce });
 
@@ -133,6 +134,7 @@ export class ConnectionWizardPanel {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
+  <link rel="stylesheet" href="${standardsStyleUri}" />
   <link rel="stylesheet" href="${styleUri}" />
   <title>Connection Profile</title>
 </head>

@@ -28,7 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
-- None.
+- All screens now share the same fonts, buttons, messages and read-only look.
 
 ### [INTERNAL]
 
