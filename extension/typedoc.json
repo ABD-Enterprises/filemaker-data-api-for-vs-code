@@ -3,6 +3,7 @@
   "name": "FileMaker Data API Tools API",
   "entryPoints": ["./src/services", "./src/types"],
   "entryPointStrategy": "expand",
+  "exclude": ["**/services/fmClient/{certificates,containers,context,metadata,recordWrites,records,response,scripts,server,session,transport}.ts"],
   "tsconfig": "./tsconfig.json",
   "out": "../docs/api",
   "readme": "none",
@@ -14,7 +15,6 @@
   "intentionallyNotExported": [
     "BatchServiceOptions",
     "CaptureSnapshotInput",
-    "ClientRequestControl",
     "GeneratedLayoutSummary",
     "JobListener",
     "JobTask",

@@ -72,8 +72,10 @@ PR title prefix matches the highest-tier label added:
 ### [INTERNAL]
 
 - Split the connection wizard into smaller host-side parts for easier maintenance, keeping its screens, checks and messages the same.
+- Maintenance: split the Query Builder host code into smaller parts, check that rejected sessions stop after one retry and uploads keep the record version, and keep connection helpers out of the API pages.
+
 - Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
-- Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
+- Maintenance: split the FileMaker connection code into smaller parts, keeping the same requests and messages.
 
 - Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.
