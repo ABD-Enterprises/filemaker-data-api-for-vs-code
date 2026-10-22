@@ -1,173 +1,44 @@
-import { createHash, randomUUID } from 'crypto';
-
-import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
-
+import { CertificateAdvice } from './fmClient/certificates';
+import { randomUUID } from 'crypto';
+import axios, { type AxiosInstance } from 'axios';
 import type {
-  ConnectionProfile,
-  PortalPaging,
-  ContainerUploadFile,
-  EditRecordResult,
-  FileMakerRecord,
-  FindRecordsRequest,
-  FindRecordsResult,
-  RequestHistoryRecorder,
-  RequestMetricsRecorder,
-  RunScriptRequest,
-  RunScriptResult
+  ConnectionProfile, ContainerUploadFile, EditRecordResult, FileMakerRecord, FindRecordsRequest,
+  FindRecordsResult, RequestHistoryRecorder, RequestMetricsRecorder, RunScriptRequest, RunScriptResult
 } from '../types/fm';
-import type {
-  DataApiEnvelope,
-  DataApiListLayoutsResponse,
-  DataApiListRecordsResponse,
-  DataApiListScriptsResponse,
-  DataApiSessionResponse
-} from '../types/dataApi';
+import type { DataApiEnvelope, DataApiSessionResponse } from '../types/dataApi';
 import { isProxyProfile } from '../types/fm';
 import type { Logger } from './logger';
 import type { SecretStore } from './secretStore';
 import { ProxyClient } from './proxyClient';
 import { FMClientError, toFMClientError } from './errors';
-import { assertFindCriteria } from '../utils/findCriteria';
-import { assertNoNulText } from '../utils/nulText';
 import { normalizeError } from '../utils/normalizeError';
-import { buildProfileCacheKey, cacheKeyMatchesProfile } from '../utils/profileCacheKey';
+import { cacheKeyMatchesProfile } from '../utils/profileCacheKey';
 import { isCredentialRejection } from '../utils/fileMakerCodes';
-import { redactString } from '../utils/redact';
-import { extractLayoutNames } from '../utils/layoutParser';
-import { extractScriptNames } from '../utils/scriptParser';
 import { SessionTokenTracker } from './session/sessionTokenTracker';
-import { certificateTargetUrl, inspectServerCertificate } from './certificateInspect';
-import { describeNetworkFailure, isFileMakerDefaultCertificate, targetOfUrl } from '../utils/networkErrors';
-import { assertUsableUrlName } from '../utils/urlSegment';
-import { environmentProxyFor, httpsTransportFor, noteRequestTimeout, pinBypassedByHost } from './tlsAgent';
-import { NOT_DATA_API_CODE, extractScriptErrors, parseDataApiEnvelope } from './responseGuard';
-
-interface LayoutCacheEntry {
-  expiresAt: number;
-  layouts: string[];
-}
-
-interface RequestOptions {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-  path: string;
-  data?: unknown;
-  headers?: Record<string, string>;
-  params?: Record<string, string | number | boolean>;
-  /** Percent-encode the query exactly (a space is `%20`, never `+`), as the Claris guide shows for script parameters. */
-  strictQuery?: boolean;
-  signal?: AbortSignal;
-  /** Refuse a response body larger than this (axios maxContentLength). */
-  maxResponseBytes?: number;
-}
-
-interface HistoryContext {
-  recordHistory?: boolean;
-  profileId: string;
-  operation: string;
-  layout?: string;
-  endpoint: string;
-}
-
-interface RequestTrace {
-  operation: string;
-  requestId: string;
-  reauthCount: number;
-  cacheHit: boolean;
-  endpoint: string;
-}
-
-interface ClientRequestControl {
-  portal?: PortalPaging;
-  signal?: AbortSignal;
-  /**
-   * The user asked for this sign-in (Connect, Test Connection). It goes ahead even when automatic
-   * sign-ins are paused after the server rejected the stored credentials, and its result ends or
-   * renews that pause.
-   */
-  userInitiated?: boolean;
-  /**
-   * A renewal ahead of expiry while the current token is still valid. If it fails, nothing is
-   * paused and the caller keeps using the token it has.
-   */
-  proactive?: boolean;
-  /** For list, get and find calls: refuse a response body larger than this many bytes. */
-  maxResponseBytes?: number;
-}
-
-export interface FMClientContainerUploadOptions {
-  signal?: AbortSignal;
-  fieldRepetition?: number;
-  modId?: string;
-  maxBytes?: number;
-}
+import { httpsTransportFor, noteRequestTimeout, pinBypassedByHost } from './tlsAgent';
+import type {
+  LayoutCacheEntry, RequestOptions, HistoryContext, RequestTrace, ClientRequestControl,
+  FMClientContainerUploadOptions, AuthPause, SessionHealth, FMClientSessionOptions, EditRecordOptions
+} from './fmClient/types';
+import { listLayouts, listScripts, getLayoutMetadata } from './fmClient/metadata';
+import { getRecord, listRecords, findRecords } from './fmClient/records';
+import { editRecord, createRecord, deleteRecord } from './fmClient/recordWrites';
+import { uploadContainer } from './fmClient/containers';
+import { runScript } from './fmClient/scripts';
+import { getProductInfo, getProductInfoDiagnostics, listHostedDatabases } from './fmClient/server';
+import { requestWithAuth, requestNoAuth, buildEndpoint, requestWithAuthRaw } from './fmClient/transport';
+import { getErrorStatus, getErrorMessage } from './fmClient/response';
+import { credentialStamp, waitForSession } from './fmClient/session';
+import type { ClientContext } from './fmClient/context';
+export type { FMClientContainerUploadOptions, SessionHealth, FMClientSessionOptions, EditRecordOptions } from './fmClient/types';
+export { MAX_SCRIPT_URL_LENGTH } from './fmClient/types';
 
 /** Longest wait between automatic sign-in attempts after FileMaker reports no free sessions (956). */
 const MAX_SESSION_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
 const FIRST_SESSION_LIMIT_BACKOFF_MS = 30 * 1000;
-
-interface AuthPause {
-  code: string;
-  /** Hash of the account, password and server the rejection was for; a change ends the pause. */
-  stamp: string;
-}
-
-/** What the extension knows about a connection right now, from its most recent requests. */
-export interface SessionHealth {
-  state: 'connecting' | 'connected' | 'auth-failed' | 'certificate' | 'unreachable';
-  /** The error message behind a failed state (already safe to show). */
-  message?: string;
-  at: number;
-}
-
-const DEFAULT_LAYOUT_TTL_MS = 60_000;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SESSION_MAX_AGE_MS = 14 * 60 * 1000; // 14 minutes; FM Data API tokens expire at 15
 const DEFAULT_SESSION_REFRESH_LEAD_MS = 30 * 1000; // refresh 30s before nominal expiry
-
-export interface FMClientSessionOptions {
-  /** Treat the session token as expired after this many ms since issuance. Default 14m. */
-  maxAgeMs?: number;
-  /** Refresh proactively when remaining lifetime drops below this many ms. Default 30s. */
-  refreshLeadMs?: number;
-  /** Override Date.now for tests. */
-  now?: () => number;
-}
-
-/** Optional guards for an edit. */
-export interface EditRecordOptions {
-  /** The record's modification id as loaded; the edit is refused if the record has changed since. */
-  modId?: string;
-}
-
-/** `{ scriptErrors }` to spread into a result, or nothing when no script reported an error. */
-function scriptErrorsOf(response: unknown): { scriptErrors?: ReturnType<typeof extractScriptErrors> } {
-  const scriptErrors = extractScriptErrors(response);
-  return scriptErrors.length > 0 ? { scriptErrors } : {};
-}
-
-function credentialStamp(profile: ConnectionProfile, username: string, password: string): string {
-  return createHash('sha256')
-    .update([profile.serverUrl, profile.database, username, password].join('\u0000'))
-    .digest('hex');
-}
-
-/**
- * FileMaker reports "no records match the request" as error code 401. It is matched on that code,
- * whatever the HTTP status. Verified on a real FileMaker Data API Engine (2026-10-21):
- * HTTP 200, code 401, empty data. Older/other versions may use a different HTTP status.
- */
-function isNoRecordsFound(error: unknown): boolean {
-  return error instanceof FMClientError && error.code === '401';
-}
-
-/** Preserve the match count when an offset is beyond the last record. */
-function emptyFindResult(error: unknown): FindRecordsResult {
-  const details = error instanceof FMClientError ? error.details as { response?: { dataInfo?: FindRecordsResult['dataInfo'] }; dataInfo?: FindRecordsResult['dataInfo'] } | undefined : undefined;
-  const dataInfo = details?.response?.dataInfo ?? details?.dataInfo;
-  return { data: [], dataInfo: { ...dataInfo, foundCount: dataInfo?.foundCount ?? 0, returnedCount: 0 } };
-}
-
-const CERTIFICATE_LOOK_TTL_MS = 60_000;
 
 export class FMClient {
   private readonly httpClient: AxiosInstance;
@@ -178,8 +49,6 @@ export class FMClient {
   private readonly sessionTracker: SessionTokenTracker;
   private readonly inFlightRefresh = new Map<string, Promise<string>>();
   private readonly health = new Map<string, SessionHealth>();
-  /** The better certificate message (or none) per server and failure code, kept briefly so repeated failures do not each pay for a look. */
-  private readonly certificateLooks = new Map<string, { at: number; message: Promise<string | undefined> }>();
   private readonly invalidationListeners = new Set<(profileId: string) => void>();
   private readonly healthListeners = new Set<(profileId: string, health: SessionHealth | undefined) => void>();
   /**
@@ -202,6 +71,8 @@ export class FMClient {
   private readonly getSessionMaxAgeMs: () => number;
   private readonly getSessionRefreshLeadMs: () => number;
   private readonly now: () => number;
+
+  private readonly certificateAdvice: CertificateAdvice;
 
   public constructor(
     private readonly secretStore: SecretStore,
@@ -236,6 +107,35 @@ export class FMClient {
       defaultMaxAgeMs: DEFAULT_SESSION_MAX_AGE_MS,
       defaultRefreshLeadMs: DEFAULT_SESSION_REFRESH_LEAD_MS
     });
+    this.certificateAdvice = new CertificateAdvice(this.now);
+  }
+
+  /**
+   * A typed view for the extracted operations. Each member is checked against its actual private
+   * declaration below; only visibility changes. The receiver stays this client, so prototype
+   * callers and overrides keep working without copied state or bound callbacks.
+   */
+  private get context(): ClientContext {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Local type queries verify private members in the view.
+    const client = this;
+    return client as unknown as {
+      httpClient: typeof client.httpClient;
+      proxyClient: typeof client.proxyClient;
+      logger: typeof client.logger;
+      timeoutMs: typeof client.timeoutMs;
+      layoutCache: typeof client.layoutCache;
+      layoutMetadataCache: typeof client.layoutMetadataCache;
+      layoutMetadataEtags: typeof client.layoutMetadataEtags;
+      withHistory: typeof client.withHistory;
+      requestWithAuth: typeof client.requestWithAuth;
+      requestWithAuthRaw: typeof client.requestWithAuthRaw;
+      ensureSessionToken: typeof client.ensureSessionToken;
+      renewRejectedSession: typeof client.renewRejectedSession;
+      explainPinnedFailure: typeof client.explainPinnedFailure;
+      refineCertificateError: typeof client.refineCertificateError;
+      getLayoutMetadata: typeof client.getLayoutMetadata;
+      listRecords: typeof client.listRecords;
+    };
   }
 
   /**
@@ -392,82 +292,11 @@ export class FMClient {
   }
 
   public async listLayouts(profile: ConnectionProfile, control?: ClientRequestControl): Promise<string[]> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'listLayouts',
-        endpoint: 'GET /layouts'
-      },
-      async (trace) => {
-        const cacheKey = this.buildProfileCacheKey(profile);
-        const cached = this.layoutCache.get(cacheKey);
-        const now = Date.now();
-
-        if (cached && cached.expiresAt > now) {
-          trace.cacheHit = true;
-          return cached.layouts;
-        }
-
-        if (isProxyProfile(profile)) {
-          const layouts = await this.proxyClient.listLayouts(profile, control?.signal);
-          this.layoutCache.set(cacheKey, {
-            layouts,
-            expiresAt: now + DEFAULT_LAYOUT_TTL_MS
-          });
-          return layouts;
-        }
-
-        const envelope = await this.requestWithAuth<DataApiListLayoutsResponse>(
-          profile,
-          {
-            method: 'GET',
-            path: '/layouts',
-            signal: control?.signal,
-            maxResponseBytes: control?.maxResponseBytes
-          },
-          true,
-          trace
-        );
-
-        const layouts = extractLayoutNames(envelope.response.layouts ?? []);
-
-        this.layoutCache.set(cacheKey, {
-          layouts,
-          expiresAt: now + DEFAULT_LAYOUT_TTL_MS
-        });
-
-        return layouts;
-      }
-    );
+    return listLayouts(this.context, profile, control);
   }
 
   public async listScripts(profile: ConnectionProfile, control?: ClientRequestControl): Promise<string[]> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'listScripts',
-        endpoint: 'GET /scripts'
-      },
-      async (trace) => {
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.listScripts(profile, control?.signal);
-        }
-
-        const envelope = await this.requestWithAuth<DataApiListScriptsResponse>(
-          profile,
-          {
-            method: 'GET',
-            path: '/scripts',
-            signal: control?.signal,
-            maxResponseBytes: control?.maxResponseBytes
-          },
-          true,
-          trace
-        );
-
-        return extractScriptNames(envelope.response.scripts ?? []);
-      }
-    );
+    return listScripts(this.context, profile, control);
   }
 
   public async getRecord(
@@ -476,51 +305,7 @@ export class FMClient {
     recordId: string,
     control?: ClientRequestControl
   ): Promise<FileMakerRecord> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'getRecord',
-        layout,
-        endpoint: `GET /layouts/${layout}/records/${recordId}`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        if (isProxyProfile(profile)) {
-          if (control?.portal) throw new FMClientError('Loading more portal rows is unavailable through this proxy. Use a direct connection.');
-          return this.proxyClient.getRecord(profile, layout, recordId, control?.signal);
-        }
-
-        const envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
-          profile,
-          {
-            method: 'GET',
-            path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
-            ...(control?.portal ? { params: portalPagingParams(control.portal, '_'), strictQuery: true } : {}),
-            signal: control?.signal,
-            maxResponseBytes: control?.maxResponseBytes
-          },
-          true,
-          trace
-        );
-
-        const getScriptErrors = extractScriptErrors(envelope.response);
-        if (getScriptErrors.length > 0) {
-          this.logger.warn('A script reported an error while reading a record.', {
-            layout,
-            scriptErrors: getScriptErrors
-          });
-        }
-
-        const record = envelope.response.data?.[0];
-        if (!record) {
-          throw new FMClientError('Record not found in FileMaker response payload.', {
-            details: envelope
-          });
-        }
-
-        return withPortalInfo(record, envelope.response.dataInfo, envelope.response.portalDataInfo);
-      }
-    );
+    return getRecord(this.context, profile, layout, recordId, control);
   }
 
   public async listRecords(
@@ -529,26 +314,7 @@ export class FMClient {
     options: { limit?: number; offset?: number; sort?: FindRecordsRequest['sort'] } = {},
     control?: ClientRequestControl
   ): Promise<FindRecordsResult> {
-    return this.withHistory({ profileId: profile.id, operation: 'listRecords', layout, endpoint: `GET /layouts/${layout}/records` }, async (trace) => {
-      assertUsableUrlName(layout, 'layout');
-      if (isProxyProfile(profile)) {
-        throw new FMClientError('Get records is not supported by this proxy. Use a search with at least one field value.');
-      }
-      const params: Record<string, string | number> = {};
-      if (options.limit !== undefined) params._limit = options.limit;
-      if (options.offset !== undefined) params._offset = options.offset;
-      if (options.sort?.length) params._sort = JSON.stringify(options.sort);
-      try {
-        const envelope = await this.requestWithAuth<DataApiListRecordsResponse>(profile, {
-          method: 'GET', path: `/layouts/${encodeURIComponent(layout)}/records`, params,
-          signal: control?.signal, maxResponseBytes: control?.maxResponseBytes
-        }, true, trace);
-        return { data: envelope.response.data ?? [], dataInfo: envelope.response.dataInfo, ...scriptErrorsOf(envelope.response) };
-      } catch (error) {
-        if (isNoRecordsFound(error)) return { data: [], dataInfo: { foundCount: 0, returnedCount: 0 } };
-        throw error;
-      }
-    });
+    return listRecords(this.context, profile, layout, options, control);
   }
 
   public async findRecords(
@@ -557,81 +323,7 @@ export class FMClient {
     body: FindRecordsRequest,
     control?: ClientRequestControl
   ): Promise<FindRecordsResult> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'findRecords',
-        layout,
-        endpoint: `POST /layouts/${layout}/_find`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        assertFindCriteria(body.query);
-        if (isProxyProfile(profile)) {
-          try {
-            return await this.proxyClient.findRecords(profile, layout, body, control?.signal);
-          } catch (error) {
-            // The proxy passes FileMaker's code on, so "no records match" is an empty result here too.
-            if (isNoRecordsFound(error)) {
-              return emptyFindResult(error);
-            }
-            throw error;
-          }
-        }
-
-        const payload: Record<string, unknown> = {
-          query: body.query,
-          ...portalPagingParams(body.portal, '')
-        };
-
-        if (body.sort && body.sort.length > 0) {
-          payload.sort = body.sort;
-        }
-
-        if (typeof body.limit === 'number') {
-          payload.limit = body.limit;
-        }
-
-        if (typeof body.offset === 'number') {
-          payload.offset = body.offset;
-        }
-
-        for (const key of ['script', 'script.param', 'script.prerequest', 'script.prerequest.param', 'script.presort', 'script.presort.param'] as const) {
-          if (body[key] !== undefined) payload[key] = body[key];
-        }
-
-        let envelope: DataApiEnvelope<DataApiListRecordsResponse>;
-        try {
-          envelope = await this.requestWithAuth<DataApiListRecordsResponse>(
-            profile,
-            {
-              method: 'POST',
-              path: `/layouts/${encodeURIComponent(layout)}/_find`,
-              data: payload,
-              signal: control?.signal,
-              maxResponseBytes: control?.maxResponseBytes
-            },
-            true,
-            trace
-          );
-        } catch (error) {
-          // FileMaker answers a find with no matches (or an offset past the last match) with code 401.
-          // A real server returns HTTP 200 with empty data; older/other versions may use another status:
-          // match the code alone. That is a result, not a failure.
-          if (isNoRecordsFound(error)) {
-            return emptyFindResult(error);
-          }
-          throw error;
-        }
-
-        return {
-          data: (envelope.response.data ?? []).map((record) => withPortalInfo(record, (envelope.response.data?.length === 1) ? envelope.response.dataInfo : undefined,
-            (envelope.response.data?.length === 1) ? envelope.response.portalDataInfo : undefined)),
-          dataInfo: envelope.response.dataInfo,
-          ...scriptErrorsOf(envelope.response)
-        };
-      }
-    );
+    return findRecords(this.context, profile, layout, body, control);
   }
 
   public async getLayoutMetadata(
@@ -642,58 +334,7 @@ export class FMClient {
       recordHistory?: boolean;
     }
   ): Promise<Record<string, unknown>> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'getLayoutMetadata',
-        recordHistory: control?.recordHistory,
-        layout,
-        endpoint: `GET /layouts/${layout}`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.getLayoutMetadata(profile, layout, control?.signal);
-        }
-
-        const metadataKey = this.buildLayoutMetadataCacheKey(profile, layout);
-        const cachedMetadata = this.layoutMetadataCache.get(metadataKey);
-        const etag = this.layoutMetadataEtags.get(metadataKey);
-        const response = await this.requestWithAuthRaw<Record<string, unknown>>(
-          profile,
-          {
-            method: 'GET',
-            path: `/layouts/${encodeURIComponent(layout)}`,
-            headers: etag
-              ? {
-                  'If-None-Match': etag
-                }
-              : undefined,
-            signal: control?.signal
-          },
-          true,
-          trace
-        );
-
-        if (response.status === 304 && cachedMetadata) {
-          trace.cacheHit = true;
-          return cachedMetadata;
-        }
-
-        if (!response.envelope) {
-          throw new FMClientError('Layout metadata response payload is empty.');
-        }
-
-        const nextEtag = response.headers['etag'];
-        if (typeof nextEtag === 'string' && nextEtag.length > 0) {
-          this.layoutMetadataEtags.set(metadataKey, nextEtag);
-        }
-
-        this.layoutMetadataCache.set(metadataKey, response.envelope.response);
-
-        return response.envelope.response;
-      }
-    );
+    return getLayoutMetadata(this.context, profile, layout, control);
   }
 
   public async editRecord(
@@ -704,63 +345,7 @@ export class FMClient {
     control?: ClientRequestControl,
     options?: EditRecordOptions
   ): Promise<EditRecordResult> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'editRecord',
-        layout,
-        endpoint: `PATCH /layouts/${layout}/records/${recordId}`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        assertNoNulText(fieldDataPartial);
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.editRecord(
-            profile,
-            layout,
-            recordId,
-            fieldDataPartial,
-            control?.signal,
-            options?.modId
-          );
-        }
-
-        if (Object.keys(fieldDataPartial).length === 0) {
-          throw new FMClientError('At least one field change is required to edit a record.');
-        }
-
-        const envelope = await this.requestWithAuth<Record<string, unknown>>(
-          profile,
-          {
-            method: 'PATCH',
-            path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
-            data: {
-              fieldData: fieldDataPartial,
-              // When given, FileMaker refuses the edit (error 306) if the record changed since this modId.
-              ...(options?.modId !== undefined ? { modId: options.modId } : {})
-            },
-            signal: control?.signal
-          },
-          true,
-          trace
-        );
-
-        const modIdValue = envelope.response.modId;
-
-        return {
-          recordId,
-          modId:
-            typeof modIdValue === 'string'
-              ? modIdValue
-              : typeof modIdValue === 'number'
-                ? String(modIdValue)
-                : undefined,
-          messages: envelope.messages,
-          response: envelope.response,
-          ...scriptErrorsOf(envelope.response)
-        };
-      }
-    );
+    return editRecord(this.context, profile, layout, recordId, fieldDataPartial, control, options);
   }
 
   public async createRecord(
@@ -769,63 +354,7 @@ export class FMClient {
     fieldData: Record<string, unknown>,
     control?: ClientRequestControl
   ): Promise<EditRecordResult> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'createRecord',
-        layout,
-        endpoint: `POST /layouts/${layout}/records`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        assertNoNulText(fieldData);
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.createRecord(profile, layout, fieldData, control?.signal);
-        }
-
-        const envelope = await this.requestWithAuth<Record<string, unknown>>(
-          profile,
-          {
-            method: 'POST',
-            path: `/layouts/${encodeURIComponent(layout)}/records`,
-            data: {
-              fieldData
-            },
-            signal: control?.signal
-          },
-          true,
-          trace
-        );
-
-        const recordIdValue = envelope.response.recordId;
-        const recordId =
-          typeof recordIdValue === 'string'
-            ? recordIdValue
-            : typeof recordIdValue === 'number'
-              ? String(recordIdValue)
-              : undefined;
-
-        if (!recordId) {
-          throw new FMClientError('FileMaker createRecord response did not include recordId.', {
-            details: envelope.response
-          });
-        }
-
-        const modIdValue = envelope.response.modId;
-        return {
-          recordId,
-          modId:
-            typeof modIdValue === 'string'
-              ? modIdValue
-              : typeof modIdValue === 'number'
-                ? String(modIdValue)
-                : undefined,
-          messages: envelope.messages,
-          response: envelope.response,
-          ...scriptErrorsOf(envelope.response)
-        };
-      }
-    );
+    return createRecord(this.context, profile, layout, fieldData, control);
   }
 
   public async deleteRecord(
@@ -834,45 +363,7 @@ export class FMClient {
     recordId: string,
     control?: ClientRequestControl
   ): Promise<EditRecordResult> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'deleteRecord',
-        layout,
-        endpoint: `DELETE /layouts/${layout}/records/${recordId}`
-      },
-      async (trace) => {
-        assertUsableUrlName(layout, 'layout');
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.deleteRecord(profile, layout, recordId, control?.signal);
-        }
-
-        const envelope = await this.requestWithAuth<Record<string, unknown>>(
-          profile,
-          {
-            method: 'DELETE',
-            path: `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(recordId)}`,
-            signal: control?.signal
-          },
-          true,
-          trace
-        );
-
-        const modIdValue = envelope.response.modId;
-        return {
-          recordId,
-          modId:
-            typeof modIdValue === 'string'
-              ? modIdValue
-              : typeof modIdValue === 'number'
-                ? String(modIdValue)
-                : undefined,
-          messages: envelope.messages,
-          response: envelope.response,
-          ...scriptErrorsOf(envelope.response)
-        };
-      }
-    );
+    return deleteRecord(this.context, profile, layout, recordId, control);
   }
 
   public async uploadContainer(
@@ -883,103 +374,7 @@ export class FMClient {
     file: ContainerUploadFile,
     options?: FMClientContainerUploadOptions
   ): Promise<EditRecordResult> {
-    // Layout and field names are used exactly as given: a leading or trailing space is part of the name, and
-    // trimming it would send the upload to a different layout or field (`Sales` instead of ` Sales`).
-    const normalizedLayout = layout;
-    const normalizedRecordId = recordId.trim();
-    const normalizedFieldName = fieldName;
-    assertUsableUrlName(normalizedLayout, 'layout');
-    assertUsableUrlName(normalizedFieldName, 'field');
-    const normalizedFileName = file.fileName.trim();
-    const content = normalizeUploadContent(file.content);
-
-    if (!normalizedLayout.trim()) {
-      throw new FMClientError('Layout is required to upload container data.');
-    }
-    if (!normalizedRecordId) {
-      throw new FMClientError('Record ID is required to upload container data.');
-    }
-    if (!normalizedFieldName.trim()) {
-      throw new FMClientError('Container field name is required.');
-    }
-    if (!normalizedFileName) {
-      throw new FMClientError('Upload file name is required.');
-    }
-    if (content.byteLength === 0) {
-      throw new FMClientError('Upload file is empty.');
-    }
-    if (options?.maxBytes !== undefined && content.byteLength > options.maxBytes) {
-      throw new FMClientError(
-        `Container upload exceeds the configured limit (${content.byteLength} > ${options.maxBytes} bytes).`,
-        {
-          code: 'CONTAINER_UPLOAD_TOO_LARGE',
-          details: {
-            actualBytes: content.byteLength,
-            maxBytes: options.maxBytes
-          }
-        }
-      );
-    }
-
-    const fieldRepetition = normalizeContainerFieldRepetition(options?.fieldRepetition);
-    const uploadFile = {
-      ...file,
-      fileName: normalizedFileName,
-      content
-    };
-
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'uploadContainer',
-        layout: normalizedLayout,
-        endpoint: `POST /layouts/${normalizedLayout}/records/${normalizedRecordId}/containers/${normalizedFieldName}/${fieldRepetition}`
-      },
-      async (trace) => {
-        if (isProxyProfile(profile)) {
-          return this.proxyClient.uploadContainer(
-            profile,
-            normalizedLayout,
-            normalizedRecordId,
-            normalizedFieldName,
-            uploadFile,
-            {
-              fieldRepetition,
-              modId: options?.modId,
-              signal: options?.signal
-            }
-          );
-        }
-
-        const multipart = buildContainerUploadMultipart(uploadFile);
-        const envelope = await this.requestWithAuth<Record<string, unknown>>(
-          profile,
-          {
-            method: 'POST',
-            path:
-              `/layouts/${encodeURIComponent(normalizedLayout)}` +
-              `/records/${encodeURIComponent(normalizedRecordId)}` +
-              `/containers/${encodeURIComponent(normalizedFieldName)}/${fieldRepetition}`,
-            data: multipart.body,
-            headers: {
-              'Content-Type': multipart.contentType,
-              'Content-Length': String(multipart.body.byteLength)
-            },
-            params: options?.modId ? { modId: options.modId } : undefined,
-            signal: options?.signal
-          },
-          true,
-          trace
-        );
-
-        return {
-          recordId: normalizedRecordId,
-          messages: envelope.messages,
-          response: envelope.response,
-          ...scriptErrorsOf(envelope.response)
-        };
-      }
-    );
+    return uploadContainer(this.context, profile, layout, recordId, fieldName, file, options);
   }
 
   /**
@@ -1001,166 +396,7 @@ export class FMClient {
     request: RunScriptRequest,
     control?: ClientRequestControl
   ): Promise<RunScriptResult> {
-    return this.withHistory(
-      {
-        profileId: profile.id,
-        operation: 'runScript',
-        layout: request.layout,
-        endpoint: `GET /layouts/${request.layout}/script/${request.scriptName}`
-      },
-      async (trace) => {
-        assertUsableUrlName(request.scriptName, 'script');
-        assertUsableUrlName(request.layout, 'layout');
-        if (isProxyProfile(profile)) {
-          const result = await this.proxyClient.runScript(profile, request, control?.signal);
-          return { ...result, response: scriptResponse(result.response) };
-        }
-
-        // Names are used exactly as given (see uploadContainer): only an empty or all-blank name is refused.
-        const scriptName = request.scriptName;
-        if (!scriptName.trim()) {
-          throw new FMClientError('Script name is required.');
-        }
-
-        const layout = request.layout;
-        if (!layout.trim()) {
-          throw new FMClientError('Layout is required to run script.');
-        }
-
-        const scriptParam = request.scriptParam !== undefined && request.scriptParam.length > 0 ? request.scriptParam : undefined;
-        const ifTooLong = (path: string, query: Record<string, string>): boolean =>
-          this.buildEndpoint(profile, path).length + 1 + strictQuerySerializer(query).length > MAX_SCRIPT_URL_LENGTH;
-
-        const attach = async (): Promise<RunScriptResult> => {
-          if (request.recordId) {
-            // GET: the script parameters are query parameters.
-            const recordPath = `/layouts/${encodeURIComponent(layout)}/records/${encodeURIComponent(request.recordId)}`;
-            const query = buildScriptParams(scriptName, scriptParam);
-            if (ifTooLong(recordPath, query as Record<string, string>)) {
-              throw tooLongScriptParameter();
-            }
-            const envelope = await this.requestWithAuth<Record<string, unknown>>(
-              profile,
-              { method: 'GET', path: recordPath, params: query, strictQuery: true, signal: control?.signal },
-              true,
-              trace
-            );
-            return { response: scriptResponse(envelope.response), messages: envelope.messages };
-          }
-          const path = `/layouts/${encodeURIComponent(layout)}/records`;
-          const params = { _limit: 1, ...buildScriptParams(scriptName, scriptParam) };
-          if (ifTooLong(path, Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(value)])))) {
-            throw tooLongScriptParameter();
-          }
-          try {
-            const envelope = await this.requestWithAuth<Record<string, unknown>>(profile,
-              { method: 'GET', path, params, strictQuery: true, signal: control?.signal }, true, trace);
-            return { response: scriptResponse(envelope.response), messages: envelope.messages };
-          } catch (error) {
-            if (isNoRecordsFound(error)) throw scriptLayoutEmpty();
-            throw error;
-          }
-        };
-
-        const failure = (error: unknown, endpoint: string): FMClientError =>
-          this.explainPinnedFailure(
-            profile,
-            toFMClientError(
-              normalizeError(error, {
-                fallbackMessage: 'Failed to run FileMaker script.',
-                operation: trace.operation,
-                requestId: trace.requestId,
-                endpoint
-              })
-            )
-          );
-
-        // A record in context cannot be given to the script endpoint.
-        if (request.recordId) {
-          try {
-            return await attach();
-          } catch (error) {
-            if (error instanceof FMClientError && error.code === 'SCRIPT_PARAMETER_TOO_LONG') {
-              throw error;
-            }
-            if (isLikelyScriptUnsupportedError(error)) {
-              throw scriptUnsupported(error);
-            }
-            throw failure(error, `GET /layouts/${request.layout}/records/${request.recordId}`);
-          }
-        }
-
-        const scriptPath = `/layouts/${encodeURIComponent(layout)}/script/${encodeURIComponent(scriptName)}`;
-        const query: Record<string, string> = scriptParam === undefined ? {} : { 'script.param': scriptParam };
-
-        if (ifTooLong(scriptPath, query)) {
-          const metadata = this.layoutMetadataCache.get(this.buildLayoutMetadataCacheKey(profile, layout))
-            ?? await this.getLayoutMetadata(profile, layout, { signal: control?.signal, recordHistory: false });
-          const fields = Array.isArray(metadata.fieldMetaData) ? metadata.fieldMetaData : [];
-          const textFields = fields.filter((field): field is { name: string; result: string; type?: string } =>
-            field !== null && typeof field === 'object' && typeof field.name === 'string'
-            && typeof field.result === 'string' && field.result.toLowerCase() === 'text'
-            && (field.type === undefined || (typeof field.type === 'string' && field.type.toLowerCase() === 'normal'))
-            && field.global !== true && String(field.global).toLowerCase() !== 'true');
-          // Prefer confirmed stored fields, but tolerate metadata that omits the field type.
-          const textField = textFields.find((field) => field.type?.toLowerCase() === 'normal') ?? textFields[0];
-          if (!textField) {
-            // Establish whether the layout is empty even when the parameter cannot fit a GET.
-            const records = await this.listRecords(profile, layout, { limit: 1 }, control);
-            if (!records.data.length) throw scriptLayoutEmpty();
-            return attach();
-          }
-          try {
-            const envelope = await this.requestWithAuth<Record<string, unknown>>(
-              profile,
-              {
-                method: 'POST', path: `/layouts/${encodeURIComponent(layout)}/_find`,
-                data: { query: [{ [textField.name]: '*' }], limit: 1, ...buildScriptParams(scriptName, scriptParam) },
-                signal: control?.signal
-              },
-              true,
-              trace
-            );
-            return { response: scriptResponse(envelope.response), messages: envelope.messages };
-          } catch (error) {
-            if (isNoRecordsFound(error)) {
-              // '*' matches non-empty text, not every record. A read without a script distinguishes
-              // an empty layout from one whose chosen field is empty in every visible record.
-              const records = await this.listRecords(profile, layout, { limit: 1 }, control);
-              if (!records.data.length) throw scriptLayoutEmpty();
-              return attach();
-            }
-            throw failure(error, `POST /layouts/${request.layout}/_find`);
-          }
-        }
-
-        try {
-          const envelope = await this.requestWithAuth<Record<string, unknown>>(
-            profile,
-            { method: 'GET', path: scriptPath, params: query, strictQuery: true, signal: control?.signal },
-            true,
-            trace
-          );
-          return { response: scriptResponse(envelope.response), messages: envelope.messages };
-        } catch (error) {
-          if (!isLikelyScriptUnsupportedError(error)) {
-            throw failure(error, `GET /layouts/${request.layout}/script/${request.scriptName}`);
-          }
-        }
-
-        // The script endpoint was refused for a reason that is about the endpoint itself: use the documented
-        // "another request" form instead.
-        try {
-          return await attach();
-        } catch (error) {
-          if (isNoRecordsFound(error)) throw scriptLayoutEmpty();
-          if (isLikelyScriptUnsupportedError(error)) {
-            throw scriptUnsupported(error);
-          }
-          throw failure(error, `GET /layouts/${request.layout}/records`);
-        }
-      }
-    );
+    return runScript(this.context, profile, request, control);
   }
 
   /**
@@ -1172,17 +408,7 @@ export class FMClient {
     profile: ConnectionProfile,
     control?: ClientRequestControl
   ): Promise<{ name?: string; version?: string }> {
-    const envelope = await this.requestServerLevel<{ productInfo?: Record<string, unknown> }>(
-      profile,
-      '/productInfo',
-      control,
-      'Failed to reach the FileMaker Data API.'
-    );
-    const info = envelope.response.productInfo ?? {};
-    return {
-      name: typeof info.name === 'string' ? info.name : undefined,
-      version: typeof info.version === 'string' ? info.version : undefined
-    };
+    return getProductInfo(this.context, profile, control);
   }
 
   /** Unauthenticated connection diagnosis through the same transport as Test Connection. */
@@ -1190,18 +416,7 @@ export class FMClient {
     profile: ConnectionProfile,
     control?: ClientRequestControl
   ): Promise<{ status: number; code?: string; name?: string; version?: string }> {
-    let status = 0;
-    const envelope = await this.requestServerLevel<{ productInfo?: Record<string, unknown> }>(
-      profile, '/productInfo', control, 'Failed to reach the FileMaker Data API.',
-      (value) => { status = value; }, true
-    );
-    const info = envelope.response.productInfo ?? {};
-    return {
-      status,
-      code: envelope.messages[0]?.code,
-      name: typeof info.name === 'string' ? info.name : undefined,
-      version: typeof info.version === 'string' ? info.version : undefined
-    };
+    return getProductInfoDiagnostics(this.context, profile, control);
   }
 
   /**
@@ -1213,54 +428,7 @@ export class FMClient {
     profile: ConnectionProfile,
     control?: ClientRequestControl
   ): Promise<string[] | undefined> {
-    try {
-      const envelope = await this.requestServerLevel<{ databases?: Array<{ name?: unknown }> }>(
-        profile,
-        '/databases',
-        control,
-        'Failed to list the hosted databases.'
-      );
-      return (envelope.response.databases ?? [])
-        .map((entry) => (typeof entry?.name === 'string' ? entry.name : undefined))
-        .filter((name): name is string => Boolean(name));
-    } catch (error) {
-      if (error instanceof FMClientError && (error.status === 401 || error.status === 403)) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-
-  private async requestServerLevel<TResponse extends Record<string, unknown>>(
-    profile: ConnectionProfile,
-    path: string,
-    control: ClientRequestControl | undefined,
-    fallbackMessage: string,
-    onStatus?: (status: number) => void,
-    skipCertificateInspection = false
-  ): Promise<DataApiEnvelope<TResponse>> {
-    const base = profile.serverUrl.replace(/\/+$/, '');
-    const basePath = this.normalizePath(profile.apiBasePath ?? '/fmi/data');
-    const version = (profile.apiVersionPath ?? 'vLatest').replace(/^\/+|\/+$/g, '');
-    try {
-      const response = await this.httpClient.request<unknown>({
-        method: 'GET',
-        url: `${base}${basePath}/${version}${path}`,
-        headers: { Accept: 'application/json' },
-        signal: control?.signal,
-        timeout: this.timeoutMs,
-        maxRedirects: 0,
-        ...httpsTransportFor(profile, `${base}${basePath}/${version}${path}`)
-      });
-      onStatus?.(response.status);
-      return parseDataApiEnvelope<TResponse>(response);
-    } catch (error) {
-      const failure = toFMClientError(normalizeError(error, { fallbackMessage, endpoint: `GET ${path}` }));
-      // Diagnosis already read the peer certificate with its own cancellable deadline.
-      throw (skipCertificateInspection
-        ? this.explainPinnedFailure(profile, failure)
-        : await this.refineCertificateError(profile, failure));
-    }
+    return listHostedDatabases(this.context, profile, control);
   }
 
   /**
@@ -1305,71 +473,8 @@ export class FMClient {
     return pinBypassedByHost(profile, failure) ?? failure;
   }
 
-  /**
-   * When the certificate was refused because this computer does not trust its issuer, look at what
-   * the server presents (one extra handshake, no request, at most 1.5 s, made directly and not through any proxy) and, if it is FileMaker Server's own
-   * default certificate, say so in the message. Best effort: any problem returns the error as it was.
-   */
   private async refineCertificateError(profile: ConnectionProfile, failure: FMClientError): Promise<FMClientError> {
-    const untrusted = new Set([
-      'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
-      'UNABLE_TO_GET_ISSUER_CERT',
-      'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
-      'DEPTH_ZERO_SELF_SIGNED_CERT',
-      'SELF_SIGNED_CERT_IN_CHAIN'
-    ]);
-    const bypassed = pinBypassedByHost(profile, failure);
-    if (bypassed) {
-      return bypassed;
-    }
-    if (failure.kind !== 'certificate' || !failure.networkCode || !untrusted.has(failure.networkCode)) {
-      return failure;
-    }
-    const url = certificateTargetUrl(profile);
-    // This look dials the server directly; behind a proxy it would only hang, so it is skipped there.
-    if (!url || environmentProxyFor(url)) {
-      return failure;
-    }
-    // One look per server and failure for a minute: every failed request would otherwise pay the
-    // handshake again (up to 1.5 s), and a server that does not answer would cost the full wait each time.
-    const key = `${url}|${failure.networkCode}`;
-    const now = this.now();
-    let look = this.certificateLooks.get(key);
-    if (!look || now - look.at > CERTIFICATE_LOOK_TTL_MS || now < look.at) {
-      if (this.certificateLooks.size >= 32) {
-        this.certificateLooks.delete(this.certificateLooks.keys().next().value as string);
-      }
-      look = { at: now, message: this.lookAtCertificate(url, failure.networkCode) };
-      this.certificateLooks.set(key, look);
-    }
-    const message = await look.message;
-    return message
-      ? new FMClientError(message, {
-          status: failure.status,
-          code: failure.code,
-          networkCode: failure.networkCode,
-          kind: failure.kind,
-          isRetryable: failure.isRetryable,
-          details: failure.details,
-          requestId: failure.requestId,
-          endpoint: failure.endpoint
-        })
-      : failure;
-  }
-
-  /** The message that names what the server presented, or undefined when the look fails or adds nothing. */
-  private async lookAtCertificate(url: string, networkCode: string): Promise<string | undefined> {
-    try {
-      const info = await inspectServerCertificate(url, 1500);
-      const better = describeNetworkFailure(networkCode, {
-        ...targetOfUrl(url),
-        fileMakerDefaultCertificate: isFileMakerDefaultCertificate(info),
-        certificateListsHostNames: info.altNames.length > 0
-      });
-      return better?.message;
-    } catch {
-      return undefined;
-    }
+    return this.certificateAdvice.refine(profile, failure);
   }
 
   /** The last known health of a profile's connection, or undefined before any request this session. */
@@ -1572,7 +677,7 @@ export class FMClient {
     if (isProxyProfile(profile)) return;
     const timeout = Math.min(this.timeoutMs, 3000);
     try {
-      const url = this.buildEndpoint(profile, `/sessions/${encodeURIComponent(token)}`);
+      const url = buildEndpoint(profile, `/sessions/${encodeURIComponent(token)}`);
       await this.httpClient.request({ method: 'DELETE', url,
         headers: { Authorization: `Bearer ${token}` }, timeout, signal: AbortSignal.timeout(timeout),
         maxRedirects: 0, ...httpsTransportFor(profile, url) });
@@ -1628,66 +733,7 @@ export class FMClient {
     trace?: RequestTrace,
     authOptions?: { skipProactiveRefresh?: boolean }
   ): Promise<DataApiEnvelope<TResponse>> {
-    if (trace) {
-      trace.endpoint = redactString(`${request.method} ${request.path}`);
-    }
-
-    const token = await this.ensureSessionToken(profile, { signal: request.signal }, authOptions);
-
-    try {
-      const config: AxiosRequestConfig = {
-        method: request.method,
-        url: this.buildEndpoint(profile, request.path),
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...(request.headers ?? {})
-        },
-        data: request.data,
-        params: request.params,
-        ...(request.strictQuery ? { paramsSerializer: { serialize: strictQuerySerializer } } : {}),
-        signal: request.signal,
-        timeout: this.timeoutMs,
-        maxBodyLength: Infinity,
-        ...(request.maxResponseBytes ? { maxContentLength: request.maxResponseBytes } : {}),
-        // The Data API never redirects. Following one could send a login to another server or drop
-        // the request body; a redirect is reported as an error that says where it pointed.
-        maxRedirects: 0,
-        ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path))
-      };
-
-      const response = await this.httpClient.request<unknown>(config);
-      return parseDataApiEnvelope<TResponse>(response);
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      if (axiosError.response?.status === 401 && retryOn401) {
-        if (trace) {
-          trace.reauthCount += 1;
-        }
-        this.logger.info('Session token rejected; refreshing token and retrying once.', {
-          profileId: profile.id,
-          requestId: trace?.requestId
-        });
-        await this.renewRejectedSession(profile, token, { signal: request.signal });
-
-        return this.requestWithAuth(profile, request, false, trace);
-      }
-
-      throw this.explainPinnedFailure(
-        profile,
-        toFMClientError(
-          normalizeError(error, {
-            operation: trace?.operation,
-            requestData: request.data,
-            requestParams: request.params,
-            fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
-            requestId: trace?.requestId,
-            endpoint: redactString(`${request.method} ${request.path}`)
-          })
-        )
-      );
-    }
+    return requestWithAuth(this.context, profile, request, retryOn401, trace, authOptions);
   }
 
   private async requestWithAuthRaw<TResponse extends Record<string, unknown>>(
@@ -1700,126 +746,14 @@ export class FMClient {
     headers: Record<string, string | undefined>;
     envelope?: DataApiEnvelope<TResponse>;
   }> {
-    if (trace) {
-      trace.endpoint = redactString(`${request.method} ${request.path}`);
-    }
-
-    const token = await this.ensureSessionToken(profile, { signal: request.signal });
-
-    try {
-      const config: AxiosRequestConfig = {
-        method: request.method,
-        url: this.buildEndpoint(profile, request.path),
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          ...(request.headers ?? {})
-        },
-        data: request.data,
-        params: request.params,
-        ...(request.strictQuery ? { paramsSerializer: { serialize: strictQuerySerializer } } : {}),
-        signal: request.signal,
-        timeout: this.timeoutMs,
-        maxBodyLength: Infinity,
-        maxRedirects: 0,
-        ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path)),
-        validateStatus: (status) => (status >= 200 && status < 300) || status === 304
-      };
-
-      const response = await this.httpClient.request<unknown>(config);
-      const headers = normalizeHeaders(response.headers as Record<string, unknown>);
-      if (response.status === 304) {
-        return {
-          status: response.status,
-          headers
-        };
-      }
-
-      return {
-        status: response.status,
-        headers,
-        envelope: parseDataApiEnvelope<TResponse>(response)
-      };
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      if (axiosError.response?.status === 401 && retryOn401) {
-        if (trace) {
-          trace.reauthCount += 1;
-        }
-        this.logger.info('Session token rejected; refreshing token and retrying once.', {
-          profileId: profile.id,
-          requestId: trace?.requestId
-        });
-        await this.renewRejectedSession(profile, token, { signal: request.signal });
-
-        return this.requestWithAuthRaw(profile, request, false, trace);
-      }
-
-      throw this.explainPinnedFailure(
-        profile,
-        toFMClientError(
-          normalizeError(error, {
-            operation: trace?.operation,
-            requestData: request.data,
-            requestParams: request.params,
-            fallbackMessage: `FileMaker request failed (${redactString(`${request.method} ${request.path}`)}).`,
-            requestId: trace?.requestId,
-            endpoint: redactString(`${request.method} ${request.path}`)
-          })
-        )
-      );
-    }
+    return requestWithAuthRaw<TResponse>(this.context, profile, request, retryOn401, trace);
   }
 
   private async requestNoAuth<TResponse extends Record<string, unknown>>(
     profile: ConnectionProfile,
     request: RequestOptions
   ): Promise<DataApiEnvelope<TResponse>> {
-    const config: AxiosRequestConfig = {
-      method: request.method,
-      url: this.buildEndpoint(profile, request.path),
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        ...(request.headers ?? {})
-      },
-      data: request.data,
-      params: request.params,
-      signal: request.signal,
-      timeout: this.timeoutMs,
-      maxRedirects: 0,
-      ...httpsTransportFor(profile, this.buildEndpoint(profile, request.path))
-    };
-
-    const response = await this.httpClient.request<unknown>(config);
-    return parseDataApiEnvelope<TResponse>(response);
-  }
-
-  private buildProfileCacheKey(profile: ConnectionProfile): string {
-    return buildProfileCacheKey(profile);
-  }
-
-  private buildLayoutMetadataCacheKey(profile: ConnectionProfile, layout: string): string {
-    return buildProfileCacheKey(profile, layout);
-  }
-
-  private buildEndpoint(profile: ConnectionProfile, path: string): string {
-    const normalizedServer = profile.serverUrl.replace(/\/+$/, '');
-    const normalizedBasePath = this.normalizePath(profile.apiBasePath ?? '/fmi/data');
-    const version = (profile.apiVersionPath ?? 'vLatest').replace(/^\/+|\/+$/g, '');
-    const database = encodeURIComponent(profile.database);
-
-    return `${normalizedServer}${normalizedBasePath}/${version}/databases/${database}${path}`;
-  }
-
-  private normalizePath(path: string): string {
-    const trimmed = path.trim();
-    if (!trimmed.startsWith('/')) {
-      return `/${trimmed.replace(/\/+$/, '')}`;
-    }
-
-    return trimmed.replace(/\/+$/, '');
+    return requestNoAuth(this.context, profile, request);
   }
 
   private async withHistory<T>(
@@ -1960,202 +894,4 @@ export class FMClient {
       this.logger.warn('Failed to persist request metrics entry.', { error });
     }
   }
-}
-
-/** The Claris guide advises keeping a Data API URL under 2000 characters (URL and data format notes). */
-export const MAX_SCRIPT_URL_LENGTH = 2000;
-
-/** `a=b&c=d` with every key and value percent-encoded (a space is `%20`, a `+` is `%2B`, a `|` is `%7C`). */
-function strictQuerySerializer(params: Record<string, unknown>): string {
-  return Object.entries(params)
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-    .join('&');
-}
-
-/**
- * A script run is not a data request. When the script is attached to a record or a find, that request's own
- * record(s) (`data`, `dataInfo`) come back too; they are not part of the script's answer and are dropped, so no
- * consumer (Layout Mode, the preview bridge, the AI tools, Script Runner) passes a record along by accident.
- */
-function withoutRecordData(response: Record<string, unknown>): Record<string, unknown> {
-  const { data: _data, dataInfo: _dataInfo, ...rest } = response;
-  void _data;
-  void _dataInfo;
-  return rest;
-}
-
-/** An HTTP success without the main script's status does not confirm execution. */
-function scriptResponse(response: Record<string, unknown>): Record<string, unknown> {
-  if (response.scriptError === undefined || response.scriptError === null || response.scriptError === '') {
-    throw new FMClientError(
-      'The server did not confirm that the script ran (no scriptError in the response). Check the script before trying again.',
-      { code: 'SCRIPT_NOT_CONFIRMED', kind: 'server', isRetryable: false }
-    );
-  }
-  return withoutRecordData(response);
-}
-
-function tooLongScriptParameter(): FMClientError {
-  return new FMClientError(
-    'This parameter is too long to send. Shorten it or run the script from a layout with a text field',
-    { code: 'SCRIPT_PARAMETER_TOO_LONG', kind: 'validation', isRetryable: false }
-  );
-}
-
-function scriptUnsupported(error: unknown): FMClientError {
-  return new FMClientError('Script runner is not supported on this server/profile.', {
-    code: 'SCRIPT_UNSUPPORTED',
-    status: getErrorStatus(error),
-    details: error
-  });
-}
-
-function buildScriptParams(
-  scriptName: string,
-  scriptParam?: string
-): Record<string, string | number | boolean> {
-  const params: Record<string, string | number | boolean> = {
-    script: scriptName
-  };
-
-  if (scriptParam !== undefined && scriptParam.length > 0) {
-    params['script.param'] = scriptParam;
-  }
-
-  return params;
-}
-
-function normalizeUploadContent(content: Buffer | Uint8Array): Buffer {
-  return Buffer.isBuffer(content) ? content : Buffer.from(content);
-}
-
-function normalizeContainerFieldRepetition(fieldRepetition: number | undefined): number {
-  if (fieldRepetition === undefined) {
-    return 1;
-  }
-
-  if (!Number.isInteger(fieldRepetition) || fieldRepetition < 1) {
-    throw new FMClientError('Container field repetition must be a positive integer.');
-  }
-
-  return fieldRepetition;
-}
-
-function buildContainerUploadMultipart(file: ContainerUploadFile & { content: Buffer }): {
-  body: Buffer;
-  contentType: string;
-} {
-  const boundary = `----filemaker-data-api-tools-${randomUUID()}`;
-  const contentType = sanitizeMultipartHeaderValue(file.contentType ?? 'application/octet-stream');
-  const fileName = sanitizeMultipartHeaderValue(file.fileName);
-
-  const header = Buffer.from(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="upload"; filename="${fileName}"\r\n` +
-      `Content-Type: ${contentType}\r\n\r\n`,
-    'utf8'
-  );
-  const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
-
-  return {
-    body: Buffer.concat([header, file.content, footer]),
-    contentType: `multipart/form-data; boundary=${boundary}`
-  };
-}
-
-function sanitizeMultipartHeaderValue(value: string): string {
-  const normalized = value
-    .replace(/[\r\n"]/g, '_')
-    .replace(/\\/g, '\\\\')
-    .trim();
-  return normalized.length > 0 ? normalized : 'application/octet-stream';
-}
-
-function isLikelyScriptUnsupportedError(error: unknown): boolean {
-  const status = getErrorStatus(error);
-  if (status === 405 || status === 501) {
-    return true;
-  }
-  // A bare 404 is a wrong address or a disabled Data API, not "scripts unsupported": only a 404
-  // that carries a FileMaker error code counts.
-  return (
-    status === 404 &&
-    error instanceof FMClientError &&
-    error.code !== undefined &&
-    error.code !== NOT_DATA_API_CODE
-  );
-}
-
-function getErrorStatus(error: unknown): number | undefined {
-  if (error instanceof FMClientError) {
-    return error.status;
-  }
-
-  const axiosError = error as AxiosError;
-  if (axiosError?.isAxiosError) {
-    return axiosError.response?.status;
-  }
-
-  return undefined;
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-  const normalized = normalizeError(error);
-  return redactString(normalized.message);
-}
-
-function normalizeHeaders(headers: Record<string, unknown>): Record<string, string | undefined> {
-  const normalized: Record<string, string | undefined> = {};
-
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === 'string') {
-      normalized[key.toLowerCase()] = value;
-      continue;
-    }
-
-    if (Array.isArray(value) && typeof value[0] === 'string') {
-      normalized[key.toLowerCase()] = value[0];
-      continue;
-    }
-
-    normalized[key.toLowerCase()] = undefined;
-  }
-
-  return normalized;
-}
-
-/** A shared sign-in belongs to the connection; each waiting request owns only its own wait. */
-function waitForSession<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return promise;
-  return new Promise<T>((resolve, reject) => {
-    const cleanup = () => signal.removeEventListener('abort', abort);
-    const abort = () => {
-      cleanup();
-      reject(new FMClientError('Request cancelled.', { kind: 'cancellation', isRetryable: false }));
-    };
-    if (signal.aborted) abort();
-    else signal.addEventListener('abort', abort, { once: true });
-    // Attach handlers even when already aborted: a later failed shared login must be observed.
-    promise.then((value) => { cleanup(); resolve(value); }, (error) => { cleanup(); reject(error); });
-  });
-}
-
-function portalPagingParams(portals: PortalPaging | undefined, prefix: string): Record<string, number> {
-  const params: Record<string, number> = {};
-  for (const [name, page] of Object.entries(portals ?? {})) {
-    params[`${prefix}limit.${name}`] = page.limit;
-    if (page.offset !== undefined) params[`${prefix}offset.${name}`] = page.offset;
-  }
-  return params;
-}
-
-function scriptLayoutEmpty(): FMClientError {
-  return new FMClientError('The script did not run because this layout has no records. Add a record or use a layout that has records.',
-    { code: '401', kind: 'validation', isRetryable: false });
-}
-
-function withPortalInfo(record: FileMakerRecord, dataInfo?: Record<string, unknown>, responsePortalInfo?: unknown): FileMakerRecord {
-  const info = record.portalDataInfo ?? dataInfo?.portalDataInfo ?? responsePortalInfo;
-  return Array.isArray(info) ? { ...record, portalDataInfo: info } : record;
 }
