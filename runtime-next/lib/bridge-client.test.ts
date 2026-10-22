@@ -26,3 +26,16 @@ describe('RuntimeBridgeClient', () => {
     );
   });
 });
+
+describe('FileMaker record version and empty data', () => {
+  it('includes modId in the edit request and explains FileMaker 306', async () => {
+    const fetchFn = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ error: 'Record modification ID does not match.', code: '306' }), { status: 500 }));
+    const client = new RuntimeBridgeClient('http://bridge.test/fm', fetchFn, 'token');
+    await expect(client.editRecord(' Layout ', '19', { ' Field ': 'value' }, '7')).rejects.toThrow(/changed.*306/);
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ layout: ' Layout ', recordId: '19', fieldData: { ' Field ': 'value' }, modId: '7' });
+  });
+  it('treats no-record error 401 as an empty found set', async () => {
+    const client = new RuntimeBridgeClient('http://bridge.test/fm', async () => new Response(JSON.stringify({ error: 'No records match', code: '401' }), { status: 500 }));
+    expect(await client.find({ layout: 'Empty', query: [{}] })).toEqual({ data: [] });
+  });
+});

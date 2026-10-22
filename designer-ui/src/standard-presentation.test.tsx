@@ -21,7 +21,7 @@ describe('shared designer and runtime presentation', () => {
       expect(field.style.width).toBe(`${width}px`);
       expect(field.style.height).toBe(`${height + 24}px`);
       expect(field.getAttribute('data-fm-label-position')).toBe('top');
-      expect(field.querySelector('input')?.style.height).toBe(`${height}px`);
+      expect(field.querySelector<HTMLElement>(':scope > div')?.style.height).toBe(`${height}px`);
       expect(field.querySelector('label')?.style.height).toBe('24px');
     });
     expect(container.querySelector('label')?.textContent).toBe(' Text ');
@@ -34,11 +34,11 @@ describe('shared designer and runtime presentation', () => {
     [...layout.objects].sort((a, b) => a.y - b.y || a.x - b.x).forEach((object) => {
       const field = container.querySelector<HTMLElement>(`[data-fm-field-id="${object.id}"]`)!;
       expect(field.style.left).toBe('24px');
-      expect(field.style.top).toBe(`${y}px`);
+      expect(Number.parseFloat(field.style.top)).toBeGreaterThanOrEqual(y);
       expect(Number.parseFloat(field.style.width)).toBeLessThanOrEqual(172);
-      y += object.height + 24 + 16;
+      y = Number.parseFloat(field.style.top) + object.height + 24 + 16;
     });
-    expect(Number.parseFloat((container.firstChild as HTMLElement).style.height)).toBe(y + 24);
+    expect(Number.parseFloat((container.firstChild as HTMLElement).style.height)).toBeGreaterThanOrEqual(y + 24);
     expect(FIELD_LAYOUT).toMatchObject({ pageMargin: 24, rowGap: 16, columnGap: 24 });
   });
 

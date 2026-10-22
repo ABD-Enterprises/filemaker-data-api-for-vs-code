@@ -1,4 +1,4 @@
-// fmweb-managed: runtime template v3. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v4. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 import * as React from 'react';
 
 import type { LayoutDefinition, LayoutObject, RuntimeLayoutData } from '@fmweb/shared';
@@ -12,6 +12,7 @@ export interface RuntimeDataState {
   currentRecord?: RuntimeRecord;
   currentIndex: number;
   statusMessage: string;
+  errorMessage?: string;
   loading: boolean;
   runtimeData: RuntimeLayoutData;
 }
@@ -21,8 +22,8 @@ export interface RuntimeDataActions {
   reloadRecord: () => Promise<void>;
   nextRecord: () => void;
   prevRecord: () => void;
-  createRecord: (fieldData: Record<string, unknown>) => Promise<void>;
-  editCurrentRecord: (fieldData: Record<string, unknown>) => Promise<void>;
+  createRecord: (fieldData: Record<string, unknown>) => Promise<boolean>;
+  editCurrentRecord: (fieldData: Record<string, unknown>, modId?: string) => Promise<boolean>;
   deleteCurrentRecord: () => Promise<void>;
 }
 
@@ -53,8 +54,10 @@ export function useRuntimeDataController(
 
   const [foundSet, setFoundSet] = React.useState<RuntimeRecord[]>([]);
   const [currentIndex, setCurrentIndex] = React.useState(0);
-  const [statusMessage, setStatusMessage] = React.useState('Runtime data is idle.');
-  const [loading, setLoading] = React.useState(false);
+  const [statusMessage, setStatusMessage] = React.useState('Loading records…');
+  const [loading, setLoading] = React.useState(true);
+  const [errorMessage, setErrorMessage] = React.useState<string | undefined>();
+  const initialFindRef = React.useRef(false);
   const [snapshotReady, setSnapshotReady] = React.useState(false);
   const initialRecordHydratedRef = React.useRef(false);
   const initialIndexAppliedRef = React.useRef(false);
@@ -76,10 +79,11 @@ export function useRuntimeDataController(
     };
   }, [currentRecord, layout, viewport]);
 
-  const withAsyncStatus = React.useCallback(async (task: () => Promise<void>): Promise<void> => {
+  const withAsyncStatus = React.useCallback(async <T,>(task: () => Promise<T>): Promise<T> => {
     setLoading(true);
+    setErrorMessage(undefined);
     try {
-      await task();
+      return await task();
     } finally {
       setLoading(false);
     }
@@ -90,10 +94,11 @@ export function useRuntimeDataController(
     if (snapshot && snapshot.foundSet.length > 0) {
       setFoundSet(snapshot.foundSet);
       setCurrentIndex(Math.max(0, Math.min(snapshot.currentIndex, snapshot.foundSet.length - 1)));
-      setStatusMessage(`Restored ${snapshot.foundSet.length} record(s) from session cache.`);
+      setStatusMessage(`Showing ${snapshot.foundSet.length} saved record(s).`);
     }
 
     setSnapshotReady(true);
+    initialFindRef.current = false;
     initialRecordHydratedRef.current = false;
     initialIndexAppliedRef.current = false;
   }, [layoutSnapshotKey]);
@@ -120,17 +125,21 @@ export function useRuntimeDataController(
   }, [foundSet.length, initialRecordId, initialRecordIndex]);
 
   React.useEffect(() => {
-    if (initialRecordHydratedRef.current) {
+    if (!snapshotReady || initialRecordHydratedRef.current) {
       return;
     }
 
-    if (!initialRecordId || !bridgeClient.isConfigured()) {
+    if (!initialRecordId) return;
+    if (!bridgeClient.isConfigured()) {
+      setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+      setLoading(false);
       return;
     }
 
     const existingIndex = foundSet.findIndex((record) => record.recordId === initialRecordId);
     if (existingIndex >= 0) {
       initialRecordHydratedRef.current = true;
+      setLoading(false);
       if (existingIndex !== currentIndex) {
         setCurrentIndex(existingIndex);
       }
@@ -155,18 +164,19 @@ export function useRuntimeDataController(
         }
 
         initialRecordHydratedRef.current = true;
-        setStatusMessage(`Navigation record ${initialRecordId} was not available. ${formatError(error)}`);
+        setErrorMessage(`The requested record could not be loaded. ${formatError(error)}`);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [bridgeClient, currentIndex, foundSet, initialRecordId, layout.fmLayoutName, layout.name, withAsyncStatus]);
+  }, [bridgeClient, currentIndex, foundSet, initialRecordId, layout.fmLayoutName, layout.name, snapshotReady, withAsyncStatus]);
 
   const findAll = React.useCallback(async (): Promise<void> => {
     if (!bridgeClient.isConfigured()) {
-      setStatusMessage('Bridge is not configured. Set NEXT_PUBLIC_FMWEB_BRIDGE_URL.');
+      setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+      setLoading(false);
       return;
     }
 
@@ -179,16 +189,23 @@ export function useRuntimeDataController(
         });
         setFoundSet(result.data ?? []);
         setCurrentIndex(0);
-        setStatusMessage(`Loaded ${result.data?.length ?? 0} record(s).`);
+        setStatusMessage(result.data?.length ? `Showing ${result.data.length} record(s).` : 'No records on this layout. Choose Create to add a record, or Find to try again.');
       } catch (error) {
-        setStatusMessage(formatError(error));
+        setErrorMessage(formatError(error));
       }
     });
   }, [bridgeClient, layout.fmLayoutName, layout.name, withAsyncStatus]);
 
+  React.useEffect(() => {
+    if (!snapshotReady || initialFindRef.current || initialRecordId) return;
+    initialFindRef.current = true;
+    void findAll();
+  }, [findAll, initialRecordId, snapshotReady]);
+
   const reloadRecord = React.useCallback(async (): Promise<void> => {
     if (!bridgeClient.isConfigured()) {
-      setStatusMessage('Bridge is not configured. Set NEXT_PUBLIC_FMWEB_BRIDGE_URL.');
+      setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+      setLoading(false);
       return;
     }
 
@@ -208,13 +225,13 @@ export function useRuntimeDataController(
         );
         setStatusMessage(`Reloaded record ${currentRecord.recordId}.`);
       } catch (error) {
-        setStatusMessage(formatError(error));
+        setErrorMessage(formatError(error));
       }
     });
   }, [bridgeClient, currentRecord, layout.fmLayoutName, layout.name, withAsyncStatus]);
 
   const nextRecord = React.useCallback(() => {
-    setCurrentIndex((value) => Math.min(foundSet.length - 1, value + 1));
+    setCurrentIndex((value) => Math.max(0, Math.min(foundSet.length - 1, value + 1)));
   }, [foundSet.length]);
 
   const prevRecord = React.useCallback(() => {
@@ -222,21 +239,29 @@ export function useRuntimeDataController(
   }, []);
 
   const createRecord = React.useCallback(
-    async (fieldData: Record<string, unknown>): Promise<void> => {
+    async (fieldData: Record<string, unknown>): Promise<boolean> => {
       if (!bridgeClient.isConfigured()) {
-        setStatusMessage('Bridge is not configured. Set NEXT_PUBLIC_FMWEB_BRIDGE_URL.');
-        return;
+        setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+        setLoading(false);
+        return false;
       }
 
-      await withAsyncStatus(async () => {
+      return withAsyncStatus(async () => {
         try {
           const created = await bridgeClient.createRecord(layout.fmLayoutName ?? layout.name, fieldData);
-          const record = await bridgeClient.getRecord(layout.fmLayoutName ?? layout.name, created.recordId);
+          let record: RuntimeRecord = { recordId: created.recordId, modId: created.modId, fieldData };
+          try {
+            record = await bridgeClient.getRecord(layout.fmLayoutName ?? layout.name, created.recordId);
+          } catch (error) {
+            setErrorMessage(`Record ${created.recordId} was created, but could not be reloaded. Choose Reload before editing. ${formatError(error)}`);
+          }
           setFoundSet((existing) => [...existing, record]);
           setCurrentIndex(foundSet.length);
           setStatusMessage(`Created record ${created.recordId}.`);
+          return true;
         } catch (error) {
-          setStatusMessage(formatError(error));
+          setErrorMessage(formatError(error));
+          return false;
         }
       });
     },
@@ -244,30 +269,35 @@ export function useRuntimeDataController(
   );
 
   const editCurrentRecord = React.useCallback(
-    async (fieldData: Record<string, unknown>): Promise<void> => {
+    async (fieldData: Record<string, unknown>, modId?: string): Promise<boolean> => {
       if (!bridgeClient.isConfigured()) {
-        setStatusMessage('Bridge is not configured. Set NEXT_PUBLIC_FMWEB_BRIDGE_URL.');
-        return;
+        setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+        setLoading(false);
+        return false;
       }
 
       if (!currentRecord) {
         setStatusMessage('No current record to edit.');
-        return;
+        return false;
       }
 
-      await withAsyncStatus(async () => {
+      return withAsyncStatus(async () => {
         try {
-          await bridgeClient.editRecord(layout.fmLayoutName ?? layout.name, currentRecord.recordId, fieldData);
-          const refreshed = await bridgeClient.getRecord(
-            layout.fmLayoutName ?? layout.name,
-            currentRecord.recordId
-          );
+          const saved = await bridgeClient.editRecord(layout.fmLayoutName ?? layout.name, currentRecord.recordId, fieldData, modId);
+          let refreshed: RuntimeRecord = { ...currentRecord, modId: saved.modId, fieldData: { ...currentRecord.fieldData, ...fieldData } };
+          try {
+            refreshed = await bridgeClient.getRecord(layout.fmLayoutName ?? layout.name, currentRecord.recordId);
+          } catch (error) {
+            setErrorMessage(`Record ${currentRecord.recordId} was saved, but could not be reloaded. Choose Reload before editing. ${formatError(error)}`);
+          }
           setFoundSet((existing) =>
             existing.map((item) => (item.recordId === refreshed.recordId ? refreshed : item))
           );
           setStatusMessage(`Saved record ${currentRecord.recordId}.`);
+          return true;
         } catch (error) {
-          setStatusMessage(formatError(error));
+          setErrorMessage(formatError(error));
+          return false;
         }
       });
     },
@@ -276,7 +306,8 @@ export function useRuntimeDataController(
 
   const deleteCurrentRecord = React.useCallback(async (): Promise<void> => {
     if (!bridgeClient.isConfigured()) {
-      setStatusMessage('Bridge is not configured. Set NEXT_PUBLIC_FMWEB_BRIDGE_URL.');
+      setErrorMessage('The preview is not connected to FileMaker. Start the FM Web preview from the extension and try again.');
+      setLoading(false);
       return;
     }
 
@@ -292,7 +323,7 @@ export function useRuntimeDataController(
         setCurrentIndex((value) => Math.max(0, Math.min(value, foundSet.length - 2)));
         setStatusMessage(`Deleted record ${currentRecord.recordId}.`);
       } catch (error) {
-        setStatusMessage(formatError(error));
+        setErrorMessage(formatError(error));
       }
     });
   }, [bridgeClient, currentRecord, foundSet.length, layout.fmLayoutName, layout.name, withAsyncStatus]);
@@ -303,6 +334,7 @@ export function useRuntimeDataController(
     currentRecord,
     currentIndex,
     statusMessage,
+    errorMessage,
     loading,
     runtimeData,
     findAll,
@@ -333,7 +365,7 @@ function resolvePortalRows(
 
   const portals = layout.objects.filter((item): item is Extract<LayoutObject, { type: 'portal' }> => item.type === 'portal');
   for (const portal of portals) {
-    const contextKey = portal.relatedContext.trim();
+    const contextKey = portal.relatedContext;
     const exact = contextKey ? portalData[contextKey] : undefined;
     if (exact && Array.isArray(exact)) {
       mapped[portal.id] = exact;

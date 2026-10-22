@@ -21,3 +21,5 @@ export type { LayoutRendererProps, RuntimeLayoutData } from './ui-renderer';
 
 export { FIELD_LAYOUT, standardFieldSize, standardFieldsCss, applyStandardField } from './field-standards';
 export type { StandardFieldMetadata } from './field-standards';
+
+export * from './record-edit';

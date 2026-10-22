@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The generated FM Web page opens again, no longer stretches sideways, and can edit and save records.
 - The user guide, upgrade notes and a changelog by version are now on the project's website.
 
 ## 1.7.0

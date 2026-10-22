@@ -28,7 +28,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [FIX]
 
-- None.
+- The generated FM Web page opens again, no longer stretches sideways, and can edit and save records.
 
 ### [INTERNAL]
 
