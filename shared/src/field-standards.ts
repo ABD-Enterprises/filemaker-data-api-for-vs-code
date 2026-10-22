@@ -1,3 +1,5 @@
+export { orderFields } from './field-order';
+
 /** Dependency-free presentation rules shared by the designer and value-entry webviews. */
 export const FIELD_LAYOUT = Object.freeze({
   grid: 8,
@@ -21,26 +23,114 @@ export interface StandardFieldMetadata {
   displayType?: string;
   multiline?: boolean;
   optionCount?: number;
+  result?: string;
+  kind?: 'normal' | 'calculation' | 'summary' | 'container' | 'global';
+  maxLength?: number;
+  height?: number;
+  value?: unknown;
+  options?: readonly string[];
+}
+
+export type StandardControlKind = 'input' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'container';
+
+export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): {
+  kind: StandardControlKind; width: number; height: number; readOnly: boolean;
+} {
+  const normalize = (value?: string): string => (value ?? '').trim().toLowerCase().replace(/[ -]/g, '');
+  const type = normalize(field.result || field.type);
+  const display = normalize(field.displayType);
+  const readOnly = ['calculation', 'summary', 'container'].includes(normalize(field.kind || field.type)) || type === 'container';
+  let kind: StandardControlKind = 'input';
+  if (type === 'container' || normalize(field.kind) === 'container') kind = 'container';
+  else if (['popup', 'popupmenu', 'dropdown', 'dropdownlist'].includes(display)) kind = 'select';
+  else if (['checkbox', 'checkboxset'].includes(display)) kind = 'checkbox';
+  else if (['radio', 'radiobuttongroup', 'radiobuttons'].includes(display)) kind = 'radio';
+  else if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type)
+    || ['textarea', 'multiline'].includes(display)
+    || ((!type || type === 'text') && ((field.maxLength ?? 0) > 100 || String(field.value ?? '').length > 100 || /[\r\n]/.test(String(field.value ?? ''))))
+    || (display === 'edittext' && (field.height ?? 0) > 1)) kind = 'textarea';
+  const count = field.optionCount ?? field.options?.length;
+  const height = kind === 'container' ? FIELD_LAYOUT.containerHeight : kind === 'textarea' ? FIELD_LAYOUT.multilineHeight
+    : kind === 'checkbox' || kind === 'radio' ? Math.max(FIELD_LAYOUT.inputHeight,
+      (Number.isFinite(count) ? Math.min(50, Math.max(1, Math.ceil(count!))) : 1) * FIELD_LAYOUT.optionHeight)
+      : FIELD_LAYOUT.inputHeight;
+  return { kind, readOnly, width: type === 'number' ? FIELD_LAYOUT.numberWidth
+    : ['date', 'time', 'timestamp'].includes(type) ? FIELD_LAYOUT.temporalWidth : FIELD_LAYOUT.textWidth, height };
+}
+
+let nextChoiceGroup = 0;
+
+/** DOM controls for the extension's CSP-restricted pages; values and names are never normalized. */
+export function createStandardControl(document: Document, field: Partial<StandardFieldMetadata>, value: string,
+  onChange: (value: string) => void, readOnly = false): HTMLElement {
+  const standard = standardControlFor({ ...field, value });
+  const locked = readOnly || standard.readOnly;
+  let control: HTMLElement;
+  if (standard.kind === 'container') {
+    control = document.createElement('div');
+    control.className = 'fm-container fm-readonly';
+    if (/^https?:\/\//i.test(value)) {
+      const link = document.createElement('a');
+      link.href = value;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open container';
+      if (/\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(value)) {
+        const image = document.createElement('img');
+        image.src = value;
+        image.alt = field.name ?? '';
+        link.replaceChildren(image);
+      }
+      control.appendChild(link);
+    } else control.textContent = value;
+  } else if (standard.kind === 'checkbox' || standard.kind === 'radio') {
+    control = document.createElement('div');
+    control.setAttribute('role', standard.kind === 'radio' ? 'radiogroup' : 'group');
+    const groupName = `fm-choice-${nextChoiceGroup++}`;
+    const selected = value.split(/\r\n|\r|\n/);
+    const options = Array.from(new Set([...(field.options ?? []), ...selected.filter(Boolean)]));
+    for (const option of options) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = standard.kind;
+      input.name = groupName;
+      input.value = option;
+      input.checked = selected.includes(option);
+      input.disabled = locked;
+      input.addEventListener('change', () => {
+        if (locked) return;
+        onChange(standard.kind === 'radio' ? option : Array.from(control.querySelectorAll<HTMLInputElement>('input:checked')).map((item) => item.value).join('\r'));
+      });
+      label.append(input, document.createTextNode(option));
+      control.appendChild(label);
+    }
+    if (locked) control.classList.add('fm-readonly');
+  } else {
+    const input = document.createElement(standard.kind === 'select' ? 'select' : standard.kind === 'textarea' ? 'textarea' : 'input');
+    if (input instanceof document.defaultView!.HTMLSelectElement) {
+      const options = Array.from(new Set(['', ...(field.options ?? []), value]));
+      for (const option of options) {
+        const item = document.createElement('option');
+        item.value = option;
+        item.textContent = option === value && option !== '' && !field.options?.includes(option) ? `${option} (current value)` : option;
+        input.appendChild(item);
+      }
+      input.disabled = locked;
+    } else {
+      input.readOnly = locked;
+      if (standard.kind === 'input' && (field.result || field.type)?.toLowerCase() === 'number') input.inputMode = 'decimal';
+    }
+    input.value = value;
+    input.addEventListener(standard.kind === 'select' ? 'change' : 'input', () => { if (!locked) onChange(input.value); });
+    control = input;
+  }
+  control.classList.add('fm-field-control');
+  return control;
 }
 
 export function standardFieldSize(field: Partial<StandardFieldMetadata> = {}): { width: number; height: number } {
-  const type = (field.type ?? '').toLowerCase();
-  const display = (field.displayType ?? '').toLowerCase().replace(/[ -]/g, '');
-  if (['checkbox', 'checkboxset', 'radio', 'radiobuttongroup', 'radiobuttons'].includes(display)) {
-    const count = Number.isFinite(field.optionCount) ? Math.min(50, Math.max(1, Math.ceil(field.optionCount!))) : 1;
-    return { width: FIELD_LAYOUT.textWidth, height: Math.max(FIELD_LAYOUT.inputHeight, count * FIELD_LAYOUT.optionHeight) };
-  }
-  if (type === 'container') {
-    return { width: FIELD_LAYOUT.textWidth, height: FIELD_LAYOUT.containerHeight };
-  }
-  if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type.replace(/[ -]/g, '')) || ['textarea', 'multiline'].includes(display)) {
-    return { width: FIELD_LAYOUT.textWidth, height: FIELD_LAYOUT.multilineHeight };
-  }
-  return {
-    width: type === 'number' ? FIELD_LAYOUT.numberWidth
-      : ['date', 'time', 'timestamp'].includes(type) ? FIELD_LAYOUT.temporalWidth : FIELD_LAYOUT.textWidth,
-    height: FIELD_LAYOUT.inputHeight
-  };
+  const { width, height } = standardControlFor(field);
+  return { width, height };
 }
 
 /** Data attributes select build-generated CSS; webviews never need inline styles or relaxed CSP. */
@@ -62,6 +152,13 @@ export function standardFieldsCss(webview = false): string {
 .fm-field { display: flex; flex-direction: column; width: var(--fm-field-width); max-width: 100%; min-width: 0; box-sizing: border-box; }
 .fm-field-label { display: block; min-height: ${FIELD_LAYOUT.labelSpace}px; overflow-wrap: anywhere; }
 .fm-field > .fm-field-control { flex: none; }
+.fm-field-control[type="text"], input.fm-field-control { white-space: nowrap; overflow-wrap: normal; }
+textarea.fm-field-control { resize: vertical; }
+textarea.fm-field-control[readonly] { resize: none; }
+.fm-container { overflow: auto; }
+.fm-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.fm-field-control[role="group"], .fm-field-control[role="radiogroup"] { overflow: auto; }
+.fm-field-control[role="group"] > label, .fm-field-control[role="radiogroup"] > label { display: flex; align-items: center; min-height: 24px; gap: 6px; }
 .fm-field-control { display: block; width: 100%; max-width: 100%; min-width: 0; height: var(--fm-field-height); min-height: var(--fm-field-height); box-sizing: border-box; }
 .fm-field-table { display: block; width: 100%; min-width: 0; }
 .fm-field-table > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

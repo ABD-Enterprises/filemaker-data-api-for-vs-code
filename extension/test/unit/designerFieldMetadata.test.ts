@@ -60,3 +60,12 @@ it('carries all read-only kinds, globals and the Editor required/multiline hints
   expect(fields[4]?.multiline).toBe(true);
   expect(fields[5]?.required).toBe(false);
 });
+
+it('retains length and layout height hints for shared control selection', () => {
+  const fields = designerLayoutMetadata(' Layout ', { fieldMetaData: [
+    { name: ' Long ', result: 'text', maxLength: 500 },
+    { name: 'Tall', displayType: 'editText', height: 3 }
+  ] }).fields;
+  expect(fields[0]).toMatchObject({ name: ' Long ', maxLength: 500 });
+  expect(fields[1]).toMatchObject({ name: 'Tall', displayType: 'editText', height: 3 });
+});

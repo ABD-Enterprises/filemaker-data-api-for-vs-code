@@ -108,7 +108,7 @@ describe.skipIf(!JSDOM)('Record Editor: fields the account cannot see', () => {
     document.getElementById('recordIdInput')!.value = '1';
     send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', record: { recordId: '1', fieldData: { ' Text ': 'before', Number: 1, Date: 'before' } },
       presentationFields: [{ name: ' Text ', type: 'text' }, { name: 'Number', type: 'number' }, { name: 'Date', type: 'date' }] } });
-    window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = '10.50'; input.dispatchEvent(new Event('input')); }`);
+    window.eval(`for (const input of document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea')) { input.value = '10.50'; input.dispatchEvent(new Event('input')); }`);
     document.getElementById('previewButton')!.click();
     expect(posted.at(-1)).toMatchObject({ type: 'previewPatch', payload: { layout: ' Layout ', draftFieldData: { ' Text ': '10.50', Number: 10.5, Date: '10.50' } } });
   });
@@ -121,8 +121,8 @@ it.skipIf(!JSDOM)('keeps prototype-like fields in new-record forms and create pa
   send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['__proto__'] } });
   const names = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
   send({ type: 'layoutFields', payload: { profileId: 'p', layout: '__proto__', fields: names.map((name) => ({ name })), metadataSupported: true } });
-  const inputs = document.querySelectorAll('textarea[aria-label]');
-  expect(Array.from(inputs).map((input) => input.getAttribute('aria-label'))).toEqual(names.slice().sort());
+  const inputs = document.querySelectorAll('input[aria-label], textarea[aria-label]');
+  expect(Array.from(inputs).map((input) => input.getAttribute('aria-label'))).toEqual(names);
   for (const input of inputs) {
     input.value = 'value';
     (input as unknown as { dispatchEvent(event: unknown): void }).dispatchEvent(new window.Event('input'));
@@ -147,7 +147,7 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
     record: { recordId: '1', modId: '7', fieldData: { ' Name ': 'before', Calc: 1, Summary: 2, Photo: 'url', Global: 'before' } } };
   send({ type: mode === 'create' ? 'layoutFields' : 'recordLoaded', payload });
   const notes: Record<string, string> = { Calc: 'Calculated by FileMaker; cannot be edited', Summary: 'Summary field; cannot be edited', Photo: 'Use Upload to container', Global: 'Session-wide' };
-  for (const input of document.querySelectorAll('#fieldEditor textarea')) {
+  for (const input of document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea')) {
     const name = input.getAttribute('aria-label')!;
     expect(input.getAttribute('disabled')).toBeNull();
     expect(input.getAttribute('readonly') !== null).toBe(['Calc', 'Summary', 'Photo'].includes(name));
@@ -155,8 +155,10 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
     expect(document.querySelectorAll('#fieldEditor tr[data-fm-width]')).toHaveLength(5);
     if (notes[name]) expect(document.body.textContent).toContain(notes[name]);
   }
+  expect(document.querySelectorAll('#fieldEditor .fm-container.fm-readonly')).toHaveLength(1);
+  expect(document.body.textContent).toContain('Use Upload to container');
   // Dispatch even on read-only controls: their event handlers must not change a draft.
-  window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = 'after'; input.dispatchEvent(new Event('input')); }`);
+  window.eval(`for (const input of document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea')) { input.value = 'after'; input.dispatchEvent(new Event('input')); }`);
   document.getElementById(mode === 'create' ? 'createButton' : 'saveButton')!.click();
   const message = posted.at(-1)!;
   const body = message.payload as Record<string, unknown>;
@@ -165,7 +167,7 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
   // Reuse the same field names on another load: metadata changes must rebuild read-only controls.
   if (mode === 'edit') {
     send({ type: 'recordLoaded', payload: { ...payload, fields: fields.map((field) => ({ ...field, type: 'normal', result: 'text' })) } });
-    expect(document.querySelectorAll('#fieldEditor textarea[readonly]')).toHaveLength(0);
+    expect(document.querySelectorAll('#fieldEditor input[readonly], #fieldEditor textarea[readonly]')).toHaveLength(0);
   }
 });
 
@@ -184,12 +186,13 @@ it.skipIf(!JSDOM)('uses base metadata for repeated editor keys without changing 
   ];
   send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', fields, metadataSupported: true,
     record: { recordId: '1', fieldData: { ' Calc (1)': 1, ' Calc (2)': 2, 'Summary(2)': 3, 'Photo(1)': 'url', 'Qty(2)': 4, 'Global(2)': 'before', Local: 'before' } } } });
-  const inputs = Array.from(document.querySelectorAll('#fieldEditor textarea'));
-  expect(inputs.filter((input) => input.getAttribute('readonly') !== null).map((input) => input.getAttribute('aria-label')).sort()).toEqual([' Calc (1)', ' Calc (2)', 'Photo(1)', 'Summary(2)']);
+  const inputs = Array.from(document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea'));
+  expect(inputs.filter((input) => input.getAttribute('readonly') !== null).map((input) => input.getAttribute('aria-label')).sort()).toEqual([' Calc (1)', ' Calc (2)', 'Summary(2)']);
+  expect(document.querySelectorAll('#fieldEditor .fm-container[aria-label="Photo(1)"]')).toHaveLength(1);
   const globalInput = inputs.find((input) => input.getAttribute('aria-label') === 'Global(2)')!;
   expect(document.getElementById(globalInput.getAttribute('aria-describedby')!)?.textContent).toContain('Session-wide');
   expect(inputs.find((input) => input.getAttribute('aria-label') === 'Local')!.getAttribute('aria-describedby')).toBeNull();
-  window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = '12'; input.dispatchEvent(new Event('input')); }`);
+  window.eval(`for (const input of document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea')) { input.value = '12'; input.dispatchEvent(new Event('input')); }`);
   document.getElementById('saveButton')!.click();
   expect(posted.at(-1)).toMatchObject({ type: 'saveRecord', payload: {
     originalFieldData: { 'Qty(2)': 4, 'Global(2)': 'before', Local: 'before' },

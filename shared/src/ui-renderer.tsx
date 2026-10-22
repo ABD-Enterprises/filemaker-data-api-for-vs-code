@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { fieldKindNote, runtimeFieldKind } from './record-edit';
-import { FIELD_LAYOUT } from './field-standards';
+import { FIELD_LAYOUT, standardControlFor } from './field-standards';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
 
@@ -28,6 +28,8 @@ export function LayoutContainer({
   onObjectAction,
   runtimeData
 }: LayoutRendererProps): React.JSX.Element {
+  layout = React.useMemo(() => mode === 'runtime' ? runtimeControlLayout(layout, runtimeData?.fieldValues) : layout,
+    [layout, mode, runtimeData?.fieldValues]);
   const viewport = mode === 'runtime' ? runtimeData?.viewport : undefined;
   const containerWidth = viewport ? Math.max(1, Math.round(viewport.width)) : layout.canvas.width;
   const narrow = viewport !== undefined && viewport.width <= 640;
@@ -181,6 +183,26 @@ function ButtonControl(props: {
   );
 }
 
+/** Taller data needs room below its saved row; never alter the saved layout. */
+function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, unknown>): LayoutDefinition {
+  const extraRows = new Map<number, number>();
+  const objects = layout.objects.map((object) => {
+    if (object.type !== 'field') return object;
+    const height = Math.max(object.height, standardControlFor(controlMetadata(object, values?.[object.fmFieldName])).height);
+    extraRows.set(object.y, Math.max(extraRows.get(object.y) ?? 0, height - object.height));
+    return { ...object, height };
+  });
+  return { ...layout, objects: objects.map((object) => ({ ...object,
+    y: object.y + [...extraRows].reduce((shift, [row, extra]) => shift + (row < object.y ? extra : 0), 0)
+  })) };
+}
+
+function controlMetadata(object: FieldLayoutObject, value?: unknown) {
+  return { name: object.fmFieldName, type: object.metadata?.result || object.result || object.metadata?.type || object.format,
+    kind: runtimeFieldKind(object), displayType: object.displayType, multiline: object.multiline,
+    options: object.options, value };
+}
+
 function FieldControl(props: {
   style: React.CSSProperties;
   object: FieldLayoutObject;
@@ -188,7 +210,7 @@ function FieldControl(props: {
   runtimeData?: RuntimeLayoutData;
 }): React.JSX.Element {
   const { object, style } = props;
-  const labelText = object.label?.trim().length ? object.label : object.fmFieldName;
+  const labelText = object.label?.length ? object.label : object.fmFieldName;
   const runtimeValue = props.runtimeData?.fieldValues?.[object.fmFieldName];
   const previewOptions = getPreviewOptions(object, runtimeValue, props.mode);
   const value = runtimeValue === undefined || runtimeValue === null ? '' : String(runtimeValue);
@@ -287,13 +309,16 @@ function renderFieldDisplayControl(props: {
   readOnly: boolean;
   onChange: (value: unknown) => void;
 }): React.JSX.Element {
-  const disabled = props.readOnly;
+  const standard = standardControlFor(controlMetadata(props.object, props.value));
+  const disabled = props.readOnly || standard.readOnly;
   const baseControlStyle: React.CSSProperties = {
     border: '1px solid #90a3b8',
     borderRadius: 5,
+    borderStyle: disabled ? 'dashed' : 'solid',
+    resize: disabled ? 'none' : undefined,
     width: '100%',
-    height: props.object.height,
-    minHeight: props.object.height,
+    height: Math.max(props.object.height, standard.height),
+    minHeight: standard.height,
     padding: '4px 8px',
     boxSizing: 'border-box',
     background: disabled ? '#f6fafc' : '#ffffff',
@@ -302,30 +327,30 @@ function renderFieldDisplayControl(props: {
 
   const description = props.mode === 'runtime' && runtimeFieldNote(props.object, !props.readOnly) ? `${props.inputId}-note` : undefined;
   const common = { id: props.inputId, 'aria-label': props.object.fmFieldName,
-    'aria-describedby': description, style: baseControlStyle };
+    'aria-describedby': description, className: disabled ? 'fm-field-control fm-readonly' : 'fm-field-control', style: baseControlStyle };
 
-  if (runtimeFieldKind(props.object) === 'container') {
-    if (!props.value) return <span />;
+  if (standard.kind === 'container') {
+    if (!props.value) return <div {...common} className="fm-field-control fm-container fm-readonly" />;
     // Container links are server URLs, never executable schemes from field text.
-    if (!/^https?:\/\//i.test(props.value)) return <span>{props.value}</span>;
+    if (!/^https?:\/\//i.test(props.value)) return <div {...common} className="fm-field-control fm-container fm-readonly">{props.value}</div>;
     const image = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(props.value);
-    return image
+    return <div {...common} className="fm-field-control fm-container fm-readonly">{image
       ? <img src={props.value} alt={props.object.fmFieldName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-      : <a href={props.value} target="_blank" rel="noopener noreferrer">Open container</a>;
+      : <a href={props.value} target="_blank" rel="noopener noreferrer">Open container</a>}</div>;
   }
 
-  if (props.object.displayType === 'dropdown') {
+  if (standard.kind === 'select') {
     const options = Array.from(new Set(['', props.value, ...props.options]));
     return <select {...common} disabled={disabled} value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)}>
-      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      {options.map((option) => <option key={option} value={option}>{option === props.value && option !== '' && !props.options.includes(option) ? `${option} (current value)` : option}</option>)}
     </select>;
   }
 
-  if ((props.object.displayType === 'checkbox' || props.object.displayType === 'radio') && props.options.length > 0) {
-    const checkbox = props.object.displayType === 'checkbox';
+  if (standard.kind === 'checkbox' || standard.kind === 'radio') {
+    const checkbox = standard.kind === 'checkbox';
     const selected = props.value.split(/\r\n|\r|\n/);
-    const options = props.mode === 'designer' && !checkbox ? props.options.slice(0, 2) : props.options;
-    return <div role={checkbox ? 'group' : 'radiogroup'} aria-label={props.object.fmFieldName} aria-describedby={description}
+    const options = props.mode === 'designer' && !checkbox ? props.options.slice(0, 2) : Array.from(new Set([...props.options, ...selected.filter(Boolean)]));
+    return <div className={common.className} role={checkbox ? 'group' : 'radiogroup'} aria-label={props.object.fmFieldName} aria-describedby={description}
       style={{ ...baseControlStyle, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {options.map((option, index) => <label key={option} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <input id={index === 0 ? props.inputId : `${props.inputId}-${index}`} type={checkbox ? 'checkbox' : 'radio'}
@@ -338,7 +363,7 @@ function renderFieldDisplayControl(props: {
     </div>;
   }
 
-  if (props.object.multiline) {
+  if (standard.kind === 'textarea') {
     return <textarea {...common} value={props.value} readOnly={disabled} onChange={(event) => props.onChange(event.currentTarget.value)} />;
   }
 

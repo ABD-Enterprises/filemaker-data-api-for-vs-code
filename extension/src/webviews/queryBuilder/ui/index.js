@@ -344,10 +344,7 @@ function renderCriterion(request, criterion, requestIndex, criterionIndex) {
 
   row.append(labelControl(field, 'Field'), labelControl(operator, 'Condition'));
   function sizeValues() {
-    const metadata = state.fieldMetadata.find((entry) => entry.name === criterion.field);
-    if (typeof FieldStandards !== 'undefined') {
-      row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
-    }
+    row.querySelectorAll('.criterion-value').forEach((input) => replaceValueControl(input, criterion.field));
   }
 
   const definition = FindForm.getOperator(criterion.operator);
@@ -395,13 +392,33 @@ function makeValueInput(value, label, onInput) {
   input.placeholder = label;
   input.setAttribute('aria-label', label);
   input.value = value || '';
+  input.valueChanged = onInput;
   input.addEventListener('input', () => onInput(input.value));
   return labelControl(input, label);
 }
 
+// Find values use the same boxes, but remain searchable even for calculated fields.
+function replaceValueControl(input, fieldName) {
+  if (typeof FieldStandards === 'undefined') return;
+  const metadata = state.fieldMetadata.find((entry) => entry.name === fieldName)
+    || state.fieldMetadata.find((entry) => entry.name === fieldName.replace(/\(\d+\)$/, '')) || {};
+  const value = input.value || '';
+  const field = { ...metadata, kind: 'normal', type: metadata.type === 'container' ? 'text' : metadata.type, value };
+  const control = FieldStandards.createStandardControl(document, field, value, (next) => {
+    control.value = next;
+    input.valueChanged(next);
+  });
+  control.classList.add('criterion-value');
+  control.value = value;
+  control.valueChanged = input.valueChanged;
+  control.setAttribute('aria-label', input.getAttribute('aria-label'));
+  FieldStandards.applyStandardField(input.parentElement, field);
+  input.replaceWith(control);
+}
+
 function labelControl(control, text) {
   if (typeof FieldStandards === 'undefined') return control;
-  const wrapper = document.createElement('label');
+  const wrapper = document.createElement('div');
   wrapper.className = 'fm-field';
   const label = document.createElement('span');
   label.className = 'fm-field-label';
@@ -491,7 +508,8 @@ function applyFieldNames(payload) {
   }
 
   state.fieldMetadata = Array.isArray(payload && payload.fieldMetadata) ? payload.fieldMetadata : [];
-  state.fieldNames = Array.isArray(payload && payload.fieldNames) ? payload.fieldNames : [];
+  const names = Array.isArray(payload && payload.fieldNames) ? payload.fieldNames : [];
+  state.fieldNames = typeof FieldStandards !== 'undefined' ? FieldStandards.orderFields({ fields: state.fieldMetadata }, Object.fromEntries(names.map((name) => [name, true]))) : names;
   fieldNameOptions.replaceChildren(
     ...state.fieldNames.map((name) => {
       const option = document.createElement('option');
@@ -502,10 +520,7 @@ function applyFieldNames(payload) {
 
   requestList.querySelectorAll('.criterion-row').forEach((row) => {
     const field = row.querySelector('.criterion-field');
-    const metadata = state.fieldMetadata.find((entry) => entry.name === field.value);
-    if (typeof FieldStandards !== 'undefined') {
-      row.querySelectorAll('.criterion-value').forEach((input) => FieldStandards.applyStandardField(input.parentElement, metadata));
-    }
+    row.querySelectorAll('.criterion-value').forEach((input) => replaceValueControl(input, field.value));
   });
   fieldNamesHint.classList.remove('error');
   if (payload && payload.error) {
@@ -1100,7 +1115,9 @@ function collectColumns(records, maxColumns = MAX_COLUMNS) {
     Object.keys(fieldData).forEach((key) => seen.add(key));
   }
 
-  return Array.from(seen).slice(0, maxColumns);
+  const columns = typeof FieldStandards !== 'undefined'
+    ? FieldStandards.orderFields({ fields: state.fieldMetadata }, Object.fromEntries([...seen].map((name) => [name, true]))) : Array.from(seen);
+  return columns.slice(0, maxColumns);
 }
 
 function getCellRaw(record, column) {

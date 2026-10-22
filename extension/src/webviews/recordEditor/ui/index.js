@@ -579,22 +579,14 @@ function loadLayouts(profileId) {
 }
 
 function renderFieldEditor() {
-  const keys = Object.keys(state.draftFieldData).sort((a, b) => a.localeCompare(b));
+  const keys = typeof FieldStandards !== 'undefined'
+    ? FieldStandards.orderFields({ fields: state.presentationFields }, state.draftFieldData) : Object.keys(state.draftFieldData);
   if (!keys.length) {
     showEmptyFieldEditor();
     return;
   }
 
-  if (!hasMatchingFieldInputs(keys)) {
-    buildFieldEditor(keys);
-    return;
-  }
-
-  updateFieldEditorValues(keys);
-}
-
-function hasMatchingFieldInputs(keys) {
-  return fieldInputs.size === keys.length && keys.every((key) => fieldInputs.has(key));
+  buildFieldEditor(keys);
 }
 
 function showEmptyFieldEditor() {
@@ -640,20 +632,24 @@ function buildFieldEditor(keys) {
     tr.appendChild(labelCell);
 
     const inputCell = document.createElement('td');
-    const input = document.createElement('textarea');
+    const note = readOnlyNote(key);
+    const change = (value) => {
+      if (readOnlyNote(key)) return;
+      state.draftFieldData[key] = parseEditableValue(value, key);
+      debouncedMarkDirtyState();
+    };
+    const input = typeof FieldStandards !== 'undefined'
+      ? FieldStandards.createStandardControl(document, fieldPresentation(key), toEditableValue(state.draftFieldData[key]), change, Boolean(note))
+      : document.createElement('textarea');
     input.id = `record-field-${fieldInputs.size}`;
-    input.className = 'fm-field-control';
+    input.classList.add('fm-field-control');
     input.setAttribute('aria-label', key);
     input.setAttribute('aria-labelledby', labelCell.id);
-    input.rows = 2;
-    input.value = toEditableValue(state.draftFieldData[key]);
-    const note = readOnlyNote(key);
-    input.readOnly = Boolean(note);
-    input.addEventListener('input', () => {
-      if (readOnlyNote(key)) return;
-      state.draftFieldData[key] = parseEditableValue(input.value, key);
-      debouncedMarkDirtyState();
-    });
+    if (typeof FieldStandards === 'undefined') {
+      input.value = toEditableValue(state.draftFieldData[key]);
+      input.readOnly = Boolean(note);
+      input.addEventListener('input', () => change(input.value));
+    }
     fieldInputs.set(key, input);
     inputCell.appendChild(input);
     const noteText = note || (isGlobalField(metadataForField(state.fields, key)) ? 'Session-wide: changes apply throughout this session.' : '');
@@ -699,20 +695,9 @@ function editableFields(values) {
 
 function fieldPresentation(name) {
   const metadata = metadataForField(state.presentationFields, name);
-  return { ...metadata, type: metadata.result || metadata.type };
+  return { ...metadata, name, type: metadata.result || metadata.type, value: toEditableValue(state.draftFieldData[name]) };
 }
 
-function updateFieldEditorValues(keys) {
-  for (const key of keys) {
-    const input = fieldInputs.get(key);
-    if (!input) {
-      continue;
-    }
-
-    input.value = toEditableValue(state.draftFieldData[key]);
-    if (typeof FieldStandards !== 'undefined') FieldStandards.applyStandardField(input.closest('tr'), fieldPresentation(key));
-  }
-}
 
 function markDirtyState() {
   const changed = JSON.stringify(state.originalFieldData) !== JSON.stringify(state.draftFieldData);

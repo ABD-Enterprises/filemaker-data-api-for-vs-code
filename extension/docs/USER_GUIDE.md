@@ -80,8 +80,8 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | List Layouts | Opens a JSON list of the profile's layouts. | Shown with a profile. |
 | Run Find (JSON) | Prompts for find, sort and paging options and opens the result as JSON. | Shown with a profile; choose a layout. |
 | Get Record by ID | Reads one record and opens it as JSON. | Shown with a profile; choose a layout and record ID. |
-| Open Record Viewer | Opens a record and shows related row counts, with Load more on direct connections. | Shown with a profile; choose a layout. |
-| Open Query Builder | Opens the visual find form and results table; an empty search offers List records instead. | Shown with a profile. |
+| Open Record Viewer | Shows fields in layout order, with Copy beside each field name and related row counts below. Direct connections can Load more. | Shown with a profile; choose a layout. |
+| Open Query Builder | Opens the find form and results in layout field order, with the right boxes for search values. An empty search offers List records instead. | Shown with a profile. |
 | Open Layout Metadata | Opens layout metadata, field count and cache status as JSON. | Shown with a profile; needs metadata support for the chosen layout. |
 | Select Layout for Inspector | Selects a layout and focuses the Layout Inspector. | Shown with a profile. |
 | Refresh Layout Inspector | Reloads the currently inspected layout. | Shown with a profile; select a layout in the inspector first. |
@@ -107,7 +107,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Generate Snippets for Layout | Writes and opens editor snippets for a layout. | Shown with a profile; needs workspace trust and a layout. |
 | Generate TypeScript Client | Generates a typed client for selected layouts in a chosen folder. | Shown with a profile; needs workspace trust. |
 | Open Generated Types Folder | Creates the configured types folder if needed and reveals it in the file manager. | Always shown; needs a trusted workspace folder. |
-| Open Record Editor | Opens an existing record for editing, keeping number-looking text as text and warning before saving text with a NUL character. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
+| Open Record Editor | Shows an existing record in layout order, with the right kind of box for each field. Keeps number-looking text as text and warns before saving text with a NUL character. | Shown with a profile; needs record editing enabled and allowed, a layout and a record ID. |
 | Edit Record by ID | Prompts for a record ID and opens the record editor. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Create Record | Opens the editor in create mode, loads the layout field list, and warns before sending text with a NUL character. | Shown with a profile; needs record editing enabled and allowed and a layout. |
 | Delete Record | Deletes a chosen record after confirmation. | Shown with a profile; needs record editing enabled, workspace trust and write operations allowed. |
@@ -504,7 +504,7 @@ A **record ID** is FileMaker's internal record number for a row on a layout (wha
 
 ### View a record
 
-Run **FileMaker: Get Record by ID** or **FileMaker: Open Record Viewer**, choose a profile and layout, and enter the record ID (or use **View** on a row in the Query Builder). The viewer shows the fields, portal data and container fields (container URLs are shown as text; images are not previewed). **Export Record JSON** saves the record.
+Run **FileMaker: Get Record by ID** or **FileMaker: Open Record Viewer**, choose a profile and layout, and enter the record ID (or use **View** on a row in the Query Builder). The viewer shows fields in the layout’s order, followed by any extra fields returned by the server. Repeating fields stay together in repetition order. It uses the same kinds of boxes as the Record Editor, all read-only. Image container links show a preview; other container links can be opened. Copy sits beside each field name and appears when you point at the field or move keyboard focus into it, leaving the whole value box available for numbers and dates. Related rows appear below. **Export Record JSON** saves the record.
 
 If **Load more** in the Record Viewer fails, the error is shown and the button becomes available to try again. Portal counts supplied only for the first result are not applied to other records in a search or CSV export.
 
@@ -516,6 +516,10 @@ If **Load more** in the Record Viewer fails, the error is shown and the button b
 2. Choose a profile and layout and enter the record ID, or skip this and use **Edit** on a row in the Query Builder (the editor then opens with the record loaded). In the editor, **Load** fetches the record.
 3. Change fields. **Validate** checks the values. **Preview Update JSON** shows exactly what will be sent.
 4. Select **Save**. A dialog lists the fields that will change. Confirm with **Save**.
+
+The Record Editor shows fields in the same order as your layout, with the right kind of box for each field. Repeating fields stay together in repetition order. Extra fields returned by the server come last, in the server’s order. Hidden fields stay hidden. If field details are unavailable, fields stay in the server’s order and use text boxes.
+
+Short text, numbers, dates and times use single-line boxes. Long text and text containing line breaks use taller boxes. Pop-up and drop-down lists use a menu; radio buttons and checkboxes show the layout’s choices. A saved value missing from a menu is still offered as “(current value)”; leaving it alone keeps it exactly as it was. Calculation and summary fields are read-only. Containers show a link or image; use **Upload to Container** to replace a file. Dates keep the server’s format.
 
 Only changed fields are sent. **Discard Changes** reverts the form.
 
@@ -805,7 +809,7 @@ When you run **Generate FM Web Next.js App** or **Start FM Web Preview Server** 
 
 New fields added from the picker or toolbox continue below existing objects on the standard grid, including room for labels. The page grows as needed. Opening **Edit Record by ID** loads the supplied record automatically.
 
-Query Builder find values, Record Editor and Record Viewer use these same widths, top labels and 16 px / 24 px gaps. Narrow panels stack fields into one column. Metadata unavailable means text sizing. These rules affect presentation only; find expressions, editing, copying and validation work as before. Generated web layout pages use the same renderer as Layout Mode: saved field sizes and label positions are retained on wide screens, and objects stack in saved order at 640 px or narrower.
+Query Builder find values, Record Editor, Record Viewer and FM Web use the same kinds of field boxes, widths, top labels and 16 px / 24 px gaps. Query Builder field choices and result columns follow layout order. Find boxes stay available for searching calculation and summary values; container searches use a text box. Narrow panels stack fields into one column. Metadata unavailable means text sizing. These rules affect presentation only; find expressions, editing, copying and validation work as before. Generated web layout pages use the same renderer as Layout Mode: saved field sizes and label positions are retained on wide screens, and objects stack in saved order at 640 px or narrower.
 
 Confirmations you will see:
 

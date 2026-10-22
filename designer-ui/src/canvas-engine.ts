@@ -1,4 +1,4 @@
-import { FIELD_LAYOUT, standardFieldSize, type StandardFieldMetadata, type FieldLayoutObject, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
+import { FIELD_LAYOUT, standardFieldSize, standardControlFor, orderFields, type StandardFieldMetadata, type FieldLayoutObject, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
 
 export interface Point {
   x: number;
@@ -476,7 +476,8 @@ export function arrangeStandardForm(
   if (!layout.objects.some((object) => (object.type === 'field' || object.type === 'portal') && (!ids || ids.includes(object.id)))) return layout;
   const next = standardizeFields(layout, fields, ids);
   const included = (object: LayoutObject): boolean => !ids || ids.includes(object.id);
-  const order = new Map(fields.map((field, index) => [field.name, index]));
+  const names = orderFields({ fields }, Object.fromEntries(next.objects.filter((object) => object.type === 'field' && included(object)).map((object) => [(object as FieldLayoutObject).fmFieldName, true])));
+  const order = new Map(names.map((name, index) => [name, index]));
   const arranged = next.objects.filter((object) => object.type === 'field' && included(object))
     .sort((a, b) => (order.get((a as FieldLayoutObject).fmFieldName) ?? fields.length)
       - (order.get((b as FieldLayoutObject).fmFieldName) ?? fields.length));
@@ -533,25 +534,24 @@ export type StarterTemplate = 'blank' | 'form' | 'twoColumn' | 'formPortal';
 export interface StandardPortalMetadata { name: string; fields: string[] }
 
 export function createStandardField(
-  metadata: StandardFieldMetadata & { kind?: FieldLayoutObject['kind']; required?: boolean; options?: string[] },
+  metadata: StandardFieldMetadata & { required?: boolean },
   id: string,
   point: Point,
   zIndex: number
 ): FieldLayoutObject {
-  const display = (metadata.displayType ?? '').toLowerCase().replace(/[ -]/g, '');
+  const standard = standardControlFor(metadata);
   return {
     id, name: metadata.name, type: 'field', fmFieldName: metadata.name,
     x: Math.max(0, snapToGrid(point.x, FIELD_LAYOUT.grid)),
     y: Math.max(0, snapToGrid(point.y, FIELD_LAYOUT.grid)),
     ...standardFieldSize(metadata), zIndex,
     anchors: { top: true, right: false, bottom: false, left: true },
-    displayType: ['checkbox', 'checkboxset'].includes(display) ? 'checkbox'
-      : ['radio', 'radiobuttongroup', 'radiobuttons'].includes(display) ? 'radio'
-      : ['dropdown', 'popupmenu'].includes(display) ? 'dropdown' : 'editBox',
+    displayType: standard.kind === 'checkbox' ? 'checkbox' : standard.kind === 'radio' ? 'radio' : standard.kind === 'select' ? 'dropdown' : 'editBox',
     format: metadata.type?.toLowerCase() === 'number' ? 'number' : metadata.type?.toLowerCase() === 'date' ? 'date' : 'text',
     kind: metadata.kind ?? (metadata.type?.toLowerCase() === 'container' ? 'container' : 'normal'),
-    multiline: metadata.multiline === true || ['textarea', 'multiline'].includes(display) || ['long text', 'multiline text'].includes(metadata.type?.toLowerCase() ?? ''),
-    options: metadata.options,
+    multiline: standard.kind === 'textarea',
+    result: metadata.result || metadata.type,
+    options: metadata.options ? [...metadata.options] : undefined,
     labelPosition: FIELD_LAYOUT.labelPosition, required: metadata.required ?? false
   };
 }

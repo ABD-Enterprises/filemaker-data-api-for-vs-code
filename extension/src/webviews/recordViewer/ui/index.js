@@ -325,23 +325,15 @@ function revealRecordViewer() {
 }
 
 function renderFieldData(fieldData) {
-  const fieldKeys = Object.keys(fieldData);
+  const fieldKeys = typeof FieldStandards !== 'undefined'
+    ? FieldStandards.orderFields({ fields: presentationFields }, fieldData) : Object.keys(fieldData);
   if (!fieldKeys.length) {
     fieldCellRefs.clear();
     fieldDataContainer.replaceChildren(createEmptyMessage('No field data.'));
     return;
   }
 
-  if (!hasMatchingFieldCells(fieldKeys)) {
-    buildFieldTable(fieldData, fieldKeys);
-    return;
-  }
-
-  updateFieldCells(fieldData, fieldKeys);
-}
-
-function hasMatchingFieldCells(fieldKeys) {
-  return fieldCellRefs.size === fieldKeys.length && fieldKeys.every((fieldKey) => fieldCellRefs.has(fieldKey));
+  buildFieldTable(fieldData, fieldKeys);
 }
 
 function buildFieldTable(fieldData, fieldKeys) {
@@ -391,16 +383,13 @@ function buildFieldTable(fieldData, fieldKeys) {
     const valueCell = document.createElement('td');
     const standard = typeof FieldStandards !== 'undefined';
     valueCell.className = standard ? 'fm-field-control viewer-value' : '';
-    const valueControl = document.createElement(standard ? 'textarea' : 'span');
+    const valueControl = standard
+      ? FieldStandards.createStandardControl(document, fieldPresentation(field, fieldData[field]), toText(fieldData[field]), () => {}, true)
+      : document.createElement('span');
     if (standard) {
-      valueControl.className = 'fm-field-control';
-      valueControl.setAttribute('readonly', '');
       valueControl.setAttribute('aria-label', field);
       valueControl.setAttribute('aria-labelledby', fieldCell.id);
-      valueControl.value = toText(fieldData[field]);
-    } else {
-      valueControl.textContent = toText(fieldData[field]);
-    }
+    } else valueControl.textContent = toText(fieldData[field]);
     valueCell.appendChild(valueControl);
     fieldCellRefs.set(field, valueControl);
     row.appendChild(valueCell);
@@ -413,8 +402,11 @@ function buildFieldTable(fieldData, fieldKeys) {
       setStatus(`Copied ${field}.`);
     });
     if (standard) {
-      copyButton.className = 'field-copy';
-      valueCell.appendChild(copyButton);
+      copyButton.className = 'field-copy icon';
+      copyButton.textContent = '⧉';
+      copyButton.setAttribute('aria-label', `Copy ${field}`);
+      copyButton.title = `Copy ${field}`;
+      fieldCell.appendChild(copyButton);
     } else {
       copyCell.appendChild(copyButton);
       row.appendChild(copyCell);
@@ -429,22 +421,9 @@ function buildFieldTable(fieldData, fieldKeys) {
 }
 
 function fieldPresentation(name, value) {
-  const metadata = presentationFields.find((entry) => entry.name === name) || {};
-  const text = toText(value);
-  return { ...metadata, multiline: metadata.multiline || /[\r\n]/.test(text) || text.length > 100 };
-}
-
-function updateFieldCells(fieldData, fieldKeys) {
-  fieldKeys.forEach((fieldKey) => {
-    const control = fieldCellRefs.get(fieldKey);
-    const nextValue = toText(fieldData[fieldKey]);
-    if (control && typeof FieldStandards !== 'undefined') {
-      FieldStandards.applyStandardField(control.closest('tr'), fieldPresentation(fieldKey, fieldData[fieldKey]));
-      control.value = nextValue;
-    } else if (control) {
-      control.textContent = nextValue;
-    }
-  });
+  const metadata = presentationFields.find((entry) => entry.name === name)
+    || presentationFields.find((entry) => entry.name === name.replace(/\(\d+\)$/, '')) || {};
+  return { ...metadata, name, value: toText(value) };
 }
 
 function renderPortalData(relatedData) {

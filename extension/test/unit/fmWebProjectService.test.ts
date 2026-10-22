@@ -71,28 +71,34 @@ describe('FmWebProjectService', () => {
         { name: 'Summary', type: 'summary', result: 'number' },
         { name: 'Photo', result: 'container' },
         { name: 'Global', type: 'normal', result: 'text', global: true },
-        { name: 'Notes', result: 'text', multiline: true }
-      ] })
+        { name: 'Notes', result: 'text', maxLength: 500 },
+        { name: 'Status', result: 'text', displayType: 'popupMenu', valueList: 'Statuses' },
+        { name: 'When', result: 'timestamp' }
+      ], valueLists: [{ name: 'Statuses', values: [{ value: 'Active' }, { value: 'Closed' }] }] })
     }), createSchemaServiceStub(), logger);
     await service.initializeProject(); await service.syncMetadata(profile);
     const { createBlankLayout } = await import('../../src/fmweb/layoutSchema');
     const { FmWebRuntimeGenerator } = await import('../../src/services/fmWebRuntimeGenerator');
     const layout = createBlankLayout('Web', ' Layout ');
-    layout.objects = [' Calc ', 'Summary', 'Photo', 'Global', 'Notes'].map((name, i) => ({
+    layout.objects = [' Calc ', 'Summary', 'Photo', 'Global', 'Notes', 'Status', 'When'].map((name, i) => ({
       id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, name, fmFieldName: name, type: 'field',
       format: 'text', displayType: 'editBox', labelPosition: 'top', required: false, x: 24, y: i * 80,
       width: 240, height: 34, zIndex: i, anchors: { left: true, top: true, right: false, bottom: false }
     }));
     const savedPath = await service.saveLayout(layout);
     const saved = JSON.parse(await readFile(savedPath, 'utf8'));
-    expect(saved.objects.map((field: { kind: string }) => field.kind)).toEqual(['calculation', 'summary', 'container', 'global', 'normal']);
+    expect(saved.objects.map((field: { kind: string }) => field.kind)).toEqual(['calculation', 'summary', 'container', 'global', 'normal', 'normal', 'normal']);
     expect(saved.objects[4].multiline).toBe(true);
+    expect(saved.objects[5]).toMatchObject({ displayType: 'dropdown', options: ['Active', 'Closed'] });
+    expect(saved.objects[6].result).toBe('timestamp');
     // Old layout files also acquire flags when generated without first saving in the designer.
     await writeFile(savedPath, JSON.stringify(layout));
     const generated = await new FmWebRuntimeGenerator({ extensionUri: { fsPath: path.resolve(__dirname, '../..') } } as never, service, logger).generateLayoutPage(layout.id);
     const output = JSON.parse(await readFile(generated.outputPath, 'utf8'));
     expect(output.objects.map((field: { kind: string }) => field.kind)).toEqual(saved.objects.map((field: { kind: string }) => field.kind));
     expect(output.objects[4].multiline).toBe(true);
+    expect(output.objects[5]).toMatchObject({ displayType: 'dropdown', options: ['Active', 'Closed'] });
+    expect(output.objects[6].result).toBe('timestamp');
     expect(output.objects[0].fmFieldName).toBe(' Calc ');
   });
 
