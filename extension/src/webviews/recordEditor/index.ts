@@ -21,6 +21,7 @@ import { copyRecordRequestMenuHtml } from '../../snippets/recordMenuHtml';
 import { describeScriptErrors } from '../../services/responseGuard';
 import { isFeatureEnabled, isOfflineModeOn } from '../../utils/policySetting';
 import { versionFooterHtml } from '../../about/runtimeVersion';
+import { editableFieldData, metadataForField } from '../../utils/fieldAccess';
 
 interface RecordEditorOpenOptions {
   profileId?: string;
@@ -270,9 +271,7 @@ export class RecordEditorPanel {
       const record = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
 
       const schema = await this.schemaService.getFields(profile, payload.layout);
-      if (schema.supported) {
-        this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
-      }
+      this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
 
       // Only now, once nothing more can fail, does the host's copy (and the modId saves are
       // checked against) change. Updating it earlier could pair a new modId with the page's
@@ -291,7 +290,8 @@ export class RecordEditorPanel {
           record,
           fields: schema.fields,
           presentationFields: designerLayoutMetadata(payload.layout, schema.metadata ?? { fields: schema.fields }).fields,
-          metadataSupported: schema.supported
+          metadataSupported: schema.supported,
+          message: schema.message
         }
       });
     } catch (error) {
@@ -356,6 +356,11 @@ export class RecordEditorPanel {
       return;
     }
 
+    const fields = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout));
+    payload = { ...payload,
+      originalFieldData: editableFieldData(payload.originalFieldData, fields),
+      draftFieldData: editableFieldData(payload.draftFieldData, fields)
+    };
     const initialPreview = this.recordEditService.previewPatch(payload.originalFieldData, payload.draftFieldData);
     if (initialPreview.changedFields.length === 0) {
       await this.postError('No field changes detected.');
@@ -468,7 +473,10 @@ export class RecordEditorPanel {
     try {
       const current = await this.fmClient.getRecord(profile, payload.layout, payload.recordId);
       changedByOthers = Object.keys(
-        this.recordEditService.computePatch(payload.originalFieldData, current.fieldData)
+        this.recordEditService.computePatch(
+          payload.originalFieldData,
+          editableFieldData(current.fieldData, this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout)))
+        )
       ).sort((left, right) => left.localeCompare(right));
     } catch (error) {
       this.logger.warn('Could not read the current record to describe an edit conflict.', {
@@ -500,16 +508,14 @@ export class RecordEditorPanel {
 
     try {
       const schema = await this.schemaService.getFields(profile, payload.layout);
-      if (schema.supported) {
-        this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
-      }
+      this.fieldsByLayout.set(this.layoutKey(payload.profileId, payload.layout), schema.fields);
       await this.panel.webview.postMessage({
         type: 'layoutFields',
         payload: {
           profileId: payload.profileId,
           layout: payload.layout,
           presentationFields: designerLayoutMetadata(payload.layout, schema.metadata ?? { fields: schema.fields }).fields,
-          fields: schema.fields.map((field) => ({ name: field.name, type: field.type, result: field.result })),
+          fields: schema.fields.map((field) => ({ name: field.name, type: field.type, global: field.global, result: field.result })),
           metadataSupported: schema.supported,
           message: schema.message
         }
@@ -535,8 +541,10 @@ export class RecordEditorPanel {
       return;
     }
 
+    const known = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout))
+      ?? (await this.schemaService.getFields(profile, payload.layout)).fields;
     let nonEmptyFields = Object.fromEntries(
-      Object.entries(payload.fieldData).filter(([, v]) => v !== '' && v !== undefined && v !== null)
+      Object.entries(editableFieldData(payload.fieldData, known)).filter(([, v]) => v !== '' && v !== undefined && v !== null)
     );
     const names = Object.keys(nonEmptyFields);
     if (names.length === 0) {
@@ -546,10 +554,8 @@ export class RecordEditorPanel {
 
     // Names must be fields of the layout when its fields are known: the page cannot add
     // others, and `recordId`/`modId` are never fields to send.
-    const known = this.fieldsByLayout.get(this.layoutKey(payload.profileId, payload.layout));
-    if (known) {
-      const allowed = new Set(known.map((field) => field.name));
-      const unknown = names.filter((name) => !allowed.has(name));
+    if (known?.length) {
+      const unknown = names.filter((name) => !metadataForField(known, name));
       if (unknown.length > 0) {
         await this.postError(`These are not fields on layout "${payload.layout}": ${unknown.join(', ')}.`);
         return;

@@ -28,6 +28,16 @@ it.each(['fm_edit_record', 'fm_create_record'].flatMap((tool) => ['A\0B', 'A\0B\
   expect(h.client.createRecord).not.toHaveBeenCalled();
 });
 
+it.each(['fm_edit_record', 'fm_create_record'].flatMap((tool) => [' Calculation ', ' SUMMARY ', 'container'].map((type) => ({ tool, type }))))('$tool refuses read-only metadata $type before approval', async ({ tool, type }) => {
+  const h = ready();
+  h.layoutFields.push({ name: ' Calc ', type, result: type === 'container' ? ' Container ' : 'number' } as { name: string; result: string });
+  const message = await failure(h.service.invoke(tool, { layout: 'Contacts', ...(tool === 'fm_edit_record' ? { recordId: '1' } : {}), fields: { ' Calc ': '5' } }));
+  expect(message).toMatch(/(calculation|summary|container) fields cannot be written/i);
+  expect(h.confirms).toHaveLength(0);
+  expect(h.client.editRecord).not.toHaveBeenCalled();
+  expect(h.client.createRecord).not.toHaveBeenCalled();
+});
+
 describe('fm_edit_record', () => {
   it('shows a host-built diff first, labels the model\'s own words last, then sends only changed fields with the confirm-time modId', async () => {
     const h = ready();

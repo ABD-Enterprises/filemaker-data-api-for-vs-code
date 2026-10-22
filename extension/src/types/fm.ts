@@ -366,11 +366,14 @@ export interface BatchUpdateEntry {
   /** CSV values are converted using layout result types at job start. */
   sourceFormat?: 'csv';
   csvRecordColumn?: string;
+  modId?: string;
   recordId: string;
   fieldData: Record<string, unknown>;
 }
 
 export interface BatchUpdateOptions {
+  /** Explicitly chosen overwrite; otherwise exported versions protect newer changes. */
+  overwriteChanged?: boolean;
   dryRun: boolean;
   concurrency: number;
 }
@@ -382,6 +385,12 @@ export interface BatchUpdateFailure {
 }
 
 export interface BatchUpdateResult {
+  rowsWithModId?: number;
+  rowsChecked?: number;
+  skippedChanged?: number;
+  skippedReadOnlyRows?: number;
+  skippedColumns?: string[];
+  warnings?: string[];
   dryRun: boolean;
   total: number;
   attempted: number;

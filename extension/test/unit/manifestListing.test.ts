@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const extensionDir = path.resolve(__dirname, '../..');
 const manifest = JSON.parse(readFileSync(path.join(extensionDir, 'package.json'), 'utf8')) as {
   homepage: string;
+  keywords: string[];
   author: { url: string };
   capabilities: {
     virtualWorkspaces?: { supported: unknown; description?: string };
@@ -22,6 +23,10 @@ const settings = Object.assign({}, ...manifest.contributes.configuration.map((se
 >;
 
 describe('marketplace manifest', () => {
+  it('does not advertise unsupported FileMaker Cloud sign-in in search keywords', () => {
+    expect(manifest.keywords).not.toContain('filemaker cloud');
+  });
+
   it('documents every contributed command in the User Guide command reference', () => {
     const guide = readFileSync(path.join(extensionDir, 'docs/USER_GUIDE.md'), 'utf8');
     const reference = guide.split(/^## Command reference\r?\n/m)[1]?.split(/^## /m)[0] ?? '';

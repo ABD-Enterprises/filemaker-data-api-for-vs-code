@@ -2,6 +2,8 @@
 
 All contributors are expected to follow the project [Code of Conduct](../CODE_OF_CONDUCT.md). To report a vulnerability, follow the [security policy](../SECURITY.md) instead of opening an issue.
 
+See the [adoption debt log](../docs/FILEMAKER_FAILURE_MODES.md#adoption-debt-verified-2026-10-21) for verified gaps, release targets and the next small checks.
+
 ## Set up
 
 You need Git, Node.js 22 or newer, and npm. From the repository root:

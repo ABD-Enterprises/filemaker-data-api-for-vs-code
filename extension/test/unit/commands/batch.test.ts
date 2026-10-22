@@ -184,12 +184,12 @@ describe('batch commands', () => {
     expect(batchService.batchUpdate).toHaveBeenCalledWith(profile, layout, entries, { dryRun: true, concurrency: 3 }, context);
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
     const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
-    expect(JSON.parse(doc.content)).toEqual({ dryRun: true, totalEntries: 1, layout, sample: entries, flaggedRows: [] });
+    expect(JSON.parse(doc.content)).toEqual({ dryRun: true, totalEntries: 1, layout, sample: entries, flaggedRows: [], rowsWithModId: 0, rowsChecked: 0, skippedColumns: [], warnings: [] });
     expect(context.log).toHaveBeenCalledWith('info', 'Batch update completed. Attempted=1, success=1, failures=0');
   });
 
   it.each(['json', 'csv'])('lists all flagged data rows and exact field names in the %s dry-run document', async (format) => {
-    setup();
+    const { tasks } = setup();
     updateInputs(true, join('/tmp', `input.${format}`));
     // Include repeated record ids and a flagged row beyond the five-row sample.
     const rows = Array.from({ length: 7 }, (_, index) => ({
@@ -198,17 +198,42 @@ describe('batch commands', () => {
     const source = format === 'json' ? JSON.stringify(rows) : 'recordId, Name ,Other\n' + rows.map((row) => `42,${row.fieldData[' Name ']},${row.fieldData.Other}`).join('\n');
     vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(source));
     await command('batchUpdateFromFile')(arg);
+    await tasks[0]!({ log: vi.fn() } as never);
     const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
     expect(JSON.parse(doc.content)).toEqual({
+      rowsWithModId: 0, rowsChecked: 0, skippedColumns: [], warnings: [],
       dryRun: true, totalEntries: 7, layout, sample: rows.slice(0, 5),
       flaggedRows: [{ row: 2, recordId: '42', fields: [' Name '] }, { row: 7, recordId: '42', fields: [' Name ', 'Other'] }]
     });
   });
 
+  it('shows and flags only editable dry-run values without taking focus', async () => {
+    const { tasks, batchService } = setup();
+    updateInputs();
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(JSON.stringify([{ recordId: '42', fieldData: { ' Field ': 'safe', 'Calc(1)': 'secret\0value' } }])));
+    batchService.batchUpdate.mockResolvedValue({ attempted: 0, successCount: 0, failureCount: 0, skippedColumns: ['Calc(1)'] } as never);
+    await command('batchUpdateFromFile')(arg);
+    await tasks[0]!({ log: vi.fn() } as never);
+    const doc = vi.mocked(vscode.workspace.openTextDocument).mock.calls[0]![0] as { content: string };
+    expect(JSON.parse(doc.content)).toMatchObject({ sample: [{ recordId: '42', fieldData: { ' Field ': 'safe' } }], flaggedRows: [] });
+    expect(doc.content).not.toContain('secret');
+    expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ preserveFocus: true }));
+  });
+
+  it('keeps the computed dry-run result when opening the preview fails', async () => {
+    const { tasks } = setup();
+    updateInputs();
+    vi.mocked(vscode.workspace.openTextDocument).mockRejectedValueOnce(new Error('cannot open preview'));
+    await command('batchUpdateFromFile')(arg);
+    const context = { log: vi.fn() };
+    await expect(tasks[0]!(context as never)).resolves.toMatchObject({ successCount: 1, failureCount: 0 });
+    expect(context.log).toHaveBeenCalledWith('warn', expect.stringMatching(/preview.*could not be opened/i));
+  });
+
   it.each([undefined, 'Cancel', 'Execute'])('requires a destructive modal before executing updates (%s)', async (choice) => {
     const { tasks, jobRunner, batchService } = setup();
     updateInputs(false);
-    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(choice as never);
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(choice as never).mockResolvedValueOnce('Continue' as never);
     await command('batchUpdateFromFile')(arg);
     expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining(`Execute batch update for 1 records on ${layout}?`), { modal: true }, 'Execute');
     if (choice === 'Execute') {
@@ -220,6 +245,44 @@ describe('batch commands', () => {
       expect(jobRunner.startJob).not.toHaveBeenCalled();
       expect(batchService.batchUpdate).not.toHaveBeenCalled();
     }
+  });
+
+  it.each([undefined, 'Check for newer changes (recommended)', 'Overwrite even if changed'])('requires an explicit version choice for exported files (%s)', async (choice) => {
+    const { tasks, jobRunner, batchService } = setup();
+    updateInputs(false);
+    const versioned = [{ ...entries[0], modId: '7' }];
+    vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(Buffer.from(JSON.stringify(versioned)));
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Execute' as never).mockResolvedValueOnce(choice as never);
+    await command('batchUpdateFromFile')(arg);
+    expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith(expect.stringContaining('newer changes'), { modal: true }, 'Check for newer changes (recommended)', 'Overwrite even if changed');
+    if (!choice) expect(jobRunner.startJob).not.toHaveBeenCalled();
+    else {
+      await tasks[0]!({ log: vi.fn() } as never);
+      expect(batchService.batchUpdate).toHaveBeenCalledWith(profile, layout, versioned, { dryRun: false, concurrency: 3, overwriteChanged: choice === 'Overwrite even if changed' }, expect.anything());
+    }
+  });
+
+  it.each([undefined, 'Cancel', 'Continue'])('warns before running a handmade file without versions (%s)', async (choice) => {
+    const { tasks, jobRunner, batchService } = setup();
+    updateInputs(false);
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Execute' as never).mockResolvedValueOnce(choice as never);
+    await command('batchUpdateFromFile')(arg);
+    expect(vscode.window.showWarningMessage).toHaveBeenLastCalledWith('This file has no modId column, so updates cannot detect newer changes. Continue without the check?', { modal: true }, 'Continue', 'Cancel');
+    if (choice !== 'Continue') expect(jobRunner.startJob).not.toHaveBeenCalled();
+    else {
+      await tasks[0]!({ log: vi.fn() } as never);
+      expect(batchService.batchUpdate).toHaveBeenCalledWith(profile, layout, entries, { dryRun: false, concurrency: 3 }, expect.anything());
+    }
+  });
+
+  it('includes changed-row counts in the final job summary', async () => {
+    const { tasks, batchService } = setup();
+    updateInputs();
+    batchService.batchUpdate.mockResolvedValue({ attempted: 2, successCount: 1, failureCount: 1, skippedChanged: 1 } as never);
+    await command('batchUpdateFromFile')(arg);
+    const log = vi.fn();
+    await tasks[0]!({ log } as never);
+    expect(log).toHaveBeenCalledWith('info', expect.stringContaining('1 rows were skipped because the records changed after the export'));
   });
 
   it('includes early-stop guidance in the job log', async () => {

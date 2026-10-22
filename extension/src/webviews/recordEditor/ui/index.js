@@ -26,6 +26,7 @@ const state = {
   loaded: undefined,
   originalFieldData: Object.create(null),
   draftFieldData: Object.create(null),
+  fields: [],
   presentationFields: []
 };
 
@@ -194,7 +195,7 @@ createButton.addEventListener('click', () => {
 
   const fieldData = Object.create(null);
   for (const [name, value] of Object.entries(state.draftFieldData)) {
-    if (value !== '' && value !== undefined && value !== null) {
+    if (!readOnlyNote(name) && value !== '' && value !== undefined && value !== null) {
       fieldData[name] = value;
     }
   }
@@ -295,6 +296,8 @@ function applyLayoutFields(payload) {
   }
 
   showDuplicateFieldNote(payload.fields);
+  state.fields = payload.fields || [];
+  fieldInputs.clear();
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = Object.create(null);
   state.draftFieldData = Object.create(null);
@@ -374,6 +377,8 @@ function applyRecord(payload) {
   hideConflict();
   state.loaded = payload;
   showDuplicateFieldNote(payload.fields);
+  state.fields = payload.fields || [];
+  fieldInputs.clear();
   state.presentationFields = payload.presentationFields || payload.fields || [];
   state.originalFieldData = clone(payload.record.fieldData);
   state.draftFieldData = clone(payload.record.fieldData);
@@ -382,7 +387,7 @@ function applyRecord(payload) {
   patchPreview.textContent = '';
   renderFieldEditor();
   showHiddenFieldNote(payload);
-  setStatus(`Loaded record ${payload.record.recordId}.`);
+  setStatus(`Loaded record ${payload.record.recordId}.${payload.metadataSupported === false || !state.fields.length ? ' Read-only fields cannot be identified because the field list is unavailable. Check the field types before saving.' : ''}`);
 }
 
 /**
@@ -642,12 +647,23 @@ function buildFieldEditor(keys) {
     input.setAttribute('aria-labelledby', labelCell.id);
     input.rows = 2;
     input.value = toEditableValue(state.draftFieldData[key]);
+    const note = readOnlyNote(key);
+    input.disabled = Boolean(note);
     input.addEventListener('input', () => {
+      if (readOnlyNote(key)) return;
       state.draftFieldData[key] = parseEditableValue(input.value, key);
       debouncedMarkDirtyState();
     });
     fieldInputs.set(key, input);
     inputCell.appendChild(input);
+    const noteText = note || (isGlobalField(metadataForField(state.fields, key)) ? 'Session-wide: changes apply throughout this session.' : '');
+    if (noteText) {
+      const help = document.createElement('p');
+      help.id = `${input.id}-note`;
+      help.textContent = noteText;
+      input.setAttribute('aria-describedby', help.id);
+      inputCell.appendChild(help);
+    }
     tr.appendChild(inputCell);
     tbody.appendChild(tr);
   }
@@ -657,8 +673,32 @@ function buildFieldEditor(keys) {
   fieldEditor.replaceChildren(wrapper);
 }
 
+function metadataForField(fields, name) {
+  return fields.find((field) => field.name === name) || fields.find((field) => field.name === name.replace(/\(\d+\)$/, '')) || {};
+}
+
+function normalizedType(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isGlobalField(metadata) {
+  return metadata.global === true || normalizedType(metadata.global) === 'true' || normalizedType(metadata.type) === 'global';
+}
+
+function readOnlyNote(name) {
+  const metadata = metadataForField(state.fields, name);
+  if (normalizedType(metadata.type) === 'calculation') return 'Calculated by FileMaker; cannot be edited';
+  if (normalizedType(metadata.type) === 'summary') return 'Summary field; cannot be edited';
+  if (normalizedType(metadata.result) === 'container' || normalizedType(metadata.type) === 'container') return 'Use Upload to container';
+  return '';
+}
+
+function editableFields(values) {
+  return Object.fromEntries(Object.entries(values).filter(([name]) => !readOnlyNote(name)));
+}
+
 function fieldPresentation(name) {
-  const metadata = state.presentationFields.find((field) => field.name === name) || {};
+  const metadata = metadataForField(state.presentationFields, name);
   return { ...metadata, type: metadata.result || metadata.type };
 }
 
@@ -703,8 +743,8 @@ function collectDraftPayload() {
 
   return {
     ...base,
-    originalFieldData: state.originalFieldData,
-    draftFieldData: state.draftFieldData
+    originalFieldData: editableFields(state.originalFieldData),
+    draftFieldData: editableFields(state.draftFieldData)
   };
 }
 
@@ -717,8 +757,8 @@ function toEditableValue(value) {
 }
 
 function parseEditableValue(value, name) {
-  const metadata = state.presentationFields.find((field) => field.name === name) || {};
-  if ((metadata.result || metadata.type || '').toLowerCase() !== 'number') return value;
+  const metadata = metadataForField(state.presentationFields, name);
+  if (normalizedType(metadata.result || metadata.type) !== 'number') return value;
   // Keep this decimal check in step with utils/numericText.ts (covered by parity tests).
   const match = /^[-+]?(\d+\.?\d*|\.\d+)(?:[eE]([-+]?\d+))?$/.exec(value);
   if (!match) return value;

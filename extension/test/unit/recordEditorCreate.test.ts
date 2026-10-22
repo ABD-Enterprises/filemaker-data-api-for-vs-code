@@ -76,6 +76,7 @@ describe('Record Editor create mode (stubbed services)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.window.showWarningMessage).mockReset();
     workspace.isTrusted = true;
     workspace.getConfiguration.mockImplementation(() => ({ get: (_k: string, d?: unknown) => d }));
     createRecord = vi.fn(async () => ({ recordId: '501', modId: '0', response: {}, messages: [] }));
@@ -127,6 +128,70 @@ describe('Record Editor create mode (stubbed services)', () => {
   it('lists the layout fields without any record id', async () => {
     await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: 'People' } });
     expect(panel.last('layoutFields')?.payload).toMatchObject({ metadataSupported: true, fields: [{ name: 'Name' }, { name: 'Age' }] });
+  });
+
+  it('passes field kind and global scope to the create form', async () => {
+    const fields = [{ name: ' Calc ', type: 'calculation', result: 'number' }, { name: 'Global', type: 'normal', result: 'text', global: true }];
+    const panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields: vi.fn(async () => ({ supported: true, fields, fromCache: false })) }
+    });
+    await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: ' Layout ' } });
+    expect(panel.last('layoutFields')?.payload).toMatchObject({ layout: ' Layout ', fields });
+  });
+
+  it('creates without requiring values for read-only calculation, summary and container fields', async () => {
+    const fields = [
+      { name: ' Name ', type: 'normal', result: 'text', required: true },
+      { name: 'Calc', type: 'calculation', result: 'number', required: true },
+      { name: 'Summary', type: 'summary', result: 'number', required: true },
+      { name: 'Photo', type: 'normal', result: 'container', required: true },
+      { name: 'Global', type: 'normal', result: 'text', global: true, required: true }
+    ];
+    const panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields: vi.fn(async () => ({ supported: true, fields, fromCache: false })) }
+    });
+    await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: ' Layout ' } });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
+    await panel.send({ type: 'createRecord', payload: { profileId: 'p1', layout: ' Layout ', fieldData: { ' Name ': 'Ada', Global: 'session' } } });
+    expect(createRecord).toHaveBeenCalledWith(expect.anything(), ' Layout ', { ' Name ': 'Ada', Global: 'session' });
+    createRecord.mockClear();
+    await panel.send({ type: 'createRecord', payload: { profileId: 'p1', layout: ' Layout ', fieldData: { ' Name ': 'Ada' } } });
+    expect(createRecord).not.toHaveBeenCalled();
+    expect(panel.last('error')?.message).toContain('Global: Field is required');
+  });
+
+  it('filters read-only repetition values in the host create handler and keeps exact editable names', async () => {
+    const fields = [
+      { name: ' Name ', type: 'normal', required: true },
+      { name: 'Calc', type: ' Calculation ', required: true },
+      { name: 'Summary', type: ' SUMMARY ', required: true },
+      { name: 'Photo', result: ' Container ', required: true },
+      { name: 'Qty', result: 'number', maxRepeat: 2 }
+    ];
+    const panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields: vi.fn(async () => ({ supported: true, fields })) }
+    });
+    await panel.send({ type: 'loadLayoutFields', payload: { profileId: 'p1', layout: ' Layout ' } });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
+    await panel.send({ type: 'createRecord', payload: { profileId: 'p1', layout: ' Layout ', fieldData: { ' Name ': 'Ada', 'Calc(1)': 5, 'Summary(2)': 6, 'Photo(1)': 'url', 'Qty(2)': 3 } } });
+    expect(createRecord).toHaveBeenCalledWith(expect.anything(), ' Layout ', { ' Name ': 'Ada', 'Qty(2)': 3 });
+  });
+
+  it('uses host metadata to filter a create request even before the page has loaded fields', async () => {
+    const panel = openPanel({
+      profileStore: { getProfile: vi.fn(async () => profile('https://fm.example.com')), listProfiles: vi.fn(async () => []), getActiveProfileId: vi.fn() },
+      fmClient: { createRecord },
+      schemaService: { getFields: vi.fn(async () => ({ supported: true, fields: [{ name: 'Name' }, { name: 'Calc', type: 'calculation' }] })) }
+    });
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce('Create' as never);
+    await panel.send({ type: 'createRecord', payload: { profileId: 'p1', layout: 'People', fieldData: { Name: 'Ada', 'Calc(2)': 5 } } });
+    expect(createRecord).toHaveBeenCalledWith(expect.anything(), 'People', { Name: 'Ada' });
   });
 
   it('refuses names that are not fields of the layout, before asking or calling FileMaker', async () => {

@@ -11,7 +11,6 @@ import type { SettingsService } from '../services/settingsService';
 import { nulTextFields } from '../utils/nulText';
 import { parseFindJson, parseSortJson } from '../utils/jsonValidate';
 import {
-  openJsonDocument,
   parseLayoutArg,
   promptForLayout,
   resolveProfileFromArg,
@@ -207,6 +206,8 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
             return;
           }
 
+          let overwriteChanged: boolean | undefined;
+          const rowsWithModId = entries.filter((entry) => entry.modId !== undefined).length;
           if (!dryRunSelection.value) {
             const confirmation = await vscode.window.showWarningMessage(
               `Execute batch update for ${entries.length} records on ${layout}?\nRollback guidance: keep a pre-update export and rerun updates with previous values to revert.`,
@@ -214,8 +215,20 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
               'Execute'
             );
 
-            if (confirmation !== 'Execute') {
-              return;
+            if (confirmation !== 'Execute') return;
+            if (rowsWithModId === 0) {
+              const choice = await vscode.window.showWarningMessage(
+                'This file has no modId column, so updates cannot detect newer changes. Continue without the check?',
+                { modal: true }, 'Continue', 'Cancel'
+              );
+              if (choice !== 'Continue') return;
+            } else {
+              const choice = await vscode.window.showWarningMessage(
+                `Check for newer changes before updating? ${rowsWithModId} rows have modId; ${entries.length - rowsWithModId} rows have no modId and cannot be checked.`,
+                { modal: true }, 'Check for newer changes (recommended)', 'Overwrite even if changed'
+              );
+              if (choice !== 'Check for newer changes (recommended)' && choice !== 'Overwrite even if changed') return;
+              overwriteChanged = choice === 'Overwrite even if changed';
             }
           }
 
@@ -233,35 +246,49 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
               entries,
               {
                 dryRun: dryRunSelection.value,
-                concurrency
+                concurrency,
+                ...(overwriteChanged !== undefined ? { overwriteChanged } : {})
               },
               jobContext
             );
 
             jobContext.log(
               'info',
-              `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}${result.stoppedReason ? `. Stopped early (${result.notAttempted ?? 0} not attempted): ${result.stoppedReason}` : ''}`
+              `Batch update completed. Attempted=${result.attempted}, success=${result.successCount}, failures=${result.failureCount}${result.skippedReadOnlyRows ? `. ${result.skippedReadOnlyRows} rows had no editable values and were skipped` : ''}${result.skippedChanged ? `. ${result.skippedChanged} rows were skipped because the records changed after the export` : ''}${result.stoppedReason ? `. Stopped early (${result.notAttempted ?? 0} not attempted): ${result.stoppedReason}` : ''}`
             );
+
+            if (dryRunSelection.value) {
+              const previewEntries = entries.map((entry) => ({ ...entry, fieldData: Object.fromEntries(
+                Object.entries(entry.fieldData).filter(([name]) => !result.skippedColumns?.includes(name))
+              ) }));
+              const preview = {
+                dryRun: true,
+                totalEntries: entries.length,
+                layout,
+                rowsWithModId: result.rowsWithModId ?? rowsWithModId,
+                rowsChecked: result.rowsChecked ?? rowsWithModId,
+                skippedColumns: result.skippedColumns ?? [],
+                warnings: result.warnings ?? [],
+                sample: previewEntries.slice(0, 5),
+                // Rows are numbered from 1 in the parsed data, excluding a CSV header.
+                flaggedRows: previewEntries.flatMap((entry, index) => {
+                  const fields = nulTextFields(entry.fieldData);
+                  return fields.length ? [{ row: index + 1, recordId: entry.recordId, fields }] : [];
+                })
+              };
+              try {
+                const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(preview, null, 2) });
+                await vscode.window.showTextDocument(document, { preview: false, preserveFocus: true });
+              } catch {
+                jobContext.log('warn', 'The dry-run preview could not be opened. The result and warnings are still available in Jobs.');
+              }
+            }
 
             return result;
           });
 
           vscode.window.showInformationMessage(`Started job ${job.id.slice(0, 8)} for batch update.`);
 
-          if (dryRunSelection.value) {
-            const preview = {
-              dryRun: true,
-              totalEntries: entries.length,
-              layout,
-              sample: entries.slice(0, 5),
-              // Rows are numbered from 1 in the parsed data, excluding a CSV header.
-              flaggedRows: entries.flatMap((entry, index) => {
-                const fields = nulTextFields(entry.fieldData);
-                return fields.length ? [{ row: index + 1, recordId: entry.recordId, fields }] : [];
-              })
-            };
-            await openJsonDocument(preview);
-          }
         } catch (error) {
           await showCommandError(error, {
             fallbackMessage: 'Batch update failed to start.',

@@ -1,5 +1,7 @@
 # FileMaker Data API Tools
 
+For Claris FileMaker Server (Data API). FileMaker Cloud sign-in with a Claris ID is not supported yet; Cloud is untested.
+
 Work with a FileMaker database from VS Code: connect to a server, inspect layouts, run finds, edit records, compare schema snapshots, export large result sets, generate TypeScript types, and review diagnostics without leaving the editor.
 
 **Built by [ABD Enterprises](https://abdenterprises.com).** Free, open source (MIT), no telemetry, no cloud account.

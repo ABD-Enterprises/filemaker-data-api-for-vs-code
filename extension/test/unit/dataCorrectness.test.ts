@@ -45,7 +45,8 @@ it('batch uses metadata once, keeps text exact and warns per unsafe numeric row'
 it('Record Editor uses field result type rather than JSON guesses', async () => {
   const source = await readFile(join(__dirname, '../../src/webviews/recordEditor/ui/index.js'), 'utf8');
   const fn = source.slice(source.indexOf('function parseEditableValue('), source.indexOf('\nfunction clone('));
-  const parse = runInNewContext(`${fn}; parseEditableValue`, { state: { presentationFields: [{ name: 'Text', type: 'text' }, { name: 'Number', type: 'number' }] } });
+  const helpers = source.slice(source.indexOf('function metadataForField('), source.indexOf('function readOnlyNote('));
+  const parse = runInNewContext(`${helpers}\n${fn}; parseEditableValue`, { state: { presentationFields: [{ name: 'Text', type: 'text' }, { name: 'Number', type: 'number' }] } });
   for (const value of values) expect(parse(value, 'Text')).toBe(value);
   expect(parse('10.50', 'Number')).toBe(10.5);
   expect(parse('9007199254740993', 'Number')).toBe('9007199254740993');
@@ -120,8 +121,8 @@ it('CSV metadata columns precede digit fields, collisions round-trip, missing fi
   const csv = await readFile(path, 'utf8');
   expect(csv.split('\n')[0]).toBe('__recordId,__modId,recordId,modId,123,Later,Unseen,__portalNote (export information)');
   expect(parseBatchUpdateInput(csv, 'csv')).toEqual([
-    { recordId: 'real1', fieldData: { recordId: 'field1', modId: 'fieldmod', '123': 'digits' } },
-    { recordId: 'real2', fieldData: { Later: 'later' } }
+    { recordId: 'real1', modId: '7', fieldData: { recordId: 'field1', modId: 'fieldmod', '123': 'digits' } },
+    { recordId: 'real2', modId: '8', fieldData: { Later: 'later' } }
   ]);
   if (process.platform !== 'win32') expect((await stat(path)).mode & 0o777).toBe(0o600);
 });
@@ -204,7 +205,7 @@ it('uses extra underscores when reserved names are real fields too', async () =>
     .batchExportFind(profile, 'Layout', { query: [{}] }, { outputPath: path, format: 'csv', maxRecords: 100 });
   const csv = await readFile(path, 'utf8');
   expect(csv).toMatch(/^___recordId,___modId,/);
-  expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', fieldData: fields }]);
+  expect(parseBatchUpdateInput(csv, 'csv')).toEqual([{ recordId: '42', modId: '7', fieldData: fields }]);
 });
 
 it('recognizes semicolon CSV with quoted commas, and JSONL selected through the JSON path', () => {

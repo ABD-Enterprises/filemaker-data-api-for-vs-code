@@ -27,6 +27,8 @@ import { extractFieldsFromMetadata } from './schemaService';
 import { exportColumns, exportRow, portalNotes } from '../utils/exportRecords';
 import { numericText } from '../utils/numericText';
 import { fieldsForGeneration } from '../utils/generatedFields';
+import { fieldType, metadataForField, readOnlyFieldKind } from '../utils/fieldAccess';
+import { stableStringify } from '../utils/hash';
 
 interface BatchServiceOptions {
   getMaxRecords?: () => number;
@@ -217,12 +219,54 @@ export class BatchService {
     const maxConcurrency = performanceMode === 'high-scale' ? Math.max(2, configuredConcurrency) : configuredConcurrency;
     const total = entries.length;
 
+    let csvFields: ReturnType<typeof extractFieldsFromMetadata> = [];
+    try { csvFields = extractFieldsFromMetadata(await this.fmClient.getLayoutMetadata(profile, layout)); }
+    catch { job?.log('warn', 'Layout metadata unavailable. Read-only columns cannot be identified; CSV values will be sent as strings.'); }
+    if (!csvFields.length) job?.log('warn', 'No field types available. CSV values will be sent as strings.');
+    if (csvFields.some((field) => /^(recordId|modId)$/i.test(field.name)) && entries.some((entry) => entry.sourceFormat === 'csv' && (entry.csvRecordColumn ?? 'recordId') === 'recordId')) {
+      throw new Error('Ambiguous CSV: this layout has a recordId or modId field. Export again and keep the reserved __recordId and __modId columns.');
+    }
+    const skippedColumns = [...new Set(entries.flatMap((entry) => Object.keys(entry.fieldData)))].filter((name) => {
+      return readOnlyFieldKind(metadataForField(csvFields, name)) !== undefined;
+    });
+    const warnings = skippedColumns.map((name) => {
+      const kind = readOnlyFieldKind(metadataForField(csvFields, name));
+      return `Column ${JSON.stringify(name)}: ${kind === 'calculation' ? 'calculated by FileMaker' : kind === 'container' ? 'use Upload to container' : 'summary field'}; values will be skipped.`;
+    });
+    for (const warning of warnings) job?.log('warn', warning);
+    const rowsWithModId = entries.filter((entry) => entry.modId !== undefined && entry.modId !== '').length;
+    const coverage = { rowsWithModId, rowsChecked: options?.overwriteChanged ? 0 : rowsWithModId, skippedColumns, warnings };
+    job?.log('info', `${rowsWithModId} rows have modId; ${coverage.rowsChecked} rows will be checked for newer changes. ${total - rowsWithModId} rows have no modId.`);
+    const queue = entries.map((entry) => ({
+      ...entry,
+      ...(options?.overwriteChanged ? { modId: undefined } : {}),
+      fieldData: Object.fromEntries(Object.entries(entry.fieldData).filter(([name]) => !skippedColumns.includes(name)).map(([name, value]) => {
+        if (entry.sourceFormat !== 'csv' || fieldType(metadataForField(csvFields, name)?.result) !== 'number' || typeof value !== 'string') return [name, value];
+        const numeric = numericText(value);
+        if (typeof numeric === 'number') return [name, numeric];
+        job?.log('warn', `Row ${entry.recordId}, field "${name}": number kept as text to avoid changing its value.`);
+        return [name, value];
+      }))
+    }));
+    const seenIds = new Set<string>();
+    const duplicates = new Set<BatchUpdateEntry>();
+    const duplicateReason = 'Duplicate recordId in this file; later row skipped. Only the first row for each record is used.';
+    for (const entry of queue) {
+      if (seenIds.has(entry.recordId)) {
+        duplicates.add(entry);
+        const warning = `Row ${entry.recordId}: ${duplicateReason}`;
+        warnings.push(warning);
+        job?.log('warn', warning);
+      }
+      seenIds.add(entry.recordId);
+    }
     if (dryRun) {
-      const failures = entries.flatMap((entry) => {
-        const reason = nulTextError(entry.fieldData);
+      const failures = queue.flatMap((entry) => {
+        const reason = duplicates.has(entry) ? duplicateReason : nulTextError(entry.fieldData);
         return reason ? [{ recordId: entry.recordId, reason }] : [];
       });
       return {
+        ...coverage,
         dryRun: true,
         total,
         attempted: 0,
@@ -232,30 +276,12 @@ export class BatchService {
       };
     }
 
-    let csvFields: ReturnType<typeof extractFieldsFromMetadata> = [];
-    if (entries.some((entry) => entry.sourceFormat === 'csv')) {
-      try { csvFields = extractFieldsFromMetadata(await this.fmClient.getLayoutMetadata(profile, layout)); }
-      catch { job?.log('warn', 'Layout metadata unavailable. CSV values will be sent as strings.'); }
-      if (!csvFields.length) job?.log('warn', 'No field types available. CSV values will be sent as strings.');
-    }
-    if (csvFields.some((field) => /^(recordId|modId)$/i.test(field.name)) && entries.some((entry) => entry.sourceFormat === 'csv' && (entry.csvRecordColumn ?? 'recordId') === 'recordId')) {
-      throw new Error('Ambiguous CSV: this layout has a recordId or modId field. Export again and keep the reserved __recordId and __modId columns.');
-    }
-    const queue = entries.map((entry) => {
-      if (entry.sourceFormat !== 'csv') return entry;
-      return { ...entry, fieldData: Object.fromEntries(Object.entries(entry.fieldData).map(([name, value]) => {
-        if (csvFields.find((field) => field.name === name)?.result !== 'number' || typeof value !== 'string') return [name, value];
-        const numeric = numericText(value);
-        if (typeof numeric === 'number') return [name, numeric];
-        job?.log('warn', `Row ${entry.recordId}, field "${name}": number kept as text to avoid changing its value.`);
-        return [name, value];
-      })) };
-    });
     // Set when the account itself cannot do this (no privilege, rejected credentials): every other
     // record would fail the same way, so the job stops with one clear reason.
     let stoppedReason: string | undefined;
     let completed = 0;
     let successCount = 0;
+    let skippedChanged = 0;
     const updatedIds: string[] = [];
     const failures: BatchUpdateResult['failures'] = [];
     const adaptive = new AdaptiveConcurrency({
@@ -290,16 +316,22 @@ export class BatchService {
           return;
         }
 
-        const updatePromise = this.updateOneWithRetry(profile, layout, next, adaptive, breaker, job)
+        const updatePromise = (duplicates.has(next)
+          ? Promise.reject(new Error(duplicateReason))
+          : this.updateOneWithRetry(profile, layout, next, adaptive, breaker, job))
           .then(() => {
-            successCount += 1;
-            updatedIds.push(next.recordId);
+            if (Object.keys(next.fieldData).length > 0) {
+              successCount += 1;
+              updatedIds.push(next.recordId);
+            }
           })
           .catch((error) => {
+            const stale = error instanceof FMClientError && error.code === '306' && !(error instanceof UnconfirmedUpdateError);
+            if (stale) skippedChanged += 1;
             failures.push({
               recordId: next.recordId,
               ...(error instanceof FMClientError && error.code ? { code: error.code } : {}),
-              reason: error instanceof FMClientError && error.code ? `FileMaker ${error.code}: ${error.message}` : error instanceof Error ? error.message : 'Unknown update failure'
+              reason: stale ? 'Changed since the export (someone edited this record). Not updated.' : error instanceof UnconfirmedUpdateError ? error.message : error instanceof FMClientError && error.code ? `FileMaker ${error.code}: ${error.message}` : error instanceof Error ? error.message : 'Unknown update failure'
             });
             if (stoppedReason === undefined && stopsTheJob(error)) {
               stoppedReason = error instanceof Error ? error.message : 'The account cannot make this change.';
@@ -346,6 +378,9 @@ export class BatchService {
     }
 
     return {
+      ...coverage,
+      skippedReadOnlyRows: entries.length - successCount - failures.length - queue.length,
+      skippedChanged,
       dryRun: false,
       total,
       attempted: completed,
@@ -371,18 +406,35 @@ export class BatchService {
   ): Promise<void> {
     const nulError = nulTextError(entry.fieldData);
     if (nulError) throw new Error(nulError);
+    if (Object.keys(entry.fieldData).length === 0) return;
     let attempt = 0;
     let lastFailure: unknown;
+    let outcomeUnknown = false;
 
     while (attempt < 3) {
       if (job?.isCancellationRequested()) throw lastFailure ?? new Error('Update cancelled before it was sent.');
       const startedAt = Date.now();
       try {
-        await this.fmClient.editRecord(profile, layout, entry.recordId, entry.fieldData);
+        if (entry.modId !== undefined && entry.modId !== '') {
+          await this.fmClient.editRecord(profile, layout, entry.recordId, entry.fieldData, undefined, { modId: entry.modId });
+        } else {
+          await this.fmClient.editRecord(profile, layout, entry.recordId, entry.fieldData);
+        }
         adaptive.recordSuccess(Date.now() - startedAt);
         breaker.recordSuccess();
         return;
       } catch (error) {
+        if (outcomeUnknown && error instanceof FMClientError && error.code === '306') {
+          try {
+            const current = await this.fmClient.getRecord(profile, layout, entry.recordId);
+            if (Object.entries(entry.fieldData).every(([name, value]) => stableStringify(current.fieldData[name]) === stableStringify(value))) {
+              adaptive.recordSuccess(Date.now() - startedAt);
+              breaker.recordSuccess();
+              return;
+            }
+          } catch { /* A failed read cannot settle whether the first write succeeded. */ }
+          throw new UnconfirmedUpdateError();
+        }
         lastFailure = error;
         const status = getStatusFromError(error);
         const retryable = isBatchRetryable(error);
@@ -398,11 +450,18 @@ export class BatchService {
           throw error;
         }
 
+        if (!(error instanceof FMClientError) || error.code === undefined) outcomeUnknown = true;
         const asked = error instanceof FMClientError ? (error.retryAfterMs ?? 0) : 0;
         await sleep(Math.max(adaptive.getBackoffDelayMs(attempt, status), Math.min(asked, MAX_RETRY_AFTER_MS)));
         attempt += 1;
       }
     }
+  }
+}
+
+class UnconfirmedUpdateError extends FMClientError {
+  public constructor() {
+    super('Could not confirm: the first attempt may have succeeded. Reload this record and check its values before trying again.', { code: '306' });
   }
 }
 
@@ -417,6 +476,7 @@ function isBatchRetryable(error: unknown): boolean {
   if (!(error instanceof FMClientError)) {
     return false;
   }
+  if (error.code === '306') return false;
   if (error.code !== undefined) {
     return error.isRetryable === true;
   }
@@ -522,7 +582,8 @@ function parseCsvBatchUpdates(content: string): BatchUpdateEntry[] {
       fieldData[header] = restoreFormulaText(value);
     });
 
-    const entry: BatchUpdateEntry = { recordId, fieldData };
+    const modId = row[headers.indexOf(modColumn)]?.trim();
+    const entry: BatchUpdateEntry = { recordId, ...(modId !== undefined && modId !== '' ? { modId } : {}), fieldData };
     Object.defineProperties(entry, { sourceFormat: { value: 'csv' }, csvRecordColumn: { value: recordColumn } });
     entries.push(entry);
   }
@@ -606,8 +667,10 @@ function normalizeBatchUpdateEntry(input: unknown): BatchUpdateEntry {
     throw new Error('Batch update entries must include a fieldData object.');
   }
 
+  if (record.modId !== undefined && typeof record.modId !== 'string') throw new Error('Batch update modId must be a string.');
   return {
     recordId,
+    ...(typeof record.modId === 'string' && record.modId !== '' ? { modId: record.modId } : {}),
     fieldData: fieldData as Record<string, unknown>
   };
 }
