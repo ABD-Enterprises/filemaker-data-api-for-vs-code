@@ -71,6 +71,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
+- Split the connection wizard into smaller host-side parts for easier maintenance, keeping its screens, checks and messages the same.
 - Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
 - Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
 

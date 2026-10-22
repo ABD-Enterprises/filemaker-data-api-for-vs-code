@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [INTERNAL] Split the connection wizard into smaller host-side parts for easier maintenance, keeping its screens, checks and messages the same.
 - [FIX] Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.
 - [INTERNAL] Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
 - [INTERNAL] Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
