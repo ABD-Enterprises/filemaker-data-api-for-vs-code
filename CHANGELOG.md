@@ -74,6 +74,7 @@ PR title prefix matches the highest-tier label added:
 - Split AI tool code into smaller parts, keeping the same approvals, safety checks and results; test spaces around preview record IDs and exact layout and script names.
 
 - Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
+- Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
 
 - Extract AI approval text and server-address scrubbing into pure helpers, with tests that preserve the existing text and results.
 - Speed up theme guard tests by reusing stylesheet parsing, color measurements and the audit document, reducing Windows timeout risk without changing color checks.

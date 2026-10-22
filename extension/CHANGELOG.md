@@ -6,6 +6,7 @@
 
 - [FIX] Confirm uncertain batch writes using number formats only for number fields; keep text exact apart from line endings. Keep layout and script names exact in preview requests. Correct the Create Record field-loading guidance and avoid doubled punctuation in its defensive error message.
 - [INTERNAL] Maintenance/quality: add behavior tests for the largest coverage gaps and raise the minimum test coverage.
+- [INTERNAL] Split the FileMaker connection code into smaller parts for easier maintenance, keeping the same requests and messages.
 
 - [FIX] Let Create Record recover from a failed field lookup; keep later real edits after skipped-only rows, ignore spaces around JSON record IDs and versions, and recognize matching retry results despite number, space or line-ending differences. Cancelling stops further record checks.
 - [FIX] Handle repeating read-only fields in imports, Record Editor saves and AI writes; check uncertain batch retries, skip duplicate record rows, and keep skipped values out of dry-run previews.
