@@ -1,1 +1,0 @@
-a77156ac13c339ecf050b4fe88afe2705d44b2a8d4f20d50d4fa999c5f816d69  filemaker-data-api-tools-1.7.0.vsix
