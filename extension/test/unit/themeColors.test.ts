@@ -6,6 +6,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildSync } from 'esbuild';
 
 const root = path.resolve(import.meta.dirname, '../../..');
+const standardModule = { exports: {} as { standardFieldsCss: (webview?: boolean) => string } };
+new Function('module', buildSync({ entryPoints: [path.join(root, 'shared/src/field-standards.ts')], bundle: true, write: false, format: 'cjs' }).outputFiles[0]!.text)(standardModule);
+const standardCss = standardModule.exports.standardFieldsCss(true);
 // All CSS named colors, not just the common white/black/red spellings.
 const names = new Set(('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' '));
 
@@ -70,9 +73,9 @@ describe('webview theme color regression guard', () => {
     // and Editor. Its geometry is shared with runtime-next and must stay unchanged.
     const compiled = buildSync({ entryPoints: [path.join(root, 'shared/src/field-standards.ts')],
       bundle: true, write: false, platform: 'node', format: 'cjs' });
-    const module = { exports: {} as { standardFieldsCss: () => string } };
+    const module = { exports: {} as { standardFieldsCss: (webview?: boolean) => string } };
     new Function('module', compiled.outputFiles[0]!.text)(module);
-    styles.push({ file: 'shared/src/field-standards.ts (generated CSS)', css: module.exports.standardFieldsCss() });
+    styles.push({ file: 'shared/src/field-standards.ts (generated CSS)', css: module.exports.standardFieldsCss(true) });
     expect(styles.length).toBeGreaterThanOrEqual(12);
     expect(styles.flatMap(({ file, css }) => violations(css).map((value) => `${file}: ${value}`))).toEqual([]);
   });
@@ -112,7 +115,9 @@ const themeTokens = new Map(audit.themes.map(([theme]) => [theme, audit.tokensFo
 const styleFiles = [path.join(root, 'designer-ui/src/styles.css'), ...filesIn(path.join(root, 'extension/src'))];
 const auditedStyles = styleFiles.flatMap((file) => {
   const source = readFileSync(file, 'utf8');
-  return file.endsWith('.css') ? [{ file, css: source }] : [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => ({ file, css: match[1]! }));
+  if (file.endsWith('.css')) return [{ file, css: standardCss + source }];
+  const blocks = [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]!);
+  return blocks.length ? [{ file, css: blocks.join('\n').replaceAll('${standardFieldsCss(true)}', standardCss) }] : [];
 });
 const stylesheet = (page: string) => auditedStyles.find(({ file }) => file === path.join(root, `extension/src/webviews/${page}/ui/styles.css`))!.css;
 const designerCss = auditedStyles.find(({ file }) => file === path.join(root, 'designer-ui/src/styles.css'))!.css;
@@ -218,6 +223,51 @@ describe('offline theme audit regression guards', () => {
       expect(audit.presentationFailures(css!, body!, tokens)).toEqual([]);
       expect(audit.measure(css!, body!, tokens).every((pair) => pair.ratio >= 4.5)).toBe(true);
       expect(audit.presentationFailures(css + '.status.success, .test-badge.success, .ok { background: var(--vscode-inputValidation-infoBackground); }', body!, tokens)).toContain('success background is not green');
+    }
+  });
+
+  // Well-known defaults from VS Code's default theme color registry, with the
+  // built-in Dark+/Light+/HC theme overrides. Offline snapshot, not live theme detection.
+  // Sources: src/vs/platform/theme/common/colors/{baseColors,inputColors,listColors}.ts
+  // and extensions/theme-defaults/themes/{dark_plus,light_plus,hc_black,hc_light}.json
+  // in https://github.com/microsoft/vscode. Columns: Dark+, Light+, Dark HC, Light HC.
+  const defaults = {
+    foreground: ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'editor.background': ['#1e1e1e', '#ffffff', '#000000', '#ffffff'],
+    'editorWidget.background': ['#252526', '#f3f3f3', '#0c141f', '#ffffff'],
+    descriptionForeground: ['#ccccccb3', '#717171', '#ffffffb3', '#292929b3'],
+    'input.background': ['#3c3c3c', '#ffffff', '#000000', '#ffffff'],
+    'input.foreground': ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'input.placeholderForeground': ['#cccccc80', '#61616180', '#ffffffb3', '#292929b3'],
+    'button.hoverBackground': ['#1177bb', '#0062a3', '#000000', '#0f4a85'],
+    'button.foreground': ['#ffffff', '#ffffff', '#ffffff', '#ffffff'],
+    'button.secondaryHoverBackground': ['#323637', '#ffffff', null, null],
+    'button.secondaryForeground': ['#cccccc', '#616161', '#ffffff', '#292929'],
+    'list.hoverBackground': ['#2a2d2e', '#f0f0f0', '#ffffff1a', '#0f4a851a'],
+    'textLink.foreground': ['#3794ff', '#006ab1', '#21a6ff', '#0f4a85']
+  };
+  const shellButtons = '<button id="primary">Save</button><button class="secondary">Secondary</button>' +
+    ['mode-switch', 'mode-toggle', 'tool-grid', 'object-list', 'action-row', 'inspector-field', 'portal-column-actions']
+      .map((family) => `<div class="${family}"><button id="${family}">Action</button></div>`).join('') +
+    '<button class="field-chip">Field</button><button class="portal-field-chip">Portal field</button>' +
+    '<button class="link">Link</button><button class="icon">Icon</button>';
+
+  it.each(['Dark+', 'Light+', 'Dark HC', 'Light HC'])('%s default colors keep read-only values, labels, placeholders and hovered controls at AA contrast', (theme) => {
+    const index = ['Dark+', 'Light+', 'Dark HC', 'Light HC'].indexOf(theme);
+    const tokens = Object.fromEntries(Object.entries(defaults).flatMap(([key, values]) =>
+      values[index] == null ? [] : [[`--vscode-${key.replaceAll('.', '-')}`, values[index]!]]));
+    const fixture = '<section class="panel field"><label>Field label</label><input readonly value="Read only">' +
+      '<div class="fm-readonly">Read only value</div><input placeholder="Hint" value="Typed text"></section>';
+    const pairs = audit.measure(stylesheet('connectionWizard'), fixture, tokens);
+    expect(pairs).toHaveLength(5);
+    for (const pair of pairs) expect(pair.ratio, `${theme}: ${pair.selector}`).toBeGreaterThanOrEqual(4.5);
+    for (const state of ['hover', 'active', 'focus-visible']) {
+      // Activate just this pseudo-state on all fixture buttons without a browser.
+      // This checks the production cascade and alpha compositing, not layout/rendering.
+      const css = designerCss.replaceAll(`:${state}`, ':not(.audit-never)');
+      const hovered = audit.measure(css, `<section class="pane">${shellButtons}</section>`, tokens);
+      expect(hovered).toHaveLength(13);
+      for (const pair of hovered) expect(pair.ratio, `${theme} ${state}: ${pair.selector}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 

@@ -40,7 +40,7 @@ function themeFile(name) {
 const standards = buildSync({ entryPoints:[path.join(root,'shared/src/field-standards.ts')],bundle:true,platform:'node',format:'cjs',write:false }).outputFiles[0].text;
 const standardModule = { exports:{} };
 new Function('module',standards)(standardModule);
-const standardsCss = standardModule.exports.standardFieldsCss();
+const standardsCss = standardModule.exports.standardFieldsCss(true);
 const basicField = '<table class="fm-field-table"><tbody class="fm-fields"><tr class="fm-field" data-fm-width="240" data-fm-height="34"><td class="fm-field-label">Customer name</td><td><textarea class="fm-field-control">Ada Lovelace</textarea></td></tr></tbody></table>';
 function webview(page) {
   const source = read(`extension/src/webviews/${page}/index.ts`);
@@ -65,7 +65,7 @@ function webview(page) {
     doc.body.insertAdjacentHTML('beforeend','<section>'+['field-cell','tree-leaf'].map((base)=>'<div class="side-by-side-grid">'+['added','removed','changed','unchanged'].map((status)=>`<div class="${base} ${status}"><span class="status-badge ${status}">${status}</span><div class="field-title">Customer</div>${base==='field-cell'?'<dl class="field-meta"><dt>Type</dt><dd>Text</dd></dl>':'<span class="tree-field-type">Text</span><ul class="change-list"><li>Type changed</li></ul>'}</div>`).join('')+'</div>').join('')+'</section>');
   }
   if (page === 'connectionWizard') doc.body.insertAdjacentHTML('beforeend','<section><span class="test-badge success">Passed</span><span class="test-badge failure">Failed</span><span class="test-badge stale">Stale</span><p class="warning-hint">Warning: legacy TLS</p><p class="status error">Error</p><p class="status warning">Warning</p><p class="status success">Success</p></section>');
-  const result = { body:doc.body.innerHTML, css:read(`extension/src/webviews/${page}/ui/styles.css`)+standardsCss };
+  const result = { body:doc.body.innerHTML, css:standardsCss+read(`extension/src/webviews/${page}/ui/styles.css`) };
   dom.window.close();
   return result;
 }
@@ -84,18 +84,18 @@ async function designer() {
   first?.dispatchEvent(new dom.window.MouseEvent('mousedown',{bubbles:true,button:0}));
   dom.window.dispatchEvent(new dom.window.MouseEvent('mouseup',{bubbles:true}));
   await new Promise((r)=>setTimeout(r,30));
-  const result = {body:dom.window.document.body.innerHTML,css:read('designer-ui/src/styles.css')};
+  const result = {body:dom.window.document.body.innerHTML,css:standardsCss+read('designer-ui/src/styles.css')};
   dom.window.close();
   return result;
 }
 function inline(file, body) {
-  const css = /<style\b[^>]*>([\s\S]*?)<\/style>/.exec(read(file))[1];
+  const css = [...read(file).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match)=>match[1]).join('\n').replaceAll('${standardFieldsCss(true)}',standardsCss);
   return {css,body};
 }
 const pages = Object.fromEntries(['recordViewer','recordEditor','scriptRunner','schemaDiff','queryBuilder','connectionWizard'].map((page)=>[page,webview(page)]));
 pages.designer = await designer();
 pages.designer.body += '<section class="pane"><input placeholder="Example hint" value="Typed text"><button id="designer-disabled" disabled>Disabled (excluded)</button></section>';
-pages.layoutFallback = {css:read('extension/src/webviews/layoutMode/ui/index.css'),body:'<div id="root">Loading Layout Mode</div><footer class="fm-version">FileMaker v1.6.0</footer>'};
+pages.layoutFallback = {css:standardsCss+read('extension/src/webviews/layoutMode/ui/index.css'),body:'<div id="root">Loading Layout Mode</div><footer class="fm-version">FileMaker v1.6.0</footer>'};
 pages.environmentCompare = inline('extension/src/webviews/environmentCompare/index.ts','<div class="container"><section class="card"><h1>Environment comparison</h1><table><tr><th>Environment</th><th>Status</th></tr><tr><td>Staging</td><td><span class="ok">OK</span><span class="warn">Warning</span><span class="bad">Failed</span></td></tr></table></section></div><footer class="fm-version">FileMaker v1.6.0</footer>');
 pages.diagnostics = inline('extension/src/diagnostics/diagnosticsDashboard.ts','<div class="container"><section class="card"><h1>Diagnostics</h1><div class="stat"><p class="label">Requests</p><p>42</p></div><button>Refresh</button><p class="muted">No errors</p><table><tr><th>Profile</th></tr><tr><td>Customers</td></tr></table></section></div><footer class="fm-version">FileMaker v1.6.0</footer>');
 pages.effectiveSettings = inline('extension/src/settings/effectiveSettings.ts','<h2>Effective settings</h2><p class="muted">Current settings</p><p class="ignored">Workspace setting ignored</p><table><tr><th>Setting</th><th>Value</th></tr><tr><td>Connection</td><td>Active</td></tr></table>');

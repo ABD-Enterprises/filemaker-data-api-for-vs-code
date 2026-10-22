@@ -1,3 +1,4 @@
+import { standardFieldsCss } from '@fmweb/shared/dist/field-standards';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -251,9 +252,9 @@ export function renderEffectiveSettingsHtml(
     .map((row) => {
       const key = escapeHtml(row.key);
       const buttons =
-        `<button data-open="user" data-key="${key}">Open User Settings</button>` +
+        `<button class="secondary" data-open="user" data-key="${key}">Open User Settings</button>` +
         (row.workspaceMeaningful
-          ? `<button data-open="workspace" data-key="${key}">Open Workspace Settings</button>`
+          ? `<button class="secondary" data-open="workspace" data-key="${key}">Open Workspace Settings</button>`
           : '');
       const note =
         (row.reason ? `<div class="${row.ignored ? 'ignored' : 'muted'}">${escapeHtml(row.reason)}</div>` : '') +
@@ -274,14 +275,15 @@ export function renderEffectiveSettingsHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
 <title>FileMaker Effective Settings</title>
+<style nonce="${nonce}">${standardFieldsCss(true)}</style>
 <style nonce="${nonce}">
-  body { font-family: var(--vscode-font-family); background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground); padding: 12px 16px; }
-  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-  th, td { border: 1px solid var(--vscode-panel-border, #8884); padding: 6px 8px; text-align: left; vertical-align: top; font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
+  table { table-layout: fixed; }
+  th:last-child { width: 240px; }
+  th, td { overflow-wrap: anywhere; word-break: break-word; }
   code { white-space: pre-wrap; overflow-wrap: anywhere; }
   .ignored { color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground)); background: var(--vscode-inputValidation-warningBackground, #fff4ce); margin-bottom: 4px; }
-  button { margin: 2px 4px 2px 0; background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); border-color: var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); }
-  button:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
+  button { margin: 2px 4px 2px 0; }
+  button[data-open] { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
   .muted { color: color-mix(in srgb, var(--vscode-descriptionForeground, var(--vscode-foreground, #333333)) 75%, var(--vscode-foreground, #333333)); margin-bottom: 4px; }
   @media (max-width: 640px) {
     table, thead, tbody, tr, td { display: block; width: 100%; }
@@ -292,13 +294,17 @@ export function renderEffectiveSettingsHtml(
   }
 </style></head>
 <body>
-<h2>Effective settings</h2>
+<main class="fm-page">
+<h1>Effective settings</h1>
+<div class="fm-panel">
 <p class="muted">What is in effect, where it comes from, and why a workspace value is ignored. Read-only snapshot taken at ${escapeHtml(asOf)}; it refreshes when settings change. <button id="refresh">Refresh</button></p>
 <ul class="muted">${notes}</ul>
 <table><thead><tr><th>Setting</th><th>In effect</th><th>Comes from</th><th>User value</th><th>Workspace value</th><th>Notes</th></tr></thead>
 <tbody>
 ${body}
 </tbody></table>
+</div>
+</main>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.addEventListener('click', (event) => {

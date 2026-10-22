@@ -1,3 +1,4 @@
+import { standardFieldsCss } from '@fmweb/shared/dist/field-standards';
 import * as vscode from 'vscode';
 
 import type { HistoryStore } from '../services/historyStore';
@@ -87,40 +88,33 @@ export class DiagnosticsDashboardPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>Diagnostics Dashboard</title>
+  <style nonce="${nonce}">${standardFieldsCss(true)}</style>
   <style nonce="${nonce}">
-    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground, #333333); }
-    .wrap { padding: 16px; display: grid; gap: 14px; min-width: 0; }
-    .card { background: var(--vscode-editorWidget-background, #f3f3f3); border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 10px; padding: 12px; min-width: 0; }
+    .wrap { display: grid; gap: 14px; min-width: 0; }
+    .card { min-width: 0; }
     .table-scroll { overflow-x: auto; max-width: 100%; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; }
-    .stat { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 8px; padding: 8px; }
+    .stat { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: var(--fm-panel-radius); padding: 8px; }
     .label { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); font-size: 12px; }
     .value { font-weight: 700; font-size: 18px; margin-top: 4px; overflow-wrap: anywhere; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); text-align: left; padding: 6px 8px; font-size: 12px; }
-    th { background: var(--vscode-editor-background, #ffffff); }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-    button { border: none; border-radius: 6px; background: var(--vscode-button-background, #007acc); color: var(--vscode-button-foreground, #ffffff); padding: 7px 10px; cursor: pointer; }
-    button:hover { background: var(--vscode-button-hoverBackground, #0062a3); }
     .muted { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); }
     .fm-version { color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, #555555)); font-size: 11px; padding: 0 16px 12px; }
-
-    button { outline: 1px solid var(--vscode-contrastBorder, transparent); }
-    button:focus-visible { outline: 2px solid var(--vscode-contrastActiveBorder, var(--vscode-focusBorder, #007acc)); outline-offset: 1px; }
   </style>
 </head>
 <body>
   <div class="wrap">
+    <h1>FileMaker Diagnostics Dashboard</h1>
     <div class="card">
       <div class="actions">
         <button id="refreshBtn">Refresh</button>
-        <button id="clearBtn">Clear Metrics</button>
+        <button class="secondary" id="clearBtn">Clear Metrics</button>
       </div>
       <div id="summary" class="stats"></div>
     </div>
 
     <div class="card">
-      <h3>Endpoint Metrics (Last 200 requests)</h3>
+      <h2>Endpoint Metrics (Last 200 requests)</h2>
       <div class="table-scroll"><table>
         <thead>
           <tr><th>Operation</th><th>Endpoint</th><th>Count</th><th>Avg ms</th><th>Success</th><th>Failure</th><th>401 Re-auth</th><th>Cache Hit %</th></tr>
@@ -130,7 +124,7 @@ export class DiagnosticsDashboardPanel {
     </div>
 
     <div class="card">
-      <h3>Recent Request History</h3>
+      <h2>Recent Request History</h2>
       <div class="table-scroll"><table>
         <thead>
           <tr><th>Timestamp</th><th>Operation</th><th>Profile</th><th>Duration</th><th>Status</th><th>HTTP</th></tr>

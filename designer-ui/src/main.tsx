@@ -2083,7 +2083,7 @@ export function App(): React.JSX.Element {
 
       <footer className="console-pane">
         <strong>Console</strong>
-        <div className="console-log">
+        <div className="console-log fm-code">
           {consoleLines.map((line, index) => (
             <div key={`${line}-${index}`}>{line}</div>
           ))}

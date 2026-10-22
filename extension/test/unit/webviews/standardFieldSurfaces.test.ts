@@ -123,14 +123,14 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
       const page = loadPage(html(surface), read(`extension/src/webviews/${surface}/ui/index.js`));
       page.send({ type: 'recordLoaded', payload: { record: { recordId: '1', fieldData }, fields, presentationFields: fields } });
       page.window.eval(`const sheet = document.createElement('style');
-        sheet.textContent = ${JSON.stringify(read(`extension/src/webviews/${surface}/ui/styles.css`))} + window.FieldStandards.standardFieldsCss();
+        sheet.textContent = ${JSON.stringify(read(`extension/src/webviews/${surface}/ui/styles.css`))} + window.FieldStandards.standardFieldsCss(true);
         // jsdom does not resolve custom color properties inside border shorthands.
-        sheet.textContent = sheet.textContent.replaceAll('var(--border)', '#d0d7de');
+        sheet.textContent = sheet.textContent.replaceAll('var(--border)', '#d0d7de').replaceAll('var(--fm-control-radius)', '4px');
         document.head.appendChild(sheet);
         const control = document.querySelector('${surface === 'recordEditor' ? '#fieldEditor' : '#fieldDataContainer'} textarea');
         const style = getComputedStyle(control);
-        if (style.borderTopWidth !== '1px' || style.borderTopStyle !== 'solid' || style.borderRadius !== '8px'
-          || style.paddingTop !== '8px' || style.paddingBottom !== '8px' || style.paddingLeft !== '10px'
+        if (style.borderTopWidth !== '1px' || style.borderTopStyle !== '${surface === 'recordViewer' ? 'dashed' : 'solid'}' || style.borderRadius !== '4px'
+          || style.paddingTop !== '6px' || style.paddingBottom !== '6px' || style.paddingLeft !== '10px'
           || style.boxSizing !== 'border-box') throw new Error('${surface} control box differs from the standard input: ' + JSON.stringify([style.borderTopWidth, style.borderTopStyle, style.borderRadius, style.paddingTop, style.paddingBottom, style.paddingLeft, style.boxSizing]));
         ${surface === 'recordViewer' ? `
         const cell = control.parentElement;
@@ -187,7 +187,7 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
     page.send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: [' Layout '] } });
     page.send({ type: 'fieldNamesLoaded', payload: { profileId: 'p', layout: ' Layout ', fieldNames: fields.map((field) => field.name), fieldMetadata: fields } });
     page.window.eval(`const sheet = document.createElement('style');
-      sheet.textContent = ${JSON.stringify(read('extension/src/webviews/queryBuilder/ui/styles.css'))} + window.FieldStandards.standardFieldsCss();
+      sheet.textContent = ${JSON.stringify(read('extension/src/webviews/queryBuilder/ui/styles.css'))} + window.FieldStandards.standardFieldsCss(true);
       document.head.appendChild(sheet);`);
     page.window.eval(`if (getComputedStyle(document.querySelector('.criterion-value')).flexGrow !== '0') throw new Error('Find controls must not grow vertically inside top-label wrappers');`);
     page.document.getElementById('addSortButton')?.click();
@@ -209,23 +209,23 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
 it('the browser build generates bounded CSS from the shared rules, with narrow wrapping and no runtime dependencies', async () => {
   const compiled = buildSync({ entryPoints: [path.join(root, 'shared/src/field-standards.ts')],
     bundle: true, format: 'cjs', platform: 'node', write: false }).outputFiles[0]!.text;
-  const exports = { exports: {} as { standardFieldsCss: () => string } };
+  const exports = { exports: {} as { standardFieldsCss: (webview?: boolean) => string } };
   new Function('module', compiled)(exports);
-  const css = exports.exports.standardFieldsCss();
+  const css = exports.exports.standardFieldsCss(true);
   for (const [width, height] of sizes) {
     expect(css).toContain(`[data-fm-width="${width}"] { --fm-field-width: ${width}px; }`);
-    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height}px; }`);
+    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height === 34 ? 'var(--fm-control-height)' : `${height}px`}; }`);
   }
   for (let count = 1; count <= 50; count += 1) {
     const height = Math.max(34, count * 24);
-    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height}px; }`);
+    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height === 34 ? 'var(--fm-control-height)' : `${height}px`}; }`);
   }
   expect(css).toContain('gap: 16px 24px');
   expect(css).toContain('min-height: 24px');
   expect(css).toContain('.fm-field > .fm-field-control { flex: none; }');
   expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*flex-direction: column/);
   expect(css.split('{')).toHaveLength(css.split('}').length);
-  expect(css.length).toBeLessThan(10000);
+  expect(css.length).toBeLessThan(18000);
   expect(compiled).not.toMatch(/require\(/);
   const outputDir = mkdtempSync(path.join(tmpdir(), 'filemaker-webviews-'));
   try {

@@ -712,8 +712,8 @@ export class RecordEditorPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Record Editor</title>
-  <link rel="stylesheet" href="${styleUri}" />
   <link rel="stylesheet" href="${standardsStyleUri}" />
+  <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
   <div class="container">
@@ -736,19 +736,19 @@ export class RecordEditorPanel {
         <input id="recordIdInput" type="text" placeholder="1" />
       </div>
       <div class="actions">
-        <button id="loadButton">Load</button>
-        <button id="validateButton">Validate</button>
-        <button id="previewButton">Preview Update JSON</button>
+        <button class="secondary" id="loadButton">Load</button>
+        <button class="secondary" id="validateButton">Validate</button>
+        <button class="secondary" id="previewButton">Preview Update JSON</button>
         <button id="saveButton">Save</button>
         <button id="createButton" class="hidden">Create Record</button>
-        <button id="discardButton">Discard Changes</button>
-        <button id="exportButton">Export Record JSON</button>
+        <button class="secondary" id="discardButton">Discard Changes</button>
+        <button class="secondary" id="exportButton">Export Record JSON</button>
         ${copyRecordRequestMenuHtml()}
       </div>
       <p id="status" class="status" role="status" aria-live="polite"></p>
-      <div id="conflictBanner" class="conflict hidden" role="alert">
+      <div id="conflictBanner" class="conflict fm-banner error hidden" role="alert">
         <p id="conflictText"></p>
-        <button id="reloadAfterConflictButton" type="button">Reload record (discard my edits)</button>
+        <button class="secondary" id="reloadAfterConflictButton" type="button">Reload record (discard my edits)</button>
       </div>
     </section>
 

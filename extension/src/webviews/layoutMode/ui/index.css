@@ -8,7 +8,6 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "IBM Plex Sans", sans-serif;
   background: var(--vscode-editor-background, #ffffff);
   color: var(--vscode-foreground, #333333);
 }

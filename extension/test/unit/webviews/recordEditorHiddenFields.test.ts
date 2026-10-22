@@ -149,22 +149,23 @@ it.skipIf(!JSDOM).each(['edit', 'create'])('keeps calculated, summary and contai
   const notes: Record<string, string> = { Calc: 'Calculated by FileMaker; cannot be edited', Summary: 'Summary field; cannot be edited', Photo: 'Use Upload to container', Global: 'Session-wide' };
   for (const input of document.querySelectorAll('#fieldEditor textarea')) {
     const name = input.getAttribute('aria-label')!;
-    expect(input.getAttribute('disabled') !== null).toBe(['Calc', 'Summary', 'Photo'].includes(name));
+    expect(input.getAttribute('disabled')).toBeNull();
+    expect(input.getAttribute('readonly') !== null).toBe(['Calc', 'Summary', 'Photo'].includes(name));
     expect(document.querySelectorAll('#fieldEditor .fm-field-control')).toHaveLength(5);
     expect(document.querySelectorAll('#fieldEditor tr[data-fm-width]')).toHaveLength(5);
     if (notes[name]) expect(document.body.textContent).toContain(notes[name]);
   }
-  // Dispatch even on disabled controls: their event handlers must not change a draft.
+  // Dispatch even on read-only controls: their event handlers must not change a draft.
   window.eval(`for (const input of document.querySelectorAll('#fieldEditor textarea')) { input.value = 'after'; input.dispatchEvent(new Event('input')); }`);
   document.getElementById(mode === 'create' ? 'createButton' : 'saveButton')!.click();
   const message = posted.at(-1)!;
   const body = message.payload as Record<string, unknown>;
   expect(body[mode === 'create' ? 'fieldData' : 'draftFieldData']).toEqual({ ' Name ': 'after', Global: 'after' });
   if (mode === 'edit') expect(body.originalFieldData).toEqual({ ' Name ': 'before', Global: 'before' });
-  // Reuse the same field names on another load: metadata changes must rebuild disabled controls.
+  // Reuse the same field names on another load: metadata changes must rebuild read-only controls.
   if (mode === 'edit') {
     send({ type: 'recordLoaded', payload: { ...payload, fields: fields.map((field) => ({ ...field, type: 'normal', result: 'text' })) } });
-    expect(document.querySelectorAll('#fieldEditor textarea[disabled]')).toHaveLength(0);
+    expect(document.querySelectorAll('#fieldEditor textarea[readonly]')).toHaveLength(0);
   }
 });
 
@@ -184,7 +185,7 @@ it.skipIf(!JSDOM)('uses base metadata for repeated editor keys without changing 
   send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', fields, metadataSupported: true,
     record: { recordId: '1', fieldData: { ' Calc (1)': 1, ' Calc (2)': 2, 'Summary(2)': 3, 'Photo(1)': 'url', 'Qty(2)': 4, 'Global(2)': 'before', Local: 'before' } } } });
   const inputs = Array.from(document.querySelectorAll('#fieldEditor textarea'));
-  expect(inputs.filter((input) => input.getAttribute('disabled') !== null).map((input) => input.getAttribute('aria-label')).sort()).toEqual([' Calc (1)', ' Calc (2)', 'Photo(1)', 'Summary(2)']);
+  expect(inputs.filter((input) => input.getAttribute('readonly') !== null).map((input) => input.getAttribute('aria-label')).sort()).toEqual([' Calc (1)', ' Calc (2)', 'Photo(1)', 'Summary(2)']);
   const globalInput = inputs.find((input) => input.getAttribute('aria-label') === 'Global(2)')!;
   expect(document.getElementById(globalInput.getAttribute('aria-describedby')!)?.textContent).toContain('Session-wide');
   expect(inputs.find((input) => input.getAttribute('aria-label') === 'Local')!.getAttribute('aria-describedby')).toBeNull();

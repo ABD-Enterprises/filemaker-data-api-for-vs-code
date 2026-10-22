@@ -340,6 +340,9 @@ export class ScriptRunnerPanel {
   }
 
   private getHtml(webview: vscode.Webview): string {
+    const standardsStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui', 'fieldStandards.css')
+    );
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webviews', 'scriptRunner', 'ui', 'styles.css')
     );
@@ -360,6 +363,7 @@ export class ScriptRunnerPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>FileMaker Script Runner</title>
+  <link rel="stylesheet" href="${standardsStyleUri}" />
   <link rel="stylesheet" href="${styleUri}" />
 </head>
 <body>
@@ -390,14 +394,14 @@ export class ScriptRunnerPanel {
         <label for="scriptParamInput">Script Parameter (optional)</label>
         <div class="parameter-input-group">
           <textarea id="scriptParamInput" rows="3" placeholder="Any string payload"></textarea>
-          <button id="buildParameterButton" type="button" aria-expanded="false" aria-controls="parameterBuilderPanel">Build Parameter</button>
+          <button class="secondary" id="buildParameterButton" type="button" aria-expanded="false" aria-controls="parameterBuilderPanel">Build Parameter</button>
         </div>
       </div>
       <section id="parameterBuilderPanel" class="panel builder-panel hidden" aria-labelledby="parameterBuilderTitle">
         <h2 id="parameterBuilderTitle">Build Parameter</h2>
         <div id="parameterRows" class="builder-rows"></div>
         <div class="builder-toolbar">
-          <button id="addParameterRowButton" type="button">Add Row</button>
+          <button class="secondary" id="addParameterRowButton" type="button">Add Row</button>
         </div>
         <div class="row">
           <label for="parameterPreview">JSON Preview</label>

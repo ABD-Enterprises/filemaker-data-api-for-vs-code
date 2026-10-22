@@ -58,7 +58,11 @@ describe('preview commands are hidden when the installation has no runtime templ
 
   it('treats an unreadable location as unavailable instead of throwing', async () => {
     const setContext = vi.fn();
-    expect(await publishPreviewAvailability('\0bad', setContext)).toBe(false);
+    const unreadable = path.join(dir, '\0bad', 'extension');
+    // The parent-template probe must remain unreadable too: path normalization can remove
+    // a lone bad component and accidentally discover a template in the working directory.
+    expect(path.join(unreadable, '..', 'runtime-next', 'package.json')).toContain('\0');
+    expect(await publishPreviewAvailability(unreadable, setContext)).toBe(false);
     expect(setContext).toHaveBeenCalledWith(PREVIEW_AVAILABLE_CONTEXT_KEY, false);
   });
 

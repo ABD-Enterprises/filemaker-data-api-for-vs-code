@@ -1,3 +1,4 @@
+import { standardFieldsCss } from '@fmweb/shared/dist/field-standards';
 import * as vscode from 'vscode';
 
 import { escapeHtml } from '../../utils/escapeHtml';
@@ -59,13 +60,9 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <title>Environment Compare</title>
+  <style nonce="${nonce}">${standardFieldsCss(true)}</style>
   <style nonce="${nonce}">
-    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--vscode-editor-background, #ffffff); color: var(--vscode-foreground, #333333); }
-    .wrap { padding: 16px; display: grid; gap: 14px; }
-    .card { background: var(--vscode-editorWidget-background, #f3f3f3); border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); border-radius: 10px; padding: 12px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, #cccccc)); text-align: left; padding: 6px 8px; font-size: 12px; }
-    th { background: var(--vscode-editor-background, #ffffff); }
+    .wrap { display: grid; gap: 14px; }
     .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 11px; }
     .ok { background: color-mix(in srgb, var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-foreground, #333333)))) 12%, var(--vscode-editor-background, #ffffff)); color: var(--vscode-foreground, #333333); }
     .warn { background: var(--vscode-inputValidation-warningBackground, #fff4ce); color: var(--vscode-inputValidation-warningForeground, var(--vscode-foreground, #333333)); }
@@ -77,6 +74,7 @@ function buildHtml(webview: vscode.Webview, payload: EnvironmentComparePanelPayl
 </head>
 <body>
   <div class="wrap">
+    <h1>FileMaker Environment Compare</h1>
     ${payload.compare ? renderCompare(payload.compare) : ''}
     ${payload.layoutDiff ? renderLayoutDiff(payload.layoutDiff) : ''}
   </div>
