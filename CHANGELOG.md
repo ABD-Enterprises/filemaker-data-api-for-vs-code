@@ -24,6 +24,30 @@ PR title prefix matches the highest-tier label added:
 
 ### [FEATURE]
 
+- None.
+
+### [FIX]
+
+- None.
+
+### [INTERNAL]
+
+- None.
+
+### [SECURITY]
+
+- None.
+
+## 1.7.0 (2026-10-22)
+
+Minor release: no data migration, and no command or setting was removed. User-facing notes: `extension/CHANGELOG.md` and `extension/UPGRADE.md`. Entries for 1.6.0 were removed from this ledger; user-facing notes remain in `extension/CHANGELOG.md` under 1.6.0, and the full ledger is in git history through 5bd5dc8.
+
+### [BREAKING]
+
+- None.
+
+### [FEATURE]
+
 - Add Cancel Job in the Command Palette, running job menu and jobs status menu, with Copy failures in job details.
 
 - Add Diagnose Connection: check the server address, network, certificate and Data API without signing in, explain likely fixes, and copy a report with the address hidden if wanted.
@@ -59,13 +83,13 @@ PR title prefix matches the highest-tier label added:
 
 - Diagnose Connection now shows the full matching certificate fingerprint, explains older certificate settings and missing intermediates, and gives advice that matches the current proxy handling. Server path prefixes work, report lines are easier to read, and hiding the address also hides the port.
 
-- [FIX] Long script parameters use a wildcard find on the first text field instead of an empty find. No-match finds and responses without a script status cannot report a successful script run.
-- [FIX] Test My Server now reads a record without an empty search, and empty searches show clear next steps. Cancelled batch updates wait for pending edits and keep a list of changed, failed and untouched records. Cancelling one request no longer cancels another request's sign-in, and renewed connections close their old sessions.
+- Long script parameters use a wildcard find on the first text field instead of an empty find. No-match finds and responses without a script status cannot report a successful script run.
+- Test My Server now reads a record without an empty search, and empty searches show clear next steps. Cancelled batch updates wait for pending edits and keep a list of changed, failed and untouched records. Cancelling one request no longer cancels another request's sign-in, and renewed connections close their old sessions.
 - Preserve text and record IDs when moving data through CSV and the Record Editor; show incomplete portal rows with Load more, keep existing exports safe on failure or cancellation, and offer CSV for Excel.
 
 - Generated types now use the real field type and repeating field names. Generated clients handle empty finds and explain server errors. Special names stay intact; timeouts, paging and error messages give clearer next steps.
 
-- Trusted certificates (trusted by fingerprint) and older allow-self-signed profiles now work without changing a VS Code setting, so a server with FileMaker's default certificate can be trusted and used. A changed trusted certificate is refused before any credentials are sent; a trusted-fingerprint connection that would need a proxy is refused with advice. Custom CA file profiles are unchanged: they keep going through a proxy as before. An older allow-self-signed profile connects directly and does not use a VS Code or system proxy.
+- Trusted certificates (trusted by fingerprint) and older allow-self-signed profiles now work without changing a VS Code setting, so a server with FileMaker's default certificate can be trusted and used. A changed trusted certificate is refused before any credentials are sent; a trusted-fingerprint connection that would need a proxy is refused with advice. Custom CA file profiles are unchanged: they keep going through a proxy as before. An older allow-self-signed profile goes direct unless an environment proxy applies; that route is unchanged.
 - Warn before NUL characters can lose text in record edits and creation, refuse affected batch rows and AI writes, and generate valid types when a layout lists a field twice. Record the real-server findings and the remaining gap for creating portal rows.
 - Require the same confirmation before deleting saved queries from Manage, and show handled errors when saved-query commands, comparison report exports or snapshot lookups fail.
 
@@ -106,36 +130,3 @@ PR title prefix matches the highest-tier label added:
 - Harden error messages by masking credentials and tokens before they reach notifications or other normalized-message displays; normal FileMaker messages stay unchanged. No known exploit.
 
 - Updated `follow-redirects` (inside `axios`) from 1.16.0 to 1.16.1 for two advisories about credential headers surviving a redirect; the extension refuses every redirect (`maxRedirects: 0`), so the fixed paths were not reachable, and the production audit is clean again.
-
-## 1.6.0 - 2026-10-19
-
-Minor release: no data migration, and no command or setting was removed. User-facing notes: `extension/CHANGELOG.md` and `extension/UPGRADE.md`. Entries for 1.5.0 were removed from this ledger; the user-facing ones are in `extension/CHANGELOG.md` under 1.5.0.
-
-### [BREAKING]
-
-- None.
-
-### [FEATURE]
-
-- Find forms, Record Editor, Record Viewer and generated web layout views share Layout Mode field sizes, top labels and responsive spacing.
-- Layout Mode adds standard field sizes and spacing, arrangement and standardization with one Undo step, and blank, form, two-column and first-portal starter templates. Synced field types and FileMaker field order guide placement; names and behavior bindings stay intact.
-
-### [FIX]
-
-- A trusted (pinned) certificate failed with a misleading "not trusted" error right after being trusted when VS Code's `http.proxySupport` setting is `"override"` (its default): VS Code's networking replaces the extension's own connection, so the fingerprint check cannot run and VS Code's normal certificate check applies instead. A server whose certificate VS Code trusts anyway, such as one from a public authority, keeps working with or without a pin. Note that under `"override"` the pin is not enforced as a restriction: a different certificate that VS Code trusts would be accepted too. When the connection fails with a certificate problem the pin would have covered (not trusted, wrong host name, outside its dates), on any kind of request including proxy connections, the message now says why and names the fix: set `http.proxySupport` to `"fallback"` (which enforces the pin), or install a public certificate on the server and choose **Forget trusted certificate**. The `"on"` value was not tested. Found and verified in a real VS Code window.
-- Script runs return only the script answer, including the plain GET form. Layouts, scripts and container fields named `.` or `..` are refused before sending a request.
-- The refusal of layout, script and container field names `.` and `..` also applies to proxy connections, where names are sent in the request body.
-- Copied TypeScript keeps a field named `__proto__`. Copied proxy requests keep a trailing slash. Copied API base paths stay as configured (including percent escapes), and curl disables bracket and brace expansion when needed.
-- New files written by Write AI Context and new FM Web runtime files are readable by you only; a file that is replaced keeps its permissions (without setuid, setgid or sticky bits).
-- Folder names keep visible emoji presentation selectors while refusing hidden standalone selectors. The Output panel and Show Effective Settings now warn when `ai.hiddenFields` is a string instead of a list; hiding is unchanged: the whole string still counts as one field name, even with commas.
-- Profile changes delivered from another VS Code window refresh the connection status, explorer and AI tools within two seconds; configuration and secret changes also refresh them.
-- Layout Mode keeps standardized fields on canvas, arranges selections without covering other objects, sizes Data API option controls from value lists, restores template palettes on Undo, and loads template metadata on demand.
-
-### [INTERNAL]
-
-- The mock server's `claris-default-cert` mode now presents the default certificate exactly as a real FileMaker Server 22 does, read from a real server: an X.509 version 1 leaf with no extensions (serial 1, sha256WithRSA, 2048-bit), the real subject and issuer names, one certificate sent, TLS 1.2 only. The leaf is encoded in the mock itself, because not every OpenSSL build can make a version 1 certificate. A new end-to-end test connects by IP address through the extension's real code: refused in plain words, the trust dialog (identical to the one seen on a real server), trust by fingerprint, sign-in, and refusal of a different certificate.
-- The MCP connection-capacity test polls for the expected counts instead of relying on startup sleeps. Tests also check pending connection limits and handshake expiry without opening sockets.
-- Correct the nested `why-is-node-running` lockfile entry to the exact version required by Vitest.
-- The API Docs workflow now builds the shared package before running typedoc (it failed on `main` since the field-standards import landed, with `Cannot find module '@fmweb/shared/dist/field-standards'`). The manual release job aid names the 1.5.0 release commit (`e2f9aac`) and sets it as the default `RELEASE_SHA`, drops the untrue claim that nothing else merges meanwhile, and gives the VSIX size as a range. No user-facing change.
-
-### [SECURITY]

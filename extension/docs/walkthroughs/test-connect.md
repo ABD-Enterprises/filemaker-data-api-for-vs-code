@@ -28,3 +28,5 @@ Under the hood the extension is:
 > **If Connect fails**, the error toast offers **Retry**, **Edit Profile**,
 > and **Details…**. The Details document is redacted but includes the
 > retry chain and the failing endpoint — useful for filing bug reports.
+
+For a plain-words connection report without signing in, run **FileMaker: Diagnose Connection**. Once connected, **FileMaker: Test My Server** can run a separate read-only check; its optional scratch-record and script tests ask separately.

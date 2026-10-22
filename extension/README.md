@@ -6,6 +6,10 @@ Work with a FileMaker database from VS Code: connect to a server, inspect layout
 
 **Built by [ABD Enterprises](https://abdenterprises.com).** Free, open source (MIT), no telemetry, no cloud account.
 
+Version **1.7.0** adds checks for newer changes before batch updates, read-only calculated fields in the editor, **List records instead** for an empty search, and **Test My Server** and **Diagnose Connection** to explain connection problems. Exports preserve text and record versions, and **Cancel Job** and **Show Jobs** are always available. See the [upgrade notes](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/UPGRADE.md) before importing a file.
+
+One real FileMaker server was exercised on **2026-10-21**, but its version was not recorded. No server version has a completed recorded smoke test; see [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md). FileMaker Cloud sign-in with a Claris ID is **not supported**.
+
 ## What it does
 
 - **Connect** directly to the FileMaker Data API or through your own proxy. Passwords stay in your operating system keychain.
@@ -16,13 +20,13 @@ Work with a FileMaker database from VS Code: connect to a server, inspect layout
 - **Track schema**: capture snapshots, diff them, compare environments, and generate TypeScript types, a typed client and editor snippets.
 - **Batch**: export to JSONL or CSV, or update many records from a CSV or JSON file, with a dry run first.
 - **Control**: workspace trust (Restricted Mode keeps editing, scripts and batch jobs off), an enterprise mode with roles, an offline metadata mode, and confirmation before risky actions.
-- **Trust a private server on purpose**: for FileMaker Server's default certificate or a company certificate, review the certificate in the connection wizard and trust exactly that one by its fingerprint. A different certificate later is refused, unless VS Code's `http.proxySupport` setting is `override` (its default); see the User Guide's Certificates section.
+- **Trust a private server on purpose**: for FileMaker Server's default certificate or a company certificate, review the certificate in the connection wizard and trust exactly that one by its fingerprint. A different certificate later is refused before credentials are sent, including with VS Code's default proxy setting. This needs a direct route; a required proxy is refused with advice. See the User Guide's Certificates section.
 - **AI, off by default**: give AI coding tools your real layout names, let an agent in VS Code or an MCP client (Claude Code, Cursor) read records and, with your approval, change one record at a time, or ask `@filemaker` in the Chat view (read only).
 - **Windows, Linux and macOS**: build, lint, type check and the unit tests run on Windows and Linux in CI.
 
 ## Product tour
 
-The screenshots show a mock FileMaker Data API with made-up data (names and `example.com` addresses), not a real server.
+The screenshots show a mock FileMaker Data API with made-up data (names and `example.com` addresses), not a real server. They were taken in an older version: version labels and some field styling differ in 1.7.0; panels now follow the editor theme.
 
 ![The query builder: a find on the Contacts layout with sort, paging and results](docs/marketplace/query-builder.png)
 
@@ -34,7 +38,7 @@ The query builder gives you a readable form for FileMaker find requests (or the 
 
 ![The record editor with the fields of one record](docs/marketplace/record-editor.png)
 
-The record editor shows every field of a record, previews the update before it is sent, and refuses to save over a record someone else changed.
+The record editor shows the fields your account can read, previews the update before it is sent, and refuses to save over a record someone else changed. When field details are available, calculation, summary and container fields are read-only; use Upload to Container for containers.
 
 ![The connection wizard filled in with example values](docs/marketplace/connection-setup.png)
 
@@ -50,7 +54,7 @@ Capture schema snapshots and compare them to see which fields were added, remove
 
 ![Layout Mode with six fields placed on a layout](docs/marketplace/layout-mode.png)
 
-Layout Mode places fields from a synced layout on a canvas for an FM Web project. Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step) and blank, form, two-column and first-portal starter templates keep layouts tidy. The find form, Record Editor and Record Viewer show fields the same way.
+Layout Mode places fields from a synced layout on a canvas for an FM Web project. Generating and previewing an FM Web app need the source checkout; those commands are not in the Marketplace package. Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step) and blank, form, two-column and first-portal starter templates keep layouts tidy. The find form, Record Editor and Record Viewer show fields the same way.
 
 ![@filemaker in the Chat view answering a find](docs/marketplace/chat-participant.png)
 
@@ -60,7 +64,7 @@ Layout Mode places fields from a synced layout on a canvas for an FM Web project
 
 - FileMaker Server with the **Data API** enabled, reachable over HTTPS. FileMaker Cloud is untested: the extension has no Claris ID login, and whether a tenant accepts an account name and password is not confirmed.
 - A FileMaker account whose privilege set has the **`fmrest`** extended privilege.
-- A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file). Trusting a certificate by hand needs VS Code's `http.proxySupport` setting on `fallback` or `off`; with its default, `override`, VS Code replaces the extension's own connection (see the User Guide, Certificates).
+- A server certificate your computer trusts. For FileMaker Server's default certificate, a private authority or a self-signed certificate, the connection wizard lets you review the certificate and trust exactly that one (or set a CA file). Trusting a fingerprint works on direct connections with VS Code's default proxy setting too. A required proxy is refused for a pinned connection; custom CA profiles keep their existing routing (see the User Guide, Certificates).
 - VS Code 1.96 or newer on a macOS, Windows or Linux desktop, with a folder open (virtual workspaces such as github.dev are not supported). The AI server for MCP clients does not run in remote windows (SSH, WSL, Dev Containers, Codespaces).
 
 See [Compatibility](https://github.com/SureForgeTech/filemaker-data-api-for-vs-code/blob/main/extension/docs/COMPATIBILITY.md) for server versions, operating systems and what has and has not been tested. The automated tests run against a mock of the Data API built from Claris's documentation.

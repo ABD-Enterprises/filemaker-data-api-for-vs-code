@@ -19,7 +19,7 @@ Where the files go:
   (`types.ts`, `client.ts` and a `README.md`).
 - Snippets: `snippets/filemaker-data-api.code-snippets` in your workspace.
 
-Generating files needs a trusted workspace.
+Generating files needs a trusted workspace. Before replacing an unrelated file, choose **Overwrite**, **Skip existing**, or **Cancel**. A linked output folder is refused with an explanation; a workspace opened through a symbolic link is allowed.
 
 Regenerate after a schema change, and pair it with a schema snapshot diff to see
 exactly which fields moved.

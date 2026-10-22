@@ -66,8 +66,20 @@ Extension host services
   diagnostics, request history, and logs.
 - Schema snapshots and saved queries are not encrypted. Treat exported or
   workspace-file copies as internal project artifacts.
-- The extension sends API requests only to the configured FileMaker server or
-  proxy endpoint for the active profile.
+- Normal record operations send API requests to the configured FileMaker server or
+  proxy endpoint for the active profile. **Diagnose Connection** can also check a
+  saved profile or a server address you type, without saving it or sending credentials.
+  Its DNS, port and certificate probes connect directly; the Data API check uses the
+  selected connection settings. For proxy profiles it checks the FileMaker server.
+- **Test My Server** uses a separate temporary session and logs out afterwards.
+  Read-only checks retrieve a record but omit its values from the report. Scratch-record
+  writes and script execution require separate confirmation; cleanup is attempted
+  even after cancellation. A failed cleanup names the scratch record to remove.
+- These reports open as editor documents; they are not sent to a support service.
+  Copying a diagnosis can hide its server address, port and revealing certificate details.
+  Review organization-specific names before sharing either report. Jobs keep full
+  changed, failed and untouched lists for the session; saved recent jobs retain all
+  counts and at most 1,000 entries per list after restart.
 
 ## AI Context File
 

@@ -1,6 +1,6 @@
 # FileMaker Data API Tools: User Guide
 
-This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.6, including what changed since 1.5 (listed under [New in 1.6](#new-in-16)) and since 1.4 ([New in 1.5](#new-in-15)). The screenshots show a mock FileMaker Data API with made-up data. You can open it from VS Code with **FileMaker: Open User Guide**.
+This is the manual for operators and developers who use the extension to work with a FileMaker database from VS Code. It covers version 1.7, including what changed since 1.6 (listed under [New in 1.7](#new-in-17)). Earlier changes remain under [New in 1.6](#new-in-16) and [New in 1.5](#new-in-15). The screenshots show a mock FileMaker Data API with made-up data. They are from an older version; version labels and some field styling differ, and panels now follow your editor theme. You can open it from VS Code with **FileMaker: Open User Guide**.
 
 Command names below are the titles you see in the Command Palette (`Cmd+Shift+P` on macOS, `Ctrl+Shift+P` on Windows and Linux). Every command starts with `FileMaker:`.
 
@@ -47,7 +47,7 @@ Trusted-fingerprint profiles and older **Allow self-signed** profiles work with 
 
 Connection diagnosis uses certificate date failures to recommend checking dates or renewing the certificate, rather than changing an already configured CA file. A Data API failure takes priority over advice to change an older certificate setting.
 
-Diagnose Connection was checked on one real server on 2026-10-21: the server had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted.
+Diagnose Connection was checked on one real server on 2026-10-21 (its FileMaker Server version was not recorded): the server had a valid Let's Encrypt certificate and used TLS 1.2. Every step passed; no sign-in was attempted.
 
 Choose **Copy for bug report** when the report is ready, or run **FileMaker: Copy Connection Diagnosis for Bug Report** later. Answer **Hide the server address?** before anything is copied. Hiding also removes the port and certificate details that could reveal the address. The report leaves out passwords, tokens, API keys, request headers and cookies. The copy command copies the original diagnosis, even if you have edited the open document.
 
@@ -63,8 +63,6 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Open User Guide | Opens this guide in a Markdown preview. | Always shown. |
 | Diagnose Connection | Checks a saved server or a typed address, without signing in, and explains likely fixes. | Always shown; turn off offline mode. Uses saved profiles or an address you type; never reads a workspace template. |
 | Copy Connection Diagnosis for Bug Report | Copies the latest connection diagnosis, with a choice to hide the server address. | Always shown; run Diagnose Connection first. |
-| Test My Server | Runs a safe server check and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
-
 | Test My Server | Reads a record, checks the connection and opens a report you can share. | Shown with a profile; needs an active connection and offline mode off. Optional writes and scripts also need trust, permission and their feature switches. |
 | Show Diagnostics | Opens a redacted report of the extension, settings and connections. | Always shown. |
 | Show Effective Settings | Shows the settings in effect and where their values come from. | Always shown. |
@@ -239,13 +237,28 @@ Changes you may notice (details in the [upgrade notes](../UPGRADE.md)):
 - Logs and error details hide more secrets (session tokens in URLs, more token-like keys, passwords in URLs).
 - A status bar item `AI: off` is always shown, on the right. Selecting it switches AI tools off when they are on. When AI is not on, it only explains why (for example `filemaker.ai.enabled` is off, offline mode, an untrusted workspace, enterprise policy, or no connection enabled) and offers **Open AI Settings**; it does not change anything.
 
+### New in 1.7
+
+These changes came after 1.6.0; read [Upgrading from 1.6.0 to 1.7.0](../UPGRADE.md#upgrading-from-160-to-170) before importing a file:
+
+- **Protect newer changes.** Batch update asks **Check for newer changes (recommended)** or **Overwrite even if changed** when the file has record versions. Changed records are skipped with error 306. A file without versions gets a warning; dry runs show what can be checked.
+- **Read-only fields.** With field details available, the editor disables calculation, summary and container fields, including repetitions. Batch import skips these columns with warnings. Use Upload to Container for containers; global fields remain editable and say Session-wide.
+- **List records instead.** An empty Query Builder search offers this action on a direct connection, keeping your layout, page size, starting record and sort. Proxy users must enter criteria.
+- **Check a connection.** Test My Server makes a report with separately confirmed scratch-record and script tests. Diagnose Connection checks a saved or typed server without signing in and explains likely fixes; copying its report can hide the address.
+- **Trusted certificates.** Fingerprints work on direct connections with VS Code's default proxy setting. A required proxy is still refused with **PIN_THROUGH_PROXY**; custom CA profiles retain their routing. Proxy failures now identify the proxy more clearly.
+- **Safer exports.** Record versions (`modId` or reserved `__modId`) travel with CSV exports. Text keeps leading zeros and spaces; failed or cancelled exports leave your old file alone. CSV for Excel is available, and a portal note column appears only when related rows are missing. Direct Record Viewer connections can Load more.
+- **Jobs and palette.** Cancel Job and Show Jobs are always available. Cancellation keeps partial results and failure codes; after restart saved lists keep up to 1,000 entries each and all counts.
+- **Clearer screens and errors.** Panels follow the editor theme. Failed queries and scripts clear old results, repeated clicks do not start duplicate requests, and invalid saved-query imports explain the problem without changing saved queries.
+- **Safer text and files.** NUL characters trigger a warning in the editor and refusal in imports and AI writes. Generated files ask before replacing unrelated files; edited runtime files stay untouched. Long script parameters and generated types handle more layouts correctly.
+- **Compatibility and defaults.** One real server was exercised on 2026-10-21, but its version was not recorded; no server version has a completed recorded smoke test. FileMaker Cloud sign-in with a Claris ID is not supported. No setting defaults changed; AI features remain off by default.
+
 ### New in 1.6
 
 These changes came after 1.5.0 (details in the [upgrade notes](../UPGRADE.md)):
 
 - **Layout Mode standards.** Standard field sizes and spacing, an action that arranges the selection into a standard form, one that standardizes it (each undone in one step), and blank, form, two-column and first-portal starter templates for a new web layout. Fields are listed in FileMaker's field order.
 - **One look for fields.** The find form, Record Editor, Record Viewer and generated web layout views use the same field sizes, top labels and spacing as Layout Mode. Generated FM Web apps get their managed runtime files refreshed (template version 3) the next time you generate or preview; see [FM Web and Layout Mode](#fm-web-and-layout-mode) for what happens to a file you edited.
-- **Trusting a certificate and VS Code's network setting.** Trusted certificates work on direct routes without changing `http.proxySupport`, including `override`. CA-only profiles keep their existing proxy routing; older allow-self-signed profiles go direct unless an environment proxy applies, where their behavior is unchanged. See [Certificates](#certificates).
+- **Certificate advice in 1.6.** The trust dialog explained why VS Code's default proxy setting could prevent fingerprint trust and suggested `fallback`. Version 1.7 removes that requirement on direct connections; see [Certificates](#certificates).
 - **Smaller fixes:** script runs return only the script's answer, names `.` and `..` are refused, copy-as-code is more exact, profile changes in another window show up within two seconds, and new context and runtime files are readable by you only.
 
 ---
@@ -566,7 +579,7 @@ Large results are fetched page by page. The export stops at `filemaker.batch.max
 
 **Apostrophes in CSV files.** A spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula, and database text can start that way. The export therefore puts an apostrophe in front of such text, so `=SUM(A1)` is saved as `'=SUM(A1)`. The same applies to text that starts with a tab or a carriage return. Plain numbers (`-5`), signed numbers and phone numbers such as `+1 (555) 123-4567` are left alone. If another program reads the CSV, strip the leading apostrophe there. The same applies to **Save results as CSV…** and **Copy results as table** in the Query Builder.
 
-**Editing and re-importing a CSV export.** The first two CSV columns identify the record: `recordId` and `modId`. If a layout has a field with either name (including different capitals), the record columns use `__recordId` and `__modId` instead. Extra underscores are used if those names are also fields. Keep these two columns together at the start of the file. The layout fields follow, including fields missing from the first record. Duplicate column names are refused because the record or field to change would be unclear. An older CSV using plain record columns on a layout with clashing field names is also refused when the field list can be read; export it again to get the reserved columns. The last column, `__portalNote (export information)`, is a note about missing related rows, not a field; import skips it. Keep that note last or remove it before importing.
+**Editing and re-importing a CSV export.** The first two CSV columns identify the record: `recordId` and `modId`. If a layout has a field with either name (including different capitals), the record columns use `__recordId` and `__modId` instead. Extra underscores are used if those names are also fields. Keep these two columns together at the start of the file. The layout fields follow, including fields missing from the first record. Duplicate column names are refused because the record or field to change would be unclear. An older CSV using plain record columns on a layout with clashing field names is also refused when the field list can be read; export it again to get the reserved columns. Only when related rows are missing, a final column, `__portalNote (export information)`, explains what is incomplete. It is not a field; import skips it. Keep that note last or remove it before importing.
 
 Text fields keep exactly what you typed, including `10.50`, `null`, `true`, brackets and spaces. Number fields receive numbers only for valid decimal numbers within the safe range (up to 9,007,199,254,740,991 in either direction). Other number entries are kept as text, with a warning for each affected row in the job log, so large numbers are not rounded. Dates and times stay as written. Field types are checked once when the update job starts; if they cannot be read, values stay as text and the job log warns you. Empty CSV cells are still skipped: they leave the field unchanged, so a CSV cannot clear a field. A space in a text cell is kept as a space. The Record Editor also uses the field's type, keeping number-looking text as text.
 
@@ -1200,13 +1213,16 @@ Connection errors name the step that failed and what to do. The most common firs
 | --- | --- |
 | A find returns nothing | FileMaker reports "no records match" as error code 401: verified on a real server (FileMaker Data API Engine, 2026-10-21) as HTTP 200 with an empty data list. Older/other versions may use another status; the extension accepts code 401 on any status, and the extension shows an empty result, not an error. If it is unexpected, check the criteria and the account's record access. Do not confuse it with HTTP 401, which is a sign-in or session problem. |
 | Error 9, 200, 202, 203, 205, 207, "Insufficient privileges", "Record access is denied" | Your account's privilege set does not allow this. Ask the administrator for the access; editing the connection will not help. |
-| "Find criteria are empty" / "Missing required property" (400 / 10) | Enter at least one field value to search, or use Get records to list records. An empty search cannot list records. |
+| "Find criteria are empty" / "Missing required property" (400 / 10) | Enter at least one field value, or choose **List records instead** in Query Builder on a direct connection. It lists only after you choose it; proxy connections need a search value. |
 | "This parameter is too long to send" | The encoded URL exceeds 2,000 characters and a text-field find cannot carry it. Shorten it or use a layout with a text field without a record ID. See [Run scripts](#run-scripts). |
 | "The script did not run because this layout has no records" | A read confirmed that this layout has no visible records, so the script did not run. Add a record or use a layout that has records. |
 | "The server did not confirm that the script ran" | The response had no `scriptError`. Check the script before trying again; the runner cannot confirm execution. |
 | "Script runner is not supported on this server/profile." | The server refused both the script endpoint and the attach-to-another-request form (405, 501 or a FileMaker 404). Check the layout and script exist for the account and the server version supports the Data API script calls. |
 | Error 105 (layout is missing) or 104 (script is missing) | The name is misspelled, was renamed, or the account cannot see it. |
-| Error 306 on save | The record changed since you loaded it. See [edit a record](#edit-a-record). |
+| Error 306 on save or batch update | The record changed since you loaded or exported it. Batch update skips this row and continues; see Jobs / Copy failures. Review the newer record before retrying. See [batch update](#batch-export-and-batch-update). |
+| Batch update: “Could not confirm: the first attempt may have succeeded” | A reply was lost and the retry could not confirm the saved values. Check the record before trying again; it may already have changed. |
+| A field is read-only in the editor or skipped on import | Calculation, summary and container fields are left out when field details are available. Use Upload to Container for containers; FileMaker still decides your account privileges. |
+| Saved-query import says the file is invalid | Use a JSON file exported with Export Saved Queries. Invalid JSON or a file without a query list leaves existing queries alone. |
 | Error 301 (record in use) | Another user or a script has the record open. Try again shortly. |
 | Errors 500 to 511 on save | The value failed the field's validation (date, range, unique, value list and so on). |
 | A save worked but a script error is shown | The layout ran a script that reported an error. The record was saved; the message names the script phase and the FileMaker error. This is shown for edit, create, delete, find and container upload; getting a single record does not display script errors. |
