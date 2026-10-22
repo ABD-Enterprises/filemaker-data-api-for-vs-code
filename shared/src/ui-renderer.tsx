@@ -1,10 +1,13 @@
 import * as React from 'react';
+import { fieldKindNote } from './record-edit';
 import { FIELD_LAYOUT } from './field-standards';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
 
 export interface RuntimeLayoutData {
   fieldValues?: Record<string, unknown>;
+  editing?: boolean;
+  onFieldChange?: (name: string, value: unknown) => void;
   portalRowsByObjectId?: Record<string, Array<Record<string, unknown>>>;
   viewport?: {
     width: number;
@@ -48,10 +51,18 @@ export function LayoutContainer({
       .forEach((object) => {
         positions.set(object.id, { ...object, x: FIELD_LAYOUT.pageMargin, y: flowY,
           width: Math.min(object.width, Math.max(1, containerWidth - FIELD_LAYOUT.pageMargin * 2)) });
-        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + FIELD_LAYOUT.rowGap;
+        flowY += object.height + (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(positions.get(object.id) ?? object) + FIELD_LAYOUT.rowGap;
       });
   }
-  const visibleObjects = renderedObjects.map((object) => positions.get(object.id) ?? object);
+  const noteRows = mode === 'runtime' && !narrow ? layout.objects.reduce((rows, object) => {
+    rows.set(object.y, Math.max(rows.get(object.y) ?? 0, runtimeFieldNoteSpace(object)));
+    return rows;
+  }, new Map<number, number>()) : new Map<number, number>();
+  const visibleObjects = renderedObjects.map((object) => positions.get(object.id) ?? (noteRows.size
+    ? { ...object, y: object.y + [...noteRows].reduce((shift, [row, space]) => shift + (row < object.y ? space : 0), 0) }
+    : object));
+  const contentHeight = Math.max(containerHeight, ...visibleObjects.map((object) => object.y + object.height +
+    (object.type === 'field' && object.labelPosition === 'top' ? FIELD_LAYOUT.labelSpace : 0) + runtimeFieldNoteSpace(object) + FIELD_LAYOUT.pageMargin));
 
   return (
     <div
@@ -59,7 +70,7 @@ export function LayoutContainer({
       style={{
         position: 'relative',
         width: containerWidth,
-        height: narrow ? Math.max(containerHeight, flowY + FIELD_LAYOUT.pageMargin) : containerHeight,
+        height: mode === 'runtime' ? Math.max(contentHeight, narrow ? flowY + FIELD_LAYOUT.pageMargin : 0) : containerHeight,
         backgroundColor: layout.styles.colors.surface,
         color: layout.styles.colors.text,
         fontFamily: layout.styles.typography.fontFamily,
@@ -80,6 +91,16 @@ export function LayoutContainer({
       ))}
     </div>
   );
+}
+
+function runtimeFieldNote(object: LayoutObject): string | undefined {
+  if (object.type !== 'field') return undefined;
+  return [fieldKindNote(object.kind), object.format === 'date' ? "Use the server's date format, keeping the same order and separators." : undefined].filter(Boolean).join(' ') || undefined;
+}
+
+function runtimeFieldNoteSpace(object: LayoutObject): number {
+  const note = runtimeFieldNote(object);
+  return note ? Math.ceil(note.length / Math.max(1, Math.floor(object.width / 7))) * 16 + 4 : 0;
 }
 
 interface LayoutObjectRendererProps {
@@ -169,7 +190,10 @@ function FieldControl(props: {
   const { object, style } = props;
   const labelText = object.label?.trim().length ? object.label : object.fmFieldName;
   const runtimeValue = props.runtimeData?.fieldValues?.[object.fmFieldName];
-  const previewOptions = getPreviewOptions(object, runtimeValue);
+  const previewOptions = getPreviewOptions(object, runtimeValue, props.mode);
+  const value = runtimeValue === undefined || runtimeValue === null ? '' : String(runtimeValue);
+  const note = props.mode === 'runtime' ? runtimeFieldNote(object) : undefined;
+  const readOnly = props.mode !== 'runtime' || !props.runtimeData?.editing || ['calculation', 'summary', 'container'].includes(object.kind ?? 'normal');
   const showLabel = object.labelPosition !== 'none';
   const horizontalLabel = object.labelPosition === 'left' || object.labelPosition === 'right';
   const inputId = `field-input-${object.id}`;
@@ -213,7 +237,10 @@ function FieldControl(props: {
     object,
     mode: props.mode,
     inputId,
-    options: previewOptions
+    options: previewOptions,
+    value: props.mode === 'designer' ? previewOptions[0] : value,
+    readOnly,
+    onChange: (next) => props.runtimeData?.onFieldChange?.(object.fmFieldName, next)
   });
 
   return (
@@ -232,8 +259,10 @@ function FieldControl(props: {
       data-fm-field-id={object.id}
       data-fm-field-control={object.displayType}
       data-fm-field-format={object.format}
+      data-fm-field-kind={object.kind ?? 'normal'}
       data-fm-label-position={object.labelPosition}
     >
+      {note ? <span id={`${inputId}-note`} role="note">{note}</span> : null}
       {object.labelPosition === 'right' ? (
         <>
           <div style={inlineControlStyle}>{fieldControl}</div>
@@ -254,8 +283,11 @@ function renderFieldDisplayControl(props: {
   mode: 'designer' | 'runtime';
   inputId: string;
   options: string[];
+  value: string;
+  readOnly: boolean;
+  onChange: (value: unknown) => void;
 }): React.JSX.Element {
-  const disabled = props.mode === 'designer';
+  const disabled = props.readOnly;
   const baseControlStyle: React.CSSProperties = {
     border: '1px solid #90a3b8',
     borderRadius: 5,
@@ -268,106 +300,59 @@ function renderFieldDisplayControl(props: {
     color: '#20364f'
   };
 
+  const description = props.mode === 'runtime' && runtimeFieldNote(props.object) ? `${props.inputId}-note` : undefined;
+  const common = { id: props.inputId, 'aria-label': props.object.fmFieldName,
+    'aria-describedby': description, style: baseControlStyle };
+
+  if (props.object.kind === 'container') {
+    if (!props.value) return <span />;
+    // Container links are server URLs, never executable schemes from field text.
+    if (!/^https?:\/\//i.test(props.value)) return <span>{props.value}</span>;
+    const image = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(props.value);
+    return image
+      ? <img src={props.value} alt={props.object.fmFieldName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      : <a href={props.value} target="_blank" rel="noopener noreferrer">Open container</a>;
+  }
+
   if (props.object.displayType === 'dropdown') {
-    return (
-      <select
-        id={props.inputId}
-        disabled={disabled}
-        aria-label={props.object.fmFieldName}
-        defaultValue={props.options[0]}
-        style={baseControlStyle}
-      >
-        {props.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    );
+    const options = Array.from(new Set(['', props.value, ...props.options]));
+    return <select {...common} disabled={disabled} value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)}>
+      {options.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select>;
   }
 
-  if (props.object.displayType === 'checkbox') {
-    return (
-      <label
-        htmlFor={props.inputId}
-        style={{
-          ...baseControlStyle,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }}
-      >
-        <input id={props.inputId} type="checkbox" checked={disabled} disabled={disabled} readOnly />
-        <span>{props.options[0]}</span>
-      </label>
-    );
+  if ((props.object.displayType === 'checkbox' || props.object.displayType === 'radio') && props.options.length > 0) {
+    const checkbox = props.object.displayType === 'checkbox';
+    const selected = props.value.split(/\r\n|\r|\n/);
+    const options = props.mode === 'designer' && !checkbox ? props.options.slice(0, 2) : props.options;
+    return <div role={checkbox ? 'group' : 'radiogroup'} aria-label={props.object.fmFieldName} aria-describedby={description}
+      style={{ ...baseControlStyle, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {options.map((option, index) => <label key={option} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <input id={index === 0 ? props.inputId : `${props.inputId}-${index}`} type={checkbox ? 'checkbox' : 'radio'}
+          name={`choice-${props.object.id}`} value={option} checked={selected.includes(option)} disabled={disabled}
+          onChange={(event) => props.onChange(checkbox
+            ? (event.currentTarget.checked ? [...selected.filter(Boolean), option] : selected.filter((value) => value !== option)).join('\r')
+            : option)} />
+        <span>{option}</span>
+      </label>)}
+    </div>;
   }
 
-  if (props.object.displayType === 'radio') {
-    return (
-      <div
-        role="radiogroup"
-        aria-label={props.object.fmFieldName}
-        style={{
-          ...baseControlStyle,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4
-        }}
-      >
-        {props.options.slice(0, 2).map((option, index) => (
-          <label key={`${props.object.id}-${option}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="radio"
-              name={`radio-${props.object.id}`}
-              checked={index === 0}
-              disabled={disabled}
-              readOnly
-            />
-            <span>{option}</span>
-          </label>
-        ))}
-      </div>
-    );
+  if (props.object.multiline) {
+    return <textarea {...common} value={props.value} readOnly={disabled} onChange={(event) => props.onChange(event.currentTarget.value)} />;
   }
 
-  return (
-    <input
-      id={props.inputId}
-      type={props.object.format === 'date' ? 'date' : 'text'}
-      value={props.options[0]}
-      readOnly
-      aria-label={props.object.fmFieldName}
-      style={baseControlStyle}
-    />
-  );
+  // FileMaker returns dates in its server format. A browser date input would discard it.
+  return <input {...common} type="text" inputMode={props.object.format === 'number' ? 'decimal' : undefined}
+    value={props.value} readOnly={disabled} onChange={(event) => props.onChange(event.currentTarget.value)} />;
 }
 
-function getPreviewOptions(object: FieldLayoutObject, runtimeValue?: unknown): string[] {
-  if (runtimeValue !== undefined && runtimeValue !== null) {
-    if (Array.isArray(runtimeValue)) {
-      const values = runtimeValue
-        .map((item) => String(item))
-        .filter((item) => item.trim().length > 0);
-      if (values.length > 0) {
-        return values;
-      }
-    }
-
-    const asText = String(runtimeValue).trim();
-    if (asText.length > 0) {
-      return [asText];
-    }
-  }
-
-  if (object.format === 'number') {
-    return ['12,450.25', '98,000.00', '510.75'];
-  }
-
-  if (object.format === 'date') {
-    return ['2026-03-03', '2026-03-10', '2026-03-17'];
-  }
-
+function getPreviewOptions(object: FieldLayoutObject, runtimeValue: unknown, mode: 'designer' | 'runtime'): string[] {
+  if (mode === 'runtime') return object.options ?? [];
+  if (object.options?.length) return object.options;
+  if (runtimeValue !== undefined && runtimeValue !== null) return [String(runtimeValue)];
+  if (object.format === 'number') return ['12,450.25', '98,000.00', '510.75'];
+  if (object.format === 'date') return ['2026-03-03', '2026-03-10', '2026-03-17'];
   return [object.fmFieldName, `${object.fmFieldName} A`, `${object.fmFieldName} B`];
 }
 
@@ -380,9 +365,7 @@ function PortalControl(props: {
   const { object, style } = props;
   const runtimeRows = props.runtimeData?.portalRowsByObjectId?.[object.id];
   const rows = React.useMemo(() => {
-    if (props.mode === 'runtime' && runtimeRows && runtimeRows.length > 0) {
-      return runtimeRows;
-    }
+    if (props.mode === 'runtime') return runtimeRows ?? [];
 
     return Array.from({ length: Math.max(1, object.rowCount) }).map((_, rowIndex) => {
       const row: Record<string, unknown> = {};
@@ -469,7 +452,7 @@ function PortalControl(props: {
                   data-fm-portal-cell={`${column.fmFieldName}:${rowIndex}`}
                   style={{ padding: '6px 8px', borderRight: '1px solid #f0f4f8' }}
                 >
-                  {formatPortalCellValue(row[column.fmFieldName], column.fmFieldName, rowIndex)}
+                  {props.mode === 'runtime' ? String(row[column.fmFieldName] ?? '') : formatPortalCellValue(row[column.fmFieldName], column.fmFieldName, rowIndex)}
                 </div>
               ))}
               {object.columns.length === 0 ? (

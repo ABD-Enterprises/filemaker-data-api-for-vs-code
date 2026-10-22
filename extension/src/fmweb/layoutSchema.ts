@@ -49,6 +49,9 @@ const fieldObjectSchema = objectBaseSchema.extend({
   fmFieldName: z.string().min(1),
   displayType: fieldDisplaySchema.default('editBox'),
   format: fieldFormatSchema.default('text'),
+  kind: z.enum(['normal', 'calculation', 'summary', 'container', 'global']).default('normal').optional(),
+  multiline: z.boolean().default(false).optional(),
+  options: z.array(z.string()).optional(),
   label: z.string().optional(),
   labelPosition: z.enum(['top', 'left', 'right', 'none']).default('top'),
   required: z.boolean().default(false)

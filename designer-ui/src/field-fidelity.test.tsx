@@ -198,7 +198,7 @@ describe('field fidelity', () => {
       const dateInput = container.querySelector(
         `[data-fm-field-id="${fieldId}"][data-fm-field-control="editBox"] input`
       ) as HTMLInputElement | null;
-      expect(dateInput?.type).toBe('date');
+      expect(dateInput?.type).toBe('text');
       expect(dateInput?.value).toBe('2026-03-03');
     });
 

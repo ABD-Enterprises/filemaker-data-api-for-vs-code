@@ -31,8 +31,8 @@ interface GeneratedLayoutSummary {
 const SAFE_ENV_VALUE = /^[A-Za-z0-9:/._~%+=@-]+$/;
 
 /** Bump together with the `fmweb-managed: runtime template vN` line in the managed files. */
-export const RUNTIME_TEMPLATE_VERSION = 3;
-const MANAGED_MARKER = /^\/\/ fmweb-managed: runtime template v(\d+)/;
+export const RUNTIME_TEMPLATE_VERSION = 4;
+const MANAGED_MARKER = /^(?:\/\/|\/\*) fmweb-managed: runtime template v(\d+)/;
 
 /**
  * Files of the runtime template that the extension owns and keeps current in apps that were
@@ -41,6 +41,7 @@ const MANAGED_MARKER = /^\/\/ fmweb-managed: runtime template v(\d+)/;
  * version marker, so an unmodified old copy can be recognised and refreshed safely.
  */
 const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
+  'app/styles.css': ['ed5fdbfd2e42b6e952332bc74a1ddbeefe9d831493d72b567e8832bf98c4c6f8'],
   'app/layouts/[id]/page.tsx': [
     '0da7442c0152dd6bc59d53741a7bca633723afad470e5afb095e73590412b266',
     '645ed91229d76841ea407279e6d0472f9d8af64dd3dcd4313c7aa566789ae814'
@@ -63,11 +64,12 @@ const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
  * one; the runtime-template test fails until you do.
  */
 export const SHIPPED_MARKED_HASHES: Record<string, string[]> = {
-  'app/layouts/[id]/page.tsx': ['4a7882e3638ccadf65d48b1fa7a16a14b98df4009671453ea82f4ce18159e895'],
-  'lib/bridge-client.ts': ['e0253ec75ce1dd79cef212a05f12cc4db4570ffb5cc8f36fb3775f9ac72f323e', '4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07'],
-  'lib/runtime-data.ts': ['22cad0412d5a831000a671fc210edde6e7eb6285ea49356981b4e80d9ab0d729', '17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b'],
-  'lib/runtime-behavior.ts': ['8d74f0dc280c8a42e4e64e1b47a0df0d11f09beba8605808c5263a81a6f3b94d', '84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609'],
-  'app/layouts/[id]/runtime-layout-client.tsx': ['6becf8abb393e1e501f75390540b0fbefec17c9ca77803fc4f9352157a67249e', '12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5']
+  'app/styles.css': ['15d2d57725d731126dc25aa9b303089e38539ff8deb472cbbafb2818c3c5e668'],
+  'app/layouts/[id]/page.tsx': ['4a7882e3638ccadf65d48b1fa7a16a14b98df4009671453ea82f4ce18159e895', '167da245a60540ea0f64900f31445424f4dbe6c025a525e7314088f4d0b8f3de'],
+  'lib/bridge-client.ts': ['e0253ec75ce1dd79cef212a05f12cc4db4570ffb5cc8f36fb3775f9ac72f323e', '4c1b977065ac9689fc4992c7139f685e16f6489240d1f195ebe4044c20e99b07', '7823748b4050231a7a8bfbc781181bab1aea425a5c5c6855b06a5d7f0918d1a9'],
+  'lib/runtime-data.ts': ['22cad0412d5a831000a671fc210edde6e7eb6285ea49356981b4e80d9ab0d729', '17ef4bdd043cd5e61fc23bee9516acb66696f4775f53c347048277c32693de3b', 'da5854ee29102d44e966881ccdc2679afd1691d12eee0a1365803b86f0d6ff82'],
+  'lib/runtime-behavior.ts': ['8d74f0dc280c8a42e4e64e1b47a0df0d11f09beba8605808c5263a81a6f3b94d', '84f4d5c3c7c0f01e033d48476e419150ba1ed28fc28542c61f319613f8d59609', 'bac62b9460c693e064c4f0e516d6e2f382c7a22ed21548ae1a3a59e633dca2d1'],
+  'app/layouts/[id]/runtime-layout-client.tsx': ['6becf8abb393e1e501f75390540b0fbefec17c9ca77803fc4f9352157a67249e', '12d62d25e10b9a94af9e23f997c0bfc1f522c5d50906d67cc6b13a10de6748e5', '40c2f2e4b688c23049ecd70ae2d707766a079953e09134c3ddfd13e7fea09a5b']
 };
 
 export function normalizedHash(content: Buffer): string {
@@ -181,7 +183,12 @@ export class FmWebRuntimeGenerator {
       const sourcePath = path.join(templateRoot, relativePath);
       const outputPath = path.join(outputRoot, relativePath);
       const managedKey = relativePath.split(path.sep).join('/');
-      const content = await readFile(sourcePath);
+      const sourceContent = await readFile(sourcePath);
+      const content = relativePath === 'package.json'
+        ? Buffer.from(`${JSON.stringify({ ...JSON.parse(sourceContent.toString('utf8')), dependencies: {
+            ...JSON.parse(sourceContent.toString('utf8')).dependencies, '@fmweb/shared': 'file:./shared'
+          } }, null, 2)}\n`)
+        : sourceContent;
 
       // lstat, not access: a link (even a dangling one) is something the user or the repository put
       // there, and a write would follow it to wherever it points. Leave it alone; for a managed
@@ -189,7 +196,7 @@ export class FmWebRuntimeGenerator {
       await this.assertSafeFolder(path.dirname(outputPath));
       const present = await lstat(outputPath).catch(() => undefined);
       if (present) {
-        const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey];
+        const legacyHashes = MANAGED_TEMPLATE_FILES[managedKey] ?? (relativePath === 'package.json' ? [normalizedHash(sourceContent)] : undefined);
         if (present.isDirectory()) {
           throw new Error(`${relativePath} in the generated runtime is a folder, not a file; remove it and try again.`);
         }
@@ -201,7 +208,7 @@ export class FmWebRuntimeGenerator {
           }
           continue;
         }
-        const decision = legacyHashes
+        const decision = relativePath === 'package.json' && content.equals(await readFile(outputPath)) ? 'current' : legacyHashes
           ? decideManagedRefresh(await readFile(outputPath), legacyHashes, SHIPPED_MARKED_HASHES[managedKey] ?? [])
           : 'skip';
         if (decision === 'refresh') {
@@ -223,6 +230,34 @@ export class FmWebRuntimeGenerator {
       await this.assertSafeFolder(path.dirname(outputPath));
       await writeManagedFile(outputPath, content);
       created.push(relativePath);
+    }
+
+    const sharedRoot = path.join(templateRoot, '..', 'shared');
+    const sharedOutput = path.join(outputRoot, 'shared');
+    const sharedFiles = ['package.json', ...await collectFiles(path.join(sharedRoot, 'src'), path.join(sharedRoot, 'src')).then((files) => files.map((file) => path.join('src', file)))];
+    for (const file of sharedFiles) {
+      const target = path.join(sharedOutput, file);
+      const reported = path.join('shared', file);
+      let content = await readFile(path.join(sharedRoot, file));
+      if (file === 'package.json') {
+        const pkg = JSON.parse(content.toString('utf8'));
+        // Next transpiles this source package; no prebuilt/stale shared dist is copied.
+        content = Buffer.from(`${JSON.stringify({ ...pkg, main: 'src/index.ts', types: 'src/index.ts', scripts: {} }, null, 2)}\n`);
+      }
+      await this.assertSafeFolder(path.dirname(target));
+      const present = await lstat(target).catch(() => undefined);
+      if (present) {
+        skipped.push(reported);
+        if (!present.isFile() || !content.equals(await readFile(target))) {
+          needsManualUpdate.push(reported);
+          this.logger.warn('A generated shared file was edited and was not refreshed.', { file: reported });
+        }
+      } else {
+        await mkdir(path.dirname(target), { recursive: true });
+        await this.assertSafeFolder(path.dirname(target));
+        await writeManagedFile(target, content);
+        created.push(reported);
+      }
     }
 
     return {
@@ -282,7 +317,8 @@ export class FmWebRuntimeGenerator {
     }
 
     const raw = await readFile(selected.filePath, 'utf8');
-    const layout = migrateLayoutDefinition(JSON.parse(raw));
+    const parsed = migrateLayoutDefinition(JSON.parse(raw));
+    const layout = await this.fmWebProjectService.prepareLayout?.(parsed) ?? parsed;
     const outputDir = this.getGeneratedLayoutsRoot();
     const outputPath = path.join(outputDir, `${layout.id}.layout.json`);
 

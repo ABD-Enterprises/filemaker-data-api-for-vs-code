@@ -1,0 +1,84 @@
+:root {
+  color-scheme: light;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(145deg, #f4f8fb 0%, #edf2f6 100%);
+  color: #182a3a;
+}
+
+.runtime-home,
+.runtime-layout-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.runtime-layout-page {
+  display: grid;
+  gap: 12px;
+}
+
+.runtime-layout-header h1 {
+  margin: 0;
+}
+
+.runtime-layout-header p {
+  margin: 6px 0 0;
+  color: #4a6073;
+  font-size: 14px;
+}
+
+.runtime-toolbar {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.runtime-toolbar button {
+  border: 1px solid #99acc0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #1f3850;
+  cursor: pointer;
+}
+
+.runtime-toolbar button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.runtime-canvas-host {
+  width: 100%;
+  min-height: 520px;
+  height: clamp(520px, 72vh, 860px);
+  border: 1px solid #c7d4e1;
+  border-radius: 10px;
+  background: #f3f7fb;
+  padding: 12px;
+}
+
+.runtime-action-result {
+  border: 1px solid #cad7e5;
+  background: #f8fbff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #233a4f;
+  font-size: 14px;
+}
+
+.runtime-action-result.ok {
+  border-color: #8fc39d;
+  background: #f5fcf7;
+}
+
+.runtime-action-result.error {
+  border-color: #d6a2a2;
+  background: #fff6f6;
+}

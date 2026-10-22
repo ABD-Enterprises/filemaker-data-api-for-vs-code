@@ -214,7 +214,7 @@ export class FmBridgeServer {
         error,
         status
       });
-      this.sendJson(response, status, { error: message });
+      this.sendJson(response, status, { error: message, ...(error instanceof FMClientError && error.code ? { code: error.code } : {}) });
     }
   }
 
@@ -288,9 +288,10 @@ export class FmBridgeServer {
         const recordId = requireString(payload.recordId, 'recordId');
         const fieldData = asObject(payload.fieldData, 'fieldData');
         assertNoNulText(fieldData);
+        const modId = typeof payload.modId === 'string' ? payload.modId : undefined;
         const result = await this.fmClient.editRecord(profile, layout, recordId, fieldData, {
           signal: controller.signal
-        });
+        }, modId !== undefined ? { modId } : undefined);
         return result as unknown as Record<string, unknown>;
       }
 
