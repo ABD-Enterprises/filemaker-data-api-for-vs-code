@@ -1,6 +1,7 @@
 import type { ConnectionProfile } from '../types/fm';
 import { redactString } from '../utils/redact';
-import { AiToolError, type ConfirmSpec } from './aiToolService';
+import { AiToolError } from './tools/errors';
+import type { ConfirmSpec } from './tools/types';
 import { MAX_DIALOG_DETAIL_CHARS, MAX_FIELDS_PER_WRITE, MAX_SCRIPT_PARAMETER_CHARS, MAX_WRITE_VALUE_CHARS } from './aiToolDefinitions';
 import { displayText } from './aiText';
 
