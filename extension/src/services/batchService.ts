@@ -250,8 +250,9 @@ export class BatchService {
     }));
     const seenIds = new Set<string>();
     const duplicates = new Set<BatchUpdateEntry>();
-    const duplicateReason = 'Duplicate recordId in this file; later row skipped. Only the first row for each record is used.';
+    const duplicateReason = 'Duplicate recordId in this file; later row skipped. Only the first row with editable values for each record is used.';
     for (const entry of queue) {
+      if (Object.keys(entry.fieldData).length === 0) continue;
       if (seenIds.has(entry.recordId)) {
         duplicates.add(entry);
         const warning = `Row ${entry.recordId}: ${duplicateReason}`;
@@ -425,9 +426,10 @@ export class BatchService {
         return;
       } catch (error) {
         if (outcomeUnknown && error instanceof FMClientError && error.code === '306') {
+          if (job?.isCancellationRequested()) throw new UnconfirmedUpdateError();
           try {
             const current = await this.fmClient.getRecord(profile, layout, entry.recordId);
-            if (Object.entries(entry.fieldData).every(([name, value]) => stableStringify(current.fieldData[name]) === stableStringify(value))) {
+            if (Object.entries(entry.fieldData).every(([name, value]) => sameWrittenValue(current.fieldData[name], value))) {
               adaptive.recordSuccess(Date.now() - startedAt);
               breaker.recordSuccess();
               return;
@@ -457,6 +459,14 @@ export class BatchService {
       }
     }
   }
+}
+
+/** Compare reread values without changing the fields or values sent to FileMaker. */
+function sameWrittenValue(left: unknown, right: unknown): boolean {
+  const normalize = (value: unknown): unknown => typeof value === 'string'
+    ? numericText(value.replace(/\r\n?/g, '\n').trimEnd())
+    : value;
+  return stableStringify(normalize(left)) === stableStringify(normalize(right));
 }
 
 class UnconfirmedUpdateError extends FMClientError {
@@ -669,8 +679,8 @@ function normalizeBatchUpdateEntry(input: unknown): BatchUpdateEntry {
 
   if (record.modId !== undefined && typeof record.modId !== 'string') throw new Error('Batch update modId must be a string.');
   return {
-    recordId,
-    ...(typeof record.modId === 'string' && record.modId !== '' ? { modId: record.modId } : {}),
+    recordId: recordId.trim(),
+    ...(typeof record.modId === 'string' && record.modId.trim() !== '' ? { modId: record.modId.trim() } : {}),
     fieldData: fieldData as Record<string, unknown>
   };
 }
