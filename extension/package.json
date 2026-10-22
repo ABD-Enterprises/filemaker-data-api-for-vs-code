@@ -1503,8 +1503,8 @@
           "filemaker.advanced.powerUserMode": {
             "type": "boolean",
             "default": false,
-            "description": "Per workspace. Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
-            "markdownDescription": "**Per workspace.** Surface diagnostic / plugin / circuit-breaker / job-runner / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
+            "description": "Per workspace. Surface diagnostic / plugin / circuit-breaker / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
+            "markdownDescription": "**Per workspace.** Surface diagnostic / plugin / circuit-breaker / import-export commands in the Command Palette. Off by default to keep the FileMaker palette focused on commands new users actually need.",
             "order": 4
           },
           "filemaker.logging.level": {

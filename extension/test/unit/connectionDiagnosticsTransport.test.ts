@@ -50,7 +50,7 @@ describe('diagnosis uses the real FMClient unauthenticated transport', () => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); setAgentReplacedPolicy(() => false); });
 it.each(['fallback', 'on', 'off'])('names an unreachable environment proxy for legacy self-signed profiles (%s)', async (proxySupport) => {
   vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({ get: (key: string, fallback: unknown) => key === 'proxySupport' ? proxySupport : fallback } as never);
-  vi.stubEnv('HTTPS_PROXY', 'http://user:secret@127.0.0.9:4321'); vi.stubEnv('https_proxy', ''); vi.stubEnv('ALL_PROXY', ''); vi.stubEnv('all_proxy', ''); vi.stubEnv('NO_PROXY', ''); vi.stubEnv('no_proxy', '');
+  vi.stubEnv('https_proxy', ''); vi.stubEnv('ALL_PROXY', ''); vi.stubEnv('all_proxy', ''); vi.stubEnv('NO_PROXY', ''); vi.stubEnv('no_proxy', ''); vi.stubEnv('HTTPS_PROXY', 'http://user:secret@127.0.0.9:4321'); // set last: Windows env names ignore case
   const { fm, request } = client();
   request.mockImplementationOnce(async (config) => {
     throw Object.assign(new axios.AxiosError('connect ECONNREFUSED 127.0.0.9:4321', 'ECONNREFUSED', config), { cause: { code: 'ECONNREFUSED', address: '127.0.0.9', port: 4321 } });
@@ -61,7 +61,7 @@ it.each(['fallback', 'on', 'off'])('names an unreachable environment proxy for l
   expect(config.httpsAgent.options.rejectUnauthorized).toBe(false);
 });
 it('keeps server advice when the failed address is the server, even with an environment proxy set', async () => {
-  vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.9:4321'); vi.stubEnv('https_proxy', ''); vi.stubEnv('NO_PROXY', ''); vi.stubEnv('no_proxy', '');
+  vi.stubEnv('https_proxy', ''); vi.stubEnv('NO_PROXY', ''); vi.stubEnv('no_proxy', ''); vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.9:4321'); // set last: Windows env names ignore case
   const { fm, request } = client();
   request.mockImplementationOnce(async (config) => { throw Object.assign(new axios.AxiosError('refused', 'ECONNREFUSED', config), { cause: { address: '192.0.2.1', port: 443 } }); });
   await expect(fm.getProductInfoDiagnostics(profile)).rejects.toMatchObject({ message: expect.stringContaining('Nothing is listening on fm.example.test') });

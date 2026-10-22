@@ -219,7 +219,7 @@ export function registerBatchCommands(deps: RegisterBatchCommandsDeps): vscode.D
             if (rowsWithModId === 0) {
               const choice = await vscode.window.showWarningMessage(
                 'This file has no modId column, so updates cannot detect newer changes. Continue without the check?',
-                { modal: true }, 'Continue', 'Cancel'
+                { modal: true }, 'Continue'
               );
               if (choice !== 'Continue') return;
             } else {
