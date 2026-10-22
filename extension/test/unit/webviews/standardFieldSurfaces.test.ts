@@ -129,8 +129,8 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
         document.head.appendChild(sheet);
         const control = document.querySelector('${surface === 'recordEditor' ? '#fieldEditor' : '#fieldDataContainer'} textarea');
         const style = getComputedStyle(control);
-        if (style.borderTopWidth !== '1px' || style.borderTopStyle !== 'solid' || style.borderRadius !== '4px'
-          || style.paddingTop !== '8px' || style.paddingBottom !== '8px' || style.paddingLeft !== '10px'
+        if (style.borderTopWidth !== '1px' || style.borderTopStyle !== '${surface === 'recordViewer' ? 'dashed' : 'solid'}' || style.borderRadius !== '4px'
+          || style.paddingTop !== '6px' || style.paddingBottom !== '6px' || style.paddingLeft !== '10px'
           || style.boxSizing !== 'border-box') throw new Error('${surface} control box differs from the standard input: ' + JSON.stringify([style.borderTopWidth, style.borderTopStyle, style.borderRadius, style.paddingTop, style.paddingBottom, style.paddingLeft, style.boxSizing]));
         ${surface === 'recordViewer' ? `
         const cell = control.parentElement;
@@ -214,11 +214,11 @@ it('the browser build generates bounded CSS from the shared rules, with narrow w
   const css = exports.exports.standardFieldsCss(true);
   for (const [width, height] of sizes) {
     expect(css).toContain(`[data-fm-width="${width}"] { --fm-field-width: ${width}px; }`);
-    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height}px; }`);
+    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height === 34 ? 'var(--fm-control-height)' : `${height}px`}; }`);
   }
   for (let count = 1; count <= 50; count += 1) {
     const height = Math.max(34, count * 24);
-    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height}px; }`);
+    expect(css).toContain(`[data-fm-height="${height}"] { --fm-field-height: ${height === 34 ? 'var(--fm-control-height)' : `${height}px`}; }`);
   }
   expect(css).toContain('gap: 16px 24px');
   expect(css).toContain('min-height: 24px');

@@ -139,18 +139,6 @@
   transition: background 0.15s;
 }
 
-.status { display: none; }
-
-.status.error {
-  display: block;
-}
-
-.status.success { display: block; }
-
-.status.warning {
-  display: block;
-}
-
 .loading-skeleton {
   display: flex;
   flex-direction: column;

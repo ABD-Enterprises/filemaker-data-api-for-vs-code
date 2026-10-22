@@ -125,7 +125,7 @@ export class SchemaDiffPanel {
 </head>
 <body>
   <main class="container">
-    <header class="fm-panel">
+    <header>
       <h1>FileMaker Schema Diff</h1>
       <p id="meta"></p>
       <div class="summary" id="summary" role="status" aria-live="polite"></div>

@@ -156,6 +156,7 @@ export class ConnectionWizardPanel {
     <h1>Connection Profile</h1>
     <p class="subtitle">Configure a connection to your FileMaker Server.</p>
 
+    <div class="fm-panel">
     <div class="form-section">
       <h2>Profile</h2>
       <div class="field">
@@ -289,6 +290,7 @@ export class ConnectionWizardPanel {
     </div>
 
     <div id="status" class="status" role="status" aria-live="polite"></div>
+    </div>
   </form>
 
   ${versionFooterHtml()}

@@ -387,7 +387,7 @@ export class RecordViewerPanel {
 </head>
 <body>
   <div class="container">
-    <header class="header fm-panel">
+    <header class="header">
       <h1>FileMaker Record Viewer</h1>
       <p>Inspect one record and related portal data.</p>
     </header>

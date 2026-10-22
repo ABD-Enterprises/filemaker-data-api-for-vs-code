@@ -70,7 +70,7 @@ textarea {
 }
 
 .builder-field textarea {
-  min-height: 36px;
+  min-height: var(--fm-control-height);
 }
 
 .builder-json-value {

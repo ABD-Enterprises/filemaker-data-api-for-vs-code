@@ -717,7 +717,7 @@ export class RecordEditorPanel {
 </head>
 <body>
   <div class="container">
-    <header class="header fm-panel">
+    <header class="header">
       <h1>FileMaker Record Editor</h1>
       <p>Load a record, edit fieldData, preview patch JSON, and save safely.</p>
     </header>

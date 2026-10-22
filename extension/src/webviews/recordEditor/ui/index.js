@@ -648,7 +648,7 @@ function buildFieldEditor(keys) {
     input.rows = 2;
     input.value = toEditableValue(state.draftFieldData[key]);
     const note = readOnlyNote(key);
-    input.disabled = Boolean(note);
+    input.readOnly = Boolean(note);
     input.addEventListener('input', () => {
       if (readOnlyNote(key)) return;
       state.draftFieldData[key] = parseEditableValue(input.value, key);

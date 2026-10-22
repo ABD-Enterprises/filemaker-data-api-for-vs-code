@@ -31,7 +31,7 @@ export function getHtmlForWebview(webview: vscode.Webview, extensionUri: vscode.
 </head>
 <body>
   <div class="container">
-    <header class="header fm-panel">
+    <header class="header">
       <h1>FileMaker Query Builder</h1>
       <p>Build a find request, run it, and open any record from the results.</p>
     </header>

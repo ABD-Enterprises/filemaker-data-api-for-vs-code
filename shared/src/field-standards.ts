@@ -68,7 +68,7 @@ export function standardFieldsCss(webview = false): string {
 .fm-field-table > tbody > tr > td { display: block; border: 0; padding: 0; max-width: 100%; min-width: 0; }
 .fm-field-table > tbody > tr > td.fm-field-control { padding: 8px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 ${[...widths].map((width) => `[data-fm-width="${width}"] { --fm-field-width: ${width}px; }`).join('\n')}
-${[...heights].map((height) => `[data-fm-height="${height}"] { --fm-field-height: ${height}px; }`).join('\n')}
+${[...heights].map((height) => `[data-fm-height="${height}"] { --fm-field-height: ${webview && height === FIELD_LAYOUT.inputHeight ? 'var(--fm-control-height)' : `${height}px`}; }`).join('\n')}
 @media (max-width: 640px) {
   .fm-fields { flex-direction: column; }
 }
@@ -79,6 +79,9 @@ ${[...heights].map((height) => `[data-fm-height="${height}"] { --fm-field-height
 function webviewBaseCss(): string {
   return `
 :root {
+  --fm-control-height: ${FIELD_LAYOUT.inputHeight}px;
+  --fm-input-background: var(--vscode-input-background, #ffffff);
+  --fm-input-foreground: var(--vscode-input-foreground, #333333);
   --fm-page-width: 1200px;
   --fm-control-radius: 4px;
   --fm-panel-radius: 8px;
@@ -97,6 +100,10 @@ function webviewBaseCss(): string {
   --success: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-terminal-ansiGreen, var(--vscode-foreground, #333333))));
   --error: var(--vscode-errorForeground, #a1260d);
 }
+.vscode-dark, .vscode-high-contrast {
+  --fm-input-background: var(--vscode-input-background, #3c3c3c);
+  --fm-input-foreground: var(--vscode-input-foreground, #cccccc);
+}
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--vscode-font-family, sans-serif); font-size: var(--vscode-font-size, 13px); color: var(--text); background: var(--bg); line-height: 1.4; }
 .container, .wrap, .fm-page, .app-shell { width: 100%; max-width: var(--fm-page-width); margin: 0; padding: 16px; min-width: 0; }
@@ -104,11 +111,15 @@ h1 { margin: 0 0 8px; font-size: 1.6em; font-weight: 600; }
 h2 { margin: 0 0 12px; font-size: 1.2em; font-weight: 600; }
 h3 { font-size: 1.05em; }
 .panel, .card, .form-section, .pane, .center-pane, .console-pane, .builder-panel, .fm-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--fm-panel-radius); padding: var(--fm-panel-padding); min-width: 0; }
-input, select, textarea { font: inherit; border: 1px solid var(--border); border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border))); border-radius: var(--fm-control-radius); padding: 8px 10px; min-width: 0; background: var(--vscode-input-background, #ffffff); color: var(--vscode-input-foreground, var(--text)); accent-color: var(--vscode-focusBorder, #007acc); }
+input, select, textarea { font: inherit; border: 1px solid var(--border); border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border))); border-radius: var(--fm-control-radius); padding: 6px 10px; min-width: 0; background: var(--fm-input-background); color: var(--fm-input-foreground); accent-color: var(--vscode-focusBorder, #007acc); }
+input:not([type="checkbox"]):not([type="radio"]), select { height: var(--fm-control-height); }
 code, pre, .fm-code { font-family: var(--vscode-editor-font-family, monospace); }
-input:disabled, select:disabled, textarea:disabled, [readonly], .fm-readonly { background: var(--vscode-input-background, #ffffff); background: color-mix(in srgb, var(--vscode-input-background, #ffffff) 85%, var(--bg)); color: var(--vscode-disabledForeground, var(--muted)); resize: none; }
-button, summary.secondary, details.menu > summary { font: inherit; font-weight: 500; border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: var(--fm-control-radius); background: var(--accent); color: var(--accent-text); padding: 5px 12px; cursor: pointer; }
-.actions > button, .actions > details > summary { min-height: 32px; }
+[readonly], .fm-readonly { background: var(--fm-input-background); color: var(--fm-input-foreground); border-style: dashed; border-color: var(--vscode-contrastBorder, var(--vscode-input-border, var(--border))); cursor: default; resize: none; }
+input:disabled, select:disabled, textarea:disabled { background: var(--fm-input-background); color: var(--vscode-disabledForeground, var(--muted)); cursor: default; resize: none; }
+@media (forced-colors: active) {
+  [readonly], .fm-readonly { background: Canvas; color: CanvasText; border-color: CanvasText; forced-color-adjust: auto; }
+}
+button, summary.secondary, details.menu > summary { font: inherit; font-weight: 500; border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: var(--fm-control-radius); background: var(--accent); color: var(--accent-text); padding: 5px 12px; min-height: 32px; align-self: center; cursor: pointer; }
 button:hover:not(:disabled) { background: var(--accent-strong); }
 button.secondary, summary.secondary, details.menu > summary, .mode-switch button, .mode-toggle button, .tool-grid button, .object-list button, .action-row button, .field-chip, .inspector-field button, .portal-column-actions button, .portal-field-chip { background: var(--secondary); color: var(--secondary-text); }
 button.secondary:hover:not(:disabled), summary.secondary:hover, details.menu > summary:hover, .mode-switch button:hover, .mode-toggle button:hover { background: var(--secondary-hover); }
@@ -125,7 +136,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--vsco
 .fm-banner.error, .status.error, .summary.error, .conflict { background: var(--vscode-inputValidation-errorBackground, var(--panel)); color: var(--vscode-inputValidation-errorForeground, var(--text)); border-color: var(--vscode-contrastBorder, var(--vscode-inputValidation-errorBorder, var(--error))); }
 .fm-banner.warning, .status.warning, .restricted-notice, .legacy-tls-warning { background: var(--vscode-inputValidation-warningBackground, var(--panel)); color: var(--vscode-inputValidation-warningForeground, var(--text)); border-color: var(--vscode-contrastBorder, var(--vscode-inputValidation-warningBorder, var(--border))); }
 .fm-banner.success, .status.success { background: color-mix(in srgb, var(--success) 12%, var(--bg)); color: var(--text); border-color: var(--vscode-contrastBorder, var(--success)); }
-.fm-banner:empty, .status:empty, .summary:empty { display: none; }
+.fm-banner:empty, .status:empty, .summary:empty { min-height: 0; padding: 0; margin: 0; border: 0; }
 table { width: 100%; border-collapse: collapse; font: inherit; }
 th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
 th { font-weight: 600; background: var(--panel); }

@@ -293,12 +293,14 @@ export function renderEffectiveSettingsHtml(
 </style></head>
 <body class="fm-page">
 <h1>Effective settings</h1>
+<div class="fm-panel">
 <p class="muted">What is in effect, where it comes from, and why a workspace value is ignored. Read-only snapshot taken at ${escapeHtml(asOf)}; it refreshes when settings change. <button id="refresh">Refresh</button></p>
 <ul class="muted">${notes}</ul>
 <table><thead><tr><th>Setting</th><th>In effect</th><th>Comes from</th><th>User value</th><th>Workspace value</th><th>Notes</th></tr></thead>
 <tbody>
 ${body}
 </tbody></table>
+</div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.addEventListener('click', (event) => {

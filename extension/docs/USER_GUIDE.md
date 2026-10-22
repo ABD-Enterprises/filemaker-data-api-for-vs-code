@@ -57,7 +57,7 @@ Turn off offline mode before running a check. In Restricted Mode, you can check 
 
 ## Command reference
 
-FileMaker screens use the same fonts, buttons and boxed messages, and follow your VS Code theme. Fields you cannot edit have dimmed text and no resize handle. JSON boxes use the editor font. Layout Mode uses these styles around the page you are designing; the page itself keeps its own appearance.
+FileMaker screens use the same fonts, buttons and boxed messages, and follow your VS Code theme. Read-only fields keep normal text contrast and have a dashed border and no resize handle. Unavailable controls use dimmer text. Page titles sit above the content panels, and input and button sizes match across screens. Empty status messages stay ready for screen readers to announce the first update. JSON boxes use the editor font. Layout Mode uses these styles around the page you are designing; the page itself keeps its own appearance.
 
 The table lists every extension command. Titles have the **FileMaker:** prefix in VS Code. “Shown” describes palette visibility; “needs” describes additional requirements when you run the command. A profile means a saved connection profile. Server operations also need access to the server and the relevant FileMaker privileges. Feature settings, workspace trust, offline mode and enterprise policy still apply as described in the sections below.
 
@@ -98,7 +98,7 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Show Request History | Lists recent requests and opens a selected entry's details as JSON. | Shown in power-user mode; needs recorded requests. |
 | Refresh Connections | Refreshes the FileMaker Connections tree. | Connections toolbar action; hidden from the Command Palette. |
 | Capture Schema Snapshot | Saves the chosen layout's current metadata as a schema snapshot. | Shown with a profile; needs layout metadata support. |
-| Diff Schema Snapshots | Compares two saved snapshots for a layout. Changes are shown first; clear **Show only changes** to see all fields. | Shown when snapshots exist; needs two snapshots for the chosen profile and layout. |
+| Diff Schema Snapshots | Compares two saved snapshots for a layout. Opens with **Show only changes** ticked; clear it to see all fields. | Shown when snapshots exist; needs two snapshots for the chosen profile and layout. |
 | Diff Against Latest Snapshot | Compares current layout fields with its latest saved snapshot. | Shown when snapshots exist; needs a snapshot and current layout metadata. |
 | Open Schema Snapshot JSON | Opens a saved schema snapshot as JSON. | Shown when snapshots exist. |
 | Write AI Context | Writes selected layout schemas and script names to an AI context Markdown file. | Shown with a profile; writing inside the workspace needs trust. |
@@ -557,7 +557,7 @@ Some layouts list the same field more than once. The editor shows one value per 
 
 **Known gap: creating related records.** FileMaker accepts related records when creating a record, but this extension's Create Record sends only the main record's fields. It cannot yet create portal rows. A real-server check created a related record in **Phone Numbers**, with **Phone Numbers::Number** and **Phone Numbers::Type**; that support has not been added to the extension.
 
-When the layout field list is available, calculation and summary fields are disabled in the Record Editor with a note explaining why. Container fields are disabled with **Use Upload to container**; use the separate upload action. Save and Create Record leave these fields out, including repetitions such as `Calc(1)` and `Calc(2)`. The extension checks this again before sending a change. Global fields remain editable and show **Session-wide** because they apply throughout the connection session. Read-only fields keep the same standard field presentation. If the field list is unavailable, the editor warns that it cannot identify read-only fields; check the field types before saving. FileMaker still decides which fields your account can change.
+When the layout field list is available, calculation and summary fields are read-only in the Record Editor with a note explaining why. Container fields are read-only with **Use Upload to container**; use the separate upload action. Save and Create Record leave these fields out, including repetitions such as `Calc(1)` and `Calc(2)`. The extension checks this again before sending a change. Global fields remain editable and show **Session-wide** because they apply throughout the connection session. Read-only fields keep the same standard field presentation. If the field list is unavailable, the editor warns that it cannot identify read-only fields; check the field types before saving. FileMaker still decides which fields your account can change.
 
 ## Batch export and batch update
 
@@ -719,7 +719,7 @@ A snapshot records a layout's fields and metadata at a moment in time, so you ca
 
 1. Right-click a layout and choose **Capture Schema Snapshot** (or run **FileMaker: Capture Schema Snapshot**).
 2. Later, choose **Diff Against Latest Snapshot** on the layout, or **FileMaker: Diff Schema Snapshots** to compare any two.
-3. The **Schema Diff** panel shows added, removed and changed fields side by side or as a tree. **Export Diff JSON** saves it.
+3. The **Schema Diff** panel opens with **Show only changes** ticked and shows added, removed and changed fields side by side or as a tree. Clear the box to include unchanged fields. **Export Diff JSON** saves it.
 
 ![The Schema Diff panel with a field added and a field removed](./marketplace/schema-diff.png)
 
