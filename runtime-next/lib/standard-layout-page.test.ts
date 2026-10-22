@@ -26,9 +26,21 @@ function fixture(): LayoutDefinition {
 }
 
 describe('web layout view page', () => {
+  it('awaits Next route promises before reading identifiers and query values', async () => {
+    vi.mocked(loadLayoutDefinition).mockResolvedValue(fixture());
+    const route = await LayoutPage({
+      params: Promise.resolve({ id: ' Exact id ' }),
+      searchParams: Promise.resolve({ recordId: '19', foundIndex: '2', debug: '1' })
+    });
+    expect(loadLayoutDefinition).toHaveBeenCalledWith(' Exact id ');
+    const client = React.Children.toArray(route.props.children).find((child) =>
+      React.isValidElement(child) && child.type !== 'style') as React.ReactElement<Record<string, unknown>>;
+    expect(client.props).toMatchObject({ initialRecordId: '19', initialRecordIndex: 2, debug: true });
+  });
+
   it('renders the shared standard widths, full control heights and top labels', async () => {
     vi.mocked(loadLayoutDefinition).mockResolvedValue(fixture());
-    const markup = renderToStaticMarkup(await LayoutPage({ params: { id: 'layout' } }));
+    const markup = renderToStaticMarkup(await LayoutPage({ params: Promise.resolve({ id: 'layout' }) }));
     expect(markup).toContain('data-fm-field-layout="standard"');
     for (const [width, height] of [[240, 34], [120, 34], [160, 34], [240, 96], [240, 160]]) {
       expect(markup).toContain(`data-fm-width="${width}" data-fm-height="${height}"`);
@@ -48,7 +60,7 @@ describe('web layout view page', () => {
     ];
     viewport = { width: 400, height: 200 };
     vi.mocked(loadLayoutDefinition).mockResolvedValue(layout);
-    const markup = renderToStaticMarkup(await LayoutPage({ params: { id: 'layout' } }));
+    const markup = renderToStaticMarkup(await LayoutPage({ params: Promise.resolve({ id: 'layout' }) }));
     for (const [id, y] of [['left', 24], ['right', 98], ['bottom', 172]]) {
       expect(markup).toMatch(new RegExp(`<div style="[^"]*left:24px;top:${y}px;[^"]*"[^>]*data-fm-field-id="${id}"`));
     }

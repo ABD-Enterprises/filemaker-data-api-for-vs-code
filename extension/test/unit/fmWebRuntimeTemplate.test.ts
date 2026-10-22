@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { createRequire } from 'module';
 import { chmod, link, lstat, mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -76,7 +77,67 @@ describe('FM Web runtime template', () => {
     expect(page).toContain('data-fm-field-layout="standard"');
     const client = await readFile(path.join(gen.getGeneratedRuntimeRoot(), 'app/layouts/[id]/runtime-layout-client.tsx'), 'utf8');
     expect(client).toContain('LayoutContainer');
-    expect(client).toContain('runtimeData={runtime.runtimeData}');
+    expect(client).toContain('fieldValues: edit ? edit.draft : runtime.runtimeData.fieldValues');
+  });
+
+  it('writes a working runtime and its shared source dependency with all screen fixes', async () => {
+    const gen = generator();
+    await gen.generateRuntimeAppTemplate();
+    const output = gen.getGeneratedRuntimeRoot();
+    const page = await readFile(path.join(output, 'app/layouts/[id]/page.tsx'), 'utf8');
+    expect(page).toContain('const { id } = await params');
+    expect(page).toContain('await searchParams');
+    const client = await readFile(path.join(output, 'app/layouts/[id]/runtime-layout-client.tsx'), 'utf8');
+    expect(client).toContain('Cancel'); expect(client).toContain('computeRecordPatch');
+    expect(client).not.toMatch(/Save Stamp|LastViewedAt/);
+    const css = await readFile(path.join(output, 'app/styles.css'), 'utf8');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr)');
+    expect(await readFile(path.join(output, 'lib/runtime-data.ts'), 'utf8')).toContain('fieldData, modId');
+    const shared = path.join(output, 'shared');
+    const pkg = JSON.parse(await readFile(path.join(output, 'package.json'), 'utf8'));
+    expect(pkg.dependencies['@fmweb/shared']).toBe('file:./shared');
+    // Model already-installed runtime dependencies, without installing anything.
+    await symlink(path.join(extensionDir, '..', 'node_modules'), path.join(output, 'node_modules'));
+    expect(createRequire(path.join(shared, 'src/index.ts')).resolve('zod')).toContain('node_modules');
+    expect(JSON.parse(await readFile(path.join(shared, 'package.json'), 'utf8')).main).toBe('src/index.ts');
+    for (const file of ['ui-renderer.tsx', 'layout-schema.ts', 'record-edit.ts']) {
+      expect(await readFile(path.join(shared, 'src', file), 'utf8')).toBe(await readFile(path.join(extensionDir, '../shared/src', file), 'utf8'));
+    }
+    expect(await readFile(path.join(output, 'next.config.ts'), 'utf8')).toContain("transpilePackages: ['@fmweb/shared']");
+    // Regeneration must preserve local shared edits, just like managed runtime edits.
+    await writeFile(path.join(shared, 'src/ui-renderer.tsx'), '// my change');
+    const again = await gen.generateRuntimeAppTemplate();
+    expect(again.needsManualUpdate).toContain(path.join('shared', 'src/ui-renderer.tsx'));
+    expect(await readFile(path.join(shared, 'src/ui-renderer.tsx'), 'utf8')).toBe('// my change');
+  });
+
+  it('updates an unedited generated dependency path and preserves an edited package file', async () => {
+    const gen = generator();
+    const pkgPath = path.join(gen.getGeneratedRuntimeRoot(), 'package.json');
+    await mkdir(path.dirname(pkgPath), { recursive: true });
+    await writeFile(pkgPath, await readFile(path.join(extensionDir, '../runtime-next/package.json')));
+    expect((await gen.generateRuntimeAppTemplate()).updated).toContain('package.json');
+    expect(JSON.parse(await readFile(pkgPath, 'utf8')).dependencies['@fmweb/shared']).toBe('file:./shared');
+    await writeFile(pkgPath, '{"name":"my-app","dependencies":{}}');
+    expect((await gen.generateRuntimeAppTemplate()).needsManualUpdate).toContain('package.json');
+    expect(JSON.parse(await readFile(pkgPath, 'utf8')).name).toBe('my-app');
+  });
+
+  it('refreshes the shipped old frame stylesheet, preserves edited CSS, and refuses linked shared folders', async () => {
+    const gen = generator();
+    const cssPath = path.join(gen.getGeneratedRuntimeRoot(), 'app/styles.css');
+    await mkdir(path.dirname(cssPath), { recursive: true });
+    const legacy = await readFile(path.join(extensionDir, 'test/fixtures/legacy-runtime-styles.css.txt'));
+    await writeFile(cssPath, legacy);
+    expect((await gen.generateRuntimeAppTemplate()).updated).toContain(path.join('app', 'styles.css'));
+    expect(await readFile(cssPath, 'utf8')).toContain('grid-template-columns: minmax(0, 1fr)');
+    await writeFile(cssPath, `${legacy.toString()}\n/* my edit */\n`);
+    expect((await gen.generateRuntimeAppTemplate()).needsManualUpdate).toContain(path.join('app', 'styles.css'));
+    expect(await readFile(cssPath, 'utf8')).toContain('my edit');
+    const outside = path.join(dir, 'outside-shared'); await mkdir(outside);
+    const shared = path.join(gen.getGeneratedRuntimeRoot(), 'shared'); await rm(shared, { recursive: true }); await symlink(outside, shared);
+    await expect(gen.generateRuntimeAppTemplate()).rejects.toThrow(/symlink/);
+    expect(await readdir(outside)).toEqual([]);
   });
 
   it('asks before replacing unrelated generated layout pages and marks new pages', async () => {
@@ -226,7 +287,7 @@ describe('FM Web runtime template', () => {
 
   it('a link at an ordinary (not managed) template file is skipped without a warning', async () => {
     const files = (await generator().generateRuntimeAppTemplate()).created;
-    const plain = files.find((file) => !['bridge-client.ts', 'runtime-data.ts', 'runtime-behavior.ts', 'runtime-layout-client.tsx'].includes(path.basename(file)) && file.endsWith('.json'));
+    const plain = files.find((file) => !['bridge-client.ts', 'runtime-data.ts', 'runtime-behavior.ts', 'runtime-layout-client.tsx'].includes(path.basename(file)) && file.endsWith('tsconfig.json'));
     expect(plain).toBeTruthy();
     const target = path.join(dir, 'runtime-next', plain as string);
     const outside = path.join(dir, 'elsewhere.json');

@@ -46,6 +46,10 @@ jobs:
       - name: Workflow regression tests
         run: node --test .github/tests/ci.test.mjs
 
+      # The extension imports the compiled shared package (dist/), which npm ci does not produce.
+      - name: Build shared package
+        run: npm run build -w shared
+
       - name: Mock API contract
         run: npm run mock:check -w extension
 

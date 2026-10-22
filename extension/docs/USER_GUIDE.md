@@ -131,8 +131,8 @@ The table lists every extension command. Titles have the **FileMaker:** prefix i
 | Sync FM Web Project Metadata | Saves layouts, scripts and fields for the selected project profile. | Shown with an initialized FM Web project; needs a profile and trust. |
 | Select Active Profile | Selects the active profile and, in a trusted folder, saves it to the FM Web project (creating the project if needed). | Shown with a profile. |
 | Open FM Web Layout Mode | Opens the visual editor for saved FM Web layouts. | Shown with an initialized FM Web project; needs trust. |
-| Generate FM Web Next.js App | Generates or updates the local preview app template. | Shown with an initialized project and installed preview template; needs trust. |
-| Generate FM Web Layout Page | Writes the runtime layout JSON artifact for a saved layout. | Shown with an initialized project; needs trust and a saved layout definition. |
+| Generate FM Web Next.js App | Generates or updates the local preview app and its shared field controls. | Shown with an initialized project and installed preview template; needs trust. |
+| Generate FM Web Layout Page | Writes a saved layout for the preview, including which fields can be edited. | Shown with an initialized project; needs trust and a saved layout definition. |
 | Start FM Web Preview Server | Starts the local bridge and launches the preview app in a terminal. | Shown with an initialized project and installed preview template; needs trust. |
 | Set AI Access for Connection | Chooses no AI access, read access or write access for a profile. | Shown with a profile; needs an unlocked profile. |
 | Switch AI Tools Off or On | Stops AI tools immediately or restores them after confirmation. | Shown while AI tools are active; also available from the AI status bar. |
@@ -793,7 +793,15 @@ Layout Mode has three new actions:
 
 FM Web checks its output folders before creating files. Your workspace folder may itself be a symbolic link, but a link below it, including `.fmweb`, `generated` or `runtime-next`, is refused. Choose a real folder there and try again.
 
-When you run **Generate FM Web Next.js App** or **Start FM Web Preview Server** again, the extension refreshes the few managed runtime files (marked `fmweb-managed: runtime template v3`) in an app you generated earlier. It never overwrites a file you edited and never follows a symbolic link: such files are left as they are, and a warning names each one ("These generated preview files were edited (or are symbolic links), so they were not updated: ..."). Delete the named files and run the command again to get fresh copies; until then the preview cannot reach the bridge.
+The web page loads records when it opens. **Find** lists records again; **Prev**, **Next** and **Reload** browse them. A loading message explains when records are being read, an empty page says there are no records, and a failed request shows its reason.
+
+Choose **Edit** to change the current record, then **Save** or **Cancel**. Only changed fields are sent. If someone changed the record after you opened it, the save is refused with error **306** and your draft stays on screen. Copy any changes you need to keep, choose **Cancel**, then **Reload** before editing again. Choose **Create** to fill in a new record and **Save** to create it, or **Cancel** to leave it. **Delete** asks you to confirm.
+
+Calculated fields, summary fields and containers cannot be edited here; each has the same note as the Record Editor. Global fields can be edited and have a session-wide note. Image container links show an image; other container links can be opened. Empty fields stay empty. Dates use text boxes in the server's date format, for example `31/12/2026`; keep that format when changing a date. Dates you leave alone keep their original value and are left out of the update. Number and date checks follow the Record Editor: safely sized decimal numbers are sent as numbers, larger numbers stay text, and FileMaker checks the final number/date format and field rules. Required fields are checked before saving. Text and spaces are kept as entered. If text contains NUL, the page explains that FileMaker may drop the rest and offers to remove only that character or cancel; if removal empties a field, it tells you before saving.
+
+The bridge connection detail is hidden during normal use. Add `?debug=1` to the page address (or `&debug=1` if it already has a question mark) to show it when checking a preview problem.
+
+When you run **Generate FM Web Next.js App** or **Start FM Web Preview Server** again, the extension refreshes the few managed runtime files (marked `fmweb-managed: runtime template v4`) in an app you generated earlier. It never overwrites a file you edited and never follows a symbolic link: such files are left as they are, and a warning names each one ("These generated preview files were edited (or are symbolic links), so they were not updated: ..."). Delete the named files and run the command again to get fresh copies; until then the preview may still show the older behaviour. The shared field controls are copied into the preview app’s shared folder; if you have edited those copies, they are also left alone and named in the warning.
 
 New fields added from the picker or toolbox continue below existing objects on the standard grid, including room for labels. The page grows as needed. Opening **Edit Record by ID** loads the supplied record automatically.
 

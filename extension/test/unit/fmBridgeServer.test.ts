@@ -76,6 +76,16 @@ describe('FmBridgeServer', () => {
     expect(getRecord).toHaveBeenCalledWith(profile, ' Exact ', '1', { signal: expect.any(AbortSignal) });
   });
 
+  it('forwards the loaded modId and returns FileMaker error 306 without retrying', async () => {
+    const editRecord = vi.fn().mockRejectedValue(new FMClientError('Record modification ID does not match.', { code: '306', status: 500 }));
+    const server = new FmBridgeServer(createProfileStoreStub(), createFmClientStub({ editRecord }), createFmWebProjectServiceStub(), logger);
+    const result = await invokeBridgeRequest(server, '/fm/editRecord', {
+      payload: { layout: ' Exact ', recordId: '19', modId: '7', fieldData: { ' Field ': 'changed' } }
+    });
+    expect(editRecord).toHaveBeenCalledExactlyOnceWith(profile, ' Exact ', '19', { ' Field ': 'changed' }, { signal: expect.any(AbortSignal) }, { modId: '7' });
+    expect(result).toMatchObject({ status: 500, json: { code: '306', error: 'Record modification ID does not match.' } });
+  });
+
   it.each(['/editRecord', '/createRecord'].flatMap((route) =>
     ['A\0B', 'A\0B\0C', ['safe', 'A\0B\0C'], { nested: 'A\0B\0C' }].map((value) => ({ route, value }))
   ))('refuses NUL on $route before calling FileMaker: $value', async ({ route, value }) => {
@@ -99,7 +109,7 @@ describe('FmBridgeServer', () => {
     });
     expect(response.status).toBe(200);
     if (route === '/editRecord') {
-      expect(client.editRecord).toHaveBeenCalledWith(profile, 'Contacts', '1', fields, expect.anything());
+      expect(client.editRecord).toHaveBeenCalledWith(profile, 'Contacts', '1', fields, expect.anything(), undefined);
     } else {
       expect(client.createRecord).toHaveBeenCalledWith(profile, 'Contacts', fields, expect.anything());
     }

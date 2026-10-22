@@ -1,4 +1,4 @@
-// fmweb-managed: runtime template v3. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v4. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 export interface RuntimeRecord {
   recordId: string;
   modId?: string;
@@ -30,6 +30,10 @@ export interface RuntimeRunScriptResponse {
   messages: Array<{ code: string; message: string }>;
 }
 
+export class RuntimeBridgeError extends Error {
+  constructor(message: string, public readonly code?: string) { super(message); }
+}
+
 export const BRIDGE_TOKEN_HEADER = 'X-FM-Bridge-Token';
 
 export class RuntimeBridgeClient {
@@ -50,7 +54,12 @@ export class RuntimeBridgeClient {
   }
 
   public async find(request: RuntimeFindRequest): Promise<RuntimeFindResponse> {
-    return this.post<RuntimeFindResponse>('find', request);
+    try {
+      return await this.post<RuntimeFindResponse>('find', request);
+    } catch (error) {
+      if (error instanceof RuntimeBridgeError && error.code === '401') return { data: [] };
+      throw error;
+    }
   }
 
   public async getRecord(layout: string, recordId: string): Promise<RuntimeRecord> {
@@ -60,9 +69,10 @@ export class RuntimeBridgeClient {
   public async editRecord(
     layout: string,
     recordId: string,
-    fieldData: Record<string, unknown>
+    fieldData: Record<string, unknown>,
+    modId?: string
   ): Promise<RuntimeEditResponse> {
-    return this.post<RuntimeEditResponse>('editRecord', { layout, recordId, fieldData });
+    return this.post<RuntimeEditResponse>('editRecord', { layout, recordId, fieldData, modId });
   }
 
   public async createRecord(layout: string, fieldData: Record<string, unknown>): Promise<RuntimeEditResponse> {
@@ -100,7 +110,11 @@ export class RuntimeBridgeClient {
     const body = await parseResponse(response);
     if (!response.ok) {
       const message = body && typeof body === 'object' ? String((body as { error?: string }).error ?? '') : '';
-      throw new Error(message || `Bridge request failed with status ${response.status}.`);
+      const code = body && typeof body === 'object' ? (body as { code?: string }).code : undefined;
+      if (code === '306' || /\b306\b/.test(message)) {
+        throw new RuntimeBridgeError('This record changed since you opened it (306). Your changes have not been saved. Cancel, reload the record, and try again.', '306');
+      }
+      throw new RuntimeBridgeError(message || `Bridge request failed with status ${response.status}.`, code);
     }
 
     return body as T;

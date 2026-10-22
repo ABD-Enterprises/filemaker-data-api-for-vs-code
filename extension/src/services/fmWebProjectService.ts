@@ -273,11 +273,24 @@ export class FmWebProjectService {
     this.assertWorkspaceTrusted();
     await this.ensureProjectInitialized();
 
-    const validated = validateLayoutDefinition(layout);
+    const validated = validateLayoutDefinition(await this.prepareLayout(layout));
     const filePath = this.getLayoutFilePath(validated.id);
     await this.writeJson(filePath, validated);
 
     return filePath;
+  }
+
+  public async prepareLayout(layout: LayoutDefinition): Promise<LayoutDefinition> {
+    if (!layout.fmLayoutName) return layout;
+    const [metadata] = await this.getDesignerLayouts([layout.fmLayoutName]);
+    return { ...layout, objects: layout.objects.map((object) => {
+      if (object.type !== 'field') return object;
+      const field = metadata?.fields.find((item) => item.name === object.fmFieldName);
+      if (!field) return object;
+      return { ...object, kind: field.kind ?? object.kind,
+        multiline: field.multiline || object.multiline || ['textarea', 'multiline'].includes(field.displayType ?? ''),
+        options: field.options ?? object.options, required: field.required ?? object.required };
+    }) };
   }
 
   public async getAvailableFields(layoutName?: string): Promise<string[]> {

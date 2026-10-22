@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The generated FM Web page opens again, no longer stretches sideways, and can edit and save records.
 - All screens now share the same fonts, buttons, messages and read-only look.
 - Read-only values stay easy to read, empty messages remain available to screen readers, and headings, panels and control sizes match across screens. Schema Diff opens with **Show only changes** ticked; clear it to see unchanged fields.
 - The user guide, upgrade notes and a changelog by version are now on the project's website.

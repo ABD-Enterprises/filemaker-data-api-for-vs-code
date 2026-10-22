@@ -1,4 +1,4 @@
-// fmweb-managed: runtime template v3. Field presentation uses the shared designer rules.
+// fmweb-managed: runtime template v4. Field presentation uses the shared designer rules.
 import { standardFieldsCss } from '@fmweb/shared';
 import { notFound } from 'next/navigation';
 import type { JSX } from 'react';
@@ -7,27 +7,30 @@ import { loadLayoutDefinition } from '../../../lib/layout-loader';
 import { RuntimeLayoutClient } from './runtime-layout-client';
 
 interface LayoutPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
-  searchParams?: Record<string, string | string[] | undefined>;
+  }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function LayoutPage({ params, searchParams }: LayoutPageProps): Promise<JSX.Element> {
-  const layout = await loadLayoutDefinition(params.id);
+  const { id } = await params;
+  const query = await searchParams;
+  const layout = await loadLayoutDefinition(id);
 
   if (!layout) {
     notFound();
   }
 
-  const initialRecordId = readSingleSearchParam(searchParams?.recordId);
-  const initialRecordIndex = readNumberSearchParam(searchParams?.foundIndex);
+  const initialRecordId = readSingleSearchParam(query?.recordId);
+  const initialRecordIndex = readNumberSearchParam(query?.foundIndex);
 
   return (
     <main className="runtime-layout-page" data-fm-field-layout="standard">
       <style>{standardFieldsCss()}</style>
       <RuntimeLayoutClient
         layout={layout}
+        debug={readSingleSearchParam(query?.debug) === '1'}
         initialRecordId={initialRecordId}
         initialRecordIndex={initialRecordIndex}
       />

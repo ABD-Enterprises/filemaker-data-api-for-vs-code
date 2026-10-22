@@ -533,7 +533,7 @@ export type StarterTemplate = 'blank' | 'form' | 'twoColumn' | 'formPortal';
 export interface StandardPortalMetadata { name: string; fields: string[] }
 
 export function createStandardField(
-  metadata: StandardFieldMetadata,
+  metadata: StandardFieldMetadata & { kind?: FieldLayoutObject['kind']; required?: boolean; options?: string[] },
   id: string,
   point: Point,
   zIndex: number
@@ -549,7 +549,10 @@ export function createStandardField(
       : ['radio', 'radiobuttongroup', 'radiobuttons'].includes(display) ? 'radio'
       : ['dropdown', 'popupmenu'].includes(display) ? 'dropdown' : 'editBox',
     format: metadata.type?.toLowerCase() === 'number' ? 'number' : metadata.type?.toLowerCase() === 'date' ? 'date' : 'text',
-    labelPosition: FIELD_LAYOUT.labelPosition, required: false
+    kind: metadata.kind ?? (metadata.type?.toLowerCase() === 'container' ? 'container' : 'normal'),
+    multiline: metadata.multiline === true || ['textarea', 'multiline'].includes(display) || ['long text', 'multiline text'].includes(metadata.type?.toLowerCase() ?? ''),
+    options: metadata.options,
+    labelPosition: FIELD_LAYOUT.labelPosition, required: metadata.required ?? false
   };
 }
 
