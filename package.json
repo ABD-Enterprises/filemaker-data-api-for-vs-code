@@ -21,6 +21,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "format": "npm run format --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",
+    "docs:site": "node tools/build-docs-site.mjs",
     "docs:api": "npm run docs:api -w extension",
     "package:check": "npm run package:check -w extension",
     "package:vsix": "npm run build --workspaces --if-present && npm run package:vsix -w extension",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.5",
+    "markdown-it": "^14.3.0",
     "yaml": "2.9.1"
   },
   "overrides": {

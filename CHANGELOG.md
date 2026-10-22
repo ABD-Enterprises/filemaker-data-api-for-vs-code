@@ -32,7 +32,7 @@ PR title prefix matches the highest-tier label added:
 
 ### [INTERNAL]
 
-- None.
+- The user guide, upgrade notes and a changelog by version are now on the project's website.
 
 ### [SECURITY]
 

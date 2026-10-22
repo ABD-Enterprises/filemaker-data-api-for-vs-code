@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The user guide, upgrade notes and a changelog by version are now on the project's website.
+
 ## 1.7.0
 
 _Released 2026-10-22._

@@ -12,6 +12,7 @@ One real FileMaker server was exercised on **2026-10-21**, but its version was n
 
 | I want to... | Read |
 | --- | --- |
+| Browse the website | [Documentation home](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/), [User Guide](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/guide/) and [Changelog by version](https://sureforgetech.github.io/filemaker-data-api-for-vs-code/changelog/) |
 | Use the extension | [User Guide](extension/docs/USER_GUIDE.md) |
 | Get help or report a bug | [Support](SUPPORT.md) |
 | Check which FileMaker versions work | [Compatibility](extension/docs/COMPATIBILITY.md) |
@@ -47,7 +48,7 @@ npm test
 
 Press `F5` in VS Code to open an Extension Development Host, then run **FileMaker: Add Connection Profile**. No FileMaker server? Run `npm run mock:server -w extension` and point a profile at the mock Data API described in [CONTRIBUTING.md](extension/CONTRIBUTING.md).
 
-Useful root scripts: `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run docs:api` (TypeDoc into `docs/api`), `npm run package:check` (run `npm run build` first; builds a VSIX into `artifacts/` and validates it). See [Contributing](extension/CONTRIBUTING.md) for the full checklist.
+Useful root scripts: `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run docs:api` (TypeDoc into `docs/api`), `npm run docs:site` (website into `pages`; open `pages/index.html` to preview it), `npm run package:check` (run `npm run build` first; builds a VSIX into `artifacts/` and validates it). See [Contributing](extension/CONTRIBUTING.md) for the full checklist.
 
 ## License
 

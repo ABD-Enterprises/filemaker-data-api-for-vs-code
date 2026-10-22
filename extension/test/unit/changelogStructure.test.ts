@@ -10,7 +10,9 @@ it('keeps the ledger instructions and starts a fresh ledger for the next release
   expect(root).toContain('labels, or\napplies the `changelog-skip` label');
   const unreleased = root.split('\n## Unreleased\n')[1]?.split('\n## ')[0];
   expect(unreleased?.match(/^### \[(?:BREAKING|FEATURE|FIX|INTERNAL|SECURITY)\]$/gm)).toHaveLength(5);
-  expect(unreleased?.match(/^- None\.$/gm)).toHaveLength(5);
+  for (const section of unreleased?.split(/^### /m).slice(1) ?? []) {
+    expect(section).toMatch(/^- .+/m);
+  }
   expect(root).toContain('\n## 1.7.0 (2026-10-22)\n');
   expect(root).not.toMatch(/^## 1\.6\.0/m);
   const features = root.split('\n## 1.7.0 (2026-10-22)\n')[1]?.split('### [FEATURE]')[1]?.split('### [FIX]')[0];
@@ -20,7 +22,7 @@ it('keeps the ledger instructions and starts a fresh ledger for the next release
 
 it('makes 1.7.0 notes available to the release helper and preserves earlier user notes', () => {
   const changelog = readExtension('CHANGELOG.md');
-  expect(changelog).toMatch(/^# Changelog\n\n## Unreleased\n\n## 1\.7\.0\n/);
+  expect(changelog).toMatch(/^# Changelog\n\n## Unreleased\n[\s\S]*?\n## 1\.7\.0\n/);
   const release = changelog.split('\n## 1.7.0\n')[1]?.split('\n## ')[0];
   expect(release).toContain('_Released 2026-10-22._');
   expect(release).toContain('Upgrading from 1.6.0 to 1.7.0');
