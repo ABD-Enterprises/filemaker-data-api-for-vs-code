@@ -1,2 +1,0 @@
-# Replace the modId with the one from the record you read: FileMaker refuses the edit (error 306) if the record changed since.
-curl -X PATCH 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42' -H 'Content-Type: application/json' -H "Authorization: Bearer $FM_TOKEN" --data-raw '{"fieldData":{"Status":"Inactive"},"modId":"<modId>"}'

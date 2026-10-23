@@ -1,1 +1,0 @@
-curl -X POST 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/_find' -H 'Content-Type: application/json' -H 'Authorization: Bearer <REDACTED>' --data-raw '{"query":[{"City":"Portland","Status":"==Active"},{"City":"Seattle","omit":"true"}],"sort":[{"fieldName":"Name","sortOrder":"ascend"}],"limit":25,"offset":26}'

@@ -1,2 +1,0 @@
-# Replace ./file-to-upload with the path of the file to send.
-curl -X POST 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42/containers/Photo/1' -H 'Authorization: Bearer <REDACTED>' -F 'upload=@./file-to-upload'

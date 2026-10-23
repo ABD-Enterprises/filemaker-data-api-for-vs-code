@@ -1,1 +1,0 @@
-export { LayoutModePanel } from './panel';

@@ -1,5 +1,0 @@
-@host = https://fm.example.com
-
-### List scripts
-GET {{host}}/fmi/data/vLatest/databases/Sales%20DB/scripts
-Authorization: Bearer <REDACTED>

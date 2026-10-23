@@ -1,2 +1,0 @@
-# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
-curl -X POST 'https://proxy.example.com/filemaker' -H 'Content-Type: application/json' -H "Authorization: Bearer $FM_PROXY_API_KEY" --data-raw '{"action":"runScript","profile":{"id":"profile-proxy","database":"Sales DB","serverUrl":"https://fm.example.com"},"payload":{"layout":"Contacts","scriptName":"Send Welcome","scriptParam":"{\"id\": 42, \"note\": \"a b&c\"}"}}'

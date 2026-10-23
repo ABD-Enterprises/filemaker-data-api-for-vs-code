@@ -1,5 +1,0 @@
-@host = https://fm.example.com
-
-### Get metadata of layout "Contacts"
-GET {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts
-Authorization: Bearer <REDACTED>

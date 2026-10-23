@@ -1,5 +1,0 @@
-@host = https://fm.example.com
-
-### Get record 42 from layout "Contacts"
-GET {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42
-Authorization: Bearer <REDACTED>

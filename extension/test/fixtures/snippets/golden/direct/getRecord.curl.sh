@@ -1,1 +1,0 @@
-curl -X GET 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records/42' -H 'Authorization: Bearer <REDACTED>'

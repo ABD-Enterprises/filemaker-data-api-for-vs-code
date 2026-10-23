@@ -1,3 +1,0 @@
-# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
-# Fill in the file name and the base64 text of the file.
-curl -X POST 'https://proxy.example.com/filemaker' -H 'Content-Type: application/json' -H "Authorization: Bearer $FM_PROXY_API_KEY" --data-raw '{"action":"uploadContainer","profile":{"id":"profile-proxy","database":"Sales DB","serverUrl":"https://fm.example.com"},"payload":{"layout":"Contacts","recordId":"42","fieldName":"Photo","fieldRepetition":2,"modId":"<modId>","fileName":"<file name>","contentType":"application/octet-stream","contentBase64":"<base64 of the file>"}}'

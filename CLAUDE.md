@@ -1,1 +1,1 @@
-# Local AI Adapter (Claude)
+@AGENTS.md
