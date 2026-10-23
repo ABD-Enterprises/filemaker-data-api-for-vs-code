@@ -123,7 +123,19 @@ it.skipIf(process.platform === 'win32')('the generated project runs its own test
   const gen = runtime(); await gen.generateRuntimeAppTemplate();
   const output = gen.getGeneratedRuntimeRoot();
   // Use the installed dependencies; this runs the generated project's own test command offline.
-  await symlink(path.resolve(__dirname, '../../../node_modules'), path.join(output, 'node_modules'), 'dir');
+  // npm may keep `next` (and its @next packages) inside runtime-next/node_modules instead of the root, so link every
+  // root entry and let runtime-next's own copies win.
+  const nodeModules = path.join(output, 'node_modules');
+  await mkdir(nodeModules);
+  const repoRoot = path.resolve(__dirname, '../../..');
+  for (const name of await readdir(path.join(repoRoot, 'node_modules'))) {
+    await symlink(path.join(repoRoot, 'node_modules', name), path.join(nodeModules, name), 'dir');
+  }
+  for (const name of await readdir(path.join(repoRoot, 'runtime-next', 'node_modules')).catch(() => [] as string[])) {
+    if (name === '.bin') continue;
+    await rm(path.join(nodeModules, name), { force: true });
+    await symlink(path.join(repoRoot, 'runtime-next', 'node_modules', name), path.join(nodeModules, name), 'dir');
+  }
   const result = spawnSync('npm', ['test'], { cwd: output, encoding: 'utf8', timeout: 30_000 });
   expect(result.status, result.stdout + result.stderr).toBe(0);
 }, 30_000);
@@ -139,6 +151,7 @@ it('refreshes untouched older shared files and test config, but names and preser
   const oldPkg = JSON.parse(await readFile(path.resolve(__dirname, '../../../runtime-next/package.json'), 'utf8'));
   delete oldPkg.devDependencies.jsdom;
   oldPkg.dependencies['@fmweb/shared'] = 'file:./shared';
+  oldPkg.dependencies.next = '16.3.8'; // the version this older project was generated with
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify(oldPkg, null, 2)}\n`);
   const result = await gen.generateRuntimeAppTemplate();
   expect(result.updated).toContain(path.join('shared', 'src/record-edit.ts'));
