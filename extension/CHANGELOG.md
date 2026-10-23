@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Security: the web page generator now uses Next.js 16.4.2, which fixes two published problems in Next.js (an image-handling flaw and a denial-of-service flaw). The extension itself did not use the affected parts, but apps you generated earlier keep their old version: run `npm install next@16.4.2` in `.fmweb/generated/runtime-next` to update them.
 - Website tables scroll on small screens, documentation links stay on the website, and repeated documentation links are removed.
 - Generated FM Web apps can run their own tests and refresh untouched older shared files. Missing field details, stopped previews and save errors have clearer messages; date hints appear while editing and saved messages clear when browsing.
 - Layout Mode buttons keep their text readable when pointed at or selected with the keyboard. Effective Settings lines up with other screens and keeps its settings buttons on one line. Disclosure controls and separate tabs use the same size and rounded corners as other controls.
