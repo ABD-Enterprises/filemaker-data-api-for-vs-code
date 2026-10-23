@@ -41,7 +41,7 @@ const MANAGED_MARKER = /^(?:\/\/|\/\*) fmweb-managed: runtime template v(\d+)/;
  * version marker, so an unmodified old copy can be recognised and refreshed safely.
  */
 const MANAGED_TEMPLATE_FILES: Record<string, string[]> = {
-  'package.json': ['01f94b699e9d6c9939b2bb1a49028f028c7ba29e2f9f53bd2160318edbecb991', '6d184961fb6759b90115ff94d15dac9455b401917d2d1527b7d3b98531b67ee8'],
+  'package.json': ['01f94b699e9d6c9939b2bb1a49028f028c7ba29e2f9f53bd2160318edbecb991', '6d184961fb6759b90115ff94d15dac9455b401917d2d1527b7d3b98531b67ee8', 'c170e5afd10b11e6a02c5914756407fce984f6d925766c0a68077cd0515af9b8'],
   'vitest.config.ts': ['c2bd4b81a42becfbb5fa2fc55aee8c57943590ed9ec79c17082731f78a59b949'],
   'app/styles.css': ['ed5fdbfd2e42b6e952332bc74a1ddbeefe9d831493d72b567e8832bf98c4c6f8'],
   'app/layouts/[id]/page.tsx': [
