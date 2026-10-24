@@ -63,3 +63,66 @@ test('Dependabot does not ignore uuid when neither lockfile contains it', () => 
   const dependabot = parse(read('dependabot.yml'));
   assert.ok(!dependabot.updates[0].ignore.some((entry) => entry['dependency-name'] === 'uuid'));
 });
+
+test('the secret rotation reminder tests the parser, installs nothing and files issues with narrow permissions', () => {
+  const rotation = parse(read('workflows/secret-rotation-reminder.yml'));
+  const job = rotation.jobs.remind;
+  assert.equal(job['runs-on'], '${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}');
+  assert.deepEqual(job.permissions, { contents: 'read', issues: 'write' });
+
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  const setupNode = job.steps.find((step) => step.uses?.startsWith('actions/setup-node@'));
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(setupNode.with['node-version'], 22);
+  const ciSteps = ci.jobs['build-test'].steps;
+  assert.equal(checkout.uses, ciSteps.find((step) => step.uses?.startsWith('actions/checkout@')).uses);
+  assert.equal(setupNode.uses, ciSteps.find((step) => step.uses?.startsWith('actions/setup-node@')).uses);
+
+  assert.ok(job.steps.some((step) => step.run === 'node --test scripts/*.test.mjs'));
+  const file = job.steps.find((step) => step.run === 'node scripts/secret-rotation-remind.mjs');
+  assert.ok(file);
+  assert.equal(file.env.GH_TOKEN, '${{ github.token }}');
+  assert.equal(file.env.GH_REPO, '${{ github.repository }}');
+  for (const step of job.steps) {
+    assert.doesNotMatch(step.run ?? '', /npm (ci|install|run)/, 'the job must not install or run dependencies');
+  }
+  assert.equal(rotation.on.workflow_dispatch.inputs['dry-run'].default, true);
+});
+
+test('CI runs the rotation calendar tests on every pull request', () => {
+  const steps = ci.jobs['build-test'].steps;
+  const scripts = steps.find((step) => step.run === 'node --test scripts/*.test.mjs');
+  assert.ok(scripts, 'the build-test job must run the parser and runner tests');
+  const setupNode = steps.findIndex((step) => step.uses?.startsWith('actions/setup-node@'));
+  assert.ok(steps.indexOf(scripts) > setupNode);
+});
+
+test('the parser tests are named one by one, because Node 22 cannot run a directory', () => {
+  // Node 22 reads a directory argument as a module and fails, so the test
+  // files are named by the glob the shell expands. The shell has to be bash
+  // for that, so both steps say so.
+  const rotation = parse(read('workflows/secret-rotation-reminder.yml'));
+  for (const steps of [ci.jobs['build-test'].steps, rotation.jobs.remind.steps]) {
+    const scripts = steps.find((step) => step.run === 'node --test scripts/*.test.mjs');
+    assert.ok(scripts, 'the step must name the test files');
+    assert.equal(scripts.shell, 'bash', 'the shell expands the glob');
+    assert.doesNotMatch(scripts.run, /node --test scripts\/(\s|$)/);
+  }
+});
+
+test('the secret rotation reminder stays monthly, dry by default and serialized', () => {
+  const rotation = parse(read('workflows/secret-rotation-reminder.yml'));
+  assert.deepEqual(rotation.on.schedule, [{ cron: '0 9 1 * *' }]);
+
+  const file = rotation.jobs.remind.steps.find(
+    (step) => step.run === 'node scripts/secret-rotation-remind.mjs'
+  );
+  assert.ok(file);
+  assert.equal(file.env.DRY_RUN, '${{ inputs.dry-run }}');
+  assert.equal(rotation.on.workflow_dispatch.inputs['dry-run'].default, true);
+
+  // The group has to be the workflow name alone: a group that holds the run
+  // id is unique per run and serializes nothing.
+  assert.equal(rotation.concurrency?.group, '${{ github.workflow }}');
+  assert.equal(rotation.concurrency['cancel-in-progress'], false);
+});

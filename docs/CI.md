@@ -10,7 +10,7 @@ What the project's automated checks are, the limits they enforce, and how depend
 | `api-docs.yml` | push to `main` | Builds the documentation website and the TypeDoc API reference and deploys both to GitHub Pages: <https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/>. |
 | `dependency-auto-merge.yml` | Dependabot pull requests | Enables auto-merge for safe dev-dependency updates (see below). |
 | `entra-identity-id.yml` | manual | One-off helper for the Entra publishing setup ([job aid](./JOB_AID_ENTRA_PUBLISHING.md)). Delete it when the setup is done. |
-| `secret-rotation-reminder.yml` | monthly | A scaffold that does nothing yet; see [SECRETS.md](./SECRETS.md). |
+| `secret-rotation-reminder.yml` | monthly, or manual | Reads the rotation calendar in [SECRETS.md](./SECRETS.md) and files a reminder issue about 30 days before a tracked credential is due. A manual run has a `dry-run` input that prints what it would file. |
 
 Every job's runner comes from the repository variable `LINUX_RUNNER_LABELS` (a JSON array of labels), except `cross-platform`, which names its operating systems in its matrix. The variable is currently `["ubuntu-latest"]`, a GitHub-hosted runner, which is free because this repository is public. Do not write a hosted label directly into a workflow; keep using the variable so the runner can change without editing workflows. `cross-platform` is the one deliberate exception: it needs a Windows runner, GitHub-hosted runners are free for a public repository, and the self-hosted-only rule applies to private repositories. Do not copy it into a private repository.
 
@@ -22,9 +22,10 @@ The `release` job and the dependency auto-merge workflow use the composite actio
 
 Branch protection on `main` requires one status check, **`build-test`**, and no approving review. Nothing else is required today. Code scanning default setup is not configured on this repository, so there is no required scanning check.
 
-After checkout and Node 22 setup, `build-test` runs, in order: `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), workflow regression tests (`node --test .github/tests/ci.test.mjs`), the mock API contract (`npm run mock:check -w extension`), typecheck (the workspace TypeScript checks, including extension source and tests), `test:coverage` (Vitest, with coverage thresholds), build (shared output, esbuild bundles and webview assets), designer and runtime workspace tests (`npm test -w designer-ui -w runtime-next`, after shared is built), package check (`npm run package:check`: it first verifies that `extension/THIRD_PARTY_NOTICES.txt` is current, then runs `vsce package`), and the VSIX size budget. To run the checks locally (the size cap is enforced in CI):
+After checkout and Node 22 setup, `build-test` runs, in order: the rotation calendar parser and reminder runner tests (`node --test scripts/*.test.mjs`, the shell expands the glob because Node 22 reads a directory argument as a module and fails), `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), workflow regression tests (`node --test .github/tests/ci.test.mjs`), the mock API contract (`npm run mock:check -w extension`), typecheck (the workspace TypeScript checks, including extension source and tests), `test:coverage` (Vitest, with coverage thresholds), build (shared output, esbuild bundles and webview assets), designer and runtime workspace tests (`npm test -w designer-ui -w runtime-next`, after shared is built), package check (`npm run package:check`: it first verifies that `extension/THIRD_PARTY_NOTICES.txt` is current, then runs `vsce package`), and the VSIX size budget. To run the checks locally (the size cap is enforced in CI):
 
 ```bash
+node --test scripts/*.test.mjs
 npm ci
 npm audit --omit=dev --audit-level=high
 npm run lint
