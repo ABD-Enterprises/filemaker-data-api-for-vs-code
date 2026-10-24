@@ -5,18 +5,17 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import nock from 'nock';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from 'https';
 
+import type * as TlsAgentModule from '../../src/services/tlsAgent';
 import {
   PinnedCertificateAgent,
   RETIRED_AGENT_GRACE_MS,
   createHttpsAgentForProfile,
   disposeTlsAgents,
-  noteRequestTimeout,
-  normalizeSha256,
-  retiredAgentGrace
+  normalizeSha256
 } from '../../src/services/tlsAgent';
 import { DAY, keyToPem, makeCertificate, newKeyPair } from '../helpers/x509';
 
@@ -133,6 +132,9 @@ describe('a pinned agent and kept-alive sockets', () => {
     nock.disableNetConnect();
   });
   afterEach(async () => {
+    // The agent made for the pinned certificate is closed here, so it does not stay in the
+    // module's cache and change what a later test finds there.
+    disposeTlsAgents();
     await Promise.all(
       servers.splice(0).map((server) => {
         server.closeAllConnections();
@@ -206,29 +208,39 @@ describe('a pinned agent and kept-alive sockets', () => {
 });
 
 describe('the grace for a replaced agent outlives a long request', () => {
+  // The grace is a module global that is only ever raised, so this block works on its own copy
+  // of the module: the tests below must not depend on the order they run in, and the grace they
+  // raise must not reach any other test.
+  let tls: typeof TlsAgentModule;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tls = await import('../../src/services/tlsAgent');
+  });
+
   afterEach(() => {
     vi.useRealTimers();
-    disposeTlsAgents();
+    tls.disposeTlsAgents();
   });
 
   it('is at least the request timeout plus ten seconds (and never less than thirty)', () => {
-    expect(retiredAgentGrace()).toBe(30_000);
-    noteRequestTimeout(5_000);
-    expect(retiredAgentGrace()).toBe(30_000);
-    noteRequestTimeout(120_000);
-    expect(retiredAgentGrace()).toBe(130_000);
-    noteRequestTimeout(60_000); // only ever raised
-    expect(retiredAgentGrace()).toBe(130_000);
-    noteRequestTimeout(Number.NaN);
-    noteRequestTimeout(-1);
-    expect(retiredAgentGrace()).toBe(130_000);
+    expect(tls.retiredAgentGrace()).toBe(30_000);
+    tls.noteRequestTimeout(5_000);
+    expect(tls.retiredAgentGrace()).toBe(30_000);
+    tls.noteRequestTimeout(120_000);
+    expect(tls.retiredAgentGrace()).toBe(130_000);
+    tls.noteRequestTimeout(60_000); // only ever raised
+    expect(tls.retiredAgentGrace()).toBe(130_000);
+    tls.noteRequestTimeout(Number.NaN);
+    tls.noteRequestTimeout(-1);
+    expect(tls.retiredAgentGrace()).toBe(130_000);
   });
 
   it('an agent replaced while a long request runs is not closed until that request could have finished', () => {
     vi.useFakeTimers();
-    noteRequestTimeout(120_000);
-    const pins = Array.from({ length: 33 }, (_, i) => normalizeSha256((i + 140).toString(16).padStart(2, '0').repeat(32)) as string);
-    const agents = pins.map((pin) => createHttpsAgentForProfile({ pinnedCertSha256: pin }));
+    tls.noteRequestTimeout(120_000);
+    const pins = Array.from({ length: 33 }, (_, i) => tls.normalizeSha256((i + 140).toString(16).padStart(2, '0').repeat(32)) as string);
+    const agents = pins.map((pin) => tls.createHttpsAgentForProfile({ pinnedCertSha256: pin }));
     const evicted = vi.spyOn(agents[0] as Agent, 'destroy');
     vi.advanceTimersByTime(129_999);
     expect(evicted).not.toHaveBeenCalled();

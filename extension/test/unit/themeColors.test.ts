@@ -193,6 +193,11 @@ describe('offline theme audit regression guards', () => {
     }
   });
 
+  // Every theme is measured against seven stylesheets, twice each (with and without the
+  // placeholder token): each measurement parses the stylesheet and computes the contrast of
+  // every rule. That measured 1.4 s on an idle machine and 6.0 s on a loaded one, so it does
+  // not fit vitest's 5 s default either. The budget is 30 s, about six times the default, and
+  // every theme is still measured the same way.
   it.each(audit.themes)('%s keeps hints distinct and secondary text readable', (theme) => {
     const tokens = themeTokens.get(theme)!;
     for (const css of [designerCss, ...['connectionWizard','recordEditor','recordViewer','queryBuilder','schemaDiff','scriptRunner'].map(stylesheet)]) {
@@ -205,7 +210,7 @@ describe('offline theme audit regression guards', () => {
         expect(audit.presentationFailures(css, fieldFixture, colors)).toEqual([]);
       }
     }
-  });
+  }, 30_000);
 
   it('detects placeholder and secondary hierarchy mutations', () => {
     const tokens = audit.tokensFor('light');

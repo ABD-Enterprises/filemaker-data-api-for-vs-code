@@ -190,6 +190,10 @@ describe('designer build requirements', () => {
 });
 
 describe('browser script linting', () => {
+  // ESLint is loaded and then run over every webview script, so the test starts an ESLint
+  // instance and lints nine files. That measured 2.4 s on an idle machine and 5.1 s on a loaded
+  // one, so it does not fit vitest's 5 s default either. The budget is 30 s, about six times the
+  // default, and the same files are still linted.
   it('lints browser globals, undefined names and unused arguments with the root lint command', async () => {
     const { ESLint } = await import('eslint');
     const eslint = new ESLint({ cwd: extensionDir });
@@ -202,5 +206,5 @@ describe('browser script linting', () => {
     expect(results.flatMap((result) => result.messages)).toEqual([]);
     const pkg = JSON.parse(readFileSync(path.join(extensionDir, 'package.json'), 'utf8'));
     expect(pkg.scripts.lint).toContain('src/webviews/*/ui/*.js');
-  });
+  }, 30_000);
 });
