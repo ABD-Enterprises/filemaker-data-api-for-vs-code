@@ -10,6 +10,7 @@ import type { RunScriptRequest } from '../../types/fm';
 import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
 import type { SnippetFormat } from '../../snippets/model';
 import { buildWebviewCsp, createNonce } from '../common/csp';
+import { guardDispatch } from '../common/dispatch';
 import {
   getStringField,
   toRecord
@@ -68,7 +69,7 @@ export class ScriptRunnerPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handleMessage(message);
+      this.dispatch(() => this.handleMessage(message));
     });
   }
 
@@ -86,10 +87,11 @@ export class ScriptRunnerPanel {
 
     const column = vscode.ViewColumn.One;
 
-    if (ScriptRunnerPanel.currentPanel) {
-      ScriptRunnerPanel.currentPanel.panel.reveal(column);
-      ScriptRunnerPanel.currentPanel.pendingDefaults = defaults;
-      void ScriptRunnerPanel.currentPanel.sendInit();
+    const current = ScriptRunnerPanel.currentPanel;
+    if (current) {
+      current.panel.reveal(column);
+      current.pendingDefaults = defaults;
+      current.dispatch(() => current.sendInit());
       return;
     }
 
@@ -109,6 +111,19 @@ export class ScriptRunnerPanel {
       logger,
       defaults
     );
+  }
+
+  /**
+   * The host hands the panel a message and returns; the handler runs on its own. A failure is
+   * logged and posted to the page, so the user reads the reason instead of an empty panel.
+   */
+  private dispatch(run: () => PromiseLike<void>): void {
+    guardDispatch(run, {
+      label: 'Script runner request',
+      logger: this.logger,
+      formatError: (error) => formatError(error),
+      postError: (message) => this.postError(message)
+    });
   }
 
   private async handleMessage(rawMessage: unknown): Promise<void> {

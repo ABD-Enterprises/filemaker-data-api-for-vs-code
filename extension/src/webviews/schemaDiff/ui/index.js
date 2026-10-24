@@ -31,7 +31,22 @@ if (diffHeader && diffSections.length > 0) {
 
 window.addEventListener('message', (event) => {
   const message = event.data;
-  if (!message || message.type !== 'diff') {
+  if (!message || typeof message.type !== 'string') {
+    return;
+  }
+
+  if (message.type === 'error') {
+    // The host could not do what the page asked for. Say so in the status line
+    // instead of leaving the skeleton on screen forever.
+    summary.textContent = message.message || 'Something went wrong.';
+    setElementsVisible(diffSections, true);
+    diffSections.forEach((section) => {
+      section.classList.add('loaded');
+    });
+    return;
+  }
+
+  if (message.type !== 'diff') {
     return;
   }
 

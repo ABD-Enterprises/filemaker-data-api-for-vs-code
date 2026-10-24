@@ -7,6 +7,7 @@ import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce, profileImageSources } from '../common/csp';
+import { guardDispatch } from '../common/dispatch';
 import { getStringField, toRecord } from '../common/messageValidation';
 import {
   deliverSnippet,
@@ -62,7 +63,7 @@ export class RecordViewerPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handleMessage(message);
+      this.dispatch(() => this.handleMessage(message));
     });
   }
 
@@ -75,10 +76,11 @@ export class RecordViewerPanel {
   ): void {
     const column = vscode.ViewColumn.One;
 
-    if (RecordViewerPanel.currentPanel) {
-      RecordViewerPanel.currentPanel.panel.reveal(column);
-      RecordViewerPanel.currentPanel.pendingDefaults = defaults;
-      void RecordViewerPanel.currentPanel.sendInitState();
+    const current = RecordViewerPanel.currentPanel;
+    if (current) {
+      current.panel.reveal(column);
+      current.pendingDefaults = defaults;
+      current.dispatch(() => current.sendInitState());
       return;
     }
 
@@ -103,6 +105,19 @@ export class RecordViewerPanel {
       logger,
       defaults
     );
+  }
+
+  /**
+   * The host hands the panel a message and returns; the handler runs on its own. A failure is
+   * logged and posted to the page, so the user reads the reason instead of an empty panel.
+   */
+  private dispatch(run: () => PromiseLike<void>): void {
+    guardDispatch(run, {
+      label: 'Record viewer request',
+      logger: this.logger,
+      formatError: (error) => this.formatError(error),
+      postError: (message) => this.postError(message)
+    });
   }
 
   private async handleMessage(rawMessage: unknown): Promise<void> {
