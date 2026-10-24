@@ -72,6 +72,9 @@ describe('documentation website from the real repository', () => {
       .toEqual(versions.map((v) => `#${v!.replaceAll('.', '-')}`));
   });
 
+  // Every generated page is parsed with JSDOM and every local link and anchor is resolved
+  // against the staged site. That measured 35.7 s on a loaded machine, so the budget is 60 s
+  // (about twice the slowest measurement); the check itself is unchanged.
   it('resolves all local files and anchors, copies images, and has no active or unexpected external content', () => {
     const visit = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory()
       ? visit(path.join(dir, entry.name)) : entry.name.endsWith('.html') ? [path.join(dir, entry.name)] : []);
@@ -108,7 +111,7 @@ describe('documentation website from the real repository', () => {
     for (const image of readdirSync(path.join(root, 'extension/docs/marketplace')).filter((f) => f.endsWith('.png'))) {
       expect(existsSync(path.join(output, 'assets/extension/docs/marketplace', image)), image).toBe(true);
     }
-  }, 30_000);
+  }, 60_000);
 });
 
 it('escapes hostile markdown, gives duplicate headings unique IDs, rewrites links, and sorts versions', () => {

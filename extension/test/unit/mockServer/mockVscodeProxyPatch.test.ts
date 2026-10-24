@@ -3,7 +3,7 @@ import os from 'os';
 
 import axios from 'axios';
 import nock from 'nock';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { inspectServerCertificate } from '../../../src/services/certificateInspect';
 import { FMClient } from '../../../src/services/fmClient';
@@ -13,39 +13,77 @@ import { installVscodeProxyPatch } from '../../helpers/vscodeProxyPatch';
 import { InMemorySecretStorage } from '../mocks';
 import { hasOpenssl, startMockProcess, type RunningMock } from './mockHelper';
 
-const lan = Object.values(os.networkInterfaces()).flat().find((info) => info?.family === 'IPv4' && !info.internal)?.address;
-if (!lan) console.warn('Real VS Code proxy-patch TLS test skipped: no non-loopback IPv4 address is available.');
+/**
+ * Every non-loopback IPv4 address of this machine. A machine can have several (a VPN tunnel, a
+ * container bridge, a virtual switch) and only some of them can be bound: an address of an
+ * interface that is down is refused with EADDRNOTAVAIL. The first one the OS happens to list is
+ * therefore no guarantee, so the relay below is bound to the first address that accepts a socket.
+ */
+const lanAddresses = Object.values(os.networkInterfaces())
+  .flatMap((infos) => infos ?? [])
+  .filter((info) => info?.family === 'IPv4' && !info.internal)
+  .map((info) => info.address);
+if (!lanAddresses.length) console.warn('Real VS Code proxy-patch TLS test skipped: no non-loopback IPv4 address is available.');
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
 /** A TCP relay lets the unchanged loopback-only mock be reached through a real LAN address. */
-describe.skipIf(!lan || !hasOpenssl)('real VS Code proxy patch with the Claris default certificate over LAN IPv4', () => {
+describe.skipIf(!lanAddresses.length || !hasOpenssl)('real VS Code proxy patch with the Claris default certificate over LAN IPv4', () => {
   let mock: RunningMock;
   let relay: net.Server;
   const sockets = new Set<Socket>();
   let serverUrl: string;
   let pin: string;
+  /** Set when no LAN address could be bound; the tests skip themselves instead of failing. */
+  let skipReason: string | undefined;
+
+  /** Binds the relay to the first LAN address that accepts a socket; undefined when none does. */
+  async function bindRelay(): Promise<string | undefined> {
+    for (const address of lanAddresses) {
+      const server = net.createServer((incoming) => {
+        const upstream = net.connect(Number(new URL(mock.baseUrl).port), '127.0.0.1');
+        for (const socket of [incoming, upstream]) {
+          sockets.add(socket);
+          socket.once('close', () => sockets.delete(socket));
+        }
+        incoming.on('error', () => upstream.destroy());
+        upstream.on('error', () => incoming.destroy());
+        incoming.pipe(upstream).pipe(incoming);
+      });
+      const bound = await new Promise<boolean>((resolve) => {
+        const onError = () => resolve(false);
+        server.once('error', onError);
+        server.listen(0, address, () => {
+          server.removeListener('error', onError);
+          resolve(true);
+        });
+      });
+      if (bound) {
+        relay = server;
+        return address;
+      }
+      server.close();
+    }
+    return undefined;
+  }
 
   beforeAll(async () => {
     nock.restore();
     for (const name of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']) vi.stubEnv(name, undefined);
+    const address = await bindRelay();
+    if (!address) {
+      // Nothing on this machine can be reached over the LAN: the mock is not even started.
+      skipReason = `none of the non-loopback IPv4 addresses of this machine (${lanAddresses.join(', ')}) could be bound`;
+      console.warn(`Real VS Code proxy-patch TLS test skipped: ${skipReason}.`);
+      return;
+    }
     mock = await startMockProcess({ TLS: 'claris-default-cert', ADMIN_PORT: '0' });
-    relay = net.createServer((incoming) => {
-      const upstream = net.connect(Number(new URL(mock.baseUrl).port), '127.0.0.1');
-      for (const socket of [incoming, upstream]) {
-        sockets.add(socket);
-        socket.once('close', () => sockets.delete(socket));
-      }
-      incoming.on('error', () => upstream.destroy());
-      upstream.on('error', () => incoming.destroy());
-      incoming.pipe(upstream).pipe(incoming);
-    });
-    await new Promise<void>((resolve, reject) => {
-      relay.once('error', reject);
-      relay.listen(0, lan, resolve);
-    });
-    serverUrl = `https://${lan}:${(relay.address() as AddressInfo).port}`;
+    serverUrl = `https://${address}:${(relay.address() as AddressInfo).port}`;
     pin = (await inspectServerCertificate(serverUrl)).sha256;
   }, 30000);
+
+  beforeEach(({ skip }) => {
+    if (skipReason) skip(skipReason);
+  });
 
   afterAll(async () => {
     sockets.forEach((socket) => socket.destroy());

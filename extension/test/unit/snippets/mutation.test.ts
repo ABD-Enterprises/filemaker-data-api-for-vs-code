@@ -125,9 +125,14 @@ afterEach(() => {
 afterAll(cleanupScratch);
 
 describe.skipIf(process.platform === 'win32')('mutations of the escaping and placeholder rules are caught', () => {
+  // The control is the only case that runs every hostile string through every operation, and each
+  // round trip starts three child processes (bash -n, sh -n, and the run itself): 225 process
+  // starts in one test. That measured 10.6 s on an otherwise idle machine and 14.7 s on a loaded
+  // one, so it never fits vitest's 5 s default. The budget is 60 s, about four times the slowest
+  // measurement, and the check itself is unchanged.
   it('control: the real implementation passes every check', async () => {
     expect(await detects(await loadWith())).toBe(false);
-  });
+  }, 60_000);
 
   for (const mutant of MUTANTS) {
     it(`mutant: ${mutant.name}`, async () => {

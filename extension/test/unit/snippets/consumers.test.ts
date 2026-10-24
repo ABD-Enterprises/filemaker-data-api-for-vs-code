@@ -34,6 +34,10 @@ describe.skipIf(!posix)('curl commands', () => {
     expect(scripts.length).toBeGreaterThanOrEqual(30);
   });
 
+  // Every golden file is handed to bash, to POSIX sh and to zsh, and each check starts a child
+  // process: about 90 process starts in one test. That measured 2.7 s on an idle machine and
+  // 5.5 s on a loaded one, so it does not fit vitest's 5 s default either. The budget is 30 s,
+  // about six times the default, and every file is still checked by every shell.
   it('parse as bash, as POSIX sh and as zsh', () => {
     for (const script of scripts) {
       expect(bashSyntaxProblems(script.text, 'bash'), script.name).toEqual([]);
@@ -42,7 +46,7 @@ describe.skipIf(!posix)('curl commands', () => {
         expect(bashSyntaxProblems(script.text, 'zsh'), script.name).toEqual([]);
       }
     }
-  });
+  }, 30_000);
 
   it.skipIf(!hasShellcheck)('pass shellcheck with no finding', () => {
     for (const script of scripts) {
