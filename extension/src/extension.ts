@@ -62,6 +62,7 @@ import { FMExplorerProvider } from './views/fmExplorer';
 import { LayoutInspectorProvider } from './views/layoutInspector';
 import { OfflineStatusBar } from './views/offlineStatusBar';
 import { registerPanelRestoreGuards } from './webviews/common/panelRestore';
+import { runAndReport } from './utils/fireAndForget';
 
 type HealthListener = Parameters<FMClient['onHealthChange']>[0];
 
@@ -186,7 +187,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const deprecatedKeys = settingsService.consumeDeprecatedSettingsUsed();
   if (deprecatedKeys.length > 0) {
     const newNames = deprecatedKeys.map((k) => k.replace('filemakerDataApiTools.', 'filemaker.'));
-    void offerDeprecatedSettingsMigration(settingsService, deprecatedKeys, newNames, logger);
+    runAndReport('Offering the deprecated-settings migration', logger, () =>
+      offerDeprecatedSettingsMigration(settingsService, deprecatedKeys, newNames, logger)
+    );
     logger.warn('Deprecated settings in use; falling back to the legacy values.', {
       deprecatedKeys,
       newNames
@@ -417,7 +420,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const refreshExplorer = (): void => {
     fmExplorerProvider.refresh();
-    void refreshPaletteContexts();
+    runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts);
   };
 
   // Persistent connection-state status bar — sits at priority 105 (above the
@@ -566,7 +569,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const aiStatusBar = new AiStatusBar({ service: aiService, controller: aiController, profileStore, reportHiddenFieldsProblem }, aiMcp);
   const refreshAi = (): void => {
     aiController.refresh();
-    void aiStatusBar.refresh();
+    runAndReport('Refreshing the AI status bar', logger, () => aiStatusBar.refresh());
   };
   const aiDisposables = [
     ...(chatParticipant ? [chatParticipant] : []),
@@ -575,9 +578,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     aiStatusBar,
     aiController.onDidChange(() => {
       aiMcp.notifyToolsChanged();
-      void aiStatusBar.refresh();
+      runAndReport('Refreshing the AI status bar', logger, () => aiStatusBar.refresh());
     }),
-    aiMcp.onDidChange(() => void aiStatusBar.refresh()),
+    aiMcp.onDidChange(() => runAndReport('Refreshing the AI status bar', logger, () => aiStatusBar.refresh())),
     watchExternalServerSetting({
       onDidChangeConfiguration: (listener) => vscode.workspace.onDidChangeConfiguration(listener),
       controller: aiMcp,
@@ -588,7 +591,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       extensionPath: context.extensionUri?.fsPath ?? '',
       globalStoragePath: context.globalStorageUri?.fsPath,
       isEnabled: () => isExternalServerEnabled(vscode.workspace.getConfiguration('filemaker')),
-      refresh: () => void aiStatusBar.refresh()
+      refresh: () => runAndReport('Refreshing the AI status bar', logger, () => aiStatusBar.refresh())
     }),
     ...registerAiToolCommands({
       service: aiService,
@@ -612,7 +615,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   ];
   refreshAi();
   // The setting is only a permission: start only where the user started the server before.
-  void aiMcp.autostart();
+  runAndReport('Starting the AI MCP server', logger, () => aiMcp.autostart());
   // Tell the user once about any profile that skips all certificate checks (an older setting).
   void import('./services/legacyTlsNotice')
     .then(({ notifyAboutLegacyTlsProfiles }) =>
@@ -811,7 +814,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       logger.warn('Failed to refresh command-palette contexts.', { error });
     }
   };
-  void refreshPaletteContexts();
+  runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts);
   // The keys depend on what the stores hold, so they are re-read whenever that changes: a profile saved
   // by the wizard, removed or selected, and a project created by Initialize FM Web (or by a file change
   // outside the extension). Without this, Connect and the FM Web commands stay missing until a reload.
@@ -823,11 +826,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       refreshAi();
       refreshExplorer();
     }),
-    fmWebProjectService.onDidChangeProject(() => void refreshPaletteContexts()),
+    fmWebProjectService.onDidChangeProject(() =>
+      runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts)
+    ),
     projectFileWatcher,
-    projectFileWatcher.onDidCreate(() => void refreshPaletteContexts()),
-    projectFileWatcher.onDidDelete(() => void refreshPaletteContexts()),
-    projectFileWatcher.onDidChange(() => void refreshPaletteContexts())
+    projectFileWatcher.onDidCreate(() =>
+      runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts)
+    ),
+    projectFileWatcher.onDidDelete(() =>
+      runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts)
+    ),
+    projectFileWatcher.onDidChange(() =>
+      runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts)
+    )
   );
   const secretChanges = context.secrets.onDidChange(() => {
     profileStore.checkForExternalChanges();
@@ -837,8 +848,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (secretChanges) context.subscriptions.push(secretChanges);
   // Hide the preview commands in an installation that has no runtime template (the Marketplace
   // package); computed the same way the generator resolves it.
-  void publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>
-    vscode.commands.executeCommand('setContext', key, value)
+  runAndReport('Publishing the preview availability', logger, () =>
+    publishPreviewAvailability(context.extensionUri.fsPath, (key, value) =>
+      vscode.commands.executeCommand('setContext', key, value)
+    )
   );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
@@ -846,7 +859,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         event.affectsConfiguration('filemaker.enterprise.mode') ||
         event.affectsConfiguration('filemaker.advanced.powerUserMode')
       ) {
-        void refreshPaletteContexts();
+        runAndReport('Refreshing the command-palette contexts', logger, refreshPaletteContexts);
       }
     })
   );
@@ -855,7 +868,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(...registerPanelRestoreGuards());
 
   registerWalkthroughCommands(context, logger);
-  void maybeOpenFirstRunWalkthrough(context, logger);
+  runAndReport('Opening the first-run walkthrough', logger, () =>
+    maybeOpenFirstRunWalkthrough(context, logger)
+  );
 
   logger.info('FileMaker Data API Tools activated.');
 }

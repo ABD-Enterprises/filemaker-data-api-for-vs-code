@@ -82,6 +82,8 @@ describe('SchemaDiffPanel HTML output', () => {
     (SchemaDiffPanel as unknown as { currentPanel: undefined }).currentPanel = undefined;
   });
 
+  const logger = { error: vi.fn() };
+
   const sampleDiff: SchemaDiffResult = {
     profileId: 'p1',
     layout: 'Contacts',
@@ -100,7 +102,7 @@ describe('SchemaDiffPanel HTML output', () => {
       subscriptions: []
     } as unknown as vscode.ExtensionContext;
 
-    SchemaDiffPanel.createOrShow(context, sampleDiff);
+    SchemaDiffPanel.createOrShow(context, sampleDiff, logger);
     const html = getHtml();
 
     expect(html.length).toBeGreaterThan(0);
@@ -113,7 +115,7 @@ describe('SchemaDiffPanel HTML output', () => {
       subscriptions: []
     } as unknown as vscode.ExtensionContext;
 
-    SchemaDiffPanel.createOrShow(context, sampleDiff);
+    SchemaDiffPanel.createOrShow(context, sampleDiff, logger);
     const html = getHtml();
 
     expect(html).toContain('Content-Security-Policy');
@@ -127,7 +129,7 @@ describe('SchemaDiffPanel HTML output', () => {
       subscriptions: []
     } as unknown as vscode.ExtensionContext;
 
-    SchemaDiffPanel.createOrShow(context, sampleDiff);
+    SchemaDiffPanel.createOrShow(context, sampleDiff, logger);
     const html = getHtml();
 
     expect(html).not.toMatch(/\sonclick=/i);
@@ -142,7 +144,7 @@ describe('SchemaDiffPanel HTML output', () => {
       subscriptions: []
     } as unknown as vscode.ExtensionContext;
 
-    SchemaDiffPanel.createOrShow(context, sampleDiff);
+    SchemaDiffPanel.createOrShow(context, sampleDiff, logger);
     const html = getHtml();
 
     expect(html).toMatch(/<script\s+nonce="[a-zA-Z0-9]+"/);

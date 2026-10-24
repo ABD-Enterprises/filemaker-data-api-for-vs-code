@@ -71,7 +71,7 @@ const panels: Record<string, () => Promise<void>> = {
   },
   schemaDiff: async () => {
     const { SchemaDiffPanel } = await import('../../../src/webviews/schemaDiff/index');
-    SchemaDiffPanel.createOrShow(context, { baseSnapshot: {}, targetSnapshot: {}, changes: [], summary: {} } as never);
+    SchemaDiffPanel.createOrShow(context, { baseSnapshot: {}, targetSnapshot: {}, changes: [], summary: {} } as never, logger);
   },
   environmentCompare: async () => {
     const { EnvironmentComparePanel } = await import('../../../src/webviews/environmentCompare/index');

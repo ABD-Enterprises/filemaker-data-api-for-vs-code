@@ -13,6 +13,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { ConnectionProfile } from '../../types/fm';
 import type { FmWebProjectService } from '../../services/fmWebProjectService';
 import { buildWebviewCsp, createNonce } from '../common/csp';
+import { guardDispatch, requestType } from '../common/dispatch';
 import {
   getOptionalBooleanField,
   getStringField,
@@ -68,7 +69,7 @@ export class LayoutModePanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handleMessage(message);
+      this.dispatch(() => this.handleMessage(message), requestType(message));
     });
   }
 
@@ -82,11 +83,12 @@ export class LayoutModePanel {
   ): void {
     const column = vscode.ViewColumn.One;
 
-    if (LayoutModePanel.currentPanel) {
-      LayoutModePanel.currentPanel.panel.reveal(column);
-      LayoutModePanel.currentPanel.pendingLayoutId = options?.layoutId;
-      LayoutModePanel.currentPanel.assertScriptRunAllowed = options.assertScriptRunAllowed;
-      void LayoutModePanel.currentPanel.sendInitState();
+    const current = LayoutModePanel.currentPanel;
+    if (current) {
+      current.panel.reveal(column);
+      current.pendingLayoutId = options?.layoutId;
+      current.assertScriptRunAllowed = options.assertScriptRunAllowed;
+      current.dispatch(() => current.sendInitState(), 'init');
       return;
     }
 
@@ -107,6 +109,20 @@ export class LayoutModePanel {
       logger,
       options
     );
+  }
+
+  /**
+   * The host hands the panel a message and returns; the handler runs on its own. A failure is
+   * logged and posted to the page, so the user reads the reason instead of an empty panel.
+   */
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
+    guardDispatch(run, {
+      label: 'Layout Mode request',
+      type,
+      logger: this.logger,
+      formatError: (error) => this.formatError(error),
+      postError: (message) => this.postError(message)
+    });
   }
 
   private async handleMessage(rawMessage: unknown): Promise<void> {

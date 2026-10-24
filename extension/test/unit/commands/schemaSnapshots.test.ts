@@ -118,7 +118,7 @@ describe('schema snapshot commands', () => {
   });
 
   it('excludes the older selection from newer choices and sends both exact snapshots to the worker', async () => {
-    const { snapshotStore, context } = setup();
+    const { snapshotStore, log, context } = setup();
     pickSnapshots();
     await command('diffSchemaSnapshots')(arg);
     expect(snapshotStore.listSnapshots).toHaveBeenCalledWith({ profileId: profile.id, layout });
@@ -127,7 +127,7 @@ describe('schema snapshot commands', () => {
     expect(diffSchemaSnapshotsInWorker).toHaveBeenCalledWith(older, newer,
       [expect.objectContaining({ name: ' Field ' })], [expect.objectContaining({ name: ' Field ' })], undefined);
     expect(vscode.window.withProgress).toHaveBeenCalledWith(expect.objectContaining({ cancellable: true, title: 'Diffing schema snapshots' }), expect.any(Function));
-    expect(SchemaDiffPanel.createOrShow).toHaveBeenCalledWith(context, diff);
+    expect(SchemaDiffPanel.createOrShow).toHaveBeenCalledWith(context, diff, log);
   });
 
   it.each(['older', 'newer'])('reports a missing %s snapshot without invoking the diff worker', async (which) => {
@@ -184,14 +184,14 @@ describe('schema snapshot commands', () => {
   });
 
   it('diffs the current exact layout and publishes field diagnostics with correct severities', async () => {
-    const { snapshotStore, diagnostics, context } = setup();
+    const { snapshotStore, diagnostics, log, context } = setup();
     const token = { isCancellationRequested: false };
     vi.mocked(vscode.window.withProgress).mockImplementation(((_options: unknown, task: (p: unknown, t: unknown) => unknown) => task({}, token)) as never);
     await command('diffAgainstLatestSnapshot')(arg);
     expect(snapshotStore.getLatestSnapshot).toHaveBeenCalledWith(profile.id, layout);
     expect(diffSchemaFieldsInWorker).toHaveBeenCalledWith({ profileId: profile.id, layout, olderSnapshotId: older.id,
       beforeFields: [expect.objectContaining({ name: ' Field ' })], afterFields: metadata.fieldMetaData }, token);
-    expect(SchemaDiffPanel.createOrShow).toHaveBeenCalledWith(context, diff);
+    expect(SchemaDiffPanel.createOrShow).toHaveBeenCalledWith(context, diff, log);
     expect(diagnostics.set).toHaveBeenCalledWith(expect.objectContaining({ fsPath: `filemaker-schema://p1/${encodeURIComponent(layout)}.json` }), [
       expect.objectContaining({ message: 'Schema added field:  Added ', severity: vscode.DiagnosticSeverity.Warning }),
       expect.objectContaining({ message: 'Schema removed field:  Removed ', severity: vscode.DiagnosticSeverity.Warning }),

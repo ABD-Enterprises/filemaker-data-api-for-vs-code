@@ -149,7 +149,7 @@ export function registerSchemaSnapshotCommands(
             )
         );
 
-        SchemaDiffPanel.createOrShow(context, diff);
+        SchemaDiffPanel.createOrShow(context, diff, logger);
       } catch (error) {
         if (error instanceof SchemaDiffCancelledError) {
           logger.info('Schema snapshot diff was cancelled.');
@@ -212,7 +212,7 @@ export function registerSchemaSnapshotCommands(
               )
           );
 
-          SchemaDiffPanel.createOrShow(context, diff);
+          SchemaDiffPanel.createOrShow(context, diff, logger);
           publishDiffDiagnosticsIfEnabled(
             diagnostics,
             profile.id,
