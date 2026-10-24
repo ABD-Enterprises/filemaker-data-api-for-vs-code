@@ -1,0 +1,17 @@
+# Proxy profile: one POST to the proxy, which adds the FileMaker credentials itself.
+@host = https://proxy.example.com
+
+### Log in (create a session)
+POST {{host}}/filemaker
+Content-Type: application/json
+Authorization: Bearer <REDACTED>
+
+{
+  "action": "createSession",
+  "profile": {
+    "id": "profile-proxy",
+    "database": "Sales DB",
+    "serverUrl": "https://fm.example.com"
+  },
+  "payload": {}
+}

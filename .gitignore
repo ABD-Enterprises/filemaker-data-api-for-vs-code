@@ -1,0 +1,26 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.vscode-test
+*.vsix
+.DS_Store
+.fmweb
+.next
+.npm-cache
+.turbo
+build
+coverage
+.worktrees/
+docs/api/
+/pages/
+.mock-check
+
+# Claude Code session lock, never commit
+.claude/scheduled_tasks.lock
+
+# Local build, run and test logs
+artifacts/*.log
+
+# Evidence from the real-VS-Code UI tests (screenshots, reports): attach to a PR or release, never commit
+artifacts/e2e-ui/

@@ -1,0 +1,5 @@
+@host = https://fm.example.com
+
+### Run script "Refresh" (layout "Contacts")
+GET {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/script/Refresh
+Authorization: Bearer <REDACTED>

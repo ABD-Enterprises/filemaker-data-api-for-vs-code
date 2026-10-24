@@ -1,0 +1,1 @@
+curl -X POST 'https://fm.example.com/fmi/data/vLatest/databases/Sales%20DB/layouts/Contacts/records' -H 'Content-Type: application/json' -H 'Authorization: Bearer <REDACTED>' --data-raw '{"fieldData":{"Name":"Ada Lovelace","Email":"ada@example.com"}}'

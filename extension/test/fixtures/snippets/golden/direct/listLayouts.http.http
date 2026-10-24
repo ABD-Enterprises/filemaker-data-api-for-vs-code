@@ -1,0 +1,5 @@
+@host = https://fm.example.com
+
+### List layouts
+GET {{host}}/fmi/data/vLatest/databases/Sales%20DB/layouts
+Authorization: Bearer <REDACTED>

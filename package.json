@@ -1,0 +1,38 @@
+{
+  "name": "fmweb-ide-monorepo",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "version": "0.1.0",
+  "workspaces": [
+    "shared",
+    "designer-ui",
+    "runtime-next",
+    "extension"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present --parallel",
+    "dev:extension": "npm run dev -w extension",
+    "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "npm run format --workspaces --if-present",
+    "format:check": "npm run format:check --workspaces --if-present",
+    "docs:site": "node tools/build-docs-site.mjs",
+    "docs:api": "npm run docs:api -w extension",
+    "package:check": "npm run package:check -w extension",
+    "package:vsix": "npm run build --workspaces --if-present && npm run package:vsix -w extension",
+    "setup": "node ./setup.mjs"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.5",
+    "markdown-it": "^14.3.0",
+    "yaml": "2.9.1"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
+  }
+}

@@ -1,0 +1,17 @@
+.github/**
+src/**
+test/**
+dist/**/*.map
+tsconfig*.json
+typedoc.json
+vitest.config.ts
+../**
+node_modules/**
+coverage/**
+.mock-check/**
+eslint.config.mjs
+scripts/**
+docs/QA/**
+ARCHITECTURE.md
+e2e-ui/**
+.prettierignore

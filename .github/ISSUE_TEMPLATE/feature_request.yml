@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest an improvement or new capability for the FileMaker Data API extension.
+title: "Feature: "
+labels:
+  - enhancement
+  - triage
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: Describe the workflow gap or pain point this feature would solve.
+      placeholder: "I am trying to..., but today I have to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior, command, setting, API, or UI you want.
+      placeholder: "Add support for..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives-considered
+    attributes:
+      label: Alternatives considered
+      description: What workarounds, other extensions, scripts, or product features have you tried?
+      placeholder: "I considered..."
+    validations:
+      required: true
+
+  - type: input
+    id: filemaker-server-version
+    attributes:
+      label: FileMaker Server version
+      description: Include the major/minor version if this depends on server behavior.
+      placeholder: "FileMaker Server 21.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case-context
+    attributes:
+      label: Use case context
+      description: Explain what you are building and who would use this workflow.
+      placeholder: "I am building..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Willingness to contribute
+      description: Let maintainers know whether you can help implement or test this feature.
+      options:
+        - I can open a PR for this.
+        - I can help test a preview build.
+        - I can provide feedback, but cannot contribute code.
+    validations:
+      required: true

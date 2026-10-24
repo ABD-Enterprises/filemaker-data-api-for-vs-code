@@ -1,0 +1,73 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 30
+      include:
+        - axios
+        - next
+        - react
+        - react-dom
+        - zod
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        patterns:
+          - "*"
+      production-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
+      security-patches:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    ignore:
+      # @types/vscode must track the MINIMUM VS Code we support
+      # (engines.vscode in extension/package.json), not the latest release.
+      # `vsce package` hard-fails when @types/vscode > engines.vscode, so
+      # auto-bumps here (e.g. 1.96 -> 1.120) break the package/publish CI.
+      # Bump this only in lockstep with a deliberate engines.vscode raise.
+      - dependency-name: "@types/vscode"
+      # nock 15 switches to @mswjs/interceptors and breaks the real-socket TLS and MCP tests
+      # (pinnedSessionResume, mcpController, mcpServer, mcpServerHardening); revisit after those
+      # tests no longer depend on it.
+      - dependency-name: "nock"
+        update-types: ["version-update:semver-major"]
+      # The extension supports Node 22 (engines and CI); @types/node must not run ahead of it.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+  # The Marketplace publish tool (@vscode/vsce) has its own minimal lockfile so the publish job installs
+  # a fixed tree; without this entry its security fixes would never be proposed.
+  - package-ecosystem: npm
+    directory: "/tools/publish"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    groups:
+      publish-tool:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
