@@ -10,7 +10,7 @@ import { RecordEditService } from '../../services/recordEditService';
 import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
 import { buildWebviewCsp, createNonce, profileImageSources } from '../common/csp';
-import { guardDispatch } from '../common/dispatch';
+import { guardDispatch, requestType } from '../common/dispatch';
 import { getStringField, toRecord } from '../common/messageValidation';
 import {
   deliverSnippet,
@@ -94,7 +94,7 @@ export class RecordEditorPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      this.dispatch(() => this.handleMessage(message));
+      this.dispatch(() => this.handleMessage(message), requestType(message));
     });
   }
 
@@ -117,7 +117,7 @@ export class RecordEditorPanel {
     if (current) {
       current.panel.reveal(column);
       current.pendingDefaults = defaults;
-      current.dispatch(() => current.sendInit());
+      current.dispatch(() => current.sendInit(), 'init');
       return;
     }
 
@@ -155,9 +155,10 @@ export class RecordEditorPanel {
    * The host hands the panel a message and returns; the handler runs on its own. A failure is
    * logged and posted to the page, so the user reads the reason instead of an empty panel.
    */
-  private dispatch(run: () => PromiseLike<void>): void {
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
     guardDispatch(run, {
       label: 'Record editor request',
+      type,
       logger: this.logger,
       formatError: (error) => formatError(error),
       postError: (message) => this.postError(message)

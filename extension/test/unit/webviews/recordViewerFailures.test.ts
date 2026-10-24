@@ -130,7 +130,7 @@ describe.skipIf(!JSDOM)('Record Viewer reports a request the host cannot finish'
     await vi.waitFor(() => expect(page.document.getElementById('status')?.textContent).toBe('Profiles are unavailable.'));
     expect(page.document.getElementById('status')?.classList.contains('error')).toBe(true);
     expect(page.postMessage).toHaveBeenCalledWith({ type: 'error', message: 'Profiles are unavailable.' });
-    expect(page.logger.error).toHaveBeenCalledWith('Record viewer request failed.', { error: expect.any(Error) });
+    expect(page.logger.error).toHaveBeenCalledWith('Record viewer request failed.', { type: 'ready', error: expect.any(Error) });
   });
 
   it('ignores a message of an unknown type', async () => {

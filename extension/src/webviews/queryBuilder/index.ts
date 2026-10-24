@@ -21,7 +21,7 @@ import { handleRunQuery } from './find';
 import { handleSaveQuery } from './savedQueries';
 import { exportResultsToEditor, exportResultsJsonFile, exportResultsCsvFile, copyRequest, toCsvRows } from './results';
 import { getHtmlForWebview } from './html';
-import { guardDispatch } from '../common/dispatch';
+import { guardDispatch, requestType } from '../common/dispatch';
 
 export class QueryBuilderPanel {
   private requestInFlight = false;
@@ -53,7 +53,7 @@ export class QueryBuilderPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      this.dispatch(() => this.handleMessage(message));
+      this.dispatch(() => this.handleMessage(message), requestType(message));
     });
   }
 
@@ -72,7 +72,7 @@ export class QueryBuilderPanel {
     if (current) {
       current.panel.reveal(column);
       current.query.pendingDefaults = defaults;
-      current.dispatch(() => current.sendInitState());
+      current.dispatch(() => current.sendInitState(), 'init');
       return;
     }
 
@@ -111,7 +111,7 @@ export class QueryBuilderPanel {
       await current.panel.webview.postMessage({
         type: 'saveCurrentQuery'
       });
-    });
+    }, 'saveCurrentQuery');
 
     return true;
   }
@@ -120,9 +120,10 @@ export class QueryBuilderPanel {
    * The host hands the panel a message and returns; the handler runs on its own. A failure is
    * logged and posted to the page, so the user reads the reason instead of an empty panel.
    */
-  private dispatch(run: () => PromiseLike<void>): void {
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
     guardDispatch(run, {
       label: 'Query builder request',
+      type,
       logger: this.logger,
       formatError: (error) => this.formatError(error),
       postError: (message) => this.postError(message)

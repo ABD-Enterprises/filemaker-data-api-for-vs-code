@@ -10,7 +10,7 @@ import type { RunScriptRequest } from '../../types/fm';
 import { deliverSnippet, parseSnippetDelivery, type SnippetDelivery } from '../../snippets/deliver';
 import type { SnippetFormat } from '../../snippets/model';
 import { buildWebviewCsp, createNonce } from '../common/csp';
-import { guardDispatch } from '../common/dispatch';
+import { guardDispatch, requestType } from '../common/dispatch';
 import {
   getStringField,
   toRecord
@@ -69,7 +69,7 @@ export class ScriptRunnerPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      this.dispatch(() => this.handleMessage(message));
+      this.dispatch(() => this.handleMessage(message), requestType(message));
     });
   }
 
@@ -91,7 +91,7 @@ export class ScriptRunnerPanel {
     if (current) {
       current.panel.reveal(column);
       current.pendingDefaults = defaults;
-      current.dispatch(() => current.sendInit());
+      current.dispatch(() => current.sendInit(), 'init');
       return;
     }
 
@@ -117,9 +117,10 @@ export class ScriptRunnerPanel {
    * The host hands the panel a message and returns; the handler runs on its own. A failure is
    * logged and posted to the page, so the user reads the reason instead of an empty panel.
    */
-  private dispatch(run: () => PromiseLike<void>): void {
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
     guardDispatch(run, {
       label: 'Script runner request',
+      type,
       logger: this.logger,
       formatError: (error) => formatError(error),
       postError: (message) => this.postError(message)

@@ -6,7 +6,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { SecretStore } from '../../services/secretStore';
 import type { ConnectionProfile } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
-import { guardDispatch } from '../common/dispatch';
+import { guardDispatch, requestType } from '../common/dispatch';
 import { versionFooterHtml } from '../../about/runtimeVersion';
 import type { CertificateState, ConnectionWizardOptions } from './types';
 import type { WizardContext } from './context';
@@ -44,7 +44,7 @@ export class ConnectionWizardPanel {
 
     // Trusting the workspace while the wizard is open removes the notice.
     const trustListener = vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      this.dispatch(() => sendInit(this.host));
+      this.dispatch(() => sendInit(this.host), 'init');
     });
     this.panel.onDidDispose(() => {
       trustListener.dispose();
@@ -52,7 +52,7 @@ export class ConnectionWizardPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      this.dispatch(() => handleMessage(this.host, message));
+      this.dispatch(() => handleMessage(this.host, message), requestType(message));
     });
   }
 
@@ -69,7 +69,7 @@ export class ConnectionWizardPanel {
     if (current) {
       current.editingProfile = editingProfile;
       current.panel.reveal(vscode.ViewColumn.One);
-      current.dispatch(() => sendLoadProfile(current.host));
+      current.dispatch(() => sendLoadProfile(current.host), 'loadProfile');
       return;
     }
 
@@ -120,9 +120,10 @@ export class ConnectionWizardPanel {
    * The host hands the panel a message and returns; the handler runs on its own. A failure is
    * logged and posted to the page, so the user reads the reason instead of an empty panel.
    */
-  private dispatch(run: () => PromiseLike<void>): void {
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
     guardDispatch(run, {
       label: 'Connection wizard request',
+      type,
       logger: this.logger,
       formatError: (error) => formatError(error),
       postError: (message) => this.postError(message)

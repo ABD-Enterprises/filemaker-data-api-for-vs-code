@@ -8,10 +8,18 @@ export type FailureLogger = Pick<Logger, 'error'>;
  *
  * A logger that cannot write (a closed output channel) must never turn an already handled
  * failure back into an unhandled rejection, so a broken logger is swallowed here.
+ *
+ * The context (the message type a panel was handling, for example) is written next to the
+ * failure, so two failures in the same panel do not look alike in the log.
  */
-export function logFailure(logger: FailureLogger, message: string, error: unknown): void {
+export function logFailure(
+  logger: FailureLogger,
+  message: string,
+  error: unknown,
+  context?: Record<string, unknown>
+): void {
   try {
-    logger.error(message, { error });
+    logger.error(message, { ...context, error });
   } catch {
     // There is nothing left to report it with.
   }
