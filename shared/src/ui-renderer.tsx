@@ -1,12 +1,15 @@
 import * as React from 'react';
 import { fieldKindNote, runtimeFieldKind } from './record-edit';
-import { FIELD_LAYOUT, standardControlFor } from './field-standards';
+import { checkboxValue, choiceDisplayType, FIELD_LAYOUT, preserveTextLineEndings, standardControlFor } from './field-standards';
+import { orderFields } from './field-order';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
 
 export interface RuntimeLayoutData {
   fieldValues?: Record<string, unknown>;
   editing?: boolean;
+  /** A new record has no values yet, so every field of the layout stays on the form. */
+  creating?: boolean;
   onFieldChange?: (name: string, value: unknown) => void;
   portalRowsByObjectId?: Record<string, Array<Record<string, unknown>>>;
   viewport?: {
@@ -28,20 +31,32 @@ export function LayoutContainer({
   onObjectAction,
   runtimeData
 }: LayoutRendererProps): React.JSX.Element {
-  layout = React.useMemo(() => mode === 'runtime' ? runtimeControlLayout(layout, runtimeData?.fieldValues) : layout,
-    [layout, mode, runtimeData?.fieldValues]);
+  layout = React.useMemo(() => mode === 'runtime' ? runtimeControlLayout(layout, runtimeData?.fieldValues, runtimeData?.creating) : layout,
+    [layout, mode, runtimeData?.fieldValues, runtimeData?.creating]);
   const viewport = mode === 'runtime' ? runtimeData?.viewport : undefined;
   const containerWidth = viewport ? Math.max(1, Math.round(viewport.width)) : layout.canvas.width;
   const narrow = viewport !== undefined && viewport.width <= 640;
   const containerHeight = viewport ? Math.max(1, Math.round(viewport.height)) : layout.canvas.height;
 
   const renderedObjects = React.useMemo(
-    () =>
-      layout.objects
+    () => {
+      const objects = layout.objects
         .slice()
         .sort((a, b) => a.zIndex - b.zIndex)
-        .map((object) => applyAnchoredRuntimeRect(object, layout, viewport)),
-    [layout, viewport]
+        .map((object) => applyAnchoredRuntimeRect(object, layout, viewport));
+      if (mode !== 'runtime') return objects;
+      // The web layout shows the returned fields in the order of the FileMaker layout.
+      const fields = objects.filter((object): object is FieldLayoutObject => object.type === 'field');
+      const placed = new Set(fields.map((field) => field.fmFieldName));
+      const returned = Object.keys(runtimeData?.fieldValues ?? {}).filter((name) => placed.has(name));
+      const names = orderFields({ fields: layout.fieldOrder?.map((name) => ({ name })) },
+        Object.fromEntries([...returned, ...placed].map((name) => [name, true])));
+      const rank = new Map(names.map((name, index) => [name, index]));
+      fields.sort((a, b) => rank.get(a.fmFieldName)! - rank.get(b.fmFieldName)!);
+      let index = 0;
+      return objects.map((object) => object.type === 'field' ? fields[index++] : object);
+    },
+    [layout, mode, viewport, runtimeData?.fieldValues]
   );
 
   // Stack controls in the designer's visual order, while retaining paint order and decorative geometry.
@@ -184,9 +199,11 @@ function ButtonControl(props: {
 }
 
 /** Taller data needs room below its saved row; never alter the saved layout. */
-function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, unknown>): LayoutDefinition {
+function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, unknown>, creating = false): LayoutDefinition {
   const extraRows = new Map<number, number>();
-  const objects = layout.objects.map((object) => {
+  // A field that is not on the record stays hidden; a new record shows every field of the layout.
+  const objects = layout.objects.filter((object) => object.type !== 'field' || values === undefined || creating
+    || Object.prototype.hasOwnProperty.call(values, object.fmFieldName)).map((object) => {
     if (object.type !== 'field') return object;
     const height = Math.max(object.height, standardControlFor(controlMetadata(object, values?.[object.fmFieldName])).height);
     extraRows.set(object.y, Math.max(extraRows.get(object.y) ?? 0, height - object.height));
@@ -216,6 +233,11 @@ function FieldControl(props: {
   const value = runtimeValue === undefined || runtimeValue === null ? '' : String(runtimeValue);
   const note = props.mode === 'runtime' ? runtimeFieldNote(object, props.runtimeData?.editing) : undefined;
   const readOnly = props.mode !== 'runtime' || !props.runtimeData?.editing || ['calculation', 'summary', 'container'].includes(runtimeFieldKind(object));
+  // The value a choice group started with, so a selection that returns to it keeps the stored text.
+  const choiceSession = React.useRef({ original: value, current: value, readOnly });
+  if (choiceSession.current.current !== value || choiceSession.current.readOnly !== readOnly) {
+    choiceSession.current = { original: value, current: value, readOnly };
+  }
   const showLabel = object.labelPosition !== 'none';
   const horizontalLabel = object.labelPosition === 'left' || object.labelPosition === 'right';
   const inputId = `field-input-${object.id}`;
@@ -261,8 +283,12 @@ function FieldControl(props: {
     inputId,
     options: previewOptions,
     value: props.mode === 'designer' ? previewOptions[0] : value,
+    originalValue: choiceSession.current.original,
     readOnly,
-    onChange: (next) => props.runtimeData?.onFieldChange?.(object.fmFieldName, next)
+    onChange: (next) => {
+      choiceSession.current.current = String(next);
+      props.runtimeData?.onFieldChange?.(object.fmFieldName, next);
+    }
   });
 
   return (
@@ -306,10 +332,12 @@ function renderFieldDisplayControl(props: {
   inputId: string;
   options: string[];
   value: string;
+  originalValue: string;
   readOnly: boolean;
   onChange: (value: unknown) => void;
 }): React.JSX.Element {
-  const standard = standardControlFor(controlMetadata(props.object, props.value));
+  const metadata = controlMetadata(props.object, props.value);
+  const standard = standardControlFor({ ...metadata, displayType: choiceDisplayType(metadata.displayType, props.options) });
   const disabled = props.readOnly || standard.readOnly;
   const baseControlStyle: React.CSSProperties = {
     border: '1px solid #90a3b8',
@@ -348,23 +376,28 @@ function renderFieldDisplayControl(props: {
 
   if (standard.kind === 'checkbox' || standard.kind === 'radio') {
     const checkbox = standard.kind === 'checkbox';
-    const selected = props.value.split(/\r\n|\r|\n/);
-    const options = props.mode === 'designer' && !checkbox ? props.options.slice(0, 2) : Array.from(new Set([...props.options, ...selected.filter(Boolean)]));
+    // A radio keeps its current value as a choice; a checkbox holds one value per line.
+    const selected = checkbox ? props.value.split(/\r\n|\r|\n/) : [props.value];
+    const original = checkbox ? props.originalValue.split(/\r\n|\r|\n/).filter(Boolean) : [props.originalValue];
+    const options = props.mode === 'designer' && !checkbox ? props.options.slice(0, 2)
+      : Array.from(new Set([...props.options, ...original, ...(checkbox ? selected.filter(Boolean) : selected)]));
     return <div className={common.className} role={checkbox ? 'group' : 'radiogroup'} aria-label={props.object.fmFieldName} aria-describedby={description}
       style={{ ...baseControlStyle, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {options.map((option, index) => <label key={option} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <input id={index === 0 ? props.inputId : `${props.inputId}-${index}`} type={checkbox ? 'checkbox' : 'radio'}
           name={`choice-${props.object.id}`} value={option} checked={selected.includes(option)} disabled={disabled}
           onChange={(event) => props.onChange(checkbox
-            ? (event.currentTarget.checked ? [...selected.filter(Boolean), option] : selected.filter((value) => value !== option)).join('\r')
+            ? checkboxValue(props.originalValue, event.currentTarget.checked ? [...selected, option] : selected.filter((value) => value !== option))
             : option)} />
-        <span>{option}</span>
+        <span>{option === '' ? '(empty)' : option}</span>
       </label>)}
     </div>;
   }
 
   if (standard.kind === 'textarea') {
-    return <textarea {...common} value={props.value} readOnly={disabled} onChange={(event) => props.onChange(event.currentTarget.value)} />;
+    // The text area shows line feeds only; the raw breaks of the stored value are kept.
+    return <textarea {...common} value={props.value} readOnly={disabled}
+      onChange={(event) => props.onChange(preserveTextLineEndings(props.value, event.currentTarget.value))} />;
   }
 
   // FileMaker returns dates in its server format. A browser date input would discard it.

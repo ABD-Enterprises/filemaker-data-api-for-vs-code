@@ -12,6 +12,7 @@ import * as vscode from 'vscode';
 import { QueryBuilderPanel } from '../../../src/webviews/queryBuilder';
 import { RecordEditorPanel } from '../../../src/webviews/recordEditor';
 import { RecordViewerPanel } from '../../../src/webviews/recordViewer';
+import { designerLayoutMetadata } from '../../../src/fmweb/fieldMetadata';
 import { JSDOM, loadPage, type DomElement } from '../../helpers/jsdomPage';
 import { InMemoryMemento } from '../mocks';
 
@@ -139,16 +140,17 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
     page.send({ type: 'fieldNamesLoaded', payload: { profileId: 'p', layout: 'Layout', fieldNames: ['A', 'Z'], fieldMetadata: metadata } });
     expect(Array.from(page.document.querySelectorAll('#fieldNameOptions option')).map((option) => option.value)).toEqual(['Z', 'A']);
     page.window.eval(`const field = document.querySelector('.criterion-field'); field.value = 'Z'; field.dispatchEvent(new Event('input'));`);
-    expect(page.document.querySelectorAll('select.criterion-value')).toHaveLength(1);
-    page.window.eval(`const select = document.querySelector('select.criterion-value'); select.value = 'Active'; select.dispatchEvent(new Event('change'));`);
+    // A find criterion is plain text, so FileMaker's own operators and wildcards stay typeable.
+    expect(page.document.querySelectorAll('input.criterion-value')).toHaveLength(1);
+    page.window.eval(`const value = document.querySelector('input.criterion-value'); value.value = 'Active'; value.dispatchEvent(new Event('input'));`);
     page.document.getElementById('runButton')!.click();
     expect(JSON.parse((page.posted.at(-1)?.payload as { findJson: string }).findJson)).toEqual([{ Z: 'Active' }]);
     page.window.eval(`if (JSON.stringify(collectColumns([{ fieldData: { Extra: '', A: '', Z: '' } }])) !== JSON.stringify(['Z', 'A', 'Extra'])) throw new Error('Wrong result column order');`);
     page.window.eval(`const field = document.querySelector('.criterion-field'); field.value = 'A'; field.dispatchEvent(new Event('input'));`);
-    expect(page.document.querySelectorAll('textarea.criterion-value')[0]?.value).toBe('Active');
+    expect(page.document.querySelectorAll('input.criterion-value')[0]?.value).toBe('Active');
   });
 
-  it('Find radio choices have their own labels, and calculated fields stay searchable', () => {
+  it('Find criteria stay plain text for choice fields, and calculated fields stay searchable', () => {
     const page = loadPage(html('queryBuilder'), read('extension/src/webviews/queryBuilder/ui/findForm.js') + '\n' + read('extension/src/webviews/queryBuilder/ui/index.js'));
     page.send({ type: 'init', payload: { profiles, activeProfileId: 'p', savedQueries: [] } });
     page.send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['Layout'] } });
@@ -156,9 +158,10 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
       { name: 'Choice', type: 'text', displayType: 'radio', options: ['A', 'B'] }, { name: 'Calc', type: 'number', kind: 'calculation' }
     ] } });
     page.window.eval(`const field = document.querySelector('.criterion-field'); field.value = 'Choice'; field.dispatchEvent(new Event('input'));
-      const group = document.querySelector('.criterion-value');
-      if (group.parentElement.tagName === 'LABEL') throw new Error('Choice labels must not be nested inside another label');
-      group.querySelectorAll('input')[1].click();`);
+      const control = document.querySelector('.criterion-value');
+      if (control.tagName !== 'INPUT') throw new Error('A find criterion must be a plain text control');
+      if (control.parentElement.tagName === 'LABEL') throw new Error('Find controls must not be nested inside another label');
+      control.value = 'B'; control.dispatchEvent(new Event('input'));`);
     page.document.getElementById('runButton')!.click();
     expect(JSON.parse((page.posted.at(-1)?.payload as { findJson: string }).findJson)).toEqual([{ Choice: 'B' }]);
     page.window.eval(`const field = document.querySelector('.criterion-field'); field.value = 'Calc'; field.dispatchEvent(new Event('input'));`);
@@ -313,10 +316,84 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
       page.window.eval("document.querySelector('.criterion-field').dispatchEvent(new Event('input'))");
       const value = page.document.querySelectorAll('.criterion-value')[0]!;
       const wrapper = page.document.querySelectorAll('.criterion-row .fm-field')[2]!;
-      assertSize(wrapper, sizes[index]![0]!, field.type === 'container' ? 34 : sizes[index]![1]!);
+      // Every find criterion is a single-line text control, so the operator syntax stays typeable.
+      assertSize(wrapper, sizes[index]![0]!, 34);
       expect(wrapper.querySelector('.fm-field-label')?.textContent).toBe('Value');
       expect(value.getAttribute('aria-label')).toBe('Value');
     });
+  });
+
+  it('Editor and Viewer keep the line breaks of a long text field as FileMaker reports it', () => {
+    // The shape FileMaker's layout metadata endpoint returns for a text field.
+    const fileMakerTextField = (name: string, maxCharacters: number) => ({
+      name, type: 'normal', displayType: 'editText', result: 'text', global: false, autoEnter: false,
+      fourDigitYear: false, maxRepeat: 1, maxCharacters, notEmpty: false, numeric: false,
+      repetitionStart: 1, repetitionEnd: 1, timeOfDay: false
+    });
+    const presentation = designerLayoutMetadata(' Layout ', { fieldMetaData: [
+      fileMakerTextField('Notes', 0), fileMakerTextField('Empty', 0), fileMakerTextField('Title', 50)
+    ] }).fields;
+    expect(presentation.map((field) => field.maxLength)).toEqual([0, 0, 50]);
+    const value = 'first line\nsecond line';
+    for (const surface of ['recordEditor', 'recordViewer'] as const) {
+      const page = loadPage(html(surface), read(`extension/src/webviews/${surface}/ui/index.js`));
+      page.send({ type: 'recordLoaded', payload: { record: { recordId: '1', fieldData: { Notes: value, Empty: '', Title: 'Short' } },
+        fields: presentation, presentationFields: presentation } });
+      const container = surface === 'recordEditor' ? '#fieldEditor' : '#fieldDataContainer';
+      // Only the long text fields need more than one line, also when they are still empty.
+      const areas = page.document.querySelectorAll(`${container} textarea`);
+      expect(areas, surface).toHaveLength(2);
+      expect(areas[0]?.value, surface).toBe(value);
+      expect(areas[1]?.value, surface).toBe('');
+      expect(page.document.querySelectorAll(`${container} input`).length, surface).toBe(1);
+      expect(page.document.querySelectorAll(`${container} input`)[0]?.value, surface).toBe('Short');
+    }
+  });
+
+  it('Query Builder keeps FileMaker find operators and wildcards exactly as typed', () => {
+    for (const [field, value] of [['Text', '=exact'], ['Drop', '>5'], ['Checks', '*empty'], ['Text', '*"a b"'], ['Text', 'a...b']] as const) {
+      const page = loadPage(html('queryBuilder'), read('extension/src/webviews/queryBuilder/ui/findForm.js') + '\n' + read('extension/src/webviews/queryBuilder/ui/index.js'));
+      page.send({ type: 'init', payload: { profiles, activeProfileId: 'p', savedQueries: [] } });
+      page.send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: ['Layout'] } });
+      page.send({ type: 'fieldNamesLoaded', payload: { profileId: 'p', layout: 'Layout', fieldNames: ['Text', 'Drop', 'Checks'], fieldMetadata: [
+        { name: 'Text', type: 'text' }, { name: 'Drop', type: 'text', displayType: 'dropdown', options: ['Active'] },
+        { name: 'Checks', type: 'text', displayType: 'checkbox', options: ['A', 'B'] }
+      ] } });
+      page.window.eval(`const field = document.querySelector('.criterion-field'); field.value = ${JSON.stringify(field)}; field.dispatchEvent(new Event('input'));`);
+      page.window.eval(`const control = document.querySelector('.criterion-value'); control.value = ${JSON.stringify(value)}; control.dispatchEvent(new Event('input'));`);
+      expect(page.document.querySelectorAll('.criterion-value')[0]?.tagName, `${field} ${value}`).toBe('INPUT');
+      expect(page.document.querySelectorAll('.criterion-value')[0]?.value, `${field} ${value}`).toBe(value);
+      page.document.getElementById('runButton')!.click();
+      expect(JSON.parse((page.posted.at(-1)?.payload as { findJson: string }).findJson), `${field} ${value}`).toEqual([{ [field]: value }]);
+    }
+  });
+
+  it('Record Editor keeps the stored checkbox order and appends a new selection', () => {
+    const page = loadPage(html('recordEditor'), read('extension/src/webviews/recordEditor/ui/index.js'));
+    page.send({ type: 'init', payload: { profiles, activeProfileId: 'p' } });
+    page.send({ type: 'layoutsLoaded', payload: { profileId: 'p', layouts: [' Layout '] } });
+    page.document.getElementById('recordIdInput')!.value = '1';
+    const fields = [{ name: 'Checks', type: 'text', displayType: 'checkbox', options: ['A', 'B', 'C'], kind: 'normal', required: false }];
+    page.send({ type: 'recordLoaded', payload: { profileId: 'p', layout: ' Layout ', fields, presentationFields: fields,
+      record: { recordId: '1', modId: '9', fieldData: { Checks: 'C\rA' } } } });
+    const boxes = page.document.querySelectorAll('#fieldEditor input[type="checkbox"]');
+    expect(Array.from(boxes).map((box) => box.value)).toEqual(['A', 'B', 'C']);
+    expect(Array.from(boxes).map((box) => box.checked)).toEqual([true, false, true]);
+    page.window.eval(`document.querySelectorAll('#fieldEditor input[type="checkbox"]')[1].click();`);
+    page.document.getElementById('saveButton')!.click();
+    const body = page.posted.at(-1)?.payload as { draftFieldData: Record<string, unknown> };
+    // The stored order wins; the new selection is appended with the stored separator.
+    expect(body.draftFieldData.Checks).toBe('C\rA\rB');
+  });
+
+  it('Record Viewer shows a checkbox set read-only, in the field option order', () => {
+    const page = loadPage(html('recordViewer'), read('extension/src/webviews/recordViewer/ui/index.js'));
+    const fields = [{ name: 'Checks', type: 'text', displayType: 'checkbox', options: ['A', 'B', 'C'], kind: 'normal', required: false }];
+    page.send({ type: 'recordLoaded', payload: { record: { recordId: '1', fieldData: { Checks: 'C\rA' } }, fields, presentationFields: fields } });
+    const boxes = page.document.querySelectorAll('#fieldDataContainer input[type="checkbox"]');
+    expect(Array.from(boxes).map((box) => box.value)).toEqual(['A', 'B', 'C']);
+    expect(Array.from(boxes).map((box) => box.checked)).toEqual([true, false, true]);
+    expect(Array.from(boxes).every((box) => box.disabled)).toBe(true);
   });
 });
 

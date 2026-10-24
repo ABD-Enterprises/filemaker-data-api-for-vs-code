@@ -81,6 +81,41 @@ describe('runtime field values', () => {
     expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'new\ntext');
   });
 
+  it('keeps the stored checkbox order and appends new selections, whatever order the boxes were ticked', () => {
+    const checkbox = field({ displayType: 'checkbox', options: ['a', 'b', 'c'] });
+    render(checkbox, 'c', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[0].click());
+    // The stored value comes first; the new selection is appended with the stored separator.
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\ra');
+    // The host stores the value and sends it back; the next tick builds on the stored value.
+    render(checkbox, 'c\ra', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[1].click());
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\ra\rb');
+    render(checkbox, 'c\ra\rb', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[0].click());
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\rb');
+  });
+
+  it('renders only placed returned fields in metadata order, with repetitions grouped and extras in response order', () => {
+    const layout = createBlankLayout('Order'); layout.fieldOrder = [' Z ', 'A', 'Hidden'];
+    layout.objects = ['Extra', 'A(10)', 'First extra', 'A(2)', ' Z ', 'A(1)', 'Hidden']
+      .map((name, index) => field({ id: String(index), fmFieldName: name, zIndex: index }));
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'First extra': '', Extra: '', 'A(10)': '', 'A(2)': '', ' Z ': '', 'A(1)': '', Unplaced: '' }
+    } })));
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label')))
+      .toEqual([' Z ', 'A(1)', 'A(2)', 'A(10)', 'First extra', 'Extra']);
+  });
+
+  it('shows every field of the layout for a new record, because a new record has no values yet', () => {
+    const layout = createBlankLayout('New'); layout.fieldOrder = ['B', 'A'];
+    layout.objects = ['A', 'B'].map((name, index) => field({ id: String(index), fmFieldName: name, zIndex: index }));
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: {}, creating: true, editing: true
+    } })));
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['B', 'A']);
+  });
+
   it('does not invent related rows or values in runtime portals', () => {
     const layout = createBlankLayout('Portal'); layout.objects = [{ ...field(), type: 'portal', relatedContext: 'Related',
       rowCount: 2, columns: [{ id: 'col', fmFieldName: 'Name', label: 'Name', width: 120 }], scroll: true, selectableRows: false }];

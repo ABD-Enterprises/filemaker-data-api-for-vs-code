@@ -25,7 +25,8 @@ export function designerLayoutMetadata(layoutName: string, metadata: Record<stri
     kind: layoutFieldKind(field),
     required: recordFieldRequired(field),
     options: Array.isArray(field.values) ? field.values.map((value) => value && typeof value === 'object' ? String((value as Record<string, unknown>).value ?? '') : String(value)) : valueLists.find((list) => list.name === field.valueList)?.values.map((item) => item.value),
-    maxLength: typeof field.maxLength === 'number' ? field.maxLength : undefined,
+    maxLength: typeof field.maxLength === 'number' ? field.maxLength
+      : typeof field.maxCharacters === 'number' ? field.maxCharacters : undefined,
     height: typeof field.height === 'number' ? field.height : undefined,
     displayType: typeof field.displayType === 'string' ? field.displayType : undefined,
     multiline: field.multiline === true || ['textarea', 'multiline'].includes(String(field.displayType ?? '').toLowerCase().replace(/[ -]/g, ''))

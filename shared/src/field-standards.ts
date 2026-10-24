@@ -29,9 +29,25 @@ export interface StandardFieldMetadata {
   height?: number;
   value?: unknown;
   options?: readonly string[];
+  /** Forces a plain text control, so FileMaker's own find operators stay typeable. */
+  freeText?: boolean;
 }
 
 export type StandardControlKind = 'input' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'container';
+
+/** Types whose values are plain text. FileMaker reports a text field as `normal` with a `text` result. */
+const TEXT_TYPES = ['', 'text', 'normal', 'string'];
+
+/**
+ * A text field needs more than one line when its character limit is unlimited (FileMaker reports
+ * `maxCharacters: 0`), when the limit is large, or when the value itself carries a line break.
+ */
+function isLongText(field: Partial<StandardFieldMetadata>, value: string): boolean {
+  if (typeof field.maxLength === 'number' && (field.maxLength === 0 || field.maxLength > 100)) {
+    return true;
+  }
+  return value.length > 100 || /[\r\n]/.test(value);
+}
 
 export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): {
   kind: StandardControlKind; width: number; height: number; readOnly: boolean;
@@ -40,14 +56,16 @@ export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): 
   const type = normalize(field.result || field.type);
   const display = normalize(field.displayType);
   const readOnly = ['calculation', 'summary', 'container'].includes(normalize(field.kind || field.type)) || type === 'container';
+  const value = String(field.value ?? '');
   let kind: StandardControlKind = 'input';
-  if (type === 'container' || normalize(field.kind) === 'container') kind = 'container';
+  if (field.freeText) kind = 'input';
+  else if (type === 'container' || normalize(field.kind) === 'container') kind = 'container';
   else if (['popup', 'popupmenu', 'dropdown', 'dropdownlist'].includes(display)) kind = 'select';
   else if (['checkbox', 'checkboxset'].includes(display)) kind = 'checkbox';
   else if (['radio', 'radiobuttongroup', 'radiobuttons'].includes(display)) kind = 'radio';
   else if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type)
     || ['textarea', 'multiline'].includes(display)
-    || ((!type || type === 'text') && ((field.maxLength ?? 0) > 100 || String(field.value ?? '').length > 100 || /[\r\n]/.test(String(field.value ?? ''))))
+    || (TEXT_TYPES.includes(type) && isLongText(field, value))
     || (display === 'edittext' && (field.height ?? 0) > 1)) kind = 'textarea';
   const count = field.optionCount ?? field.options?.length;
   const height = kind === 'container' ? FIELD_LAYOUT.containerHeight : kind === 'textarea' ? FIELD_LAYOUT.multilineHeight
@@ -60,10 +78,63 @@ export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): 
 
 let nextChoiceGroup = 0;
 
+/**
+ * A checkbox or radio field whose options are not known cannot be shown as a group of choices.
+ * Such a field stays editable text, so its stored value is never lost.
+ */
+export function choiceDisplayType(displayType: string | undefined, options: readonly string[] | undefined): string | undefined {
+  const display = (displayType ?? '').toLowerCase().replace(/[ -]/g, '');
+  const isChoice = display.includes('checkbox') || display.includes('radio');
+  return isChoice && !options?.length ? 'editBox' : displayType;
+}
+
+/**
+ * A text area shows line feeds only. A stored value that uses carriage returns would be rewritten
+ * as soon as anything else in the field changed, so the raw breaks are kept around every edit.
+ */
+export function preserveTextLineEndings(previous: string, next: string): string {
+  const tokens = previous.match(/\r\n|[\s\S]/g) ?? [];
+  const displayed = previous.replace(/\r\n|\r/g, '\n');
+  if (displayed === next) return previous;
+  let suffix = 0;
+  while (suffix < Math.min(displayed.length, next.length)
+    && displayed[displayed.length - suffix - 1] === next[next.length - suffix - 1]) suffix++;
+  let prefix = 0;
+  while (prefix < Math.min(displayed.length, next.length) - suffix && displayed[prefix] === next[prefix]) prefix++;
+  const removedBreaks = tokens.slice(prefix, tokens.length - suffix).filter((token) => /[\r\n]/.test(token));
+  const separator = tokens.find((token) => /[\r\n]/.test(token)) ?? '\n';
+  const inserted = next.slice(prefix, next.length - suffix).replace(/\n/g, () => removedBreaks.shift() ?? separator);
+  return tokens.slice(0, prefix).join('') + inserted + tokens.slice(tokens.length - suffix).join('');
+}
+
+/**
+ * A checkbox set keeps the order and the separators it was stored with. The stored value is
+ * returned unchanged when the selection is the same set as it was, so an untouched field is
+ * never rewritten and the order of the options on screen does not matter.
+ */
+export function checkboxValue(original: string, values: readonly string[]): string {
+  const selected = new Set(values.filter((value) => value !== ''));
+  const parts = original.split(/(\r\n|\r|\n)/);
+  const before = new Set(parts.filter((value, index) => index % 2 === 0 && value !== ''));
+  if (selected.size === before.size && [...selected].every((value) => before.has(value))) return original;
+  if (!selected.size) return '';
+  let result = '';
+  for (let index = 0; index < parts.length; index += 2) {
+    if (parts[index] === '' || selected.has(parts[index])) result += parts[index] + (parts[index + 1] ?? '');
+  }
+  const added = [...selected].filter((value) => !before.has(value));
+  if (added.length) {
+    const trailing = /(?:\r\n|\r|\n)$/.exec(result || original)?.[0] ?? '';
+    const separator = trailing || /\r\n|\r|\n/.exec(original)?.[0] || '\r';
+    result += (result && !trailing ? separator : '') + added.join(separator) + trailing;
+  }
+  return result;
+}
+
 /** DOM controls for the extension's CSP-restricted pages; values and names are never normalized. */
 export function createStandardControl(document: Document, field: Partial<StandardFieldMetadata>, value: string,
   onChange: (value: string) => void, readOnly = false): HTMLElement {
-  const standard = standardControlFor({ ...field, value });
+  const standard = standardControlFor({ ...field, value, displayType: choiceDisplayType(field.displayType, field.options) });
   const locked = readOnly || standard.readOnly;
   let control: HTMLElement;
   if (standard.kind === 'container') {
@@ -87,8 +158,9 @@ export function createStandardControl(document: Document, field: Partial<Standar
     control = document.createElement('div');
     control.setAttribute('role', standard.kind === 'radio' ? 'radiogroup' : 'group');
     const groupName = `fm-choice-${nextChoiceGroup++}`;
-    const selected = value.split(/\r\n|\r|\n/);
-    const options = Array.from(new Set([...(field.options ?? []), ...selected.filter(Boolean)]));
+    // A radio keeps its current value as a choice; a checkbox holds one value per line.
+    const selected = standard.kind === 'radio' ? [value] : value.split(/\r\n|\r|\n/);
+    const options = Array.from(new Set([...(field.options ?? []), ...(standard.kind === 'radio' ? selected : selected.filter(Boolean))]));
     for (const option of options) {
       const label = document.createElement('label');
       const input = document.createElement('input');
@@ -99,9 +171,10 @@ export function createStandardControl(document: Document, field: Partial<Standar
       input.disabled = locked;
       input.addEventListener('change', () => {
         if (locked) return;
-        onChange(standard.kind === 'radio' ? option : Array.from(control.querySelectorAll<HTMLInputElement>('input:checked')).map((item) => item.value).join('\r'));
+        onChange(standard.kind === 'radio' ? option : checkboxValue(value,
+          Array.from(control.querySelectorAll<HTMLInputElement>('input:checked')).map((item) => item.value)));
       });
-      label.append(input, document.createTextNode(option));
+      label.append(input, document.createTextNode(option === '' ? '(empty)' : option));
       control.appendChild(label);
     }
     if (locked) control.classList.add('fm-readonly');
@@ -121,7 +194,13 @@ export function createStandardControl(document: Document, field: Partial<Standar
       if (standard.kind === 'input' && (field.result || field.type)?.toLowerCase() === 'number') input.inputMode = 'decimal';
     }
     input.value = value;
-    input.addEventListener(standard.kind === 'select' ? 'change' : 'input', () => { if (!locked) onChange(input.value); });
+    // The text area shows line feeds only; the raw breaks of the stored value are kept.
+    let rawValue = value;
+    input.addEventListener(standard.kind === 'select' ? 'change' : 'input', () => {
+      if (locked) return;
+      rawValue = standard.kind === 'textarea' ? preserveTextLineEndings(rawValue, input.value) : input.value;
+      onChange(rawValue);
+    });
     control = input;
   }
   control.classList.add('fm-field-control');

@@ -148,6 +148,8 @@ export const layoutDefinitionSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   fmLayoutName: z.string().optional(),
+  /** The field names of the FileMaker layout, in the order that layout shows them. */
+  fieldOrder: z.array(z.string()).optional(),
   canvas: z.object({
     width: z.number().int().positive().default(1280),
     height: z.number().int().positive().default(800),

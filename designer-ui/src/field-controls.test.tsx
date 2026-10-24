@@ -78,6 +78,65 @@ it('keeps radio groups independent when the same layout field is searched twice'
   } finally { first.remove(); second.remove(); }
 });
 
+it.each(['checkbox', 'radioButtons'])('%s without resolved options remains editable text', (displayType) => {
+  for (const value of ['', '  unlisted  ', 'first\r\nsecond']) {
+    const changes: string[] = [];
+    const control = standards.createStandardControl(document, { name: ' Field ', displayType, options: [] }, value, (next) => changes.push(next));
+    expect(control.matches('input[type="text"], input:not([type]), textarea')).toBe(true);
+    expect(control.querySelectorAll('input[type="checkbox"], input[type="radio"]')).toHaveLength(0);
+    expect(changes).toEqual([]);
+    (control as HTMLInputElement).value = ' new value ';
+    control.dispatchEvent(new Event('input'));
+    expect(changes).toEqual([' new value ']);
+  }
+});
+
+it.each(['popupMenu', 'radioButtons', 'checkbox'])('%s retains unmatched, empty and space-padded current values without a patch', (displayType) => {
+  for (const value of ['', '  A  ', 'unlisted']) {
+    let draft = value;
+    const control = standards.createStandardControl(document, { name: ' Field ', displayType, options: ['A', 'B'] }, value, (next) => { draft = next; });
+    document.body.append(control);
+    expect(standards.computeRecordPatch({ ' Field ': value }, { ' Field ': draft })).toEqual({});
+    if (displayType === 'popupMenu') {
+      expect((control as HTMLSelectElement).value).toBe(value);
+      control.dispatchEvent(new Event('change'));
+    } else if (displayType === 'radioButtons' || value !== '') {
+      const selected = control.querySelector<HTMLInputElement>('input:checked')!;
+      expect(selected).not.toBeNull();
+      expect(selected.value).toBe(value);
+      if (displayType === 'checkbox') { selected.click(); selected.click(); }
+      else selected.dispatchEvent(new Event('change'));
+    }
+    expect(standards.computeRecordPatch({ ' Field ': value }, { ' Field ': draft })).toEqual({});
+    control.remove();
+  }
+});
+
+it('checkbox changes retain stored order, mixed separators, unmatched values and trailing breaks', () => {
+  let draft = ' B \r\nA\nUnlisted\r';
+  const original = draft;
+  const control = standards.createStandardControl(document, { name: 'Flags', displayType: 'checkbox', options: ['A', ' B ', 'C'] }, original, (next) => { draft = next; });
+  document.body.append(control);
+  control.querySelectorAll<HTMLInputElement>('input')[2].click();
+  expect(draft).toBe(' B \r\nA\nUnlisted\rC\r');
+  control.querySelectorAll<HTMLInputElement>('input')[0].click();
+  expect(draft).toBe(' B \r\nUnlisted\rC\r');
+  control.querySelectorAll<HTMLInputElement>('input')[0].click();
+  control.querySelectorAll<HTMLInputElement>('input')[2].click();
+  expect(draft).toBe(original);
+  control.remove();
+});
+
+it('textarea edits preserve existing breaks while allowing inserted and deleted line breaks', () => {
+  const original = '  one\r\ntwo\rthree\nfour  ';
+  let draft = original;
+  const input = standards.createStandardControl(document, { name: 'Notes' }, original, (next) => { draft = next; }) as HTMLTextAreaElement;
+  input.value = input.value.replace('two', 'two\nnew'); input.dispatchEvent(new Event('input'));
+  expect(draft).toBe('  one\r\ntwo\r\nnew\rthree\nfour  ');
+  input.value = input.value.replace('new\nthree', 'newthree'); input.dispatchEvent(new Event('input'));
+  expect(draft).toBe('  one\r\ntwo\r\nnewthree\nfour  ');
+});
+
 it('grows multiline runtime controls without overlapping the next saved row or changing the layout', () => {
   const layout = standards.createBlankLayout('Tall values');
   layout.objects = [createStandardField({ name: 'Notes' }, 'notes', { x: 24, y: 24 }, 0),

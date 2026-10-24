@@ -69,3 +69,13 @@ it('retains length and layout height hints for shared control selection', () => 
   expect(fields[0]).toMatchObject({ name: ' Long ', maxLength: 500 });
   expect(fields[1]).toMatchObject({ name: 'Tall', displayType: 'editText', height: 3 });
 });
+
+it('reads the character limit FileMaker reports, so a long text field stays a text area', () => {
+  const fields = designerLayoutMetadata(' Layout ', { fieldMetaData: [
+    { name: ' Notes ', type: 'normal', displayType: 'editText', result: 'text', maxCharacters: 0 },
+    { name: 'Title', type: 'normal', displayType: 'editText', result: 'text', maxCharacters: 50 },
+    { name: 'Plain', type: 'normal', displayType: 'editText', result: 'text' }
+  ] }).fields;
+  expect(fields.map((field) => field.maxLength)).toEqual([0, 50, undefined]);
+  expect(fields[0]).toMatchObject({ name: ' Notes ', type: 'text', maxLength: 0 });
+});

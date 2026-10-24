@@ -403,7 +403,8 @@ function replaceValueControl(input, fieldName) {
   const metadata = state.fieldMetadata.find((entry) => entry.name === fieldName)
     || state.fieldMetadata.find((entry) => entry.name === fieldName.replace(/\(\d+\)$/, '')) || {};
   const value = input.value || '';
-  const field = { ...metadata, kind: 'normal', type: metadata.type === 'container' ? 'text' : metadata.type, value };
+  // A find value is plain text, so FileMaker's own syntax (=x, >5, *) can be typed into it.
+  const field = { ...metadata, kind: 'normal', type: metadata.type === 'container' ? 'text' : metadata.type, value, freeText: true };
   const control = FieldStandards.createStandardControl(document, field, value, (next) => {
     control.value = next;
     input.valueChanged(next);
