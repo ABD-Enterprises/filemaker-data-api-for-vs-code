@@ -86,8 +86,13 @@ function gh(args) {
   return (result.stdout || '').trim();
 }
 
-function ghJson(args) {
-  const output = gh(args);
+/**
+ * Run the GitHub CLI and return the JSON it printed. Throws on a failure.
+ * The `exec` argument is the seam the tests use: it takes the argument list
+ * and returns the stdout of the command.
+ */
+export function ghJson(args, exec = gh) {
+  const output = exec(args);
   try {
     return JSON.parse(output || '[]');
   } catch {
@@ -96,41 +101,55 @@ function ghJson(args) {
 }
 
 /** The label the reminder issues carry. It is created when it is missing. */
-function ensureLabel(repo, dryRun) {
-  const labels = ghJson(['label', 'list', '--limit', '200', '--json', 'name', ...repoArgs(repo)]);
+export function ensureLabel(repo, dryRun, exec = gh) {
+  const labels = ghJson(['label', 'list', '--limit', '200', '--json', 'name', ...repoArgs(repo)], exec);
   if (labels.some((label) => label.name === LABEL)) return;
   if (dryRun) {
     console.log(`[dry-run] would create the missing label "${LABEL}"`);
     return;
   }
-  gh([
-    'label',
-    'create',
-    LABEL,
-    '--color',
-    '0e8a16',
-    '--description',
-    'Reminder to rotate a tracked credential',
-    ...repoArgs(repo)
-  ]);
-  console.log(`created the missing label "${LABEL}"`);
+  try {
+    exec([
+      'label',
+      'create',
+      LABEL,
+      '--color',
+      '0e8a16',
+      '--description',
+      'Reminder to rotate a tracked credential',
+      ...repoArgs(repo)
+    ]);
+    console.log(`created the missing label "${LABEL}"`);
+  } catch (error) {
+    // The label was created between the listing and the creation (a second
+    // run, or a label that appeared by hand). That is the state the runner
+    // wanted, so the run carries on instead of failing.
+    if (/already exists/i.test(error.message)) {
+      console.log(`the label "${LABEL}" already exists`);
+      return;
+    }
+    throw error;
+  }
 }
 
 /** Open reminder issues that already track a credential. */
-function openReminderIssues(repo) {
-  return ghJson([
-    'issue',
-    'list',
-    '--label',
-    LABEL,
-    '--state',
-    'open',
-    '--limit',
-    '100',
-    '--json',
-    'number,title,url',
-    ...repoArgs(repo)
-  ]);
+export function openReminderIssues(repo, exec = gh) {
+  return ghJson(
+    [
+      'issue',
+      'list',
+      '--label',
+      LABEL,
+      '--state',
+      'open',
+      '--limit',
+      '100',
+      '--json',
+      'number,title,url',
+      ...repoArgs(repo)
+    ],
+    exec
+  );
 }
 
 function dueText(row) {
@@ -149,12 +168,15 @@ export function issueTitle(row) {
 
 /**
  * The open reminder issue that already tracks a credential, or undefined.
- * The match is on the name in the title, so a renamed credential starts a new
- * issue instead of commenting on an unrelated one.
+ *
+ * The match is anchored on the title the runner itself writes, `Rotate <name>
+ * by <YYYY-MM-DD>`, and it is case sensitive: the names in the calendar are
+ * exact. A substring match would let `AZURE_CLIENT_ID_OLD` match the issue of
+ * `AZURE_CLIENT_ID`, and the reminder would land on the wrong credential.
  */
 export function findReminderIssue(issues, name) {
-  const wanted = name.toLowerCase();
-  return issues.find((issue) => issue.title.toLowerCase().includes(wanted));
+  const prefix = `Rotate ${name} by `;
+  return issues.find((issue) => typeof issue.title === 'string' && issue.title.startsWith(prefix));
 }
 
 /** The body of a new reminder issue. */

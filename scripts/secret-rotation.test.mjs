@@ -235,3 +235,59 @@ test('the within-days window is configurable', () => {
   const wide = parseRotationCalendar(markdown, { now: NOW, withinDays: 60 });
   assert.equal(wide.dueSoon.length, 1);
 });
+
+test('a name that appears twice is skipped and reported, and neither row reminds', () => {
+  const calendar = parseRotationCalendar(
+    documentWith([row('TWICE_PAT', 'Alan', '2026-11-01'), row('TWICE_PAT', 'Alan', '2026-12-01')]),
+    { now: NOW }
+  );
+  assert.equal(calendar.rows.length, 0);
+  assert.equal(calendar.pastDue.length, 0);
+  assert.equal(calendar.dueSoon.length, 0);
+  assert.equal(calendar.ok.length, 0);
+  assert.equal(calendar.skipped.length, 2);
+  assert.equal(calendar.skipped[0].name, 'TWICE_PAT');
+  assert.equal(calendar.skipped[1].name, 'TWICE_PAT');
+  assert.match(calendar.skipped[0].reason, /appears more than once/);
+  assert.notEqual(calendar.skipped[0].line, calendar.skipped[1].line);
+});
+
+test('only the duplicated name is dropped; the other rows still count', () => {
+  const calendar = parseRotationCalendar(
+    documentWith([
+      row('GOOD_PAT', 'Alan', '2026-11-01'),
+      row('TWICE_PAT', 'Alan', '2026-11-02'),
+      row('OTHER_PAT', 'Alan', '2026-11-03'),
+      row('TWICE_PAT', 'Alan', '2026-11-04')
+    ]),
+    { now: NOW }
+  );
+  assert.deepEqual(
+    calendar.rows.map((entry) => entry.name),
+    ['GOOD_PAT', 'OTHER_PAT']
+  );
+  assert.equal(calendar.dueSoon.length, 2);
+  assert.equal(calendar.skipped.length, 2);
+  assert.ok(calendar.skipped.every((entry) => entry.name === 'TWICE_PAT'));
+});
+
+test('a name that appears twice is a duplicate even when one row has no date', () => {
+  const calendar = parseRotationCalendar(
+    documentWith([row('TWICE_PAT', 'Alan', '2026-11-01'), row('TWICE_PAT', 'Alan', '')]),
+    { now: NOW }
+  );
+  assert.equal(calendar.rows.length, 0);
+  assert.equal(calendar.notTracked.length, 0);
+  assert.equal(calendar.skipped.length, 2);
+});
+
+test('strict mode throws on a duplicated name', () => {
+  assert.throws(
+    () =>
+      parseRotationCalendar(
+        documentWith([row('TWICE_PAT', 'Alan', '2026-11-01'), row('TWICE_PAT', 'Alan', '2026-12-01')]),
+        { now: NOW, strict: true }
+      ),
+    SecretRotationParseError
+  );
+});

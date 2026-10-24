@@ -20,6 +20,10 @@
 //   With `strict: true` the parser throws `SecretRotationParseError` instead.
 // - A blank, "N/A" or "-" date means "no rotation date recorded": the row is
 //   reported as `not-tracked` and produces no reminder.
+// - A name that appears twice in the table is a duplicate: the two rows carry
+//   two due dates for one credential, so neither is honored. Every row with
+//   that name is skipped and reported, because a reminder for the wrong date
+//   is worse than no reminder.
 // - Dates are ISO `YYYY-MM-DD` only, compared in UTC, so the result does not
 //   depend on the runner's time zone.
 
@@ -166,6 +170,22 @@ function findTable(sectionLines) {
 }
 
 /**
+ * The names that appear more than once in the given rows.
+ * Two rows with the same name carry two due dates for one credential.
+ */
+function duplicateNames(rows) {
+  const counts = new Map();
+  for (const entry of rows) {
+    counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1);
+  }
+  const names = new Set();
+  for (const [name, count] of counts) {
+    if (count > 1) names.add(name);
+  }
+  return names;
+}
+
+/**
  * Parse the rotation calendar out of a Markdown document.
  *
  * @param {string} markdown content of docs/SECRETS.md
@@ -286,6 +306,34 @@ export function parseRotationCalendar(markdown, options = {}) {
     if (status === STATUS.PAST_DUE) result.pastDue.push(entry);
     else if (status === STATUS.DUE_SOON) result.dueSoon.push(entry);
     else result.ok.push(entry);
+  }
+
+  // A name that appears twice is a duplicate row: the table then holds two due
+  // dates for one credential and neither of them can be honored. Both rows are
+  // dropped and reported, so the caller warns and fails the run instead of
+  // reminding about a date that may be the wrong one.
+  const duplicated = duplicateNames(result.rows);
+  if (duplicated.size > 0) {
+    const lines = new Map();
+    for (const entry of result.rows) {
+      if (!duplicated.has(entry.name)) continue;
+      lines.set(entry.name, [...(lines.get(entry.name) ?? []), entry.line]);
+    }
+    const dropped = result.rows.filter((entry) => duplicated.has(entry.name));
+    result.rows = result.rows.filter((entry) => !duplicated.has(entry.name));
+    result.pastDue = result.pastDue.filter((entry) => !duplicated.has(entry.name));
+    result.dueSoon = result.dueSoon.filter((entry) => !duplicated.has(entry.name));
+    result.ok = result.ok.filter((entry) => !duplicated.has(entry.name));
+    result.notTracked = result.notTracked.filter((entry) => !duplicated.has(entry.name));
+    for (const entry of dropped) {
+      result.skipped.push({
+        name: entry.name,
+        line: entry.line,
+        reason:
+          `the name "${entry.name}" appears more than once in the rotation calendar ` +
+          `(lines ${lines.get(entry.name).join(', ')}), so no due date can be honored`
+      });
+    }
   }
 
   if (strict && result.skipped.length > 0) {

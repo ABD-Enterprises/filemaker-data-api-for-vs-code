@@ -24,13 +24,13 @@ The monthly `secret-rotation-reminder.yml` workflow reads the table below and fi
 
 There are no rows yet because this repository holds no secrets: publishing uses a short-lived OIDC token instead of a personal access token (see [JOB_AID_ENTRA_PUBLISHING.md](./JOB_AID_ENTRA_PUBLISHING.md)). The table is the mechanism, not a list of invented expiries — the workflow only reminds about the rows that are really there.
 
-A row without a date (blank or `N/A`) is tracked but never reminds. A row with an unreadable date or the wrong number of columns is reported as a warning by the workflow and fails that run, so a typo cannot silently hide a rotation.
+A row without a date (blank or `N/A`) is tracked but never reminds. A row with an unreadable date, the wrong number of columns or a name that appears twice is reported as a warning by the workflow and fails that run, so a typo cannot silently hide a rotation. Two rows with the same name are a duplicate: one credential cannot have two rotation dates, so neither row is honored until the table is fixed.
 
 The reminder issues carry the label `ops/secret-rotation`. The workflow creates that label when it is missing; if the repository settings do not let the job create it, add the label by hand once.
 
 ### Manual dry-run
 
-The workflow can be run by hand from the Actions tab. The `dry-run` input is on by default for a manual run: it prints what it would file and creates no issue and posts no comment. Untick it to file the reminders for real. The scheduled run always files for real.
+The workflow can be run by hand from the Actions tab. The `dry-run` input is on by default for a manual run: it prints what it would file and creates no issue and posts no comment. Untick it to file the reminders for real. The scheduled run always files for real. Only one run files at a time: a run that starts while another one is still going waits for it, so the two cannot race for the same issue.
 
 The same dry run works from a checkout, without the workflow:
 

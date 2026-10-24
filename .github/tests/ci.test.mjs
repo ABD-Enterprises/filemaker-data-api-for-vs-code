@@ -88,3 +88,26 @@ test('the secret rotation reminder tests the parser, installs nothing and files 
   }
   assert.equal(rotation.on.workflow_dispatch.inputs['dry-run'].default, true);
 });
+
+test('CI runs the rotation calendar tests on every pull request', () => {
+  const steps = ci.jobs['build-test'].steps;
+  const scripts = steps.find((step) => step.run === 'node --test scripts/');
+  assert.ok(scripts, 'the build-test job must run the parser and runner tests');
+  const setupNode = steps.findIndex((step) => step.uses?.startsWith('actions/setup-node@'));
+  assert.ok(steps.indexOf(scripts) > setupNode);
+});
+
+test('the secret rotation reminder stays monthly, dry by default and serialized', () => {
+  const rotation = parse(read('workflows/secret-rotation-reminder.yml'));
+  assert.deepEqual(rotation.on.schedule, [{ cron: '0 9 1 * *' }]);
+
+  const file = rotation.jobs.remind.steps.find(
+    (step) => step.run === 'node scripts/secret-rotation-remind.mjs'
+  );
+  assert.ok(file);
+  assert.equal(file.env.DRY_RUN, '${{ inputs.dry-run }}');
+  assert.equal(rotation.on.workflow_dispatch.inputs['dry-run'].default, true);
+
+  assert.ok(rotation.concurrency?.group, 'the workflow must serialize its runs');
+  assert.equal(rotation.concurrency['cancel-in-progress'], false);
+});

@@ -34,6 +34,11 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
+      # The rotation calendar parser and the reminder runner have no
+      # dependencies, so their tests run before anything is installed.
+      - name: Test the rotation calendar parser
+        run: node --test scripts/
+
       - name: Install Dependencies
         run: npm ci
 
