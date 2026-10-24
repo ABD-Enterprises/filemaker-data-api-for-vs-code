@@ -274,7 +274,7 @@ function runReminder({ calendar = '', args = [], fake = {}, env = {} } = {}) {
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr, calls };
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr, calls, file };
 }
 
 /** The calls the runner made to the issues API. */
@@ -414,6 +414,9 @@ test('a name that appears twice is reported and no reminder is filed for it', ()
   assert.equal(result.status, 1);
   assert.match(result.stdout, /::warning::/);
   assert.match(result.stdout, /appears more than once/);
+  // The messages name the file that was actually read, not a hardcoded path.
+  assert.ok(result.stdout.includes(`::warning::${result.file} line `));
+  assert.ok(result.stderr.includes(`fix them in ${result.file}`));
   assert.equal(issueCalls(result.calls, 'create').length, 0);
   assert.equal(issueCalls(result.calls, 'comment').length, 0);
 });

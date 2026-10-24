@@ -310,7 +310,7 @@ function main() {
     console.log(`  no date       ${row.name}`);
   }
   for (const skipped of calendar.skipped) {
-    console.log(`::warning::docs/SECRETS.md line ${skipped.line}: ${skipped.reason}`);
+    console.log(`::warning::${options.file} line ${skipped.line}: ${skipped.reason}`);
   }
 
   const due = [...calendar.pastDue, ...calendar.dueSoon];
@@ -369,7 +369,7 @@ function main() {
 
   if (calendar.skipped.length > 0) {
     console.error(
-      `secret-rotation-remind: ${calendar.skipped.length} rotation calendar row(s) could not be read; fix them in docs/SECRETS.md`
+      `secret-rotation-remind: ${calendar.skipped.length} rotation calendar row(s) could not be read; fix them in ${options.file}`
     );
     process.exit(1);
   }
