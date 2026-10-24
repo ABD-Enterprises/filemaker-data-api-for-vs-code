@@ -56,11 +56,15 @@ export function guardDispatch(run: () => PromiseLike<void>, options: DispatchOpt
  * A formatter that throws must not swallow the failure: the page would sit there with no
  * error at all, which is the very thing this guard exists to prevent. The reason the
  * formatter failed is written to the log and a plain fallback is posted instead.
+ *
+ * A formatter that has nothing to say is treated the same way. Panels pass the reason of
+ * the failure through as it is, and a reason can be empty (`throw new Error()`), which would
+ * leave the page with an empty line dressed as an error.
  */
 function failureMessage(options: DispatchOptions, error: unknown): string {
   try {
     const message = options.formatError(error);
-    return typeof message === 'string' ? message : fallbackMessage(error);
+    return typeof message === 'string' && message.trim() !== '' ? message : fallbackMessage(error);
   } catch (formatFailure: unknown) {
     logFailure(options.logger, `Could not format the ${options.label} failure message.`, formatFailure);
     return fallbackMessage(error);
@@ -70,10 +74,11 @@ function failureMessage(options: DispatchOptions, error: unknown): string {
 /** The last resort: the reason as plain text, so the page shows something. */
 function fallbackMessage(error: unknown): string {
   try {
-    if (error instanceof Error && error.message) {
+    if (error instanceof Error && typeof error.message === 'string' && error.message.trim() !== '') {
       return error.message;
     }
-    return String(error);
+    const text = String(error);
+    return text.trim() !== '' ? text : 'Something went wrong.';
   } catch {
     return 'Something went wrong.';
   }
