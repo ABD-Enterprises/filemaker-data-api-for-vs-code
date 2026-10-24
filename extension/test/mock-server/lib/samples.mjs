@@ -55,7 +55,8 @@ export const FORMULA_STARTERS = [
   '\n=1+1',
   '＝1+1',
   '=HYPERLINK("http://evil.example/x","click")',
-  "=cmd|' /C calc'!A0",
+  // An inert formula exercises CSV escaping without a command-launching payload.
+  '=SUM(A1:A2)',
   '=IMPORTXML("http://evil.example","//a")'
 ];
 export const JSON_LIKE = [
