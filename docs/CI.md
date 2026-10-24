@@ -10,7 +10,7 @@ What the project's automated checks are, the limits they enforce, and how depend
 | `api-docs.yml` | push to `main` | Builds the documentation website and the TypeDoc API reference and deploys both to GitHub Pages: <https://sureforgetech.github.io/filemaker-data-api-for-vs-code/api/>. |
 | `dependency-auto-merge.yml` | Dependabot pull requests | Enables auto-merge for safe dev-dependency updates (see below). |
 | `entra-identity-id.yml` | manual | One-off helper for the Entra publishing setup ([job aid](./JOB_AID_ENTRA_PUBLISHING.md)). Delete it when the setup is done. |
-| `secret-rotation-reminder.yml` | monthly | A scaffold that does nothing yet; see [SECRETS.md](./SECRETS.md). |
+| `secret-rotation-reminder.yml` | monthly, or manual | Reads the rotation calendar in [SECRETS.md](./SECRETS.md) and files a reminder issue about 30 days before a tracked credential is due. A manual run has a `dry-run` input that prints what it would file. |
 
 Every job's runner comes from the repository variable `LINUX_RUNNER_LABELS` (a JSON array of labels), except `cross-platform`, which names its operating systems in its matrix. The variable is currently `["ubuntu-latest"]`, a GitHub-hosted runner, which is free because this repository is public. Do not write a hosted label directly into a workflow; keep using the variable so the runner can change without editing workflows. `cross-platform` is the one deliberate exception: it needs a Windows runner, GitHub-hosted runners are free for a public repository, and the self-hosted-only rule applies to private repositories. Do not copy it into a private repository.
 

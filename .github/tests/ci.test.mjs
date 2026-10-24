@@ -63,3 +63,28 @@ test('Dependabot does not ignore uuid when neither lockfile contains it', () => 
   const dependabot = parse(read('dependabot.yml'));
   assert.ok(!dependabot.updates[0].ignore.some((entry) => entry['dependency-name'] === 'uuid'));
 });
+
+test('the secret rotation reminder tests the parser, installs nothing and files issues with narrow permissions', () => {
+  const rotation = parse(read('workflows/secret-rotation-reminder.yml'));
+  const job = rotation.jobs.remind;
+  assert.equal(job['runs-on'], '${{ fromJSON(vars.LINUX_RUNNER_LABELS) }}');
+  assert.deepEqual(job.permissions, { contents: 'read', issues: 'write' });
+
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  const setupNode = job.steps.find((step) => step.uses?.startsWith('actions/setup-node@'));
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(setupNode.with['node-version'], 22);
+  const ciSteps = ci.jobs['build-test'].steps;
+  assert.equal(checkout.uses, ciSteps.find((step) => step.uses?.startsWith('actions/checkout@')).uses);
+  assert.equal(setupNode.uses, ciSteps.find((step) => step.uses?.startsWith('actions/setup-node@')).uses);
+
+  assert.ok(job.steps.some((step) => step.run === 'node --test scripts/'));
+  const file = job.steps.find((step) => step.run === 'node scripts/secret-rotation-remind.mjs');
+  assert.ok(file);
+  assert.equal(file.env.GH_TOKEN, '${{ github.token }}');
+  assert.equal(file.env.GH_REPO, '${{ github.repository }}');
+  for (const step of job.steps) {
+    assert.doesNotMatch(step.run ?? '', /npm (ci|install|run)/, 'the job must not install or run dependencies');
+  }
+  assert.equal(rotation.on.workflow_dispatch.inputs['dry-run'].default, true);
+});

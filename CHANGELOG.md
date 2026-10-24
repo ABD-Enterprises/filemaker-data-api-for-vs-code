@@ -40,6 +40,7 @@ PR title prefix matches the highest-tier label added:
 ### [INTERNAL]
 
 - The user guide, upgrade notes and a changelog by version are now on the project's website.
+- The monthly secret rotation reminder now reads the rotation calendar in docs/SECRETS.md and files a reminder issue about 30 days before a tracked credential is due; a manual dry run prints what it would file.
 
 ### [SECURITY]
 
