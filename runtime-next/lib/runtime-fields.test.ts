@@ -60,6 +60,16 @@ describe('runtime field values', () => {
     render(field({ kind: 'container' }), 'javascript:alert(1)'); expect(host.querySelector('a,img')).toBeNull();
     render(field({ kind: 'container' }), ''); expect(host.querySelector('a,img,input')).toBeNull();
   });
+  it('shows the address of a container whose image cannot be shown', () => {
+    render(field({ kind: 'container' }), 'https://example.com/photo.jpg');
+    const image = host.querySelector('img')!;
+    expect(image).not.toBeNull();
+    act(() => { image.dispatchEvent(new Event('error')); });
+    // The image is gone and its address says where the file lives.
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.textContent).toContain('https://example.com/photo.jpg');
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('https://example.com/photo.jpg');
+  });
   it('dropdown, checkbox, radio and multiline controls report edits under the exact field name', () => {
     render(field({ displayType: 'dropdown', options: ['a', 'b'] }), 'a', true);
     act(() => {
@@ -124,6 +134,23 @@ describe('runtime field values', () => {
     } })));
     // The repetition belongs to the field, and a field the record does not have stays hidden.
     expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['Photo']);
+  });
+
+  it('shows the value of a repeated field and reports its edit under the key the record holds it under', () => {
+    const layout = createBlankLayout('Repetition');
+    layout.objects = [field({ id: '0', fmFieldName: 'Notes' })];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'Notes(1)': 'first repetition' }, editing: true, onFieldChange
+    } })));
+    // The value of a repeated field lives under `Notes(1)`, not under the name of the layout.
+    expect(host.querySelector('input')?.value).toBe('first repetition');
+    const input = host.querySelector('input')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'edited repetition');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // The edit is reported under the same key, so the other repetitions stay untouched.
+    expect(onFieldChange).toHaveBeenLastCalledWith('Notes(1)', 'edited repetition');
   });
 
   it('does not invent related rows or values in runtime portals', () => {

@@ -46,6 +46,18 @@ export function fieldKindNote(kind?: FieldKind): string | undefined {
   return undefined;
 }
 
+/**
+ * The key a record holds the value of the field `name` under: the exact name when the record has
+ * it, otherwise the first repetition `Name(1)`, which is where a repeating field keeps its value.
+ * An edit must be written back under the key the value came from, so that one repetition of a
+ * repeating field never overwrites another.
+ */
+export function recordFieldKey(values: Record<string, unknown>, name: string): string {
+  if (Object.prototype.hasOwnProperty.call(values, name)) return name;
+  const first = `${name}(1)`;
+  return Object.prototype.hasOwnProperty.call(values, first) ? first : name;
+}
+
 export function computeRecordPatch(originalFieldData: Record<string, unknown>, draftFieldData: Record<string, unknown>): Record<string, unknown> {
   const patch: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   const keys = new Set([...Object.keys(originalFieldData), ...Object.keys(draftFieldData)]);

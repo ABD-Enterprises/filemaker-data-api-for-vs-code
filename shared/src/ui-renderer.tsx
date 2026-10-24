@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { fieldKindNote, runtimeFieldKind } from './record-edit';
+import { fieldKindNote, recordFieldKey, runtimeFieldKind } from './record-edit';
 import { checkboxValue, choiceDisplayType, FIELD_LAYOUT, preserveTextLineEndings, standardControlFor } from './field-standards';
 import { baseFieldName, orderFields } from './field-order';
 
@@ -205,7 +205,7 @@ function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, 
   const objects = layout.objects.filter((object) => object.type !== 'field' || values === undefined || creating
     || hasFieldValue(values, object.fmFieldName)).map((object) => {
     if (object.type !== 'field') return object;
-    const height = Math.max(object.height, standardControlFor(controlMetadata(object, values?.[object.fmFieldName])).height);
+    const height = Math.max(object.height, standardControlFor(controlMetadata(object, fieldValueOf(values, object.fmFieldName).value)).height);
     extraRows.set(object.y, Math.max(extraRows.get(object.y) ?? 0, height - object.height));
     return { ...object, height };
   });
@@ -224,6 +224,17 @@ function hasFieldValue(values: Record<string, unknown>, name: string): boolean {
   return Object.keys(values).some((key) => baseFieldName(key) === name);
 }
 
+/**
+ * The key a record holds the value of the layout field `name` under, and that value. A repeated
+ * field keeps its value under `Name(1)`, so the layout name `Name` finds its value there, and an
+ * edit is written back under the same key, which leaves the other repetitions alone.
+ */
+function fieldValueOf(values: Record<string, unknown> | undefined, name: string): { key: string; value: unknown } {
+  if (!values) return { key: name, value: undefined };
+  const key = recordFieldKey(values, name);
+  return { key, value: values[key] };
+}
+
 function controlMetadata(object: FieldLayoutObject, value?: unknown) {
   return { name: object.fmFieldName, type: object.metadata?.result || object.result || object.metadata?.type || object.format,
     kind: runtimeFieldKind(object), displayType: object.displayType, multiline: object.multiline,
@@ -238,11 +249,14 @@ function FieldControl(props: {
 }): React.JSX.Element {
   const { object, style } = props;
   const labelText = object.label?.length ? object.label : object.fmFieldName;
-  const runtimeValue = props.runtimeData?.fieldValues?.[object.fmFieldName];
+  // The value of a repeated field lives under `Name(1)`; the edit goes back under that same key.
+  const { key: valueKey, value: runtimeValue } = fieldValueOf(props.runtimeData?.fieldValues, object.fmFieldName);
   const previewOptions = getPreviewOptions(object, runtimeValue, props.mode);
   const value = runtimeValue === undefined || runtimeValue === null ? '' : String(runtimeValue);
   const note = props.mode === 'runtime' ? runtimeFieldNote(object, props.runtimeData?.editing) : undefined;
   const readOnly = props.mode !== 'runtime' || !props.runtimeData?.editing || ['calculation', 'summary', 'container'].includes(runtimeFieldKind(object));
+  // A container image that cannot be shown leaves its address behind.
+  const [failedImage, setFailedImage] = React.useState<string | undefined>(undefined);
   // The value a choice group started with, so a selection that returns to it keeps the stored text.
   const choiceSession = React.useRef({ original: value, current: value, readOnly });
   if (choiceSession.current.current !== value || choiceSession.current.readOnly !== readOnly) {
@@ -295,9 +309,11 @@ function FieldControl(props: {
     value: props.mode === 'designer' ? previewOptions[0] : value,
     originalValue: choiceSession.current.original,
     readOnly,
+    imageFailed: failedImage !== undefined && failedImage === value,
+    onImageError: () => setFailedImage(value),
     onChange: (next) => {
       choiceSession.current.current = String(next);
-      props.runtimeData?.onFieldChange?.(object.fmFieldName, next);
+      props.runtimeData?.onFieldChange?.(valueKey, next);
     }
   });
 
@@ -344,6 +360,9 @@ function renderFieldDisplayControl(props: {
   value: string;
   originalValue: string;
   readOnly: boolean;
+  /** The container image could not be shown, so its address is shown instead. */
+  imageFailed?: boolean;
+  onImageError?: () => void;
   onChange: (value: unknown) => void;
 }): React.JSX.Element {
   const metadata = controlMetadata(props.object, props.value);
@@ -372,8 +391,12 @@ function renderFieldDisplayControl(props: {
     // Container links are server URLs, never executable schemes from field text.
     if (!/^https?:\/\//i.test(props.value)) return <div {...common} className="fm-field-control fm-container fm-readonly">{props.value}</div>;
     const image = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(props.value);
+    // A container image that cannot be shown leaves its address behind, as a link.
+    if (image && props.imageFailed) return <div {...common} className="fm-field-control fm-container fm-readonly">
+      <a href={props.value} target="_blank" rel="noopener noreferrer">{props.value}</a></div>;
     return <div {...common} className="fm-field-control fm-container fm-readonly">{image
-      ? <img src={props.value} alt={props.object.fmFieldName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      ? <img src={props.value} alt={props.object.fmFieldName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        onError={props.onImageError} />
       : <a href={props.value} target="_blank" rel="noopener noreferrer">Open container</a>}</div>;
   }
 

@@ -1,10 +1,10 @@
-// fmweb-managed: runtime template v6. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
+// fmweb-managed: runtime template v7. The FileMaker Data API Tools extension refreshes this file when the template version changes; keep your own changes in other files.
 'use client';
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 
-import { LayoutContainer, runtimeFieldKind, computeRecordPatch, validateRecordDraft, numericText, nulTextFields, removeNulText, NUL_TEXT_WARNING, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
+import { LayoutContainer, runtimeFieldKind, computeRecordPatch, recordFieldKey, validateRecordDraft, numericText, nulTextFields, removeNulText, NUL_TEXT_WARNING, type LayoutDefinition, type LayoutObject } from '@fmweb/shared';
 
 import { executeRuntimeBehaviorAction, type RuntimeBehaviorResult } from '../../../lib/runtime-behavior';
 import { useRuntimeDataController } from '../../../lib/runtime-data';
@@ -89,7 +89,9 @@ export function RuntimeLayoutClient({
       const draft = Object.create(null) as Record<string, unknown>;
       for (const field of editableFields) {
         if (field.type !== 'field') continue;
-        const name = field.fmFieldName;
+        // A repeated field keeps its value under `Name(1)`, so the edit is written back under the
+        // key the value came from; the other repetitions of the field stay untouched.
+        const name = recordFieldKey(edit.original, field.fmFieldName);
         if (Object.hasOwn(edit.original, name)) original[name] = edit.original[name];
         if (!Object.hasOwn(edit.draft, name)) continue;
         const value = edit.draft[name];
