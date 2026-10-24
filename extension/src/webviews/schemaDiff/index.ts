@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 
+import type { Logger } from '../../services/logger';
 import type { SchemaDiffResult } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
+import { guardDispatch, requestType } from '../common/dispatch';
 import { toRecord } from '../common/messageValidation';
 import { versionFooterHtml } from '../../about/runtimeVersion';
 
@@ -15,6 +17,7 @@ export class SchemaDiffPanel {
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly context: vscode.ExtensionContext,
+    private readonly logger: Pick<Logger, 'error'>,
     private diff: SchemaDiffResult
   ) {
     this.panel.webview.html = this.renderHtml(panel.webview);
@@ -23,18 +26,20 @@ export class SchemaDiffPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      void this.handleMessage(message);
+      this.dispatch(() => this.handleMessage(message), requestType(message));
     });
   }
 
   public static createOrShow(
     context: vscode.ExtensionContext,
-    diff: SchemaDiffResult
+    diff: SchemaDiffResult,
+    logger: Pick<Logger, 'error'>
   ): void {
-    if (SchemaDiffPanel.currentPanel) {
-      SchemaDiffPanel.currentPanel.diff = diff;
-      SchemaDiffPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
-      void SchemaDiffPanel.currentPanel.sendDiff();
+    const current = SchemaDiffPanel.currentPanel;
+    if (current) {
+      current.diff = diff;
+      current.panel.reveal(vscode.ViewColumn.One);
+      current.dispatch(() => current.sendDiff(), 'sendDiff');
       return;
     }
 
@@ -51,7 +56,25 @@ export class SchemaDiffPanel {
       }
     );
 
-    SchemaDiffPanel.currentPanel = new SchemaDiffPanel(panel, context, diff);
+    SchemaDiffPanel.currentPanel = new SchemaDiffPanel(panel, context, logger, diff);
+  }
+
+  /**
+   * The host hands the panel a message and returns; the handler runs on its own. A failure is
+   * logged and posted to the page, so the user reads the reason instead of an empty panel.
+   */
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
+    guardDispatch(run, {
+      label: 'Schema diff request',
+      type,
+      logger: this.logger,
+      formatError: (error) => formatError(error),
+      postError: (message) => this.postError(message)
+    });
+  }
+
+  private async postError(message: string): Promise<void> {
+    await this.panel.webview.postMessage({ type: 'error', message });
   }
 
   private async handleMessage(message: unknown): Promise<void> {
@@ -175,4 +198,12 @@ function parseMessage(value: unknown): SchemaDiffWebviewMessage | undefined {
   }
 
   return undefined;
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Unexpected error in the schema diff panel.';
 }

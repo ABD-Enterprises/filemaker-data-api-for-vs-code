@@ -18,7 +18,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function viewer(client: object) {
+function viewer(client: object, overrides: { listProfiles?: () => Promise<unknown[]> } = {}) {
   let receive!: (message: unknown) => void;
   let page: ReturnType<typeof loadPage>;
   const webview = { html: '', cspSource: 'x', asWebviewUri: (uri: unknown) => uri,
@@ -26,11 +26,12 @@ function viewer(client: object) {
     onDidReceiveMessage: vi.fn((listener: typeof receive) => { receive = listener; }) };
   vi.mocked(vscode.window.createWebviewPanel).mockReturnValue({ webview, onDidDispose: vi.fn(), reveal: vi.fn() } as never);
   (RecordViewerPanel as unknown as { currentPanel: unknown }).currentPanel = undefined;
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   RecordViewerPanel.createOrShow({ extensionUri: vscode.Uri.file('/extension') } as never,
-    { getProfile: async () => profile, listProfiles: async () => [profile], getActiveProfileId: () => 'p' } as never,
-    client as never, { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never);
+    { getProfile: async () => profile, listProfiles: overrides.listProfiles ?? (async () => [profile]), getActiveProfileId: () => 'p' } as never,
+    client as never, logger as never);
   page = loadPage(webview.html, uiSource);
-  return { ...page, receive, postMessage: webview.postMessage };
+  return { ...page, receive, postMessage: webview.postMessage, logger };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -117,5 +118,36 @@ describe.skipIf(!JSDOM)('Record Viewer host failures reach the page', () => {
     page.receive({ type: 'copyRecordRequest', payload: { ...payload(), operation: 'get', format: 'curl' } });
     await vi.waitFor(() => expect(page.document.getElementById('status')?.textContent).toBe('Clipboard unavailable.'));
     expect(vscode.env.clipboard.writeText).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe.skipIf(!JSDOM)('Record Viewer reports a request the host cannot finish', () => {
+  it('shows and logs the failure when the first state cannot be sent', async () => {
+    const page = viewer({}, { listProfiles: async () => { throw new Error('Profiles are unavailable.'); } });
+
+    page.receive({ type: 'ready' });
+
+    await vi.waitFor(() => expect(page.document.getElementById('status')?.textContent).toBe('Profiles are unavailable.'));
+    expect(page.document.getElementById('status')?.classList.contains('error')).toBe(true);
+    expect(page.postMessage).toHaveBeenCalledWith({ type: 'error', message: 'Profiles are unavailable.' });
+    expect(page.logger.error).toHaveBeenCalledWith('Record viewer request failed.', { type: 'ready', error: expect.any(Error) });
+  });
+
+  it('ignores a message of an unknown type', async () => {
+    const page = viewer({});
+
+    page.receive({ type: 'somethingElse' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(page.postMessage).not.toHaveBeenCalled();
+    expect(page.logger.error).not.toHaveBeenCalled();
+  });
+
+  it('still reports a service failure from inside the request', async () => {
+    const page = viewer({ listLayouts: vi.fn().mockRejectedValue(new Error('Layouts unavailable.')) });
+
+    page.receive({ type: 'loadLayouts', profileId: 'p' });
+
+    await vi.waitFor(() => expect(page.document.getElementById('status')?.textContent).toBe('Layouts unavailable.'));
   });
 });

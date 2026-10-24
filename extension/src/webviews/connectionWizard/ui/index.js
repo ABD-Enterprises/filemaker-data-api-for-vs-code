@@ -224,6 +224,12 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'templateWarning':
         showStatus('warning', message.message || 'Profile template could not be used.');
         break;
+
+      // A failure the host did not expect (the panel could not read the profiles, for
+      // example). It is shown in the same status line as the save and test failures.
+      case 'error':
+        showStatus('error', message.message || 'Something went wrong.');
+        break;
     }
   });
 

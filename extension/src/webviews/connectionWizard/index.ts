@@ -6,6 +6,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import type { SecretStore } from '../../services/secretStore';
 import type { ConnectionProfile } from '../../types/fm';
 import { buildWebviewCsp, createNonce } from '../common/csp';
+import { guardDispatch, requestType } from '../common/dispatch';
 import { versionFooterHtml } from '../../about/runtimeVersion';
 import type { CertificateState, ConnectionWizardOptions } from './types';
 import type { WizardContext } from './context';
@@ -43,7 +44,7 @@ export class ConnectionWizardPanel {
 
     // Trusting the workspace while the wizard is open removes the notice.
     const trustListener = vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      void sendInit(this.host);
+      this.dispatch(() => sendInit(this.host), 'init');
     });
     this.panel.onDidDispose(() => {
       trustListener.dispose();
@@ -51,7 +52,7 @@ export class ConnectionWizardPanel {
     });
 
     this.panel.webview.onDidReceiveMessage((message: unknown) => {
-      void handleMessage(this.host, message);
+      this.dispatch(() => handleMessage(this.host, message), requestType(message));
     });
   }
 
@@ -64,10 +65,11 @@ export class ConnectionWizardPanel {
     editingProfile?: ConnectionProfile,
     options: ConnectionWizardOptions = {}
   ): void {
-    if (ConnectionWizardPanel.currentPanel) {
-      ConnectionWizardPanel.currentPanel.editingProfile = editingProfile;
-      ConnectionWizardPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
-      void sendLoadProfile(ConnectionWizardPanel.currentPanel.host);
+    const current = ConnectionWizardPanel.currentPanel;
+    if (current) {
+      current.editingProfile = editingProfile;
+      current.panel.reveal(vscode.ViewColumn.One);
+      current.dispatch(() => sendLoadProfile(current.host), 'loadProfile');
       return;
     }
 
@@ -113,6 +115,25 @@ export class ConnectionWizardPanel {
     };
   }
 
+
+  /**
+   * The host hands the panel a message and returns; the handler runs on its own. A failure is
+   * logged and posted to the page, so the user reads the reason instead of an empty panel.
+   */
+  private dispatch(run: () => PromiseLike<void>, type?: string): void {
+    guardDispatch(run, {
+      label: 'Connection wizard request',
+      type,
+      logger: this.logger,
+      formatError: (error) => formatError(error),
+      postError: (message) => this.postError(message)
+    });
+  }
+
+  /** The page shows this in its status line, like the save and test failures do. */
+  private async postError(message: string): Promise<void> {
+    await this.panel.webview.postMessage({ type: 'error', message });
+  }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
     const nonce = createNonce();
@@ -298,4 +319,12 @@ export class ConnectionWizardPanel {
 </body>
 </html>`;
   }
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Unexpected error in the connection wizard.';
 }
