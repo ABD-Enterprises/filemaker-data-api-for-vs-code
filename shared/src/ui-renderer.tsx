@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { fieldKindNote, runtimeFieldKind } from './record-edit';
 import { checkboxValue, choiceDisplayType, FIELD_LAYOUT, preserveTextLineEndings, standardControlFor } from './field-standards';
-import { orderFields } from './field-order';
+import { baseFieldName, orderFields } from './field-order';
 
 import type { FieldLayoutObject, LayoutDefinition, LayoutObject, PortalLayoutObject } from './layout-schema';
 
@@ -203,7 +203,7 @@ function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, 
   const extraRows = new Map<number, number>();
   // A field that is not on the record stays hidden; a new record shows every field of the layout.
   const objects = layout.objects.filter((object) => object.type !== 'field' || values === undefined || creating
-    || Object.prototype.hasOwnProperty.call(values, object.fmFieldName)).map((object) => {
+    || hasFieldValue(values, object.fmFieldName)).map((object) => {
     if (object.type !== 'field') return object;
     const height = Math.max(object.height, standardControlFor(controlMetadata(object, values?.[object.fmFieldName])).height);
     extraRows.set(object.y, Math.max(extraRows.get(object.y) ?? 0, height - object.height));
@@ -212,6 +212,16 @@ function runtimeControlLayout(layout: LayoutDefinition, values?: Record<string, 
   return { ...layout, objects: objects.map((object) => ({ ...object,
     y: object.y + [...extraRows].reduce((shift, [row, extra]) => shift + (row < object.y ? extra : 0), 0)
   })) };
+}
+
+/**
+ * A field is on the record when the record holds a value for it. A repeated field stores its
+ * value under `Name(1)`, so that value counts for the field `Name`.
+ */
+function hasFieldValue(values: Record<string, unknown>, name: string): boolean {
+  if (Object.prototype.hasOwnProperty.call(values, name)) return true;
+  if (baseFieldName(name) !== name) return false;
+  return Object.keys(values).some((key) => baseFieldName(key) === name);
 }
 
 function controlMetadata(object: FieldLayoutObject, value?: unknown) {

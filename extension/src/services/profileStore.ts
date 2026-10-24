@@ -56,6 +56,11 @@ export class ProfileStore {
   }
 
   public async listProfiles(): Promise<ConnectionProfile[]> {
+    return this.listProfilesSync();
+  }
+
+  /** The stored profiles without waiting; a webview needs them before its first paint. */
+  public listProfilesSync(): ConnectionProfile[] {
     const rawProfiles = this.globalState.get<unknown>(PROFILES_KEY, []);
     if (!Array.isArray(rawProfiles)) {
       return [];

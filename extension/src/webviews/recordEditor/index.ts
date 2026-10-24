@@ -9,7 +9,7 @@ import type { ProfileStore } from '../../services/profileStore';
 import { RecordEditService } from '../../services/recordEditService';
 import type { SchemaService } from '../../services/schemaService';
 import type { ConnectionProfile, EditRecordResult, FileMakerFieldMetadata, FileMakerRecord } from '../../types/fm';
-import { buildWebviewCsp, createNonce } from '../common/csp';
+import { buildWebviewCsp, createNonce, profileImageSources } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 import {
   deliverSnippet,
@@ -702,7 +702,9 @@ export class RecordEditorPanel {
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
-      nonce
+      nonce,
+      // A container image is served by the FileMaker server of a profile.
+      imageSources: profileImageSources(this.profileStore)
     });
 
     return `<!DOCTYPE html>

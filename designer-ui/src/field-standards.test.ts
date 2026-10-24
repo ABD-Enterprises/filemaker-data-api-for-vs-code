@@ -34,6 +34,21 @@ describe('shared field presentation rules', () => {
     expect(standardControlFor({ type: 'text', displayType: 'checkbox', options: ['A'], freeText: true }).kind).toBe('input');
     expect(standardControlFor({ type: 'text', maxLength: 0, freeText: true }).kind).toBe('input');
   });
+  it('keeps a field that is not text on one line, whatever its height is', () => {
+    // FileMaker reports the height of a layout object in points, so 21 points is one line.
+    expect(standardControlFor({ type: 'number', displayType: 'editText', height: 21 }).kind).toBe('input');
+    expect(standardControlFor({ type: 'date', displayType: 'editText', height: 21 }).kind).toBe('input');
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 21 }).kind).toBe('input');
+  });
+  it('keeps a text field that reports a count of lines in a text area', () => {
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 2 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 3 }).kind).toBe('textarea');
+    // A text field with a real multi-line signal stays a text area whatever its height is.
+    expect(standardControlFor({ type: 'text', multiline: true, height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'long text', height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', maxLength: 0, height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', value: 'first\nsecond', height: 21 }).kind).toBe('textarea');
+  });
 });
 
 // Real Data API display names and hostile/oversized option metadata.

@@ -3,10 +3,15 @@ export interface FieldOrderMetadata {
   fields?: ReadonlyArray<{ name: string }>;
 }
 
+/** The field name without its repetition index: the value `Photo(1)` belongs to the field `Photo`. */
+export function baseFieldName(name: string): string {
+  return name.replace(/\(\d+\)$/, '');
+}
+
 /** Order only returned fields: unavailable fields must never appear just because metadata names them. */
 export function orderFields(layoutMetadata: FieldOrderMetadata | undefined, fieldData: Record<string, unknown>): string[] {
   const keys = Object.keys(fieldData);
-  const base = (name: string): string => name.replace(/\(\d+\)$/, '');
+  const base = baseFieldName;
   const order = new Map<string, number>();
   for (const field of layoutMetadata?.fieldMetaData ?? layoutMetadata?.fields ?? []) {
     const name = base(field.name);

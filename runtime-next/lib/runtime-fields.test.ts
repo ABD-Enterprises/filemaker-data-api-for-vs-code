@@ -116,6 +116,16 @@ describe('runtime field values', () => {
     expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['B', 'A']);
   });
 
+  it('shows a repeated field when the record only holds its repeated value', () => {
+    const layout = createBlankLayout('Repetition');
+    layout.objects = [field({ id: '0', fmFieldName: 'Photo' }), field({ id: '1', fmFieldName: 'Absent' })];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'Photo(1)': 'https://example.test/photo.png' }
+    } })));
+    // The repetition belongs to the field, and a field the record does not have stays hidden.
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['Photo']);
+  });
+
   it('does not invent related rows or values in runtime portals', () => {
     const layout = createBlankLayout('Portal'); layout.objects = [{ ...field(), type: 'portal', relatedContext: 'Related',
       rowCount: 2, columns: [{ id: 'col', fmFieldName: 'Name', label: 'Name', width: 120 }], scroll: true, selectableRows: false }];

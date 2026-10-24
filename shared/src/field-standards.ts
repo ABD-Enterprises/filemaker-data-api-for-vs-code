@@ -38,6 +38,17 @@ export type StandardControlKind = 'input' | 'textarea' | 'select' | 'radio' | 'c
 /** Types whose values are plain text. FileMaker reports a text field as `normal` with a `text` result. */
 const TEXT_TYPES = ['', 'text', 'normal', 'string'];
 
+/** The most lines a text field can show; a larger height is a layout size, not a count of lines. */
+const MAX_TEXT_LINES = 10;
+
+/**
+ * A text field needs more than one line when its height counts lines. FileMaker reports the
+ * height of a layout object in points, so only a small number can be a count of lines.
+ */
+function isTextLineCount(height: number | undefined): boolean {
+  return typeof height === 'number' && Number.isFinite(height) && height > 1 && height <= MAX_TEXT_LINES;
+}
+
 /**
  * A text field needs more than one line when its character limit is unlimited (FileMaker reports
  * `maxCharacters: 0`), when the limit is large, or when the value itself carries a line break.
@@ -66,7 +77,7 @@ export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): 
   else if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type)
     || ['textarea', 'multiline'].includes(display)
     || (TEXT_TYPES.includes(type) && isLongText(field, value))
-    || (display === 'edittext' && (field.height ?? 0) > 1)) kind = 'textarea';
+    || (TEXT_TYPES.includes(type) && display === 'edittext' && isTextLineCount(field.height))) kind = 'textarea';
   const count = field.optionCount ?? field.options?.length;
   const height = kind === 'container' ? FIELD_LAYOUT.containerHeight : kind === 'textarea' ? FIELD_LAYOUT.multilineHeight
     : kind === 'checkbox' || kind === 'radio' ? Math.max(FIELD_LAYOUT.inputHeight,
@@ -150,6 +161,10 @@ export function createStandardControl(document: Document, field: Partial<Standar
         const image = document.createElement('img');
         image.src = value;
         image.alt = field.name ?? '';
+        // A blocked or missing image must not hide where the container lives.
+        image.addEventListener('error', () => {
+          link.replaceChildren(document.createTextNode(value));
+        });
         link.replaceChildren(image);
       }
       control.appendChild(link);

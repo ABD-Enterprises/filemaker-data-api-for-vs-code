@@ -132,6 +132,17 @@ describe.skipIf(!JSDOM)('standard field presentation in browser webviews', () =>
     expect(computeRecordPatch(changed.originalFieldData, changed.draftFieldData)).toEqual({ Status: 'Active' });
   });
 
+  it.each(['recordEditor', 'recordViewer'] as const)('%s shows the container URL when its image cannot be shown', (surface) => {
+    const page = loadPage(html(surface), read(`extension/src/webviews/${surface}/ui/index.js`));
+    const url = 'https://example.test/photo.png';
+    const metadata = [{ name: 'Photo', type: 'container', result: 'container' }];
+    page.send({ type: 'recordLoaded', payload: { record: { recordId: '1', fieldData: { Photo: url } }, fields: metadata, presentationFields: metadata } });
+    expect(page.document.querySelectorAll('.fm-container img')[0]?.getAttribute('src')).toBe(url);
+    // A blocked or missing image must not hide where the container lives.
+    page.window.eval(`document.querySelector('.fm-container img').dispatchEvent(new Event('error'));`);
+    expect(page.document.querySelectorAll('.fm-container')[0]?.textContent).toBe(url);
+  });
+
   it('Query Builder layout controls use layout order for field choices and result columns', () => {
     const page = loadPage(html('queryBuilder'), read('extension/src/webviews/queryBuilder/ui/findForm.js') + '\n' + read('extension/src/webviews/queryBuilder/ui/index.js'));
     page.send({ type: 'init', payload: { profiles, activeProfileId: 'p', savedQueries: [] } });
