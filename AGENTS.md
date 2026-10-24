@@ -38,6 +38,7 @@ Applies to every repository in the fleet. It is generated from one source; repos
 
 - **Validation:** `npm ci`, `npm run lint`, `npm run typecheck`, `npm run mock:check -w extension`, `npm run test:coverage`, `npm run build`, `npm test -w designer-ui -w runtime-next`, and `npm run package:check`; CI also runs `npm audit --omit=dev --audit-level=high` and the VSIX size check. Run the relevant full gate before delivery.
 - **Layout:** `extension/` is the VS Code extension; `shared/` contains shared contracts and renderer utilities; `designer-ui/` is the Layout Mode webview; `runtime-next/` is the FM Web template; `docs/` contains maintainer and security guidance.
+- **Skills:** no repository-specific skills beyond the shared fleet skills hub defaults.
 - **Changelog:** user-visible changes update `extension/CHANGELOG.md` and the root `CHANGELOG.md` in plain words; release changes follow `docs/RELEASE.md`.
 - **Merge:** a fresh independent review of the exact head must have zero unresolved P0/P1 findings and all required checks must be green. Do not merge a changed head without a fresh review.
 - **SureForge:** public-repository code changes run through a SureForge supervised contract. Contracts and operator wrappers stay outside this repository. Inside a run, agents do not commit, push, switch branches, stash, or change Git config. The default branch is protected; use a fresh linked worktree and a non-protected branch.
