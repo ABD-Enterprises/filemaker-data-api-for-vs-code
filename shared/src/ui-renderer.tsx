@@ -537,15 +537,19 @@ function PortalControl(props: {
                 minHeight: rowHeight
               }}
             >
-              {object.columns.map((column) => (
-                <div
-                  key={`${column.id}-${rowIndex}`}
-                  data-fm-portal-cell={`${column.fmFieldName}:${rowIndex}`}
-                  style={{ padding: '6px 8px', borderRight: '1px solid #f0f4f8' }}
-                >
-                  {props.mode === 'runtime' ? String(row[column.fmFieldName] ?? '') : formatPortalCellValue(row[column.fmFieldName], column.fmFieldName, rowIndex)}
-                </div>
-              ))}
+              {object.columns.map((column) => {
+                // A repeated field keeps its value under `Name(1)`, so the column finds it there.
+                const value = row[recordFieldKey(row, column.fmFieldName)];
+                return (
+                  <div
+                    key={`${column.id}-${rowIndex}`}
+                    data-fm-portal-cell={`${column.fmFieldName}:${rowIndex}`}
+                    style={{ padding: '6px 8px', borderRight: '1px solid #f0f4f8' }}
+                  >
+                    {props.mode === 'runtime' ? String(value ?? '') : formatPortalCellValue(value, column.fmFieldName, rowIndex)}
+                  </div>
+                );
+              })}
               {object.columns.length === 0 ? (
                 <div style={{ padding: '6px 8px', color: '#7a8e9f' }}>No columns configured</div>
               ) : null}

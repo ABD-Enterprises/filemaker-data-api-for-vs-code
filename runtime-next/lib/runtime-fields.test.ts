@@ -163,4 +163,14 @@ describe('runtime field values', () => {
     } })));
     expect(host.querySelector('[data-fm-portal-cell]')?.textContent).toBe('');
   });
+
+  it('shows a repeating portal column under its repetition key', () => {
+    const layout = createBlankLayout('Portal'); layout.objects = [{ ...field(), type: 'portal', relatedContext: 'Related',
+      rowCount: 2, columns: [{ id: 'col', fmFieldName: 'Notes', label: 'Notes', width: 120 }], scroll: true, selectableRows: false }];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      portalRowsByObjectId: { [layout.objects[0].id]: [{ 'Notes(1)': 'repeated value' }] }
+    } })));
+    // The related record holds the repeated value under `Notes(1)`, so the column shows it.
+    expect(host.querySelector('[data-fm-portal-cell]')?.textContent).toBe('repeated value');
+  });
 });

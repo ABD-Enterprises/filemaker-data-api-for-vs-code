@@ -10,6 +10,18 @@ describe('shared Editor rules', () => {
       expect(validateRecordDraft({ ' Exact ': value }).errors[0]?.field).toBe(' Exact ');
     }
   });
+  it('checks a required field against the key the record holds its value under', () => {
+    // A repeated field keeps its value under `Notes(1)`, so the required check finds it there.
+    expect(validateRecordDraft({ 'Notes(1)': 'x' }, [{ name: 'Notes', required: true }]).valid).toBe(true);
+    expect(validateRecordDraft({ 'Notes(1)': 'x' }, [{ name: 'Notes', notEmpty: true }]).valid).toBe(true);
+    // A required field with no value anywhere still fails.
+    expect(validateRecordDraft({}, [{ name: 'Notes', required: true }]).valid).toBe(false);
+    expect(validateRecordDraft({ Other: 'x' }, [{ name: 'Notes', required: true }]).valid).toBe(false);
+    expect(validateRecordDraft({ 'Notes(1)': '' }, [{ name: 'Notes', required: true }]).valid).toBe(false);
+    // A field that does not repeat keeps its own key.
+    expect(validateRecordDraft({ Name: '' }, [{ name: 'Name', required: true }]).valid).toBe(false);
+    expect(validateRecordDraft({ Name: 'a' }, [{ name: 'Name', required: true }]).valid).toBe(true);
+  });
   it('compares nested values without key-order noise and preserves hostile identifiers in patches', () => {
     const values = JSON.parse('{"__proto__":"kept"," Field ":" ","nested":{"b":2,"a":1}}');
     const patch = computeRecordPatch({ nested: { a: 1, b: 2 } }, values);

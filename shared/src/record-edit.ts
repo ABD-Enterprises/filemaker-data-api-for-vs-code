@@ -108,7 +108,9 @@ export function validateRecordDraft(draftFieldData: Record<string, unknown>, fie
         continue;
       }
 
-      const value = draftFieldData[field.name];
+      // A repeated field keeps its value under `Name(1)`, so the record holds it under that
+      // key; the required check looks where the value is, not under the bare field name.
+      const value = draftFieldData[recordFieldKey(draftFieldData, field.name)];
       if (value === undefined || value === null || value === '') {
         errors.push({
           field: field.name,
