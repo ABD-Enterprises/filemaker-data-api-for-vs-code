@@ -1,5 +1,5 @@
 // Tests for the rotation calendar parser in scripts/lib/secret-rotation.mjs.
-// Run with: node --test scripts/
+// Run with: node --test scripts/*.test.mjs
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -279,6 +279,35 @@ test('a name that appears twice is a duplicate even when one row has no date', (
   assert.equal(calendar.rows.length, 0);
   assert.equal(calendar.notTracked.length, 0);
   assert.equal(calendar.skipped.length, 2);
+});
+
+test('a name that appears twice is a duplicate even when the second row has an unreadable date', () => {
+  const calendar = parseRotationCalendar(
+    documentWith([row('TWICE_PAT', 'Alan', '2026-11-01'), row('TWICE_PAT', 'Alan', '2026-13-99')]),
+    { now: NOW }
+  );
+  assert.equal(calendar.rows.length, 0);
+  assert.equal(calendar.pastDue.length, 0);
+  assert.equal(calendar.dueSoon.length, 0);
+  assert.equal(calendar.ok.length, 0);
+  assert.equal(calendar.notTracked.length, 0);
+  assert.equal(calendar.skipped.length, 2);
+  assert.ok(calendar.skipped.every((entry) => entry.name === 'TWICE_PAT'));
+  assert.ok(calendar.skipped.every((entry) => /appears more than once/.test(entry.reason)));
+  assert.notEqual(calendar.skipped[0].line, calendar.skipped[1].line);
+});
+
+test('the duplicate check runs before the per-row checks', () => {
+  // The second row cannot be read at all: it has the wrong number of cells.
+  // The pair is still a duplicate, so neither row is honored.
+  const calendar = parseRotationCalendar(
+    documentWith([row('TWICE_PAT', 'Alan', '2026-11-01'), '| `TWICE_PAT` | Alan | 2026-11-02 |']),
+    { now: NOW }
+  );
+  assert.equal(calendar.rows.length, 0);
+  assert.equal(calendar.dueSoon.length, 0);
+  assert.equal(calendar.skipped.length, 2);
+  assert.ok(calendar.skipped.every((entry) => /appears more than once/.test(entry.reason)));
 });
 
 test('strict mode throws on a duplicated name', () => {

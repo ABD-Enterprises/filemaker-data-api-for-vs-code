@@ -68,7 +68,26 @@ function repoArgs(repo) {
   return repo ? ['--repo', repo] : [];
 }
 
-/** Run the GitHub CLI and return its trimmed stdout. Throws on a failure. */
+/**
+ * The outcome of a GitHub CLI call: the exit status of the command and its
+ * trimmed output. A non-zero exit is part of the outcome and not an
+ * exception, so the caller can tell one failure from another.
+ *
+ * @typedef {{ status: number, stdout: string, stderr: string }} GhResult
+ */
+
+/** The message of a failed GitHub CLI call. */
+function ghFailure(args, status, detail) {
+  return `gh ${args[0]} failed with exit code ${status}${detail ? `: ${detail}` : ''}`;
+}
+
+/**
+ * Run the GitHub CLI and return its outcome. Throws only when the CLI cannot
+ * be started at all.
+ *
+ * @param {string[]} args the arguments of the command
+ * @returns {GhResult}
+ */
 function gh(args) {
   const binary = process.env.GH_CLI || 'gh';
   const result = spawnSync(binary, args, { encoding: 'utf8' });
@@ -79,25 +98,71 @@ function gh(args) {
         : result.error.message;
     throw new Error(`gh ${args[0]} failed: ${reason}`);
   }
+  return {
+    status: result.status ?? 1,
+    stdout: (result.stdout || '').trim(),
+    stderr: (result.stderr || '').trim()
+  };
+}
+
+/**
+ * Run the GitHub CLI and return its trimmed stdout. Throws on a failure.
+ */
+function ghText(args) {
+  const result = gh(args);
   if (result.status !== 0) {
-    const detail = (result.stderr || result.stdout || '').trim();
-    throw new Error(`gh ${args[0]} failed with exit code ${result.status}${detail ? `: ${detail}` : ''}`);
+    throw new Error(ghFailure(args, result.status, result.stderr || result.stdout));
   }
-  return (result.stdout || '').trim();
+  return result.stdout;
 }
 
 /**
  * Run the GitHub CLI and return the JSON it printed. Throws on a failure.
+ *
+ * The exit code and the error output of the command are captured, so a
+ * caller that has to tell one API failure from another can look at them.
  * The `exec` argument is the seam the tests use: it takes the argument list
- * and returns the stdout of the command.
+ * and returns the outcome of the command.
+ *
+ * @param {string[]} args the arguments of the command
+ * @param {(args: string[]) => GhResult} [exec] the seam the tests use
  */
 export function ghJson(args, exec = gh) {
-  const output = exec(args);
+  const { status, stdout, stderr } = exec(args);
+  if (status !== 0) {
+    const error = new Error(ghFailure(args, status, stderr || stdout));
+    error.status = status;
+    error.stderr = stderr;
+    throw error;
+  }
   try {
-    return JSON.parse(output || '[]');
+    return JSON.parse(stdout || '[]');
   } catch {
     throw new Error(`gh ${args[0]} did not return JSON`);
   }
+}
+
+/** The HTTP status of a GitHub CLI error message, or null when it has none. */
+function httpStatus(stderr) {
+  const match = /HTTP (\d{3})\b/.exec(stderr || '');
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * True when a failed label creation means the label is already there.
+ *
+ * The GitHub CLI reports an API error as `HTTP <status>: <message> (<url>)`.
+ * Creating a label that exists answers `HTTP 422: Validation Failed`, so the
+ * status says the label is there even when the message never names it. The
+ * wording is matched as well, for a CLI that words the same failure
+ * differently.
+ *
+ * @param {GhResult} result the outcome of the label creation
+ */
+export function isLabelAlreadyThere(result) {
+  if (result.status === 0) return false;
+  if (httpStatus(result.stderr) === 422) return true;
+  return /already exists/i.test(result.stderr || '');
 }
 
 /** The label the reminder issues carry. It is created when it is missing. */
@@ -108,28 +173,29 @@ export function ensureLabel(repo, dryRun, exec = gh) {
     console.log(`[dry-run] would create the missing label "${LABEL}"`);
     return;
   }
-  try {
-    exec([
-      'label',
-      'create',
-      LABEL,
-      '--color',
-      '0e8a16',
-      '--description',
-      'Reminder to rotate a tracked credential',
-      ...repoArgs(repo)
-    ]);
+  const args = [
+    'label',
+    'create',
+    LABEL,
+    '--color',
+    '0e8a16',
+    '--description',
+    'Reminder to rotate a tracked credential',
+    ...repoArgs(repo)
+  ];
+  const result = exec(args);
+  if (result.status === 0) {
     console.log(`created the missing label "${LABEL}"`);
-  } catch (error) {
-    // The label was created between the listing and the creation (a second
-    // run, or a label that appeared by hand). That is the state the runner
-    // wanted, so the run carries on instead of failing.
-    if (/already exists/i.test(error.message)) {
-      console.log(`the label "${LABEL}" already exists`);
-      return;
-    }
-    throw error;
+    return;
   }
+  // The label was created between the listing and the creation (a second
+  // run, or a label that appeared by hand). That is the state the runner
+  // wanted, so the run carries on instead of failing.
+  if (isLabelAlreadyThere(result)) {
+    console.log(`the label "${LABEL}" already exists`);
+    return;
+  }
+  throw new Error(ghFailure(args, result.status, result.stderr || result.stdout));
 }
 
 /** Open reminder issues that already track a credential. */
@@ -275,7 +341,7 @@ function main() {
         console.log(`[dry-run] would comment on issue #${existing.number} (${existing.title}):`);
         console.log(body);
       } else {
-        gh(['issue', 'comment', String(existing.number), '--body', body, ...repoArgs(repo)]);
+        ghText(['issue', 'comment', String(existing.number), '--body', body, ...repoArgs(repo)]);
         console.log(`commented on issue #${existing.number} for ${row.name}`);
       }
       continue;
@@ -286,7 +352,7 @@ function main() {
       console.log(`[dry-run] would open an issue labeled "${LABEL}" titled "${title}":`);
       console.log(body);
     } else {
-      const url = gh([
+      const url = ghText([
         'issue',
         'create',
         '--title',

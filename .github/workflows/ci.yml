@@ -36,8 +36,11 @@ jobs:
 
       # The rotation calendar parser and the reminder runner have no
       # dependencies, so their tests run before anything is installed.
+      # The shell expands the glob: Node 22 reads a directory argument as a
+      # module and fails, so the test files are named one by one.
       - name: Test the rotation calendar parser
-        run: node --test scripts/
+        shell: bash
+        run: node --test scripts/*.test.mjs
 
       - name: Install Dependencies
         run: npm ci

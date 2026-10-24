@@ -23,7 +23,9 @@
 // - A name that appears twice in the table is a duplicate: the two rows carry
 //   two due dates for one credential, so neither is honored. Every row with
 //   that name is skipped and reported, because a reminder for the wrong date
-//   is worse than no reminder.
+//   is worse than no reminder. The check runs on the raw rows, before the
+//   per-row checks, so a name that is written twice is a duplicate even when
+//   one of the two rows is unreadable.
 // - Dates are ISO `YYYY-MM-DD` only, compared in UTC, so the result does not
 //   depend on the runner's time zone.
 
@@ -170,19 +172,39 @@ function findTable(sectionLines) {
 }
 
 /**
- * The names that appear more than once in the given rows.
- * Two rows with the same name carry two due dates for one credential.
+ * The name of a raw table row, or an empty string when the row carries no
+ * credential: a comment row and a row without a name name nothing.
+ *
+ * The name column wins over the first cell, but a row that is too short to
+ * reach the name column falls back to its first cell, so a row that cannot
+ * be read still takes part in the duplicate check.
+ */
+function rawRowName(cells, nameIndex) {
+  const cell = (nameIndex >= 0 ? cells[nameIndex] : undefined) ?? cells[0];
+  const name = plainText(cell ?? '');
+  if (!name || name.startsWith('<!--')) return '';
+  return name;
+}
+
+/**
+ * The names that appear more than once among the given raw rows, with the
+ * line numbers of every row that carries the name.
+ *
+ * Two rows with the same name carry two due dates for one credential. The
+ * check runs on the raw rows, before the per-row checks, so a name that is
+ * written twice is a duplicate even when one of the two rows cannot be
+ * read: a reminder for the wrong date is worse than no reminder.
  */
 function duplicateNames(rows) {
-  const counts = new Map();
+  const lines = new Map();
   for (const entry of rows) {
-    counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1);
+    lines.set(entry.name, [...(lines.get(entry.name) ?? []), entry.line]);
   }
   const names = new Set();
-  for (const [name, count] of counts) {
-    if (count > 1) names.add(name);
+  for (const [name, rowLines] of lines) {
+    if (rowLines.length > 1) names.add(name);
   }
-  return names;
+  return { names, lines };
 }
 
 /**
@@ -249,8 +271,32 @@ export function parseRotationCalendar(markdown, options = {}) {
   const notesIndex = indexOf('notes');
   const columnCount = table.header.length;
 
+  // The names are collected from the raw rows, before the per-row checks:
+  // a name that is written twice is a duplicate even when one of the two
+  // rows cannot be read.
+  const duplicated = duplicateNames(
+    table.rows
+      .filter((row) => !isSeparatorRow(row.cells))
+      .map((row) => ({ name: rawRowName(row.cells, nameIndex), line: row.line }))
+      .filter((entry) => entry.name !== '')
+  );
+
   for (const row of table.rows) {
     if (isSeparatorRow(row.cells)) continue;
+    const name = rawRowName(row.cells, nameIndex);
+    // A name that appears twice is a duplicate row: the table then holds two
+    // due dates for one credential and neither of them can be honored. Both
+    // rows are dropped and reported, so the caller warns and fails the run
+    // instead of reminding about a date that may be the wrong one. The check
+    // comes before the per-row checks, so an unreadable row cannot save the
+    // other row of the pair.
+    if (name && duplicated.names.has(name)) {
+      const reason =
+        `the name "${name}" appears more than once in the rotation calendar ` +
+        `(lines ${duplicated.lines.get(name).join(', ')}), so no due date can be honored`;
+      result.skipped.push({ name, line: row.line, reason });
+      continue;
+    }
     if (row.cells.length !== columnCount) {
       const reason = `the row has ${row.cells.length} cells, the table header has ${columnCount}`;
       result.skipped.push({ name: plainText(row.cells[0] ?? ''), line: row.line, reason });
@@ -258,7 +304,6 @@ export function parseRotationCalendar(markdown, options = {}) {
     }
     const nameCell = row.cells[nameIndex] ?? '';
     if (nameCell.trim().startsWith('<!--')) continue;
-    const name = plainText(nameCell);
     if (!name) {
       result.skipped.push({ name: '', line: row.line, reason: 'the row has no name' });
       continue;
@@ -306,34 +351,6 @@ export function parseRotationCalendar(markdown, options = {}) {
     if (status === STATUS.PAST_DUE) result.pastDue.push(entry);
     else if (status === STATUS.DUE_SOON) result.dueSoon.push(entry);
     else result.ok.push(entry);
-  }
-
-  // A name that appears twice is a duplicate row: the table then holds two due
-  // dates for one credential and neither of them can be honored. Both rows are
-  // dropped and reported, so the caller warns and fails the run instead of
-  // reminding about a date that may be the wrong one.
-  const duplicated = duplicateNames(result.rows);
-  if (duplicated.size > 0) {
-    const lines = new Map();
-    for (const entry of result.rows) {
-      if (!duplicated.has(entry.name)) continue;
-      lines.set(entry.name, [...(lines.get(entry.name) ?? []), entry.line]);
-    }
-    const dropped = result.rows.filter((entry) => duplicated.has(entry.name));
-    result.rows = result.rows.filter((entry) => !duplicated.has(entry.name));
-    result.pastDue = result.pastDue.filter((entry) => !duplicated.has(entry.name));
-    result.dueSoon = result.dueSoon.filter((entry) => !duplicated.has(entry.name));
-    result.ok = result.ok.filter((entry) => !duplicated.has(entry.name));
-    result.notTracked = result.notTracked.filter((entry) => !duplicated.has(entry.name));
-    for (const entry of dropped) {
-      result.skipped.push({
-        name: entry.name,
-        line: entry.line,
-        reason:
-          `the name "${entry.name}" appears more than once in the rotation calendar ` +
-          `(lines ${lines.get(entry.name).join(', ')}), so no due date can be honored`
-      });
-    }
   }
 
   if (strict && result.skipped.length > 0) {

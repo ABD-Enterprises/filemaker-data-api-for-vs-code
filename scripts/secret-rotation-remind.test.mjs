@@ -1,5 +1,5 @@
 // Tests for the reminder runner in scripts/secret-rotation-remind.mjs.
-// Run with: node --test scripts/
+// Run with: node --test scripts/*.test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import {
   commentBody,
   ensureLabel,
   findReminderIssue,
+  isLabelAlreadyThere,
   issueBody,
   issueTitle
 } from './secret-rotation-remind.mjs';
@@ -114,7 +115,7 @@ test('the label is created when it is missing', () => {
   const calls = [];
   const exec = (args) => {
     calls.push(args);
-    return '[]';
+    return { status: 0, stdout: '[]', stderr: '' };
   };
   ensureLabel(null, false, exec);
   assert.equal(calls.length, 2);
@@ -122,25 +123,65 @@ test('the label is created when it is missing', () => {
   assert.deepEqual(calls[1].slice(0, 2), ['label', 'create']);
 });
 
+test('a label that exists is recognized by its HTTP status, not by its wording', () => {
+  // The real GitHub CLI answers a label that exists like this: the status
+  // says the label is there, the message never names it.
+  assert.equal(
+    isLabelAlreadyThere({
+      status: 1,
+      stdout: '',
+      stderr: 'HTTP 422: Validation Failed (https://api.github.com/repos/owner/repo/labels)'
+    }),
+    true
+  );
+  assert.equal(
+    isLabelAlreadyThere({
+      status: 1,
+      stdout: '',
+      stderr: 'HTTP 403: Resource not accessible by integration (https://api.github.com/repos/owner/repo/labels)'
+    }),
+    false
+  );
+  assert.equal(isLabelAlreadyThere({ status: 0, stdout: '', stderr: '' }), false);
+});
+
 test('a label that appears between the listing and the creation does not fail the run', () => {
   const calls = [];
   const exec = (args) => {
     calls.push(args);
-    if (args[0] === 'label' && args[1] === 'list') return '[]';
-    throw new Error(
-      'gh label failed with exit code 1: failed to create label: a label with the name ops/secret-rotation already exists'
-    );
+    if (args[0] === 'label' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' };
+    return {
+      status: 1,
+      stdout: '',
+      stderr: 'HTTP 422: Validation Failed (https://api.github.com/repos/owner/repo/labels)'
+    };
   };
   ensureLabel(null, false, exec);
   assert.equal(calls.length, 2);
 });
 
+test('a label that exists is also recognized by its wording', () => {
+  const exec = (args) => {
+    if (args[0] === 'label' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' };
+    return {
+      status: 1,
+      stdout: '',
+      stderr: 'failed to create label: a label with the name ops/secret-rotation already exists'
+    };
+  };
+  ensureLabel(null, false, exec);
+});
+
 test('a label that cannot be created still fails the run', () => {
   const exec = (args) => {
-    if (args[0] === 'label' && args[1] === 'list') return '[]';
-    throw new Error('gh label failed with exit code 1: not allowed to create a label');
+    if (args[0] === 'label' && args[1] === 'list') return { status: 0, stdout: '[]', stderr: '' };
+    return {
+      status: 1,
+      stdout: '',
+      stderr: 'HTTP 403: Resource not accessible by integration (https://api.github.com/repos/owner/repo/labels)'
+    };
   };
-  assert.throws(() => ensureLabel(null, false, exec), /not allowed/);
+  assert.throws(() => ensureLabel(null, false, exec), /HTTP 403/);
 });
 
 // The tests below run the script itself in a child process with a fake
@@ -167,8 +208,11 @@ const row = (name, owner, due) => `| \`${name}\` | ${owner} | ${due} | |`;
  * A fake GitHub CLI. It answers the questions the runner asks and records
  * every call in a log file. The runner reads the path of the binary from the
  * GH_CLI environment variable.
+ *
+ * `labelCreateError` is the error output of a failed label creation, in the
+ * format the real GitHub CLI uses: `HTTP <status>: <message> (<url>)`.
  */
-function writeFakeGh(directory, { labels = [], issues = [], labelExists = false } = {}) {
+function writeFakeGh(directory, { labels = [], issues = [], labelCreateError = null } = {}) {
   const log = path.join(directory, 'gh-calls.log');
   const binary = path.join(directory, 'gh');
   const source = `#!/usr/bin/env node
@@ -180,8 +224,9 @@ appendFileSync(process.env.FAKE_GH_LOG, JSON.stringify(args) + '\\n');
 if (args[0] === 'label' && args[1] === 'list') {
   process.stdout.write(JSON.stringify(JSON.parse(process.env.FAKE_GH_LABELS || '[]')));
 } else if (args[0] === 'label' && args[1] === 'create') {
-  if (process.env.FAKE_GH_LABEL_EXISTS === 'true') {
-    process.stderr.write('failed to create label: a label with the name ops/secret-rotation already exists\\n');
+  const failure = process.env.FAKE_GH_LABEL_CREATE_ERROR;
+  if (failure) {
+    process.stderr.write(failure + '\\n');
     process.exit(1);
   }
   process.stdout.write('created the label\\n');
@@ -205,7 +250,7 @@ if (args[0] === 'label' && args[1] === 'list') {
       FAKE_GH_LOG: log,
       FAKE_GH_LABELS: JSON.stringify(labels),
       FAKE_GH_ISSUES: JSON.stringify(issues),
-      FAKE_GH_LABEL_EXISTS: labelExists ? 'true' : 'false'
+      FAKE_GH_LABEL_CREATE_ERROR: labelCreateError || ''
     }
   };
 }
@@ -330,11 +375,32 @@ test('the DRY_RUN environment variable has the same effect as the flag', () => {
 test('a label that appears between the listing and the creation does not stop the run', () => {
   const result = runReminder({
     calendar: calendarWith([row('LABEL_PAT', 'Alan', '2020-01-01')]),
-    fake: { labels: [], issues: [], labelExists: true }
+    fake: {
+      labels: [],
+      issues: [],
+      // The real GitHub CLI answers a label that exists like this: the status
+      // says the label is there, the message never names it.
+      labelCreateError: 'HTTP 422: Validation Failed (https://api.github.com/repos/owner/repo/labels)'
+    }
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /the label "ops\/secret-rotation" already exists/);
   assert.equal(issueCalls(result.calls, 'create').length, 1);
+});
+
+test('a label that cannot be created fails the run', () => {
+  const result = runReminder({
+    calendar: calendarWith([row('LABEL_PAT', 'Alan', '2020-01-01')]),
+    fake: {
+      labels: [],
+      issues: [],
+      labelCreateError:
+        'HTTP 403: Resource not accessible by integration (https://api.github.com/repos/owner/repo/labels)'
+    }
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /HTTP 403/);
+  assert.equal(issueCalls(result.calls, 'create').length, 0);
 });
 
 test('a name that appears twice is reported and no reminder is filed for it', () => {
@@ -342,6 +408,23 @@ test('a name that appears twice is reported and no reminder is filed for it', ()
     calendar: calendarWith([
       row('TWICE_PAT', 'Alan', '2020-01-01'),
       row('TWICE_PAT', 'Alan', '2020-02-01')
+    ]),
+    fake: { labels: [{ name: 'ops/secret-rotation' }], issues: [] }
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /::warning::/);
+  assert.match(result.stdout, /appears more than once/);
+  assert.equal(issueCalls(result.calls, 'create').length, 0);
+  assert.equal(issueCalls(result.calls, 'comment').length, 0);
+});
+
+test('a name that appears twice with an unreadable second date files no reminder', () => {
+  // The second row cannot be read, but the pair is still a duplicate: one
+  // credential cannot have two rotation dates, so neither row is honored.
+  const result = runReminder({
+    calendar: calendarWith([
+      row('TWICE_PAT', 'Alan', '2020-01-01'),
+      row('TWICE_PAT', 'Alan', '2026-13-99')
     ]),
     fake: { labels: [{ name: 'ops/secret-rotation' }], issues: [] }
   });

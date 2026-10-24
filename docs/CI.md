@@ -22,9 +22,10 @@ The `release` job and the dependency auto-merge workflow use the composite actio
 
 Branch protection on `main` requires one status check, **`build-test`**, and no approving review. Nothing else is required today. Code scanning default setup is not configured on this repository, so there is no required scanning check.
 
-After checkout and Node 22 setup, `build-test` runs, in order: `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), workflow regression tests (`node --test .github/tests/ci.test.mjs`), the mock API contract (`npm run mock:check -w extension`), typecheck (the workspace TypeScript checks, including extension source and tests), `test:coverage` (Vitest, with coverage thresholds), build (shared output, esbuild bundles and webview assets), designer and runtime workspace tests (`npm test -w designer-ui -w runtime-next`, after shared is built), package check (`npm run package:check`: it first verifies that `extension/THIRD_PARTY_NOTICES.txt` is current, then runs `vsce package`), and the VSIX size budget. To run the checks locally (the size cap is enforced in CI):
+After checkout and Node 22 setup, `build-test` runs, in order: the rotation calendar parser and reminder runner tests (`node --test scripts/*.test.mjs`, the shell expands the glob because Node 22 reads a directory argument as a module and fails), `npm ci`, `npm audit --omit=dev --audit-level=high`, lint (`--max-warnings=0`), workflow regression tests (`node --test .github/tests/ci.test.mjs`), the mock API contract (`npm run mock:check -w extension`), typecheck (the workspace TypeScript checks, including extension source and tests), `test:coverage` (Vitest, with coverage thresholds), build (shared output, esbuild bundles and webview assets), designer and runtime workspace tests (`npm test -w designer-ui -w runtime-next`, after shared is built), package check (`npm run package:check`: it first verifies that `extension/THIRD_PARTY_NOTICES.txt` is current, then runs `vsce package`), and the VSIX size budget. To run the checks locally (the size cap is enforced in CI):
 
 ```bash
+node --test scripts/*.test.mjs
 npm ci
 npm audit --omit=dev --audit-level=high
 npm run lint
