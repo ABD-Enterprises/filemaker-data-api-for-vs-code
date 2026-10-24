@@ -38,6 +38,31 @@ export function buildWebviewCsp(webview: vscode.Webview, options: CspOptions): s
   ].join('; ');
 }
 
+/** The scheme and host of a server URL, without its path; nothing for a URL that is not http(s). */
+export function serverOrigin(serverUrl: string | undefined): string | undefined {
+  if (!serverUrl) return undefined;
+  try {
+    const url = new URL(serverUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The origins of the configured servers, so a container image can be shown in a webview. Only
+ * those exact origins are allowed; every host on the internet is not.
+ */
+export function profileImageSources(store: { listProfilesSync?: () => unknown } | undefined): string[] {
+  const profiles = store?.listProfilesSync?.();
+  if (!Array.isArray(profiles)) return [];
+  const origins = profiles
+    .map((profile) => serverOrigin((profile as { serverUrl?: string } | undefined)?.serverUrl))
+    .filter((origin): origin is string => Boolean(origin));
+  return Array.from(new Set(origins));
+}
+
 function dedupe(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.length > 0)));
 }

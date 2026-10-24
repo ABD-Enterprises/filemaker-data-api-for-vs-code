@@ -44,8 +44,8 @@ describe.skipIf(!JSDOM)('Record Viewer host failures reach the page', () => {
     await vi.waitFor(() => expect(page.document.getElementById('status')?.textContent).toBe('Loaded record 1.'));
     expect(client.getRecord).toHaveBeenCalledWith(profile, ' Layout ', '1');
     expect(client.getLayoutMetadata).toHaveBeenCalledWith(profile, ' Layout ', { recordHistory: false });
-    expect(page.document.querySelectorAll('#fieldDataContainer textarea')[0]?.value).toBe('exact value');
-    expect(page.document.querySelectorAll('#fieldDataContainer td')[0]?.textContent).toBe(' Field ');
+    expect(page.document.querySelectorAll('#fieldDataContainer input')[0]?.value).toBe('exact value');
+    expect(page.document.querySelectorAll('#fieldDataContainer td')[0]?.textContent).toContain(' Field ');
     expect(page.postMessage).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ presentationFields: [] }) }));
   });
 
@@ -66,14 +66,14 @@ describe.skipIf(!JSDOM)('Record Viewer host failures reach the page', () => {
     page.receive({ type: 'loadRecord', payload: payload(' Old ') });
     await vi.waitFor(() => expect(client.getRecord).toHaveBeenCalledTimes(1));
     page.receive({ type: 'loadRecord', payload: payload(' New ') });
-    await vi.waitFor(() => expect(page.document.querySelectorAll('#fieldDataContainer textarea')[0]?.value).toBe('new value'));
+    await vi.waitFor(() => expect(page.document.querySelectorAll('#fieldDataContainer input')[0]?.value).toBe('new value'));
     if (outcome === 'success') first.resolve(record('old value'));
     else first.reject(new Error('stale error'));
     // Drain both Promise.all and the message handler before asserting the absence of a stale post.
     await first.promise.catch(() => undefined);
     await new Promise((resolve) => setImmediate(resolve));
     expect(page.postMessage).toHaveBeenCalledTimes(1);
-    expect(page.document.querySelectorAll('#fieldDataContainer textarea')[0]?.value).toBe('new value');
+    expect(page.document.querySelectorAll('#fieldDataContainer input')[0]?.value).toBe('new value');
     expect(page.document.getElementById('status')?.textContent).toBe('Loaded record 1.');
     page.receive({ type: 'exportRecord' });
     await vi.waitFor(() => expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith({ language: 'json', content: JSON.stringify({ profileId: 'p', layout: ' New ', record: record('new value') }, null, 2) }));
@@ -84,7 +84,7 @@ describe.skipIf(!JSDOM)('Record Viewer host failures reach the page', () => {
     const client = { getRecord: vi.fn(async () => record()), getLayoutMetadata: vi.fn(async () => metadata) };
     const page = viewer(client);
     page.receive({ type: 'loadRecord', payload: payload() });
-    await vi.waitFor(() => expect(page.document.querySelectorAll('#fieldDataContainer textarea')[0]?.value).toBe('exact value'));
+    await vi.waitFor(() => expect(page.document.querySelectorAll('#fieldDataContainer input')[0]?.value).toBe('exact value'));
     expect(client.getLayoutMetadata).not.toHaveBeenCalled();
     expect(page.postMessage).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ presentationFields: [] }) }));
   });

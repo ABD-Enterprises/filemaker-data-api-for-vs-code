@@ -223,3 +223,42 @@ it('shows date guidance only while editing', async () => {
   await click('Cancel');
   expect(host.textContent).not.toContain("Use the server's date format");
 });
+
+it('saves a repeated field under the key the record holds it under, and leaves the other repetitions alone', async () => {
+  const previous = layout.objects;
+  fields = { 'Notes(1)': 'first', 'Notes(2)': 'other' };
+  records = [{ recordId: '19', modId, fieldData: fields }];
+  layout.objects = [{ id: '00000000-0000-4000-8000-000000000099', name: 'Notes', fmFieldName: 'Notes', type: 'field',
+    format: 'text', kind: 'normal', displayType: 'editBox', required: false, labelPosition: 'top', width: 240, height: 34,
+    x: 24, y: 0, zIndex: 0, anchors: { left: true, top: true, right: false, bottom: false } } as FieldLayoutObject];
+  try {
+    await mount();
+    // The value of the first repetition is shown.
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Notes"]')?.value).toBe('first');
+    await click('Edit');
+    change('Notes', 'edited');
+    await click('Save');
+    // The patch names the repetition key, so the other repetition of the field keeps its value.
+    expect(calls.find((call) => call.route === 'editRecord')?.body.fieldData).toEqual({ 'Notes(1)': 'edited' });
+    expect(fields['Notes(2)']).toBe('other');
+  } finally { layout.objects = previous; }
+});
+
+
+it('saves a required repeating field whose value is under its repetition key', async () => {
+  const previous = layout.objects;
+  fields = { 'Notes(1)': 'first' };
+  records = [{ recordId: '19', modId, fieldData: fields }];
+  layout.objects = [{ id: '00000000-0000-4000-8000-000000000099', name: 'Notes', fmFieldName: 'Notes', type: 'field',
+    format: 'text', kind: 'normal', displayType: 'editBox', required: true, labelPosition: 'top', width: 240, height: 34,
+    x: 24, y: 0, zIndex: 0, anchors: { left: true, top: true, right: false, bottom: false } } as FieldLayoutObject];
+  try {
+    await mount();
+    await click('Edit');
+    change('Notes', 'edited');
+    await click('Save');
+    // The required check finds the value under the repetition key, so the save is not refused.
+    expect(host.textContent).not.toContain('Field is required by metadata hints.');
+    expect(calls.find((call) => call.route === 'editRecord')?.body.fieldData).toEqual({ 'Notes(1)': 'edited' });
+  } finally { layout.objects = previous; }
+});

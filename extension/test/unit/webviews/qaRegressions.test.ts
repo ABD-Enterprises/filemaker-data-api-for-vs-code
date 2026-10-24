@@ -199,7 +199,7 @@ describe.skipIf(!JSDOM)('webview regression checks', () => {
     document.getElementById('recordIdInput')!.value = '42';
     if (creating) send({ type: 'layoutFields', payload: { ...layouts, layout: ' Contacts ', metadataSupported: true, fields: [{ name: ' Name ' }] } });
     else send({ type: 'recordLoaded', payload: { profileId: 'p1', layout: ' Contacts ', record: { recordId: '42', fieldData: { ' Name ': 'old' } } } });
-    const input = document.querySelectorAll('#fieldEditor textarea')[0]!;
+    const input = document.querySelectorAll('#fieldEditor input:not([type="checkbox"]):not([type="radio"]), #fieldEditor textarea')[0]!;
     input.value = 'new';
     (input as unknown as { dispatchEvent(event: unknown): void }).dispatchEvent(new window.Event('input'));
     const button = document.getElementById(creating ? 'createButton' : 'saveButton')!;

@@ -101,7 +101,7 @@ describe('FM Web runtime template', () => {
     await symlink(path.join(extensionDir, '..', 'node_modules'), path.join(output, 'node_modules'));
     expect(createRequire(path.join(shared, 'src/index.ts')).resolve('zod')).toContain('node_modules');
     expect(JSON.parse(await readFile(path.join(shared, 'package.json'), 'utf8')).main).toBe('src/index.ts');
-    for (const file of ['ui-renderer.tsx', 'layout-schema.ts', 'record-edit.ts']) {
+    for (const file of ['ui-renderer.tsx', 'layout-schema.ts', 'record-edit.ts', 'field-order.ts', 'field-standards.ts', 'index.ts']) {
       expect(await readFile(path.join(shared, 'src', file), 'utf8')).toBe(await readFile(path.join(extensionDir, '../shared/src', file), 'utf8'));
     }
     expect(await readFile(path.join(output, 'next.config.ts'), 'utf8')).toContain("transpilePackages: ['@fmweb/shared']");

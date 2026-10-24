@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_LAYOUT, standardFieldSize } from '@fmweb/shared';
+import { FIELD_LAYOUT, standardControlFor, standardFieldSize } from '@fmweb/shared';
 import { createStandardField } from './canvas-engine';
 
 describe('shared field presentation rules', () => {
@@ -21,6 +21,33 @@ describe('shared field presentation rules', () => {
       expect(standardFieldSize({ displayType, optionCount: 0 }).height).toBe(34);
       expect(standardFieldSize({ displayType, optionCount: NaN }).height).toBe(34);
     }
+  });
+  it('keeps a text field with an unlimited or large character limit in a text area', () => {
+    // FileMaker reports `maxCharacters: 0` for a field without a character limit.
+    expect(standardControlFor({ type: 'normal', result: 'text', maxLength: 0 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', maxLength: 500 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', maxLength: 50 }).kind).toBe('input');
+    expect(standardControlFor({ type: 'text', value: 'first\nsecond' }).kind).toBe('textarea');
+  });
+  it('keeps a find value plain text, so FileMaker operators and wildcards stay typeable', () => {
+    expect(standardControlFor({ type: 'text', displayType: 'dropdown', options: ['Active'], freeText: true }).kind).toBe('input');
+    expect(standardControlFor({ type: 'text', displayType: 'checkbox', options: ['A'], freeText: true }).kind).toBe('input');
+    expect(standardControlFor({ type: 'text', maxLength: 0, freeText: true }).kind).toBe('input');
+  });
+  it('keeps a field that is not text on one line, whatever its height is', () => {
+    // FileMaker reports the height of a layout object in points, so 21 points is one line.
+    expect(standardControlFor({ type: 'number', displayType: 'editText', height: 21 }).kind).toBe('input');
+    expect(standardControlFor({ type: 'date', displayType: 'editText', height: 21 }).kind).toBe('input');
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 21 }).kind).toBe('input');
+  });
+  it('keeps a text field that reports a count of lines in a text area', () => {
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 2 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', displayType: 'editText', height: 3 }).kind).toBe('textarea');
+    // A text field with a real multi-line signal stays a text area whatever its height is.
+    expect(standardControlFor({ type: 'text', multiline: true, height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'long text', height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', maxLength: 0, height: 21 }).kind).toBe('textarea');
+    expect(standardControlFor({ type: 'text', value: 'first\nsecond', height: 21 }).kind).toBe('textarea');
   });
 });
 

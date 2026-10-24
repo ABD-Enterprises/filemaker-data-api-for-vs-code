@@ -60,6 +60,16 @@ describe('runtime field values', () => {
     render(field({ kind: 'container' }), 'javascript:alert(1)'); expect(host.querySelector('a,img')).toBeNull();
     render(field({ kind: 'container' }), ''); expect(host.querySelector('a,img,input')).toBeNull();
   });
+  it('shows the address of a container whose image cannot be shown', () => {
+    render(field({ kind: 'container' }), 'https://example.com/photo.jpg');
+    const image = host.querySelector('img')!;
+    expect(image).not.toBeNull();
+    act(() => { image.dispatchEvent(new Event('error')); });
+    // The image is gone and its address says where the file lives.
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.textContent).toContain('https://example.com/photo.jpg');
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('https://example.com/photo.jpg');
+  });
   it('dropdown, checkbox, radio and multiline controls report edits under the exact field name', () => {
     render(field({ displayType: 'dropdown', options: ['a', 'b'] }), 'a', true);
     act(() => {
@@ -81,6 +91,68 @@ describe('runtime field values', () => {
     expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'new\ntext');
   });
 
+  it('keeps the stored checkbox order and appends new selections, whatever order the boxes were ticked', () => {
+    const checkbox = field({ displayType: 'checkbox', options: ['a', 'b', 'c'] });
+    render(checkbox, 'c', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[0].click());
+    // The stored value comes first; the new selection is appended with the stored separator.
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\ra');
+    // The host stores the value and sends it back; the next tick builds on the stored value.
+    render(checkbox, 'c\ra', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[1].click());
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\ra\rb');
+    render(checkbox, 'c\ra\rb', true);
+    act(() => host.querySelectorAll<HTMLInputElement>('input')[0].click());
+    expect(onFieldChange).toHaveBeenLastCalledWith(' Field ', 'c\rb');
+  });
+
+  it('renders only placed returned fields in metadata order, with repetitions grouped and extras in response order', () => {
+    const layout = createBlankLayout('Order'); layout.fieldOrder = [' Z ', 'A', 'Hidden'];
+    layout.objects = ['Extra', 'A(10)', 'First extra', 'A(2)', ' Z ', 'A(1)', 'Hidden']
+      .map((name, index) => field({ id: String(index), fmFieldName: name, zIndex: index }));
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'First extra': '', Extra: '', 'A(10)': '', 'A(2)': '', ' Z ': '', 'A(1)': '', Unplaced: '' }
+    } })));
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label')))
+      .toEqual([' Z ', 'A(1)', 'A(2)', 'A(10)', 'First extra', 'Extra']);
+  });
+
+  it('shows every field of the layout for a new record, because a new record has no values yet', () => {
+    const layout = createBlankLayout('New'); layout.fieldOrder = ['B', 'A'];
+    layout.objects = ['A', 'B'].map((name, index) => field({ id: String(index), fmFieldName: name, zIndex: index }));
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: {}, creating: true, editing: true
+    } })));
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['B', 'A']);
+  });
+
+  it('shows a repeated field when the record only holds its repeated value', () => {
+    const layout = createBlankLayout('Repetition');
+    layout.objects = [field({ id: '0', fmFieldName: 'Photo' }), field({ id: '1', fmFieldName: 'Absent' })];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'Photo(1)': 'https://example.test/photo.png' }
+    } })));
+    // The repetition belongs to the field, and a field the record does not have stays hidden.
+    expect(Array.from(host.querySelectorAll('input')).map((input) => input.getAttribute('aria-label'))).toEqual(['Photo']);
+  });
+
+  it('shows the value of a repeated field and reports its edit under the key the record holds it under', () => {
+    const layout = createBlankLayout('Repetition');
+    layout.objects = [field({ id: '0', fmFieldName: 'Notes' })];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      fieldValues: { 'Notes(1)': 'first repetition' }, editing: true, onFieldChange
+    } })));
+    // The value of a repeated field lives under `Notes(1)`, not under the name of the layout.
+    expect(host.querySelector('input')?.value).toBe('first repetition');
+    const input = host.querySelector('input')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'edited repetition');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // The edit is reported under the same key, so the other repetitions stay untouched.
+    expect(onFieldChange).toHaveBeenLastCalledWith('Notes(1)', 'edited repetition');
+  });
+
   it('does not invent related rows or values in runtime portals', () => {
     const layout = createBlankLayout('Portal'); layout.objects = [{ ...field(), type: 'portal', relatedContext: 'Related',
       rowCount: 2, columns: [{ id: 'col', fmFieldName: 'Name', label: 'Name', width: 120 }], scroll: true, selectableRows: false }];
@@ -90,5 +162,15 @@ describe('runtime field values', () => {
       portalRowsByObjectId: { [layout.objects[0].id]: [{ Name: '' }] }
     } })));
     expect(host.querySelector('[data-fm-portal-cell]')?.textContent).toBe('');
+  });
+
+  it('shows a repeating portal column under its repetition key', () => {
+    const layout = createBlankLayout('Portal'); layout.objects = [{ ...field(), type: 'portal', relatedContext: 'Related',
+      rowCount: 2, columns: [{ id: 'col', fmFieldName: 'Notes', label: 'Notes', width: 120 }], scroll: true, selectableRows: false }];
+    act(() => root.render(React.createElement(LayoutContainer, { layout, mode: 'runtime', runtimeData: {
+      portalRowsByObjectId: { [layout.objects[0].id]: [{ 'Notes(1)': 'repeated value' }] }
+    } })));
+    // The related record holds the repeated value under `Notes(1)`, so the column shows it.
+    expect(host.querySelector('[data-fm-portal-cell]')?.textContent).toBe('repeated value');
   });
 });

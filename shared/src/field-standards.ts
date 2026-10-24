@@ -1,3 +1,5 @@
+export { orderFields } from './field-order';
+
 /** Dependency-free presentation rules shared by the designer and value-entry webviews. */
 export const FIELD_LAYOUT = Object.freeze({
   grid: 8,
@@ -21,26 +23,208 @@ export interface StandardFieldMetadata {
   displayType?: string;
   multiline?: boolean;
   optionCount?: number;
+  result?: string;
+  kind?: 'normal' | 'calculation' | 'summary' | 'container' | 'global';
+  maxLength?: number;
+  height?: number;
+  value?: unknown;
+  options?: readonly string[];
+  /** Forces a plain text control, so FileMaker's own find operators stay typeable. */
+  freeText?: boolean;
+}
+
+export type StandardControlKind = 'input' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'container';
+
+/** Types whose values are plain text. FileMaker reports a text field as `normal` with a `text` result. */
+const TEXT_TYPES = ['', 'text', 'normal', 'string'];
+
+/** The most lines a text field can show; a larger height is a layout size, not a count of lines. */
+const MAX_TEXT_LINES = 10;
+
+/**
+ * A text field needs more than one line when its height counts lines. FileMaker reports the
+ * height of a layout object in points, so only a small number can be a count of lines.
+ */
+function isTextLineCount(height: number | undefined): boolean {
+  return typeof height === 'number' && Number.isFinite(height) && height > 1 && height <= MAX_TEXT_LINES;
+}
+
+/**
+ * A text field needs more than one line when its character limit is unlimited (FileMaker reports
+ * `maxCharacters: 0`), when the limit is large, or when the value itself carries a line break.
+ */
+function isLongText(field: Partial<StandardFieldMetadata>, value: string): boolean {
+  if (typeof field.maxLength === 'number' && (field.maxLength === 0 || field.maxLength > 100)) {
+    return true;
+  }
+  return value.length > 100 || /[\r\n]/.test(value);
+}
+
+export function standardControlFor(field: Partial<StandardFieldMetadata> = {}): {
+  kind: StandardControlKind; width: number; height: number; readOnly: boolean;
+} {
+  const normalize = (value?: string): string => (value ?? '').trim().toLowerCase().replace(/[ -]/g, '');
+  const type = normalize(field.result || field.type);
+  const display = normalize(field.displayType);
+  const readOnly = ['calculation', 'summary', 'container'].includes(normalize(field.kind || field.type)) || type === 'container';
+  const value = String(field.value ?? '');
+  let kind: StandardControlKind = 'input';
+  if (field.freeText) kind = 'input';
+  else if (type === 'container' || normalize(field.kind) === 'container') kind = 'container';
+  else if (['popup', 'popupmenu', 'dropdown', 'dropdownlist'].includes(display)) kind = 'select';
+  else if (['checkbox', 'checkboxset'].includes(display)) kind = 'checkbox';
+  else if (['radio', 'radiobuttongroup', 'radiobuttons'].includes(display)) kind = 'radio';
+  else if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type)
+    || ['textarea', 'multiline'].includes(display)
+    || (TEXT_TYPES.includes(type) && isLongText(field, value))
+    || (TEXT_TYPES.includes(type) && display === 'edittext' && isTextLineCount(field.height))) kind = 'textarea';
+  const count = field.optionCount ?? field.options?.length;
+  const height = kind === 'container' ? FIELD_LAYOUT.containerHeight : kind === 'textarea' ? FIELD_LAYOUT.multilineHeight
+    : kind === 'checkbox' || kind === 'radio' ? Math.max(FIELD_LAYOUT.inputHeight,
+      (Number.isFinite(count) ? Math.min(50, Math.max(1, Math.ceil(count!))) : 1) * FIELD_LAYOUT.optionHeight)
+      : FIELD_LAYOUT.inputHeight;
+  return { kind, readOnly, width: type === 'number' ? FIELD_LAYOUT.numberWidth
+    : ['date', 'time', 'timestamp'].includes(type) ? FIELD_LAYOUT.temporalWidth : FIELD_LAYOUT.textWidth, height };
+}
+
+let nextChoiceGroup = 0;
+
+/**
+ * A checkbox or radio field whose options are not known cannot be shown as a group of choices.
+ * Such a field stays editable text, so its stored value is never lost.
+ */
+export function choiceDisplayType(displayType: string | undefined, options: readonly string[] | undefined): string | undefined {
+  const display = (displayType ?? '').toLowerCase().replace(/[ -]/g, '');
+  const isChoice = display.includes('checkbox') || display.includes('radio');
+  return isChoice && !options?.length ? 'editBox' : displayType;
+}
+
+/**
+ * A text area shows line feeds only. A stored value that uses carriage returns would be rewritten
+ * as soon as anything else in the field changed, so the raw breaks are kept around every edit.
+ */
+export function preserveTextLineEndings(previous: string, next: string): string {
+  const tokens = previous.match(/\r\n|[\s\S]/g) ?? [];
+  const displayed = previous.replace(/\r\n|\r/g, '\n');
+  if (displayed === next) return previous;
+  let suffix = 0;
+  while (suffix < Math.min(displayed.length, next.length)
+    && displayed[displayed.length - suffix - 1] === next[next.length - suffix - 1]) suffix++;
+  let prefix = 0;
+  while (prefix < Math.min(displayed.length, next.length) - suffix && displayed[prefix] === next[prefix]) prefix++;
+  const removedBreaks = tokens.slice(prefix, tokens.length - suffix).filter((token) => /[\r\n]/.test(token));
+  const separator = tokens.find((token) => /[\r\n]/.test(token)) ?? '\n';
+  const inserted = next.slice(prefix, next.length - suffix).replace(/\n/g, () => removedBreaks.shift() ?? separator);
+  return tokens.slice(0, prefix).join('') + inserted + tokens.slice(tokens.length - suffix).join('');
+}
+
+/**
+ * A checkbox set keeps the order and the separators it was stored with. The stored value is
+ * returned unchanged when the selection is the same set as it was, so an untouched field is
+ * never rewritten and the order of the options on screen does not matter.
+ */
+export function checkboxValue(original: string, values: readonly string[]): string {
+  const selected = new Set(values.filter((value) => value !== ''));
+  const parts = original.split(/(\r\n|\r|\n)/);
+  const before = new Set(parts.filter((value, index) => index % 2 === 0 && value !== ''));
+  if (selected.size === before.size && [...selected].every((value) => before.has(value))) return original;
+  if (!selected.size) return '';
+  let result = '';
+  for (let index = 0; index < parts.length; index += 2) {
+    if (parts[index] === '' || selected.has(parts[index])) result += parts[index] + (parts[index + 1] ?? '');
+  }
+  const added = [...selected].filter((value) => !before.has(value));
+  if (added.length) {
+    const trailing = /(?:\r\n|\r|\n)$/.exec(result || original)?.[0] ?? '';
+    const separator = trailing || /\r\n|\r|\n/.exec(original)?.[0] || '\r';
+    result += (result && !trailing ? separator : '') + added.join(separator) + trailing;
+  }
+  return result;
+}
+
+/** DOM controls for the extension's CSP-restricted pages; values and names are never normalized. */
+export function createStandardControl(document: Document, field: Partial<StandardFieldMetadata>, value: string,
+  onChange: (value: string) => void, readOnly = false): HTMLElement {
+  const standard = standardControlFor({ ...field, value, displayType: choiceDisplayType(field.displayType, field.options) });
+  const locked = readOnly || standard.readOnly;
+  let control: HTMLElement;
+  if (standard.kind === 'container') {
+    control = document.createElement('div');
+    control.className = 'fm-container fm-readonly';
+    if (/^https?:\/\//i.test(value)) {
+      const link = document.createElement('a');
+      link.href = value;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open container';
+      if (/\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i.test(value)) {
+        const image = document.createElement('img');
+        image.src = value;
+        image.alt = field.name ?? '';
+        // A blocked or missing image must not hide where the container lives.
+        image.addEventListener('error', () => {
+          link.replaceChildren(document.createTextNode(value));
+        });
+        link.replaceChildren(image);
+      }
+      control.appendChild(link);
+    } else control.textContent = value;
+  } else if (standard.kind === 'checkbox' || standard.kind === 'radio') {
+    control = document.createElement('div');
+    control.setAttribute('role', standard.kind === 'radio' ? 'radiogroup' : 'group');
+    const groupName = `fm-choice-${nextChoiceGroup++}`;
+    // A radio keeps its current value as a choice; a checkbox holds one value per line.
+    const selected = standard.kind === 'radio' ? [value] : value.split(/\r\n|\r|\n/);
+    const options = Array.from(new Set([...(field.options ?? []), ...(standard.kind === 'radio' ? selected : selected.filter(Boolean))]));
+    for (const option of options) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = standard.kind;
+      input.name = groupName;
+      input.value = option;
+      input.checked = selected.includes(option);
+      input.disabled = locked;
+      input.addEventListener('change', () => {
+        if (locked) return;
+        onChange(standard.kind === 'radio' ? option : checkboxValue(value,
+          Array.from(control.querySelectorAll<HTMLInputElement>('input:checked')).map((item) => item.value)));
+      });
+      label.append(input, document.createTextNode(option === '' ? '(empty)' : option));
+      control.appendChild(label);
+    }
+    if (locked) control.classList.add('fm-readonly');
+  } else {
+    const input = document.createElement(standard.kind === 'select' ? 'select' : standard.kind === 'textarea' ? 'textarea' : 'input');
+    if (input instanceof document.defaultView!.HTMLSelectElement) {
+      const options = Array.from(new Set(['', ...(field.options ?? []), value]));
+      for (const option of options) {
+        const item = document.createElement('option');
+        item.value = option;
+        item.textContent = option === value && option !== '' && !field.options?.includes(option) ? `${option} (current value)` : option;
+        input.appendChild(item);
+      }
+      input.disabled = locked;
+    } else {
+      input.readOnly = locked;
+      if (standard.kind === 'input' && (field.result || field.type)?.toLowerCase() === 'number') input.inputMode = 'decimal';
+    }
+    input.value = value;
+    // The text area shows line feeds only; the raw breaks of the stored value are kept.
+    let rawValue = value;
+    input.addEventListener(standard.kind === 'select' ? 'change' : 'input', () => {
+      if (locked) return;
+      rawValue = standard.kind === 'textarea' ? preserveTextLineEndings(rawValue, input.value) : input.value;
+      onChange(rawValue);
+    });
+    control = input;
+  }
+  control.classList.add('fm-field-control');
+  return control;
 }
 
 export function standardFieldSize(field: Partial<StandardFieldMetadata> = {}): { width: number; height: number } {
-  const type = (field.type ?? '').toLowerCase();
-  const display = (field.displayType ?? '').toLowerCase().replace(/[ -]/g, '');
-  if (['checkbox', 'checkboxset', 'radio', 'radiobuttongroup', 'radiobuttons'].includes(display)) {
-    const count = Number.isFinite(field.optionCount) ? Math.min(50, Math.max(1, Math.ceil(field.optionCount!))) : 1;
-    return { width: FIELD_LAYOUT.textWidth, height: Math.max(FIELD_LAYOUT.inputHeight, count * FIELD_LAYOUT.optionHeight) };
-  }
-  if (type === 'container') {
-    return { width: FIELD_LAYOUT.textWidth, height: FIELD_LAYOUT.containerHeight };
-  }
-  if (field.multiline || ['longtext', 'multilinetext', 'multiline'].includes(type.replace(/[ -]/g, '')) || ['textarea', 'multiline'].includes(display)) {
-    return { width: FIELD_LAYOUT.textWidth, height: FIELD_LAYOUT.multilineHeight };
-  }
-  return {
-    width: type === 'number' ? FIELD_LAYOUT.numberWidth
-      : ['date', 'time', 'timestamp'].includes(type) ? FIELD_LAYOUT.temporalWidth : FIELD_LAYOUT.textWidth,
-    height: FIELD_LAYOUT.inputHeight
-  };
+  const { width, height } = standardControlFor(field);
+  return { width, height };
 }
 
 /** Data attributes select build-generated CSS; webviews never need inline styles or relaxed CSP. */
@@ -62,6 +246,13 @@ export function standardFieldsCss(webview = false): string {
 .fm-field { display: flex; flex-direction: column; width: var(--fm-field-width); max-width: 100%; min-width: 0; box-sizing: border-box; }
 .fm-field-label { display: block; min-height: ${FIELD_LAYOUT.labelSpace}px; overflow-wrap: anywhere; }
 .fm-field > .fm-field-control { flex: none; }
+.fm-field-control[type="text"], input.fm-field-control { white-space: nowrap; overflow-wrap: normal; }
+textarea.fm-field-control { resize: vertical; }
+textarea.fm-field-control[readonly] { resize: none; }
+.fm-container { overflow: auto; }
+.fm-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.fm-field-control[role="group"], .fm-field-control[role="radiogroup"] { overflow: auto; }
+.fm-field-control[role="group"] > label, .fm-field-control[role="radiogroup"] > label { display: flex; align-items: center; min-height: 24px; gap: 6px; }
 .fm-field-control { display: block; width: 100%; max-width: 100%; min-width: 0; height: var(--fm-field-height); min-height: var(--fm-field-height); box-sizing: border-box; }
 .fm-field-table { display: block; width: 100%; min-width: 0; }
 .fm-field-table > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

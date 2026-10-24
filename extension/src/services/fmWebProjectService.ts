@@ -1,3 +1,4 @@
+import { standardControlFor } from '@fmweb/shared/dist/field-standards';
 import { access, mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 
@@ -283,12 +284,17 @@ export class FmWebProjectService {
   public async prepareLayout(layout: LayoutDefinition): Promise<LayoutDefinition> {
     if (!layout.fmLayoutName) return layout;
     const [metadata] = await this.getDesignerLayouts([layout.fmLayoutName]);
-    return { ...layout, objects: layout.objects.map((object) => {
+    // The generated page shows the fields in the order of the FileMaker layout.
+    const fieldOrder = metadata?.fields.map((field) => field.name);
+    return { ...layout, fieldOrder: fieldOrder?.length ? fieldOrder : layout.fieldOrder, objects: layout.objects.map((object) => {
       if (object.type !== 'field') return object;
       const field = metadata?.fields.find((item) => item.name === object.fmFieldName);
       if (!field) return object;
-      return { ...object, kind: field.kind ?? object.kind,
-        multiline: field.multiline || object.multiline || ['textarea', 'multiline'].includes(field.displayType ?? ''),
+      const control = standardControlFor(field);
+      return { ...object, kind: field.kind ?? object.kind, result: field.type ?? object.result,
+        displayType: object.displayType !== 'editBox' ? object.displayType : control.kind === 'select' ? 'dropdown'
+          : control.kind === 'checkbox' ? 'checkbox' : control.kind === 'radio' ? 'radio' : 'editBox',
+        multiline: control.kind === 'textarea' || object.multiline,
         options: field.options ?? object.options, required: field.required ?? object.required };
     }) };
   }

@@ -33,6 +33,12 @@ Each row below is **verified on a real server (FileMaker Data API Engine, 2026-1
 | Container upload to **Photo** | Success; numeric HTTP status and code were not supplied | Upload works on the demo server. |
 | **Contact Details** metadata | Success; numeric HTTP status and code were not supplied | Two container entries named **Photo**; portals **Addresses**, **Email Addresses**, **Phone Numbers**. The editor shows one value with a note, Query Builder lists one field choice, generated types have one property per exact name, copied requests use record field names once, and Layout Inspector shows one field per exact name with a note naming repeats. Test My Server counts the same distinct field keys. |
 
+## Field order, choices and readable values
+
+Fields in the Record Editor and Viewer follow the layout’s field order when details are available. Repeating values stay together in repetition order. Extra returned fields come last in the server’s order; a field absent from the record is not added just because the layout names it. Query Builder uses that order for field choices and result columns. Layout Mode’s standard forms use the same order when creating FM Web pages; a page you arranged yourself keeps its positions.
+
+Short text, numbers and dates use single-line boxes. Long text uses taller boxes, and menus, radio buttons and checkboxes use the layout’s value list. If a saved menu value is no longer in the list, it appears as “(current value)”. Leaving it alone preserves the saved value and sends no change for that field. Missing field details fall back to text boxes. Calculation and summary values stay read-only in records, but can be searched. Containers show safe links or images; they still require Upload to Container for changes. Copy is beside the Viewer’s field name, so it cannot cover the value. These are code and regression-test checks, not new real-server observations.
+
 ## Follow-up fixes for the headless QA findings
 
 These are code and regression-test checks in this checkout; the real-server QA findings were supplied by the owner. This follow-up did not contact a server.

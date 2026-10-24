@@ -6,7 +6,7 @@ import type { FMClient } from '../../services/fmClient';
 import type { Logger } from '../../services/logger';
 import type { ProfileStore } from '../../services/profileStore';
 import type { FileMakerRecord } from '../../types/fm';
-import { buildWebviewCsp, createNonce } from '../common/csp';
+import { buildWebviewCsp, createNonce, profileImageSources } from '../common/csp';
 import { getStringField, toRecord } from '../common/messageValidation';
 import {
   deliverSnippet,
@@ -372,7 +372,9 @@ export class RecordViewerPanel {
 
     const nonce = createNonce();
     const csp = buildWebviewCsp(webview, {
-      nonce
+      nonce,
+      // A container image is served by the FileMaker server of a profile.
+      imageSources: profileImageSources(this.profileStore)
     });
 
     return `<!DOCTYPE html>

@@ -5,9 +5,12 @@ import { buildSync } from 'esbuild';
 /** A real DOM (jsdom, installed by the designer-ui workspace) for running a webview page script in unit tests. */
 export interface DomElement {
   id: string;
+  tagName: string;
   value: string;
   textContent: string | null;
   className: string;
+  checked: boolean;
+  disabled: boolean;
   classList: { contains(token: string): boolean };
   click(): void;
   contains(other: unknown): boolean;

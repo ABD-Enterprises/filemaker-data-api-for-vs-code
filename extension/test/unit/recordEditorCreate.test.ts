@@ -139,12 +139,12 @@ describe('Record Editor create mode (stubbed services)', () => {
     page.send({ type: 'layoutsLoaded', payload: { profileId: 'p1', layouts: ['People', 'Other'] } });
     await panel.send(page.posted.find((message) => message.type === 'loadLayoutFields'));
     page.send(panel.last('layoutFields'));
-    page.window.eval("const input = document.querySelector('#fieldEditor textarea'); input.value = 'Ada'; input.dispatchEvent(new Event('input')); const layout = document.getElementById('layoutSelect'); layout.value = 'Other'; layout.dispatchEvent(new Event('change'));");
+    page.window.eval("const input = document.querySelector('#fieldEditor input, #fieldEditor textarea'); input.value = 'Ada'; input.dispatchEvent(new Event('input')); const layout = document.getElementById('layoutSelect'); layout.value = 'Other'; layout.dispatchEvent(new Event('change'));");
     await panel.send(page.posted.filter((message) => message.type === 'loadLayoutFields').at(-1));
     page.send(panel.last('error'));
     page.document.getElementById('createButton')!.click();
     const submission = page.posted.find((message) => message.type === 'createRecord');
-    expect(submission).toMatchObject({ payload: { layout: 'Other', fieldData: { Age: 'Ada' } } });
+    expect(submission).toMatchObject({ payload: { layout: 'Other', fieldData: { Name: 'Ada' } } });
     await panel.send(submission);
     expect(panel.last('error')?.message).toBe("Could not load the layout's fields: Connection timed out. Try again.");
     page.send(panel.last('error'));
